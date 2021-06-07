@@ -1,0 +1,91 @@
+{
+  "$schema":"http://json-schema.org/draft-04/schema#",
+  "description":" h2loadrunner configuration",
+  "title":"h2loadrunner_configuration",
+  "type":"object",
+  "required":[
+    "schema",
+    "host",
+    "scenarios"
+  ],
+  "properties":{
+    "schema":{
+      "description":"schema of the uri, http, or https",
+      "type":"string"
+    },
+    "host":{
+      "description":"host part, for example: 192.168.1.1, or, www.h2loadrunner.com",
+      "type":"string"
+    },
+    "port":{
+      "description":"port, 80, 443 ,etc.",
+      "type":"integer"
+    },
+    "requests":{
+      "description":"Number of  requests across all  clients",
+      "default": "1",
+      "type":"integer"
+    },
+    "threads":{
+      "description":"Number of native threads",
+      "default": "1",
+      "type":"integer"
+    },
+    "clients":{
+      "description":"Number of concurrent clients.",
+      "default": "1",
+      "type":"integer"
+    },
+    "scenarios":{
+      "description":"Array of scenarioes",
+      "type":"array",
+      "minItems":1,
+      "items": { "$ref": "#/$defs/scenario" }
+    }
+  },
+  
+  "$defs": {
+  "scenario": {
+    "type": "object",
+      "required":[
+        "path"
+      ],
+      "properties":{
+        "path":{
+          "description": "path of the uri",
+          "type":"object",
+          "properties":{
+            "source": {
+              "type":"string",
+              "enum": ["input", "sameWithLastUri", "extractFromLastResponseHeader", "deriveFromLastResponseBodyWithLuaScript"]
+            },
+            "input": {
+              "type":"string"
+            },
+            "headerToExtract": {
+              "type":"string"
+            },
+            "luaScript": {
+              "type":"string"
+            }
+          }
+        },
+        "method":{
+          "description": "method of the HTTP(2) request",
+          "default": "GET",
+          "type":"string"
+        },
+        "payload":{
+          "description": "payload data",
+          "type":"string"
+        },
+        "additonalHeaders":{
+        "type": "array",
+        "items": {
+           "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
