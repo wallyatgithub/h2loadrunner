@@ -114,11 +114,11 @@
       "description":"Specified the variable name in uri path and payload, which is to be replaced with an actual user ID specified next",
       "type":"string"
     },
-    "variable-name-range-start":{
+    "variable-range-start":{
       "description":"Specify variable range start.",
       "type":"integer"
     },
-    "variable-name-range-end":{
+    "variable-range-end":{
       "description":"Specify variable range end.",
       "type":"integer"
     },
