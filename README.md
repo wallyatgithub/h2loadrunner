@@ -61,4 +61,48 @@ $cmake --build ./
 
 h2loadrunner would be generated
 
+How to run:
+==========
+$./h2loadrunner http://172.18.62.237:8080/nudm-ee/v2/imsi-2621012-USER_ID/ee-subscriptions --crud-create-method=POST --crud-read-method=GET --crud-update-method=PATCH --crud-delete-method=DELETE --crud-create-data-file=datafile.json --crud-update-data-file=updatedata.json --crud-request-variable-name="-USER_ID" --crud-request-variable-value-start=1 --crud-request-variable-value-end=1000000000 --crud-resource-header="location" -H "content-type: application/json" --stream-timeout-interval-ms=2000 --rps=1000 -t 1 -c 10 -D 3000 -m 512
 
+Here is what is going on with the above command:
+
+First, "POST" (--crud-create-method) request is sent to the URI (http://172.18.62.237:8080/nudm-ee/v2/imsi-2621012-USER_ID/ee-subscriptions) with "-USER_ID" replaced by an actual user ID whose range starts from 1 (--crud-request-variable-value-start) to 1000000000 (--crud-request-variable-value-end), with payload conent spelcified in file datafile.json (--crud-create-data-file)
+
+Example content of datafile.json:
+{"callbackReference":"http://10.10.177.251:32050/nhss-ee/v1/msisdn-491971103488-USER_ID/ee-subscriptions","monitoringConfiguration":{"120984":{"eventType":"UE_REACHABILITY_FOR_SMS","immediateFlag":false,"referenceId":120984}},"reportingOptions":{"maxNumOfReports":0}}
+
+The "POST" response is monitored for the header named "location" (--crud-resource-header), whose value is a URI, which is the resource (EE-subscription) creatd by "POST".
+
+Next, "GET" (--crud-read-method) is sent to the URI above to query the created resource
+
+After "GET" response is received, "PATCH" (--crud-update-method) is sent to the URI to update the resource created, with payload specified in updatedata.json (--crud-update-data-file)
+
+Example content of updatedata.json:
+{"callbackReference":"http://10.10.177.251:32050/nhss-ee/v1/msisdn-491971103488-USER_ID/ee-subscriptions","monitoringConfiguration":{"220984":{"eventType":"UE_REACHABILITY_FOR_SMS","immediateFlag":false,"referenceId":120984}},"reportingOptions":{"maxNumOfReports":0}}
+
+
+At last, "DELETE" (--crud-delete-method) is sent to delete the created resource, which is actually an unsubscription here in this case
+
+other parameters:
+
+--stream-timeout-interval-ms:
+
+how long would h2loadrunner wait for a response to come; when this is exceeded, RST_STREAM is sent to release the resource
+
+--rps: desired request per second
+
+-t: number of thread
+
+-c: number of client, which is typically the number of connections
+
+-D: how long the test should run
+
+-m: max concurrent streams per connection
+
+Example out put during the load runs:
+Application protocol: h2c
+Mon Jun  7 05:17:42 2021, actual RPS: 9585, successful responses: 9585, 3xx: 0, 4xx: 693, 5xx: 0, max resp time (us): 58217, min resp time (us): 451, successful rate: 100%
+
+
+For other possible parameters (derived from h2load), type h2loadrunner --help
