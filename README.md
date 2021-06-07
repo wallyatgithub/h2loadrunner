@@ -48,11 +48,17 @@ How to build:
 Use cmake to build
 
 $git clone https://github.com/wallyatgithub/h2loadrunner.git
+
 $cd h2loadrunner
+
 $mkdir build
+
 $cd build
+
 $cmake ..
+
 $cmake --build ./
+
 h2loadrunner would be generated
 
 
