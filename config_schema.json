@@ -36,6 +36,92 @@
       "default": "1",
       "type":"integer"
     },
+    "max-concurrent-streams":{
+      "description":"max-concurrent-streams for each connection",
+      "default": "1",
+      "type":"integer"
+    },
+    "window-bits":{
+      "description":"Sets the stream level initial window size to (2**<N>)-1",
+      "default": "30",
+      "type":"integer"
+    },
+    "connection-window-bits":{
+      "description":"Sets the connection level initial window size to (2**<N>)-1",
+      "default": "30",
+      "type":"integer"
+    },
+    "ciphers":{
+      "description":"Set allowed cipher list. The format of the string is described in OpenSSL ciphers(1)",
+      "type":"string",
+      "default":"ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256"
+    },
+    "no-tls-proto":{
+      "description":"Specify ALPN identifier of the protocol to be used when accessing http URI without SSL/TLS. Available protocols: h2c and http/1.1",
+      "type":"string",
+      "default":"h2c"
+    },
+    "rate":{
+      "description":"Specifies the fixed rate at which connections are created. The rate must be a positive integer, representing the number of connections to be made per rate period. The maximum number of connections to be made is given in client field. This rate will be distributed among threads as evenly as possible. For example, with thread=2 and date=4, each thread gets 2 connections per period.  When the rate is 0, the program will run as it normally does, creating connections at whatever variable rate it wants. This field and the duration field are mutually exclusive.",
+      "default": "0",
+      "type":"integer"
+    },
+    "rate-period":{
+      "description":"Specifies the time period between creating connections. The period must be a positive number, representing the length of the period in time. This option is ignored if the rate option is not used.",
+      "default": "1",
+      "type":"integer"
+    },
+    "duration":{
+      "description":"Specifies the main duration (second) for the measurements in case of timing-based benchmarking. This field and the rate field are mutually exclusive.",
+      "type":"integer"
+    },
+    "warm-up-time":{
+      "description":"Specifies the time period before starting the actual measurements, in case of timing-based benchmarking. Needs to provided along with duration field.",
+      "type":"integer"
+    },
+    "connection-active-timeout":{
+      "description":"Specifies the maximum time that h2loadrunner is willing to keep a connection open, regardless of the activity on said connection. It must be a positive integer, specifying the amount of time to wait. When no timeout value is set (either active or inactive), the tool will keep a connection open indefinitely, waiting for a response.",
+      "type":"integer"
+    },
+    "connection-inactivity-timeout":{
+      "description":"Specifies the amount of time that h2loadrunner is willing to wait to see activity on a given connection. It must be a positive integer, specifying the amount of time to wait. When no timeout value is set (either active or inactive), the tool will keep a connection open indefinitely, waiting for a response.",
+      "type":"integer"
+    },
+    "npn-list":{
+      "description":"Comma delimited list of ALPN protocol identifier sorted in the order of preference. That means most desirable protocol comes first. This is used in both ALPN and NPN. The parameter must be delimited by a single comma only and any white spaces are treated as a part of protocol string.",
+      "type":"string",
+      "default":"h2,h2-16,h2-14,http/1.1"
+    },
+    "header-table-size":{
+      "description":"Specify decoder header table size.",
+      "type":"integer",
+      "default": "4096"
+    },
+    "encoder-header-table-size":{
+      "description":"Specify encoder header table size. The decoder (server) specifies the maximum dynamic table size it accepts. Then the negotiated dynamic table size is the minimum of this option value and the value which server specified.",
+      "type":"integer",
+      "default": "4096"
+    },
+    "log-file":{
+      "description":"Write per-request information to a file",
+      "type":"string"
+    },
+    "request-per-second":{
+      "description":"Specify request per second for each client.",
+      "type":"integer"
+    },
+    "variable-name-in-path-and-data":{
+      "description":"Specified the variable name in uri path and payload, which is to be replaced with an actual user ID specified next",
+      "type":"string"
+    },
+    "variable-name-range-start":{
+      "description":"Specify variable range start.",
+      "type":"integer"
+    },
+    "variable-name-range-end":{
+      "description":"Specify variable range end.",
+      "type":"integer"
+    },
     "scenarios":{
       "description":"Array of scenarioes",
       "type":"array",
