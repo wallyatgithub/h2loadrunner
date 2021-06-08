@@ -1,3 +1,7 @@
+#ifndef H2LOAD_CONFIG_SCHEMA_H
+#define H2LOAD_CONFIG_SCHEMA_H
+
+
 #include "staticjson/document.hpp"
 #include "staticjson/staticjson.hpp"
 #include "rapidjson/schema.h"
@@ -130,3 +134,5 @@ public:
     }
 
 };
+
+#endif

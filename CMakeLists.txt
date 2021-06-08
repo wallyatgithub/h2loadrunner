@@ -27,7 +27,7 @@ set_source_files_properties(${c_sources} PROPERTIES
   COMPILE_FLAGS "${WARNCFLAGS}")
 file(GLOB cxx_sources *.cc)
 set_source_files_properties(${cxx_sources} PROPERTIES
-  COMPILE_FLAGS "${WARNCXXFLAGS} ${CXX1XCXXFLAGS}")
+  COMPILE_FLAGS "-g -o0 ${WARNCXXFLAGS} ${CXX1XCXXFLAGS}")
 
 
 include_directories(
@@ -54,6 +54,9 @@ configure_file(cmakeconfig.h.in config.h)
 set(H2LOAD_SOURCES
   util.cc
   http2.cc h2load.cc
+  h2load_utils.cc
+  h2load_Client.cc
+  h2load_Worker.cc
   timegm.c
   tls.cc
   h2load_http2_session.cc

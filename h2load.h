@@ -401,10 +401,11 @@ struct Client {
   int32_t curr_stream_id;
   std::unique_ptr<Client> ancestor;
   ev_timer retart_client_watcher;
+  Config* config;
 
   enum { ERR_CONNECT_FAIL = -100 };
 
-  Client(uint32_t id, Worker *worker, size_t req_todo);
+  Client(uint32_t id, Worker *worker, size_t req_todo, Config* conf);
   ~Client();
   int make_socket(addrinfo *addr);
   int connect();
