@@ -1,0 +1,4 @@
+language: cpp
+sudo: required
+dist: trusty
+script: "sudo apt-get install -y cmake && cmake . && make && ctest -V"

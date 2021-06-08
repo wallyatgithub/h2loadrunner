@@ -35,6 +35,7 @@ include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/includes"
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party"
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/llhttp/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/third-party/StaticJSON/include"
 )
 
 link_libraries(
@@ -60,7 +61,7 @@ set(H2LOAD_SOURCES
 )
 
 add_executable(h2loadrunner ${H2LOAD_SOURCES} $<TARGET_OBJECTS:llhttp>
-  $<TARGET_OBJECTS:url-parser>)
+  $<TARGET_OBJECTS:url-parser> $<TARGET_OBJECTS:staticjson>)
 
 install(TARGETS h2loadrunner
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")

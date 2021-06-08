@@ -23,32 +23,32 @@
     },
     "requests":{
       "description":"Number of  requests across all  clients",
-      "default": "1",
+      "default": 1,
       "type":"integer"
     },
     "threads":{
       "description":"Number of native threads",
-      "default": "1",
+      "default": 1,
       "type":"integer"
     },
     "clients":{
       "description":"Number of concurrent clients.",
-      "default": "1",
+      "default": 1,
       "type":"integer"
     },
     "max-concurrent-streams":{
       "description":"max-concurrent-streams for each connection",
-      "default": "1",
+      "default": 1,
       "type":"integer"
     },
     "window-bits":{
       "description":"Sets the stream level initial window size to (2**<N>)-1",
-      "default": "30",
+      "default": 30,
       "type":"integer"
     },
     "connection-window-bits":{
       "description":"Sets the connection level initial window size to (2**<N>)-1",
-      "default": "30",
+      "default": 30,
       "type":"integer"
     },
     "ciphers":{
@@ -63,12 +63,12 @@
     },
     "rate":{
       "description":"Specifies the fixed rate at which connections are created. The rate must be a positive integer, representing the number of connections to be made per rate period. The maximum number of connections to be made is given in client field. This rate will be distributed among threads as evenly as possible. For example, with thread=2 and date=4, each thread gets 2 connections per period.  When the rate is 0, the program will run as it normally does, creating connections at whatever variable rate it wants. This field and the duration field are mutually exclusive.",
-      "default": "0",
+      "default": 0,
       "type":"integer"
     },
     "rate-period":{
       "description":"Specifies the time period between creating connections. The period must be a positive number, representing the length of the period in time. This option is ignored if the rate option is not used.",
-      "default": "1",
+      "default": 1,
       "type":"integer"
     },
     "duration":{
@@ -94,13 +94,13 @@
     },
     "header-table-size":{
       "description":"Specify decoder header table size.",
-      "type":"integer",
-      "default": "4096"
+      "default": 4096,
+      "type":"integer"
     },
     "encoder-header-table-size":{
       "description":"Specify encoder header table size. The decoder (server) specifies the maximum dynamic table size it accepts. Then the negotiated dynamic table size is the minimum of this option value and the value which server specified.",
-      "type":"integer",
-      "default": "4096"
+      "default": 4096,
+      "type":"integer"
     },
     "log-file":{
       "description":"Write per-request information to a file",
@@ -129,7 +129,7 @@
       "items": { "$ref": "#/$defs/scenario" }
     }
   },
-  
+
   "$defs": {
   "scenario": {
     "type": "object",
@@ -175,3 +175,4 @@
     }
   }
 }
+

@@ -1,20 +1,40 @@
-class H2LoadConfig_Schema: public MsgPacker::CSB_JsonParser<H2LoadConfig_Schema>
+#include "staticjson/document.hpp"
+#include "staticjson/staticjson.hpp"
+#include "rapidjson/schema.h"
+#include "rapidjson/prettywriter.h"
+
+class Config_Schema
 {
 public:
 
-struct Path {
-    std::string source;
-    std::string input;
-    std::string headerToExtract;
-    std::string luaScript;
-};
+    class Path {
+      public:
+        std::string source;
+        std::string input;
+        std::string headerToExtract;
+        std::string luaScript;
+        void staticjson_init(staticjson::ObjectHandler* h)
+        {
+            h->add_property("source", &this->source);
+            h->add_property("input", &this->input, staticjson::Flags::Optional);
+            h->add_property("headerToExtract", &this->headerToExtract, staticjson::Flags::Optional);
+            h->add_property("luaScript", &this->luaScript, staticjson::Flags::Optional);
+        }
+    };
 
-struct scenarioes {
-    Path path;
-    std::string method;
-    std::string payload;
-    std::vector<std::string> additonalHeaders;
-};
+    class Scenario {
+      public:
+        Path path;
+        std::string method;
+        std::string payload;
+        std::vector<std::string> additonalHeaders;
+        void staticjson_init(staticjson::ObjectHandler* h)
+        {
+            h->add_property("path", &this->path);
+            h->add_property("payload", &this->payload, staticjson::Flags::Optional);
+            h->add_property("additonalHeaders", &this->additonalHeaders, staticjson::Flags::Optional);
+        }
+    };
 
     std::string schema;
     std::string host;
@@ -41,69 +61,72 @@ struct scenarioes {
     std::string variable_name_in_path_and_data;
     uint64_t variable_range_start;
     uint64_t variable_range_end;
-    std::vector<scenarioes>;
+    std::vector<Scenario> scenarioes;
 
-
-
-    explicit H2LoadConfig_Schema():
-        schema("htt"),
+    Config_Schema():
+        schema("http"),
+        host(""),
         port(80),
-        mCallbackUri(""),
-        mContextName(""),
-        mContextExpiry(0),
-        mHttpHeaders(),
-        mApplicationData(""),
-        mIsConnFailureHandled(false),
-        mPeerIpEndpoint(""),
-        mPeerIpEndpointFlags(staticjson::Flags::Optional | staticjson::Flags::IgnoreWrite)
-    {  }
-
-    void clear()
+        requests(0),
+        threads(1),
+        clients(1),
+        max_concurrent_streams(1),
+        window_bits(30),
+        connection_window_bits(30),
+        ciphers("ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256"),
+        no_tls_proto("h2c"),
+        rate(0),
+        rate_period(1),
+        duration(0),
+        warm_up_time(0),
+        connection_active_timeout(0),
+        connection_inactivity_timeout(0),
+        npn_list("h2,h2-16,h2-14,http/1.1"),
+        header_table_size(4096),
+        encoder_header_table_size(4096),
+        log_file(""),
+        request_per_second(0),
+        variable_name_in_path_and_data(""),
+        variable_range_start(0),
+        variable_range_end(0)
     {
-        mPeerIndex = 0;
-        mStreamId = 0;
-        mCallbackUri.clear();
-        mPeerIpEndpoint.clear();
-        mContextName.clear();
-        mContextExpiry = 0L;
-        mHttpHeaders.clear();
-        mApplicationData.clear();
-        mIsConnFailureHandled = false;
-        mPeerIpEndpointFlags = staticjson::Flags::Optional | staticjson::Flags::IgnoreWrite;
+        Scenario scenario;
+        scenario.path.source = "input";
+        scenario.path.input = "api/version/userId";
+        scenario.method = "POST";
+        scenario.payload = "hello world";
+        scenario.additonalHeaders.push_back("content-type: text/plain");
+        scenario.additonalHeaders.push_back("content-length: 11");
+        scenarioes.push_back(scenario);
     }
 
     void staticjson_init(staticjson::ObjectHandler* h)
     {
-        h->add_property("PeerIndex", &this->mPeerIndex, staticjson::Flags::Optional);
-        h->add_property("StreamId", &this->mStreamId, staticjson::Flags::Optional);
-        h->add_property("CallbackUri", &this->mCallbackUri, staticjson::Flags::Optional);
-        h->add_property("PeerIpEndpoint", &this->mPeerIpEndpoint, mPeerIpEndpointFlags);
-        h->add_property("ContextName", &this->mContextName, staticjson::Flags::Optional);
-        h->add_property("ContextExpiry", &this->mContextExpiry, staticjson::Flags::Optional);
-        h->add_property("HttpHeaders", &this->mHttpHeaders, staticjson::Flags::Default);
-        h->add_property("ApplicationData", &this->mApplicationData, staticjson::Flags::Default);
-        h->add_property("IsConnFailureHandled", &this->mIsConnFailureHandled, staticjson::Flags::Optional);
-
-        h->set_flags(staticjson::Flags::Default | staticjson::Flags::DisallowUnknownKey);
+        h->add_property("schema", &this->schema);
+        h->add_property("host", &this->host);
+        h->add_property("port", &this->port, staticjson::Flags::Optional);
+        h->add_property("requests", &this->requests, staticjson::Flags::Optional);
+        h->add_property("threads", &this->threads, staticjson::Flags::Optional);
+        h->add_property("clients", &this->clients, staticjson::Flags::Optional);
+        h->add_property("max-concurrent-streams", &this->max_concurrent_streams, staticjson::Flags::Optional);
+        h->add_property("window-bits", &this->window_bits, staticjson::Flags::Optional);
+        h->add_property("connection-window-bits", &this->connection_window_bits, staticjson::Flags::Optional);
+        h->add_property("no-tls-proto", &this->no_tls_proto, staticjson::Flags::Optional);
+        h->add_property("ciphers", &this->ciphers, staticjson::Flags::Optional);
+        h->add_property("rate", &this->rate, staticjson::Flags::Optional);
+        h->add_property("rate-period", &this->rate_period, staticjson::Flags::Optional);
+        h->add_property("duration", &this->duration, staticjson::Flags::Optional);
+        h->add_property("warm-up-time", &this->warm_up_time, staticjson::Flags::Optional);
+        h->add_property("connection-active-timeout", &this->connection_active_timeout, staticjson::Flags::Optional);
+        h->add_property("npn-list", &this->npn_list, staticjson::Flags::Optional);
+        h->add_property("header-table-size", &this->header_table_size, staticjson::Flags::Optional);
+        h->add_property("encoder-header-table-size", &this->encoder_header_table_size, staticjson::Flags::Optional);
+        h->add_property("log-file", &this->log_file, staticjson::Flags::Optional);
+        h->add_property("request-per-second", &this->request_per_second, staticjson::Flags::Optional);
+        h->add_property("variable-name-in-path-and-data", &this->variable_name_in_path_and_data, staticjson::Flags::Optional);
+        h->add_property("variable-range-start", &this->variable_range_start, staticjson::Flags::Optional);
+        h->add_property("variable-range-end", &this->variable_range_end, staticjson::Flags::Optional);
+        h->add_property("scenarios", &this->scenarioes);
     }
 
-
-    friend std::ostream& operator<<(std::ostream& o, const CSB_IpcMsgHolder& obj)
-    {
-        o << "PeerIndex:" << obj.mPeerIndex << std::endl;
-        o << "StreamId:" << obj.mStreamId << std::endl;
-        o << "CallbackUri:" << obj.mCallbackUri << std::endl;
-        o << "PeerIpEndpoint:" << obj.mPeerIpEndpoint << std::endl;
-        o << "ContextName:" << obj.mContextName << std::endl;
-        o << "ContextExpiry:" << obj.mContextExpiry << std::endl;
-        for (auto& id : obj.mHttpHeaders)
-        {
-            o << "HttpHeaders:" << id.first << " => " << id.second << std::endl;
-        }
-        o << "ApplicationData:" << obj.mApplicationData << std::endl;
-        o << "IsConnFailureHandled:" << obj.mIsConnFailureHandled << std::endl;
-
-        return o;
-
-    }
 };

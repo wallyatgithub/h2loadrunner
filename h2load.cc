@@ -22,6 +22,16 @@
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+
+#include <fstream>
+#include <streambuf>
+
+#include "staticjson/document.hpp"
+#include "staticjson/staticjson.hpp"
+#include "rapidjson/schema.h"
+#include "rapidjson/prettywriter.h"
+#include "config_schema.h"
+
 #include "h2load.h"
 
 #include <getopt.h>
@@ -2253,6 +2263,8 @@ Options:
   --rps-input-file=<PATH>
               A file specifying rps number.  It is useful when dynamic
               change of rps is needed.
+  --config-file=<PATH>
+              A JSON file specifying the configurations needed.
   -v, --verbose
               Output debug information.
   --version   Display version information and exit.
@@ -2308,6 +2320,7 @@ int main(int argc, char **argv) {
   std::string datafile;
   std::string logfile;
   bool nreqs_set_manually = false;
+  Config_Schema json_config_schema;
   while (1) {
     static int flag = 0;
     constexpr static option long_options[] = {
@@ -2352,6 +2365,7 @@ int main(int argc, char **argv) {
         {"crud-request-variable-value-end", required_argument, &flag, 22},
         {"stream-timeout-interval-ms", required_argument, &flag, 23},
         {"rps-input-file", required_argument, &flag, 24},
+        {"config-file", required_argument, &flag, 25},
         {nullptr, 0, nullptr, 0}};
     int option_index = 0;
     auto c = getopt_long(argc, argv,
@@ -2657,7 +2671,20 @@ int main(int argc, char **argv) {
         config.rps_file = optarg;
       }
       break;
-    }
+      case 25: {
+        std::string config_file_name = optarg;
+        std::ifstream buffer(config_file_name);
+        std::string jsonStr((std::istreambuf_iterator<char>(buffer)),
+                             std::istreambuf_iterator<char>());
+        staticjson::ParseStatus result;
+        if (!staticjson::from_json_string(jsonStr.c_str(), &json_config_schema, &result))
+        {
+              std::cout<<"error reading config file:"<<result.description()<<std::endl;
+        }
+        std::cout<<"Use configuration from JSON:"<<std::endl<<staticjson::to_pretty_json_string(json_config_schema)<<std::endl;
+      }
+      break;
+   }
     break;
     default:
       break;
