@@ -286,10 +286,10 @@ void Http2Session::on_connect() {
     std::random_device                  rand_dev;
     std::mt19937                        generator(rand_dev());
     std::uniform_int_distribution<uint64_t>  distr(config->req_variable_start, config->req_variable_end);
-    client_->worker->curr_req_variable_value = distr(generator);
+    client_->curr_req_variable_value = distr(generator);
   }
   else {
-    client_->worker->curr_req_variable_value = config->req_variable_start;
+    client_->curr_req_variable_value = config->req_variable_start;
   }
 
   client_->signal_write();
@@ -386,7 +386,7 @@ int Http2Session::submit_request() {
     }
     nghttp2_nv path_nv_with_variable;
     int64_t path_nv_index = -1;
-    uint64_t curr_stream_var_value = client_->worker->curr_req_variable_value;
+    uint64_t curr_stream_var_value = client_->curr_req_variable_value;
 
     std::string path_header_value;
     if (!config->req_variable_name.empty() && config->req_variable_end) {
@@ -397,7 +397,7 @@ int Http2Session::submit_request() {
           path_header_value.assign((const char*)nva[i].value, nva[i].valuelen);
           if (path_header_value.find(config->req_variable_name) != std::string::npos) {
             size_t full_length = std::to_string(config->req_variable_end).size();
-            std::string curr_var_value = std::to_string(client_->worker->curr_req_variable_value);
+            std::string curr_var_value = std::to_string(client_->curr_req_variable_value);
             std::string padding;
             padding.reserve(full_length - curr_var_value.size());
             for (size_t i = 0; i < full_length - curr_var_value.size(); i++) {
@@ -411,9 +411,9 @@ int Http2Session::submit_request() {
           }
           if (client_->reqidx == nvas.size() -1 ) {
             // all uris in uri list are looped for this variable value, use next value for next loop
-            client_->worker->curr_req_variable_value++;
-            if (client_->worker->curr_req_variable_value > config->req_variable_end) {
-              client_->worker->curr_req_variable_value = config->req_variable_start;
+            client_->curr_req_variable_value++;
+            if (client_->curr_req_variable_value > config->req_variable_end) {
+              client_->curr_req_variable_value = config->req_variable_start;
             }
           }
           break;

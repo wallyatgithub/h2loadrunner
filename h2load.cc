@@ -469,7 +469,8 @@ Client::Client(uint32_t id, Worker *worker, size_t req_todo)
       rps_duration_started(0),
       rps_req_pending(0),
       rps_req_inflight(0),
-      curr_stream_id(0) {
+      curr_stream_id(0),
+      curr_req_variable_value(0) {
   if (req_todo == 0) { // this means infinite number of requests are to be made
     // This ensures that number of requests are unbounded
     // Just a positive number is fine, we chose the first positive number
@@ -1523,8 +1524,7 @@ Worker::Worker(uint32_t id, SSL_CTX *ssl_ctx, size_t req_todo, size_t nclients,
       nreqs_rem(req_todo % nclients),
       rate(rate),
       max_samples(max_samples),
-      next_client_id(0),
-      curr_req_variable_value(0) {
+      next_client_id(0){
   if (!config->is_rate_mode() && !config->is_timing_based_mode()) {
     progress_interval = std::max(static_cast<size_t>(1), req_todo / 10);
   } else {
