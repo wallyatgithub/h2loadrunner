@@ -48,6 +48,7 @@ public:
 private:
   Client *client_;
   nghttp2_session *session_;
+  int _submit_request();
 };
 
 } // namespace h2load

@@ -381,7 +381,7 @@ void Client::terminate_session() {
   signal_write();
 }
 
-void Client::on_request(int32_t stream_id) {
+void Client::on_request_start(int32_t stream_id) {
   streams[stream_id] = Stream();
   auto curr_timepoint = std::chrono::steady_clock::now();
   stream_timestamp.insert(std::make_pair(curr_timepoint, stream_id));
@@ -425,6 +425,16 @@ void Client::on_header(int32_t stream_id, const uint8_t *name, size_t namelen,
     // Same has been done in on_status_code function
     stream.status_success = 1;
     return;
+  }
+
+  auto request = requests_awaiting_response.find(stream_id);
+  if (request != requests_awaiting_response.end())
+  {
+    std::string header_name;
+    header_name.assign((const char*)name, namelen);
+    std::string header_value;
+    header_value.assign((const char*)value, valuelen);
+    request->second.resp_headers[header_name] = header_value;
   }
 
   if (streams_waiting_for_create_response.find(stream_id) !=
@@ -482,6 +492,13 @@ void Client::on_header(int32_t stream_id, const uint8_t *name, size_t namelen,
 }
 
 void Client::on_status_code(int32_t stream_id, uint16_t status) {
+
+  auto request = requests_awaiting_response.find(stream_id);
+  if (request != requests_awaiting_response.end())
+  {
+    request->second.status_code = status;
+  }
+
   auto itr = streams.find(stream_id);
   if (itr == std::end(streams)) {
     return;
@@ -580,6 +597,7 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final) {
 
   worker->report_progress();
   streams.erase(stream_id);
+
   streams_CRUD_data.erase(stream_id);
   streams_waiting_for_create_response.erase(stream_id);
   if (streams_waiting_for_get_response.find(stream_id) !=
@@ -591,6 +609,13 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final) {
            streams_waiting_for_update_response.end()) {
     resource_uris_to_delete.push_back(streams_waiting_for_update_response[stream_id]);
     streams_waiting_for_update_response.erase(stream_id);
+  }
+
+  auto request = requests_awaiting_response.find(stream_id);
+  if (request != requests_awaiting_response.end())
+  {
+      prepare_next_request(request->second);
+      requests_awaiting_response.erase(request);
   }
 
   if (req_left == 0 && req_inflight == 0) {
@@ -619,7 +644,11 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final) {
 
 void Client::on_data_chunk(int32_t stream_id, const uint8_t *data, size_t len)
 {
-    
+  auto request = requests_awaiting_response.find(stream_id);
+  if (request != requests_awaiting_response.end())
+  {
+    request->second.resp_payload.assign((const char*)data, len);
+  }
 }
 RequestStat *Client::get_req_stat(int32_t stream_id) {
   auto it = streams.find(stream_id);
@@ -1108,7 +1137,17 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
     }
     else if (config->json_config_schema.scenarioes[finished_request.next_request].path.source == "extractFromLastResponseHeader")
     {
-
+        auto header = finished_request.resp_headers.find(config->json_config_schema.scenarioes[finished_request.next_request].path.headerToExtract);
+        if (header != finished_request.resp_headers.end())
+        {
+          http_parser_url u{};
+          if (http_parser_parse_url(header->second.c_str(), header->second.size(), 0, &u) != 0) {
+            std::cerr << "invalid URI: " << header->second << std::endl;
+          }
+          else {
+            data.path = get_reqline(header->second.c_str(), u);
+          }
+        }
     }
     data.method = config->json_config_schema.scenarioes[finished_request.next_request].method;
     data.req_payload = config->json_config_schema.scenarioes[finished_request.next_request].payload;

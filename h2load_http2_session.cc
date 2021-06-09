@@ -203,6 +203,14 @@ ssize_t buffer_read_callback(nghttp2_session *session, int32_t stream_id,
 
 } // namespace
 
+ssize_t _buffer_read_callback(nghttp2_session *session, int32_t stream_id,
+                           uint8_t *buf, size_t length, uint32_t *data_flags,
+                           nghttp2_data_source *source, void *user_data)
+{
+    // get data from requests_awaiting_response.find(stream_id)
+    return 0;
+}
+
 namespace {
 ssize_t send_callback(nghttp2_session *session, const uint8_t *data,
                       size_t length, int flags, void *user_data) {
@@ -459,7 +467,7 @@ int Http2Session::submit_request() {
     return -1;
   }
 
-  client_->on_request(stream_id);
+  client_->on_request_start(stream_id);
   client_->curr_stream_id = stream_id;
 
   return 0;
@@ -507,6 +515,78 @@ size_t Http2Session::max_concurrent_streams() {
 
 void Http2Session::submit_rst_stream(int32_t stream_id) {
   nghttp2_submit_rst_stream(session_, NGHTTP2_FLAG_END_STREAM, stream_id, NGHTTP2_STREAM_CLOSED);
+}
+
+int Http2Session::_submit_request()
+{
+  if (nghttp2_session_check_request_allowed(session_) == 0) {
+      return -1;
+  }
+  auto config = client_->config;
+
+  // tear down the client which is approaching max stream, and reconnect again
+  if ((config->nclients > 1 && config->rps > 0 &&
+       INT32_MAX - client_->curr_stream_id < 32 * config->nclients * config->rps &&
+       rand() % config->nclients == 0 )||
+      (client_->curr_stream_id >= INT32_MAX - 1))
+  {
+      return MAX_STREAM_TO_BE_EXHAUSTED;
+  }
+
+  nghttp2_data_provider prd{{0}, _buffer_read_callback};
+
+  std::vector<nghttp2_nv> http2_nvs;
+  auto data = client_->get_request_to_submit();
+
+  Headers nvs_in_string;
+
+  nvs_in_string.emplace_back(":scheme", config->scheme);
+  if (config->port != config->default_port)
+  {
+      nvs_in_string.emplace_back(":authority",
+                              config->host + ":" + util::utos(config->port));
+  } else
+  {
+      nvs_in_string.emplace_back(":authority", config->host);
+  }
+  nvs_in_string.emplace_back(":method", data.method);
+  nvs_in_string.emplace_back(":path", data.path);
+
+  for (auto& header_with_value: data.additional_req_headers)
+  {
+      size_t t = header_with_value.find(":", 1);
+      if ((t == std::string::npos) ||
+          (header_with_value[0] == ':' && 1 == t)) {
+        std::cerr << "invalid header, no name: " << header_with_value << std::endl;
+        continue;
+      }
+      std::string header_name = header_with_value.substr(0, t);
+      std::string header_value = header_with_value.substr(t + 1);
+
+      if (header_value.empty()) {
+        std::cerr << "invalid header - no value: " << header_with_value
+                  << std::endl;
+        continue;
+      }
+      nvs_in_string.emplace_back(header_name, header_value);
+  }
+  http2_nvs.reserve(nvs_in_string.size());
+
+  for (auto &nv : nvs_in_string) {
+    http2_nvs.push_back(http2::make_nv(nv.name, nv.value, false));
+  }
+
+  int32_t stream_id =
+      nghttp2_submit_request(session_, nullptr, http2_nvs.data(), http2_nvs.size(),
+                             config->data_fd == -1 ? nullptr : &prd, nullptr);
+  if (stream_id < 0) {
+    return -1;
+  }
+
+  client_->on_request_start(stream_id);
+  client_->curr_stream_id = stream_id;
+  client_->requests_awaiting_response[stream_id] = data;
+  return 0;
 }
 
 } // namespace h2load

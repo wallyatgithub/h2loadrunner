@@ -183,7 +183,7 @@ int Http1Session::submit_request() {
     client_->reqidx = 0;
   }
 
-  client_->on_request(stream_req_counter_);
+  client_->on_request_start(stream_req_counter_);
 
   auto req_stat = client_->get_req_stat(stream_req_counter_);
 

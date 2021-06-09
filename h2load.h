@@ -417,7 +417,7 @@ struct Client {
   Config* config;
   uint64_t curr_req_variable_value;
   std::deque<Request_Data> requests_to_submit;
-  std::map<int32_t, Request_Data> requests_waiting_response;
+  std::map<int32_t, Request_Data> requests_awaiting_response;
 
   enum { ERR_CONNECT_FAIL = -100 };
 
@@ -461,7 +461,7 @@ struct Client {
 
   int connection_made();
 
-  void on_request(int32_t stream_id);
+  void on_request_start(int32_t stream_id);
   void reset_timeout_requests();
   void on_header(int32_t stream_id, const uint8_t *name, size_t namelen,
                  const uint8_t *value, size_t valuelen);
@@ -474,7 +474,7 @@ struct Client {
   void on_data_chunk(int32_t stream_id, const uint8_t *data, size_t len);
   
   // Returns RequestStat for |stream_id|.  This function must be
-  // called after on_request(stream_id), and before
+  // called after on_request_start(stream_id), and before
   // on_stream_close(stream_id, ...).  Otherwise, this will return
   // nullptr.
   RequestStat *get_req_stat(int32_t stream_id);
