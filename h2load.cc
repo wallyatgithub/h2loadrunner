@@ -463,7 +463,6 @@ int main(int argc, char **argv) {
   std::string datafile;
   std::string logfile;
   bool nreqs_set_manually = false;
-  Config_Schema json_config_schema;
   while (1) {
     static int flag = 0;
     constexpr static option long_options[] = {
@@ -815,16 +814,18 @@ int main(int argc, char **argv) {
       }
       break;
       case 25: {
+        Config_Schema json_config_schema;
         std::string config_file_name = optarg;
         std::ifstream buffer(config_file_name);
         std::string jsonStr((std::istreambuf_iterator<char>(buffer)),
                              std::istreambuf_iterator<char>());
         staticjson::ParseStatus result;
-        if (!staticjson::from_json_string(jsonStr.c_str(), &json_config_schema, &result))
+        if (!staticjson::from_json_string(jsonStr.c_str(), &config.json_config_schema, &result))
         {
               std::cout<<"error reading config file:"<<result.description()<<std::endl;
         }
-        std::cout<<"Use configuration from JSON:"<<std::endl<<staticjson::to_pretty_json_string(json_config_schema)<<std::endl;
+        std::cout<<"Use configuration from JSON:"<<std::endl<<staticjson::to_pretty_json_string(config.json_config_schema)<<std::endl;
+        assert(config.json_config_schema.scenarioes[0].path.source == "input");
       }
       break;
    }

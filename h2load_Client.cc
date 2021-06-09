@@ -1,5 +1,6 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#include <regex>
 
 #include "h2load.h"
 #include "h2load_utils.h"
@@ -616,6 +617,10 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final) {
   }
 }
 
+void Client::on_data_chunk(int32_t stream_id, const uint8_t *data, size_t len)
+{
+    
+}
 RequestStat *Client::get_req_stat(int32_t stream_id) {
   auto it = streams.find(stream_id);
   if (it == std::end(streams)) {
@@ -1016,6 +1021,107 @@ void Client::record_client_end_time() {
 void Client::signal_write() { ev_io_start(worker->loop, &wev); }
 
 void Client::try_new_connection() { new_connection_requested = true; }
+
+
+void Client::replace_variable(std::string& input, const std::string& variable_name, uint64_t variable_value)
+{
+    if (variable_name.size()&&(input.find(variable_name) != std::string::npos))
+    {
+        size_t full_length = std::to_string(config->json_config_schema.variable_range_end).size();
+        std::string curr_var_value = std::to_string(variable_value);
+        std::string padding;
+        padding.reserve(full_length - curr_var_value.size());
+        for (size_t i = 0; i < full_length - curr_var_value.size(); i++) {
+          padding.append("0");
+        }
+        curr_var_value.insert(0, padding);
+        input = std::regex_replace(input, std::regex(variable_name), curr_var_value);
+    }
+}
+
+void Client::update_content_length(Request_Data& data)
+{
+    if (data.req_payload.size())
+    {
+        auto header = data.additional_req_headers.begin();
+        while (header != data.additional_req_headers.end())
+        {
+            if (header->find("Content-Length:") == 0) // TODO: case insensative comapre
+            {
+                header = data.additional_req_headers.erase(header);
+            }
+            else
+            {
+                header++;
+            }
+        }
+        std::string content_length = "Content-Length:";
+        content_length.append(std::to_string(data.req_payload.size()));
+        data.additional_req_headers.push_back(content_length);
+    }
+}
+Request_Data Client::get_request_to_submit()
+{
+    if (!requests_to_submit.empty())
+    {
+        auto data = requests_to_submit.front();
+        requests_to_submit.pop_front();
+        return data;
+    }
+    else
+    {
+        Request_Data data;
+        data.path = config->json_config_schema.scenarioes[0].path.input;
+        data.method = config->json_config_schema.scenarioes[0].method;
+        data.req_payload = config->json_config_schema.scenarioes[0].payload;
+        data.additional_req_headers = config->json_config_schema.scenarioes[0].additonalHeaders;
+        if (config->json_config_schema.variable_name_in_path_and_data.size())
+        {
+            data.user_id = curr_req_variable_value;
+            curr_req_variable_value++;
+            if (curr_req_variable_value > config->json_config_schema.variable_range_end)
+            {
+              curr_req_variable_value = config->json_config_schema.variable_range_start;
+            }
+        }
+        replace_variable(data.path, config->json_config_schema.variable_name_in_path_and_data, curr_req_variable_value);
+        replace_variable(data.req_payload, config->json_config_schema.variable_name_in_path_and_data, curr_req_variable_value);
+        update_content_length(data);
+
+        data.next_request = 1;
+        return data;
+    }
+}
+
+bool Client::prepare_next_request(const Request_Data& finished_request)
+{
+    if (finished_request.next_request >= config->json_config_schema.scenarioes.size())
+    {
+        return false;
+    }
+
+    Request_Data data;
+    data.user_id = finished_request.user_id;
+    if (config->json_config_schema.scenarioes[finished_request.next_request].path.source == "input")
+    {
+        data.path = config->json_config_schema.scenarioes[finished_request.next_request].path.input;
+    }
+    else if (config->json_config_schema.scenarioes[finished_request.next_request].path.source == "extractFromLastResponseHeader")
+    {
+
+    }
+    data.method = config->json_config_schema.scenarioes[finished_request.next_request].method;
+    data.req_payload = config->json_config_schema.scenarioes[finished_request.next_request].payload;
+    data.additional_req_headers = config->json_config_schema.scenarioes[finished_request.next_request].additonalHeaders;
+    replace_variable(data.path, config->json_config_schema.variable_name_in_path_and_data, data.user_id);
+    replace_variable(data.req_payload, config->json_config_schema.variable_name_in_path_and_data, data.user_id);
+    update_content_length(data);
+
+    data.next_request = finished_request.next_request + 1;
+
+    requests_to_submit.push_back(std::move(data));
+    return true;
+}
 
 }
 

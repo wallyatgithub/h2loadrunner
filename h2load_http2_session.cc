@@ -93,6 +93,7 @@ int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags,
                                 int32_t stream_id, const uint8_t *data,
                                 size_t len, void *user_data) {
   auto client = static_cast<Client *>(user_data);
+  client->on_stream_close(stream_id, data, len);
   client->record_ttfb();
   client->worker->stats.bytes_body += len;
   return 0;

@@ -55,6 +55,7 @@
 #include "http2.h"
 #include "memchunk.h"
 #include "template.h"
+#include "config_schema.h"
 
 using namespace nghttp2;
 
@@ -142,6 +143,7 @@ struct Config {
   std::vector<nghttp2_nv> delete_nva;
   uint16_t stream_timeout_in_ms;
   std::string rps_file;
+  Config_Schema json_config_schema;
 
   Config();
   ~Config();
@@ -334,6 +336,18 @@ struct CRUD_data {
   CRUD_data();
 };
 
+struct Request_Data {
+  std::string req_payload;
+  std::string path;
+  uint64_t user_id;
+  std::string method;
+  std::vector<std::string> additional_req_headers;
+  std::string resp_payload;
+  std::map<std::string, std::string> resp_headers;
+  uint16_t status_code;
+  size_t next_request;
+};
+
 struct Client {
   DefaultMemchunks wb;
   std::multimap<std::chrono::steady_clock::time_point, int32_t> stream_timestamp;
@@ -402,6 +416,8 @@ struct Client {
   ev_timer retart_client_watcher;
   Config* config;
   uint64_t curr_req_variable_value;
+  std::deque<Request_Data> requests_to_submit;
+  std::map<int32_t, Request_Data> requests_waiting_response;
 
   enum { ERR_CONNECT_FAIL = -100 };
 
@@ -454,6 +470,9 @@ struct Client {
   // |successfully, but it does not mean response carried successful
   // |HTTP status code.
   void on_stream_close(int32_t stream_id, bool success, bool final = false);
+
+  void on_data_chunk(int32_t stream_id, const uint8_t *data, size_t len);
+  
   // Returns RequestStat for |stream_id|.  This function must be
   // called after on_request(stream_id), and before
   // on_stream_close(stream_id, ...).  Otherwise, this will return
@@ -468,6 +487,12 @@ struct Client {
   void record_client_end_time();
 
   void signal_write();
+
+  Request_Data get_request_to_submit();
+  bool prepare_next_request(const Request_Data& data);
+  void replace_variable(std::string& input, const std::string& variable_name, uint64_t variable_value);
+  void update_content_length(Request_Data& data);
+  
 };
 
 } // namespace h2load

@@ -7,39 +7,38 @@
 #include "rapidjson/schema.h"
 #include "rapidjson/prettywriter.h"
 
+class Path {
+public:
+    std::string source;
+    std::string input;
+    std::string headerToExtract;
+    std::string luaScript;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("source", &this->source);
+        h->add_property("input", &this->input, staticjson::Flags::Optional);
+        h->add_property("headerToExtract", &this->headerToExtract, staticjson::Flags::Optional);
+        h->add_property("luaScript", &this->luaScript, staticjson::Flags::Optional);
+    }
+};
+
+class Scenario {
+public:
+    Path path;
+    std::string method;
+    std::string payload;
+    std::vector<std::string> additonalHeaders;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("path", &this->path);
+        h->add_property("payload", &this->payload, staticjson::Flags::Optional);
+        h->add_property("additonalHeaders", &this->additonalHeaders, staticjson::Flags::Optional);
+    }
+};
+
 class Config_Schema
 {
 public:
-
-    class Path {
-      public:
-        std::string source;
-        std::string input;
-        std::string headerToExtract;
-        std::string luaScript;
-        void staticjson_init(staticjson::ObjectHandler* h)
-        {
-            h->add_property("source", &this->source);
-            h->add_property("input", &this->input, staticjson::Flags::Optional);
-            h->add_property("headerToExtract", &this->headerToExtract, staticjson::Flags::Optional);
-            h->add_property("luaScript", &this->luaScript, staticjson::Flags::Optional);
-        }
-    };
-
-    class Scenario {
-      public:
-        Path path;
-        std::string method;
-        std::string payload;
-        std::vector<std::string> additonalHeaders;
-        void staticjson_init(staticjson::ObjectHandler* h)
-        {
-            h->add_property("path", &this->path);
-            h->add_property("payload", &this->payload, staticjson::Flags::Optional);
-            h->add_property("additonalHeaders", &this->additonalHeaders, staticjson::Flags::Optional);
-        }
-    };
-
     std::string schema;
     std::string host;
     uint32_t port;
