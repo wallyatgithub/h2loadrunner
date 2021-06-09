@@ -305,7 +305,6 @@ struct Worker {
   // specified
   ev_timer duration_watcher;
   ev_timer warmup_watcher;
-  uint64_t curr_req_variable_value;
 
   Worker(uint32_t id, SSL_CTX *ssl_ctx, size_t nreq_todo, size_t nclients,
          size_t rate, size_t max_samples, Config *config);
@@ -402,6 +401,7 @@ struct Client {
   std::unique_ptr<Client> ancestor;
   ev_timer retart_client_watcher;
   Config* config;
+  uint64_t curr_req_variable_value;
 
   enum { ERR_CONNECT_FAIL = -100 };
 

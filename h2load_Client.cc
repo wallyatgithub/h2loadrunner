@@ -31,7 +31,8 @@ Client::Client(uint32_t id, Worker *worker, size_t req_todo, Config* conf)
       rps_duration_started(0),
       rps_req_pending(0),
       rps_req_inflight(0),
-      curr_stream_id(0) {
+      curr_stream_id(0),
+      curr_req_variable_value(0) {
   if (req_todo == 0) { // this means infinite number of requests are to be made
     // This ensures that number of requests are unbounded
     // Just a positive number is fine, we chose the first positive number
