@@ -7,7 +7,16 @@
 #include "h2load_http2_session.h"
 
 
+std::unique_ptr<h2load::Worker> create_worker(uint32_t id, SSL_CTX *ssl_ctx,
+                                      size_t nreqs, size_t nclients,
+                                      size_t rate, size_t max_samples, h2load::Config& config);
 
+int parse_header_table_size(uint32_t &dst, const char *opt,
+                            const char *optarg);
+
+void read_script_from_file(std::istream &infile,
+                           std::vector<ev_tstamp> &timings,
+                           std::vector<std::string> &uris);
 
 void sampling_init(h2load::Sampling &smp, size_t max_samples);
 

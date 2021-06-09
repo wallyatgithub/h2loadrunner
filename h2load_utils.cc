@@ -2,6 +2,97 @@
 
 using namespace h2load;
 
+std::unique_ptr<h2load::Worker> create_worker(uint32_t id, SSL_CTX *ssl_ctx,
+                                      size_t nreqs, size_t nclients,
+                                      size_t rate, size_t max_samples, h2load::Config& config) {
+  std::stringstream rate_report;
+  if (config.is_rate_mode() && nclients > rate) {
+    rate_report << "Up to " << rate << " client(s) will be created every "
+                << util::duration_str(config.rate_period) << " ";
+  }
+
+  if (config.is_timing_based_mode()) {
+    std::cout << "spawning thread #" << id << ": " << nclients
+              << " total client(s). Timing-based test with "
+              << config.warm_up_time << "s of warm-up time and "
+              << config.duration << "s of main duration for measurements."
+              << std::endl;
+  } else {
+    std::cout << "spawning thread #" << id << ": " << nclients
+              << " total client(s). " << rate_report.str() << nreqs
+              << " total requests" << std::endl;
+  }
+
+  if (config.is_rate_mode()) {
+    return std::make_unique<Worker>(id, ssl_ctx, nreqs, nclients, rate,
+                                    max_samples, &config);
+  } else {
+    // Here rate is same as client because the rate_timeout callback
+    // will be called only once
+    return std::make_unique<Worker>(id, ssl_ctx, nreqs, nclients, nclients,
+                                    max_samples, &config);
+  }
+}
+
+int parse_header_table_size(uint32_t &dst, const char *opt,
+                            const char *optarg) {
+  auto n = util::parse_uint_with_unit(optarg);
+  if (n == -1) {
+    std::cerr << "--" << opt << ": Bad option value: " << optarg << std::endl;
+    return -1;
+  }
+  if (n > std::numeric_limits<uint32_t>::max()) {
+    std::cerr << "--" << opt
+              << ": Value too large.  It should be less than or equal to "
+              << std::numeric_limits<uint32_t>::max() << std::endl;
+    return -1;
+  }
+
+  dst = n;
+
+  return 0;
+}
+
+void read_script_from_file(std::istream &infile,
+                           std::vector<ev_tstamp> &timings,
+                           std::vector<std::string> &uris) {
+  std::string script_line;
+  int line_count = 0;
+  while (std::getline(infile, script_line)) {
+    line_count++;
+    if (script_line.empty()) {
+      std::cerr << "Empty line detected at line " << line_count
+                << ". Ignoring and continuing." << std::endl;
+      continue;
+    }
+
+    std::size_t pos = script_line.find("\t");
+    if (pos == std::string::npos) {
+      std::cerr << "Invalid line format detected, no tab character at line "
+                << line_count << ". \n\t" << script_line << std::endl;
+      exit(EXIT_FAILURE);
+    }
+
+    const char *start = script_line.c_str();
+    char *end;
+    auto v = std::strtod(start, &end);
+
+    errno = 0;
+    if (v < 0.0 || !std::isfinite(v) || end == start || errno != 0) {
+      auto error = errno;
+      std::cerr << "Time value error at line " << line_count << ". \n\t"
+                << "value = " << script_line.substr(0, pos) << std::endl;
+      if (error != 0) {
+        std::cerr << "\t" << strerror(error) << std::endl;
+      }
+      exit(EXIT_FAILURE);
+    }
+
+    timings.push_back(v / 1000.0);
+    uris.push_back(script_line.substr(pos + 1, script_line.size()));
+  }
+}
+
 void sampling_init(h2load::Sampling &smp, size_t max_samples) {
   smp.n = 0;
   smp.max_samples = max_samples;
