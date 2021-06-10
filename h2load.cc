@@ -814,7 +814,6 @@ int main(int argc, char **argv) {
       }
       break;
       case 25: {
-        Config_Schema json_config_schema;
         std::string config_file_name = optarg;
         std::ifstream buffer(config_file_name);
         std::string jsonStr((std::istreambuf_iterator<char>(buffer)),
@@ -825,7 +824,35 @@ int main(int argc, char **argv) {
               std::cout<<"error reading config file:"<<result.description()<<std::endl;
         }
         std::cout<<"Use configuration from JSON:"<<std::endl<<staticjson::to_pretty_json_string(config.json_config_schema)<<std::endl;
-        assert(config.json_config_schema.scenarioes[0].path.source == "input");
+        assert(config.json_config_schema.scenarios[0].path.source == "input");
+
+        for (auto& scenario: config.json_config_schema.scenarios)
+        {
+          for (auto& header_with_value: scenario.additonalHeaders)
+          {
+            size_t t = header_with_value.find(":", 1);
+            if ((t == std::string::npos) ||
+                (header_with_value[0] == ':' && 1 == t)) {
+              std::cerr << "invalid header, no name: " << header_with_value << std::endl;
+              continue;
+            }
+            std::string header_name = header_with_value.substr(0, t);
+            std::string header_value = header_with_value.substr(t + 1);
+            header_value.erase(header_value.begin(), std::find_if(header_value.begin(), header_value.end(),
+                               [](unsigned char ch)
+                               {
+                                  return !std::isspace(ch);
+                               }));
+
+            if (header_value.empty()) {
+              std::cerr << "invalid header - no value: " << header_with_value
+                        << std::endl;
+              continue;
+            }
+            scenario.headers_in_map[header_name] = header_value;
+          }
+        }
+        populate_config_from_json(config);
       }
       break;
    }
@@ -836,7 +863,7 @@ int main(int argc, char **argv) {
   }
 
   if (argc == optind) {
-    if (config.ifile.empty()) {
+    if (config.ifile.empty() && (config.host.empty() || config.scheme.empty())) {
       std::cerr << "no URI or input file given" << std::endl;
       exit(EXIT_FAILURE);
     }
@@ -866,7 +893,14 @@ int main(int argc, char **argv) {
   if (config.ifile.empty()) {
     std::vector<std::string> uris;
     std::copy(&argv[optind], &argv[argc], std::back_inserter(uris));
-    reqlines = parse_uris(std::begin(uris), std::end(uris), config);
+    if (uris.empty() && config.host.size() && config.scheme.size())
+    {
+        // no exit
+    }
+    else
+    {
+        reqlines = parse_uris(std::begin(uris), std::end(uris), config);
+    }
   } else {
     std::vector<std::string> uris;
     if (!config.timing_script) {
@@ -911,7 +945,7 @@ int main(int argc, char **argv) {
     reqlines = parse_uris(std::begin(uris), std::end(uris), config);
   }
 
-  if (reqlines.empty()) {
+  if (reqlines.empty() && (config.host.empty()||config.scheme.empty())) {
     std::cerr << "No URI given" << std::endl;
     exit(EXIT_FAILURE);
   }
@@ -1018,6 +1052,7 @@ int main(int argc, char **argv) {
   }
 
   if (!logfile.empty()) {
+    close(config.log_fd);
     config.log_fd = open(logfile.c_str(), O_WRONLY | O_CREAT | O_APPEND,
                          S_IRUSR | S_IWUSR | S_IRGRP);
     if (config.log_fd == -1) {

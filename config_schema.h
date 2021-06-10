@@ -28,9 +28,11 @@ public:
     std::string method;
     std::string payload;
     std::vector<std::string> additonalHeaders;
+    std::map<std::string, std::string> headers_in_map;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("path", &this->path);
+        h->add_property("method", &this->method);
         h->add_property("payload", &this->payload, staticjson::Flags::Optional);
         h->add_property("additonalHeaders", &this->additonalHeaders, staticjson::Flags::Optional);
     }
@@ -60,11 +62,13 @@ public:
     uint64_t header_table_size;
     uint64_t encoder_header_table_size;
     std::string log_file;
-    uint64_t request_per_second;
+    double request_per_second;
     std::string variable_name_in_path_and_data;
     uint64_t variable_range_start;
     uint64_t variable_range_end;
-    std::vector<Scenario> scenarioes;
+    uint64_t nreqs;
+    uint32_t stream_timeout_in_ms;
+    std::vector<Scenario> scenarios;
 
     Config_Schema():
         schema("http"),
@@ -91,16 +95,10 @@ public:
         request_per_second(0),
         variable_name_in_path_and_data(""),
         variable_range_start(0),
-        variable_range_end(0)
+        variable_range_end(0),
+        nreqs(0),
+        stream_timeout_in_ms(5000)
     {
-        Scenario scenario;
-        scenario.path.source = "input";
-        scenario.path.input = "api/version/userId";
-        scenario.method = "POST";
-        scenario.payload = "hello world";
-        scenario.additonalHeaders.push_back("content-type: text/plain");
-        scenario.additonalHeaders.push_back("content-length: 11");
-        scenarioes.push_back(scenario);
     }
 
     void staticjson_init(staticjson::ObjectHandler* h)
@@ -119,8 +117,11 @@ public:
         h->add_property("rate", &this->rate, staticjson::Flags::Optional);
         h->add_property("rate-period", &this->rate_period, staticjson::Flags::Optional);
         h->add_property("duration", &this->duration, staticjson::Flags::Optional);
+        h->add_property("total-requests", &this->nreqs, staticjson::Flags::Optional);
         h->add_property("warm-up-time", &this->warm_up_time, staticjson::Flags::Optional);
         h->add_property("connection-active-timeout", &this->connection_active_timeout, staticjson::Flags::Optional);
+        h->add_property("connection-inactive-timeout", &this->connection_inactivity_timeout, staticjson::Flags::Optional);
+        h->add_property("stream-timeout", &this->stream_timeout_in_ms, staticjson::Flags::Optional);
         h->add_property("npn-list", &this->npn_list, staticjson::Flags::Optional);
         h->add_property("header-table-size", &this->header_table_size, staticjson::Flags::Optional);
         h->add_property("encoder-header-table-size", &this->encoder_header_table_size, staticjson::Flags::Optional);
@@ -129,7 +130,7 @@ public:
         h->add_property("variable-name-in-path-and-data", &this->variable_name_in_path_and_data, staticjson::Flags::Optional);
         h->add_property("variable-range-start", &this->variable_range_start, staticjson::Flags::Optional);
         h->add_property("variable-range-end", &this->variable_range_end, staticjson::Flags::Optional);
-        h->add_property("scenarios", &this->scenarioes);
+        h->add_property("scenarios", &this->scenarios);
     }
 
 };

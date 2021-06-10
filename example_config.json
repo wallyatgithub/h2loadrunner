@@ -1,44 +1,50 @@
 {
+  "schema": "http",
+  "host": "172.18.109.197",
+  "port": 8080,
   "requests": 0,
-  "threads": 4,
-  "clients": 100,
-  "max-concurrent-streams": 30,
-  "window-bits": 30,
-  "connection-window-bits": 30,
+  "threads": 1,
+  "clients": 1,
+  "max-concurrent-streams": 64,
+  "duration": 200,
+  "request-per-second": 1,
+  "stream-timeout": 5000,
+  "variable-name-in-path-and-data": "-USER-ID",
+  "variable-range-start": 1,
+  "variable-range-end": 100000,
   "ciphers": "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256",
   "no-tls-proto": "h2c",
   "rate": 0,
   "rate-period": 0,
+  "total-requests": 0,
+  "warm-up-time": 0,
   "npn-list": "h2,h2-16,h2-14,http/1.1",
   "header-table-size": 4096,
   "encoder-header-table-size": 4096,
+  "connection-active-timeout": 0,
+  "connection-inactivity-timeout": 0,
+  "window-bits": 30,
+  "connection-window-bits": 30,
+  "log-file": "",
   "scenarios": [
     {
       "path": {
         "source": "input",
-        "input": "apt/version/USER-ID"
+        "input": "/nudm-ee/v2/imsi-2621012-USER-ID/ee-subscriptions"
       },
       "method": "POST",
       "additonalHeaders": [
         "content-type: text/plain"
       ],
-      "payload": "hello world"
+      "payload": "hello world: -USER-ID"
     },
     {
       "path": {
         "source": "extractFromLastResponseHeader",
         "headerToExtract": "location"
       },
-      "method": "GET"
+      "method": "DELETE"
     }
-  ],
-  "schema": "https",
-  "host": "www.h2loadrunner.com",
-  "port": 443,
-  "duration": 200,
-  "connection-active-timeout": 0,
-  "request-per-second": 100,
-  "variable-name-in-path-and-data": "USER-ID",
-  "variable-range-start": 1,
-  "variable-range-end": 100000
+  ]
 }
+

@@ -1,3 +1,8 @@
+#include <fstream>
+#include <unistd.h>
+#include <fcntl.h>
+#include "template.h"
+
 #include "h2load_utils.h"
 
 using namespace h2load;
@@ -652,4 +657,41 @@ int client_select_next_proto_cb(SSL *ssl, unsigned char **out,
   return SSL_TLSEXT_ERR_NOACK;
 }
 #endif // !OPENSSL_NO_NEXTPROTONEG
+
+void populate_config_from_json(h2load::Config& config)
+{
+    config.scheme = config.json_config_schema.schema;
+    config.host = config.json_config_schema.host;
+    config.port = config.json_config_schema.port;
+    config.default_port = (config.scheme == "https" ? 443 : 80);
+    config.ciphers = config.json_config_schema.ciphers;
+    config.conn_active_timeout = config.json_config_schema.connection_active_timeout;
+    config.conn_inactivity_timeout= config.json_config_schema.connection_inactivity_timeout;
+    config.duration = config.json_config_schema.duration;
+    config.encoder_header_table_size = config.json_config_schema.encoder_header_table_size;
+    config.header_table_size = config.json_config_schema.header_table_size;
+    config.max_concurrent_streams = config.json_config_schema.max_concurrent_streams;
+    config.nclients = config.json_config_schema.clients;
+    if (config.json_config_schema.no_tls_proto == "h2c")
+    {
+        config.no_tls_proto = h2load::Config::PROTO_HTTP2;
+    }
+    else
+    {
+        config.no_tls_proto = h2load::Config::PROTO_HTTP1_1;
+    }
+    config.npn_list = util::parse_config_str_list(StringRef{config.json_config_schema.npn_list.c_str()});
+    config.nreqs = config.json_config_schema.nreqs;
+    config.nthreads = config.json_config_schema.threads;
+    config.rate = config.json_config_schema.rate;
+    config.rate_period = config.json_config_schema.rate_period;
+    config.rps = config.json_config_schema.request_per_second;
+    config.stream_timeout_in_ms = config.json_config_schema.stream_timeout_in_ms;
+    config.window_bits = config.json_config_schema.window_bits;
+    config.connection_window_bits = config.json_config_schema.connection_window_bits;
+    config.warm_up_time = config.json_config_schema.warm_up_time;
+    close(config.log_fd);
+    config.log_fd = open(config.json_config_schema.log_file.c_str(), O_WRONLY | O_CREAT | O_APPEND,
+                         S_IRUSR | S_IWUSR | S_IRGRP);
+}
 

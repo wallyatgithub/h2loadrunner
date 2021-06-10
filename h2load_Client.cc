@@ -1072,21 +1072,9 @@ void Client::update_content_length(Request_Data& data)
 {
     if (data.req_payload.size())
     {
-        auto header = data.additional_req_headers.begin();
-        while (header != data.additional_req_headers.end())
-        {
-            if (header->find("Content-Length:") == 0) // TODO: case insensative comapre
-            {
-                header = data.additional_req_headers.erase(header);
-            }
-            else
-            {
-                header++;
-            }
-        }
-        std::string content_length = "Content-Length:";
-        content_length.append(std::to_string(data.req_payload.size()));
-        data.additional_req_headers.push_back(content_length);
+        std::string content_length = "Content-Length";
+        data.req_headers.erase(content_length);
+        data.req_headers[content_length] = std::to_string(data.req_payload.size());
     }
 }
 Request_Data Client::get_request_to_submit()
@@ -1100,10 +1088,10 @@ Request_Data Client::get_request_to_submit()
     else
     {
         Request_Data data;
-        data.path = config->json_config_schema.scenarioes[0].path.input;
-        data.method = config->json_config_schema.scenarioes[0].method;
-        data.req_payload = config->json_config_schema.scenarioes[0].payload;
-        data.additional_req_headers = config->json_config_schema.scenarioes[0].additonalHeaders;
+        data.path = config->json_config_schema.scenarios[0].path.input;
+        data.method = config->json_config_schema.scenarios[0].method;
+        data.req_payload = config->json_config_schema.scenarios[0].payload;
+        data.req_headers = config->json_config_schema.scenarios[0].headers_in_map;
         if (config->json_config_schema.variable_name_in_path_and_data.size())
         {
             data.user_id = curr_req_variable_value;
@@ -1124,20 +1112,27 @@ Request_Data Client::get_request_to_submit()
 
 bool Client::prepare_next_request(const Request_Data& finished_request)
 {
-    if (finished_request.next_request >= config->json_config_schema.scenarioes.size())
+    if (finished_request.next_request >= config->json_config_schema.scenarios.size())
     {
         return false;
     }
 
     Request_Data data;
     data.user_id = finished_request.user_id;
-    if (config->json_config_schema.scenarioes[finished_request.next_request].path.source == "input")
+    data.method = config->json_config_schema.scenarios[finished_request.next_request].method;
+    data.req_payload = config->json_config_schema.scenarios[finished_request.next_request].payload;
+    data.req_headers = config->json_config_schema.scenarios[finished_request.next_request].headers_in_map;
+    replace_variable(data.path, config->json_config_schema.variable_name_in_path_and_data, data.user_id);
+    replace_variable(data.req_payload, config->json_config_schema.variable_name_in_path_and_data, data.user_id);
+    update_content_length(data);
+
+    if (config->json_config_schema.scenarios[finished_request.next_request].path.source == "input")
     {
-        data.path = config->json_config_schema.scenarioes[finished_request.next_request].path.input;
+        data.path = config->json_config_schema.scenarios[finished_request.next_request].path.input;
     }
-    else if (config->json_config_schema.scenarioes[finished_request.next_request].path.source == "extractFromLastResponseHeader")
+    else if (config->json_config_schema.scenarios[finished_request.next_request].path.source == "extractFromLastResponseHeader")
     {
-        auto header = finished_request.resp_headers.find(config->json_config_schema.scenarioes[finished_request.next_request].path.headerToExtract);
+        auto header = finished_request.resp_headers.find(config->json_config_schema.scenarios[finished_request.next_request].path.headerToExtract);
         if (header != finished_request.resp_headers.end())
         {
           http_parser_url u{};
@@ -1148,13 +1143,15 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
             data.path = get_reqline(header->second.c_str(), u);
           }
         }
+        else
+        {
+            return false;
+        }
     }
-    data.method = config->json_config_schema.scenarioes[finished_request.next_request].method;
-    data.req_payload = config->json_config_schema.scenarioes[finished_request.next_request].payload;
-    data.additional_req_headers = config->json_config_schema.scenarioes[finished_request.next_request].additonalHeaders;
-    replace_variable(data.path, config->json_config_schema.variable_name_in_path_and_data, data.user_id);
-    replace_variable(data.req_payload, config->json_config_schema.variable_name_in_path_and_data, data.user_id);
-    update_content_length(data);
+    else if (config->json_config_schema.scenarios[finished_request.next_request].path.source == "deriveFromLastResponseBodyWithLuaScript")
+    {
+        // TODO: add lua interaction, update path (and also headers and body) after lua execution
+    }
 
     data.next_request = finished_request.next_request + 1;
 

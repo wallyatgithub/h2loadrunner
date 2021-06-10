@@ -341,7 +341,7 @@ struct Request_Data {
   std::string path;
   uint64_t user_id;
   std::string method;
-  std::vector<std::string> additional_req_headers;
+  std::map<std::string, std::string> req_headers;
   std::string resp_payload;
   std::map<std::string, std::string> resp_headers;
   uint16_t status_code;

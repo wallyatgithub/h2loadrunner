@@ -87,4 +87,6 @@ int client_select_next_proto_cb(SSL *ssl, unsigned char **out,
                                 unsigned int inlen, void *arg);
 #endif // !OPENSSL_NO_NEXTPROTONEG
 
+void populate_config_from_json(h2load::Config& config);
+
 #endif

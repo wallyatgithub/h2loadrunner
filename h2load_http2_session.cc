@@ -207,8 +207,24 @@ ssize_t _buffer_read_callback(nghttp2_session *session, int32_t stream_id,
                            uint8_t *buf, size_t length, uint32_t *data_flags,
                            nghttp2_data_source *source, void *user_data)
 {
-    // get data from requests_awaiting_response.find(stream_id)
-    return 0;
+    auto client = static_cast<Client *>(user_data);
+    auto config = client->config;
+    auto request = client->requests_awaiting_response.find(stream_id);
+    assert(request != client->requests_awaiting_response.end());
+    std::string& stream_buffer = client->requests_awaiting_response[stream_id].req_payload;
+
+    if (length >= stream_buffer.size()) {
+      memcpy(buf, stream_buffer.c_str(), stream_buffer.size());
+      *data_flags |= NGHTTP2_DATA_FLAG_EOF;
+      size_t buf_size = stream_buffer.size();
+      stream_buffer.clear();
+      return buf_size;
+    }
+    else {
+      memcpy(buf, stream_buffer.c_str(), length);
+      stream_buffer = stream_buffer.substr(length, std::string::npos);
+      return length;
+    }
 }
 
 namespace {
@@ -310,6 +326,11 @@ int Http2Session::submit_request() {
   }
 
   auto config = client_->worker->config;
+
+  if (config->json_config_schema.scenarios.size()){
+    return _submit_request();
+  }
+
   thread_local static auto nvas = config->nva;
   thread_local static auto read_nva = config->read_nva;
   thread_local static auto update_nva = config->update_nva;
@@ -526,7 +547,7 @@ int Http2Session::_submit_request()
 
   // tear down the client which is approaching max stream, and reconnect again
   if ((config->nclients > 1 && config->rps > 0 &&
-       INT32_MAX - client_->curr_stream_id < 32 * config->nclients * config->rps &&
+       INT32_MAX - client_->curr_stream_id < 64 * config->nclients * config->rps &&
        rand() % config->nclients == 0 )||
       (client_->curr_stream_id >= INT32_MAX - 1))
   {
@@ -538,47 +559,35 @@ int Http2Session::_submit_request()
   std::vector<nghttp2_nv> http2_nvs;
   auto data = client_->get_request_to_submit();
 
-  Headers nvs_in_string;
+  http2_nvs.reserve(data.req_headers.size() + 4);
 
-  nvs_in_string.emplace_back(":scheme", config->scheme);
+  static std::string path_header_name = ":path";
+  http2_nvs.push_back(http2::make_nv(path_header_name, data.path, false));
+
+  static std::string scheme_header_name = ":scheme";
+  http2_nvs.push_back(http2::make_nv(scheme_header_name, config->scheme, false));
+  std::string authority;
   if (config->port != config->default_port)
   {
-      nvs_in_string.emplace_back(":authority",
-                              config->host + ":" + util::utos(config->port));
-  } else
-  {
-      nvs_in_string.emplace_back(":authority", config->host);
+      authority = config->host + ":" + util::utos(config->port);
   }
-  nvs_in_string.emplace_back(":method", data.method);
-  nvs_in_string.emplace_back(":path", data.path);
-
-  for (auto& header_with_value: data.additional_req_headers)
+  else
   {
-      size_t t = header_with_value.find(":", 1);
-      if ((t == std::string::npos) ||
-          (header_with_value[0] == ':' && 1 == t)) {
-        std::cerr << "invalid header, no name: " << header_with_value << std::endl;
-        continue;
-      }
-      std::string header_name = header_with_value.substr(0, t);
-      std::string header_value = header_with_value.substr(t + 1);
-
-      if (header_value.empty()) {
-        std::cerr << "invalid header - no value: " << header_with_value
-                  << std::endl;
-        continue;
-      }
-      nvs_in_string.emplace_back(header_name, header_value);
+      authority = config->host;
   }
-  http2_nvs.reserve(nvs_in_string.size());
+  static std::string authority_header_name = ":authority";
+  http2_nvs.push_back(http2::make_nv(authority_header_name, authority, false));
 
-  for (auto &nv : nvs_in_string) {
-    http2_nvs.push_back(http2::make_nv(nv.name, nv.value, false));
+  static std::string method_header_name = ":method";
+  http2_nvs.push_back(http2::make_nv(method_header_name, data.method, false));
+
+  for (auto &header : data.req_headers) {
+    http2_nvs.push_back(http2::make_nv(header.first, header.second, false));
   }
 
   int32_t stream_id =
       nghttp2_submit_request(session_, nullptr, http2_nvs.data(), http2_nvs.size(),
-                             config->data_fd == -1 ? nullptr : &prd, nullptr);
+                             data.req_payload.empty() ? nullptr : &prd, nullptr);
   if (stream_id < 0) {
     return -1;
   }
