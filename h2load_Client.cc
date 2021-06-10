@@ -1130,6 +1130,10 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
     {
         data.path = config->json_config_schema.scenarios[finished_request.next_request].path.input;
     }
+    else if (config->json_config_schema.scenarios[finished_request.next_request].path.source == "sameWithLastUri")
+    {
+        data.path = finished_request.path;
+    }
     else if (config->json_config_schema.scenarios[finished_request.next_request].path.source == "extractFromLastResponseHeader")
     {
         auto header = finished_request.resp_headers.find(config->json_config_schema.scenarios[finished_request.next_request].path.headerToExtract);

@@ -106,3 +106,35 @@ Mon Jun  7 05:17:42 2021, actual RPS: 9585, successful responses: 9585, 3xx: 0, 
 
 
 For other possible parameters (derived from h2load), type h2loadrunner --help
+
+
+
+
+2021-06-10 update:
+=================
+h2loadrunner now supports JSON based configuration.
+
+With this feature, h2loadrunner can support flexibile scenario combinations, not limiting to CRUD.
+
+Json schema: config_schema.json
+
+Example Json data to give to h2loadrunner: example_config.json
+
+It is recommended to use a Json editor to load the schema, and input data (Of course you can do it manually, but it is error-prone when dealing with scenarios section)
+
+Export Json data, and save to a file <JSON FILE>
+
+Then use h2loadrunner --config-file=<JSON FILE> to start the load run
+
+Note: 
+a handy Json editor is included this this repo under third-party/onde:
+    Open the file third-party/onde/samples/app.html in a web browser (Firefox or Safari, won't work with Chrome locally due its strict cross-origin policy).
+    Click the "Edit Schema" menu item.
+    Paste the Json schema into the text box
+    Push the "Update schema" button.
+    Edit data
+    Click "Export", and copy the generated Json data, and save it to a file <JSON FILE>
+    Use h2loadrunner --config-file=<JSON FILE> to start the load run
+
+    Credits:
+    onde: https://github.com/exavolt/onde

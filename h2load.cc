@@ -822,6 +822,7 @@ int main(int argc, char **argv) {
         if (!staticjson::from_json_string(jsonStr.c_str(), &config.json_config_schema, &result))
         {
               std::cout<<"error reading config file:"<<result.description()<<std::endl;
+              exit(EXIT_FAILURE);
         }
         std::cout<<"Use configuration from JSON:"<<std::endl<<staticjson::to_pretty_json_string(config.json_config_schema)<<std::endl;
         assert(config.json_config_schema.scenarios[0].path.source == "input");
