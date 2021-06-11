@@ -118,14 +118,12 @@ Config::Config()
       req_variable_start(0),
       req_variable_end(0),
       req_variable_name(""),
-      data_buffer(""),
       crud_resource_header_name(""),
       crud_create_method(""),
       crud_update_method(""),
       crud_delete_method(""),
       crud_create_data_file_name(""),
       crud_update_data_file_name(""),
-      crud_update_data_template_buf(""),
       stream_timeout_in_ms(5000) {}
 
 Config::~Config() {
@@ -165,7 +163,6 @@ Stats::Stats(size_t req_todo, size_t nclients)
       min_resp_time_us(0xFFFFFFFFFFFFFFFE) {}
 
 Stream::Stream() : req_stat{}, status_success(-1) {}
-CRUD_data::CRUD_data() : data_buffer(""), resource_uri(""), user_id(0) {}
 
 namespace {
 void print_version(std::ostream &out) {
@@ -863,6 +860,11 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (config.json_config_schema.scenarios.size() && config.custom_headers.size())
+  {
+    insert_customized_headers_to_Json_schema(config);
+  }
+
   if (argc == optind) {
     if (config.ifile.empty() && (config.host.empty() || config.scheme.empty())) {
       std::cerr << "no URI or input file given" << std::endl;
@@ -886,11 +888,6 @@ int main(int argc, char **argv) {
     proto.insert(proto.begin(), static_cast<unsigned char>(proto.size()));
   }
 
-  if (!config.crud_create_data_file_name.empty()) {
-    datafile = config.crud_create_data_file_name;
-  }
-  std::vector<std::string> reqlines;
-
   if (config.ifile.empty()) {
     std::vector<std::string> uris;
     std::copy(&argv[optind], &argv[argc], std::back_inserter(uris));
@@ -900,7 +897,7 @@ int main(int argc, char **argv) {
     }
     else
     {
-        reqlines = parse_uris(std::begin(uris), std::end(uris), config);
+        config.reqlines = parse_uris(std::begin(uris), std::end(uris), config);
     }
   } else {
     std::vector<std::string> uris;
@@ -943,10 +940,10 @@ int main(int argc, char **argv) {
       }
     }
 
-    reqlines = parse_uris(std::begin(uris), std::end(uris), config);
+    config.reqlines = parse_uris(std::begin(uris), std::end(uris), config);
   }
 
-  if (reqlines.empty() && (config.host.empty()||config.scheme.empty())) {
+  if (config.reqlines.empty() && (config.host.empty()||config.scheme.empty())) {
     std::cerr << "No URI given" << std::endl;
     exit(EXIT_FAILURE);
   }
@@ -1032,24 +1029,6 @@ int main(int argc, char **argv) {
       exit(EXIT_FAILURE);
     }
     config.data_length = data_stat.st_size;
-
-    if (!config.req_variable_name.empty() && config.req_variable_end) {
-      // pre-read the data file to avoid read it in every request
-      ssize_t nread;
-      std::vector<uint8_t> buf;
-      buf.resize(config.data_length);
-      while ((nread = pread(config.data_fd, (void*)&buf[0], config.data_length, 0)) ==
-                 -1 &&
-             errno == EINTR);
-      if (nread == -1) {
-        std::cerr << "unable to read from data file: "<< datafile<< std::endl;
-        exit(EXIT_FAILURE);
-      }
-      config.data_buffer.assign((const char*)&buf[0], (size_t)nread);
-      std::string data_to_send = std::regex_replace(config.data_buffer, std::regex(config.req_variable_name),
-                                                    std::to_string(config.req_variable_end));
-      config.data_length = data_to_send.size();
-    }
   }
 
   if (!logfile.empty()) {
@@ -1151,10 +1130,10 @@ int main(int argc, char **argv) {
                    [](const Header &nv) { return nv.name == ":method"; });
   assert(method_it != std::end(shared_nva));
 
-  config.h1reqs.reserve(reqlines.size());
-  config.nva.reserve(reqlines.size());
+  config.h1reqs.reserve(config.reqlines.size());
+  config.nva.reserve(config.reqlines.size());
 
-  for (auto &req : reqlines) {
+  for (auto &req : config.reqlines) {
     // For HTTP/1.1
     auto h1req = (*method_it).value;
     h1req += ' ';
@@ -1204,80 +1183,17 @@ int main(int argc, char **argv) {
     config.nva.push_back(std::move(nva));
   }
 
-  if (!config.crud_read_method.empty()) {
-    config.read_nva = config.nva[0];
-    replace_header_in_nva(config.read_nva, ":method", config.crud_read_method);
-    remove_header_field_from_nva(config.read_nva, "content-length");
-    remove_header_field_from_nva(config.read_nva, "content-type");
-  }
-
-  std::string update_content_length;
-  std::string nv_content_length = "content-length";
-  if (!config.crud_update_method.empty()) {
-    config.update_nva = config.nva[0];
-
-    replace_header_in_nva(config.update_nva, ":method", config.crud_update_method);
-    remove_header_field_from_nva(config.update_nva, "content-length");
-
-    if (!config.crud_update_data_file_name.empty()) {
-      int update_data_fd = open(config.crud_update_data_file_name.c_str(), O_RDONLY | O_BINARY);
-      if (update_data_fd == -1) {
-        std::cerr << "Could not open file " << config.crud_update_data_file_name << std::endl;
-        exit(EXIT_FAILURE);
-      }
-
-      struct stat data_stat;
-      if (fstat(update_data_fd, &data_stat) == -1) {
-        std::cerr << "-d: Could not stat file " << config.crud_update_data_file_name << std::endl;
-        exit(EXIT_FAILURE);
-      }
-      uint64_t update_data_len = data_stat.st_size;
-
-      ssize_t nread;
-      std::vector<uint8_t> buf;
-      buf.resize(update_data_len);
-      while ((nread = pread(update_data_fd, (void*)&buf[0], update_data_len, 0)) ==
-                 -1 &&
-             errno == EINTR);
-      if (nread == -1) {
-        std::cerr << "unable to read from data file: "<< config.crud_update_data_file_name << std::endl;
-        exit(EXIT_FAILURE);
-      }
-      close(update_data_fd);
-      config.crud_update_data_template_buf.assign((const char*)&buf[0], (size_t)nread);
-      if (!config.req_variable_name.empty()) {
-        std::string update_buffer = std::regex_replace(config.crud_update_data_template_buf,
-                                           std::regex(config.req_variable_name),
-                                           std::to_string(config.req_variable_end));
-        update_data_len = update_buffer.size();
-      }
-
-      update_content_length = std::to_string(update_data_len);
-
-      if (!update_content_length.empty()) {
-        config.update_nva.emplace_back(http2::make_nv(nv_content_length, update_content_length));
-      }
-    }
-  }
-
-  if (!config.crud_delete_method.empty()) {
-      config.delete_nva = config.nva[0];
-      replace_header_in_nva(config.delete_nva, ":method", config.crud_delete_method);
-      remove_header_field_from_nva(config.delete_nva, "content-length");
-      remove_header_field_from_nva(config.delete_nva, "content-type");
-  }
-
-  if (!config.crud_create_method.empty()) {
-    for (auto& shared_nva: config.nva) {
-      replace_header_in_nva(shared_nva, ":method", config.crud_create_method);
-    }
-  }
 
   // Don't DOS our server!
   if (config.host == "nghttp2.org") {
     std::cerr << "Using h2load against public server " << config.host
               << " should be prohibited." << std::endl;
     exit(EXIT_FAILURE);
+  }
+
+  if (!config.json_config_schema.scenarios.size())
+  {
+    convert_CRUD_operation_to_Json_scenarios(config);
   }
 
   resolve_host(config);

@@ -221,12 +221,6 @@ void Client::disconnect() {
   ev_timer_stop(worker->loop, &rps_watcher);
   ev_timer_stop(worker->loop, &request_timeout_watcher);
   streams.clear();
-  streams_CRUD_data.clear();
-  streams_waiting_for_get_response.clear();
-  streams_waiting_for_update_response.clear();
-  resource_uris_to_read.clear();
-  resource_uris_to_update.clear();
-  resource_uris_to_delete.clear();
   session.reset();
   wb.reset();
   state = CLIENT_IDLE;
@@ -437,28 +431,6 @@ void Client::on_header(int32_t stream_id, const uint8_t *name, size_t namelen,
     request->second.resp_headers[header_name] = header_value;
   }
 
-  if (streams_waiting_for_create_response.find(stream_id) !=
-      streams_waiting_for_create_response.end()) {
-    std::string header_name;
-    header_name.assign((const char*)name, namelen);
-    if (worker->config->crud_resource_header_name == header_name) {
-      std::string resource_header;
-      resource_header.assign((const char*)value, valuelen);
-      http_parser_url u{};
-      auto uri = resource_header.c_str();
-      if (http_parser_parse_url(uri, resource_header.size(), 0, &u) != 0) {
-        std::cerr << "invalid URI: " << resource_header << std::endl;
-      }
-      else {
-        CRUD_data crud_data;
-        crud_data.user_id = streams_waiting_for_create_response[stream_id];
-        crud_data.resource_uri = get_reqline(uri, u);
-        resource_uris_to_read.push_back(crud_data);
-      }
-      streams_waiting_for_create_response.erase(stream_id);
-    }
-  }
-
   if (stream.status_success == -1 && namelen == 7 &&
       util::streq_l(":status", name, namelen)) {
     int status = 0;
@@ -597,19 +569,6 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final) {
 
   worker->report_progress();
   streams.erase(stream_id);
-
-  streams_CRUD_data.erase(stream_id);
-  streams_waiting_for_create_response.erase(stream_id);
-  if (streams_waiting_for_get_response.find(stream_id) !=
-      streams_waiting_for_get_response.end()) {
-    resource_uris_to_update.push_back(streams_waiting_for_get_response[stream_id]);
-    streams_waiting_for_get_response.erase(stream_id);
-  }
-  else if (streams_waiting_for_update_response.find(stream_id) !=
-           streams_waiting_for_update_response.end()) {
-    resource_uris_to_delete.push_back(streams_waiting_for_update_response[stream_id]);
-    streams_waiting_for_update_response.erase(stream_id);
-  }
 
   auto request = requests_awaiting_response.find(stream_id);
   if (request != requests_awaiting_response.end())
@@ -1092,18 +1051,18 @@ Request_Data Client::get_request_to_submit()
         data.method = config->json_config_schema.scenarios[0].method;
         data.req_payload = config->json_config_schema.scenarios[0].payload;
         data.req_headers = config->json_config_schema.scenarios[0].headers_in_map;
-        if (config->json_config_schema.variable_name_in_path_and_data.size())
+        data.user_id = curr_req_variable_value;
+        replace_variable(data.path, config->json_config_schema.variable_name_in_path_and_data, data.user_id);
+        replace_variable(data.req_payload, config->json_config_schema.variable_name_in_path_and_data, data.user_id);
+        update_content_length(data);
+        if (config->json_config_schema.variable_range_end)
         {
-            data.user_id = curr_req_variable_value;
             curr_req_variable_value++;
             if (curr_req_variable_value > config->json_config_schema.variable_range_end)
             {
               curr_req_variable_value = config->json_config_schema.variable_range_start;
             }
         }
-        replace_variable(data.path, config->json_config_schema.variable_name_in_path_and_data, curr_req_variable_value);
-        replace_variable(data.req_payload, config->json_config_schema.variable_name_in_path_and_data, curr_req_variable_value);
-        update_content_length(data);
 
         data.next_request = 1;
         return data;

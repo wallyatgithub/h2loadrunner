@@ -127,7 +127,6 @@ struct Config {
   uint64_t req_variable_start;
   uint64_t req_variable_end;
   std::string req_variable_name;
-  std::string data_buffer;
   // this is the name of the header, identifying resource created by server
   // h2load can send update/delete to operate the resource
   std::string crud_resource_header_name;
@@ -137,13 +136,10 @@ struct Config {
   std::string crud_delete_method;
   std::string crud_create_data_file_name;
   std::string crud_update_data_file_name;
-  std::string crud_update_data_template_buf;
-  std::vector<nghttp2_nv> read_nva;
-  std::vector<nghttp2_nv> update_nva;
-  std::vector<nghttp2_nv> delete_nva;
   uint16_t stream_timeout_in_ms;
   std::string rps_file;
   Config_Schema json_config_schema;
+  std::vector<std::string> reqlines;
 
   Config();
   ~Config();
@@ -329,13 +325,6 @@ struct Stream {
   Stream();
 };
 
-struct CRUD_data {
-  std::string data_buffer;
-  std::string resource_uri;
-  uint64_t user_id;
-  CRUD_data();
-};
-
 struct Request_Data {
   std::string req_payload;
   std::string path;
@@ -352,7 +341,6 @@ struct Client {
   DefaultMemchunks wb;
   std::multimap<std::chrono::steady_clock::time_point, int32_t> stream_timestamp;
   std::unordered_map<int32_t, Stream> streams;
-  std::unordered_map<int32_t, CRUD_data> streams_CRUD_data;
   ClientStat cstat;
   std::unique_ptr<Session> session;
   ev_io wev;
@@ -405,12 +393,6 @@ struct Client {
   // rps_req_inflight measures the number of requests in all phases,
   // and it is only used if --rps is given.
   size_t rps_req_inflight;
-  std::deque<CRUD_data> resource_uris_to_read;
-  std::deque<CRUD_data> resource_uris_to_update;
-  std::deque<CRUD_data> resource_uris_to_delete;
-  std::map<int32_t, uint64_t> streams_waiting_for_create_response;
-  std::map<int32_t, CRUD_data> streams_waiting_for_get_response;
-  std::map<int32_t, CRUD_data> streams_waiting_for_update_response;
   int32_t curr_stream_id;
   std::unique_ptr<Client> ancestor;
   ev_timer retart_client_watcher;

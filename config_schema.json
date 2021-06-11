@@ -22,7 +22,7 @@
       "type":"integer"
     },
     "requests":{
-      "description":"Number of requests across all clients",
+      "description":"Number of requests across all clients. Must be greater than zero if duration (time-based test) field does not have a value",
       "default": 1,
       "type":"integer"
     },
