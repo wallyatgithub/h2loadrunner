@@ -30,7 +30,7 @@ public:
     std::map<std::string, std::string> headers_in_map;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
-        h->add_property("luaScript", &this->luaScript);
+        h->add_property("luaScript", &this->luaScript, staticjson::Flags::Optional);
         h->add_property("path", &this->path);
         h->add_property("method", &this->method);
         h->add_property("payload", &this->payload, staticjson::Flags::Optional);

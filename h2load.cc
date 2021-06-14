@@ -849,6 +849,24 @@ int main(int argc, char **argv) {
             }
             scenario.headers_in_map[header_name] = header_value;
           }
+          if (scenario.payload.size())
+          {
+            std::ifstream f(scenario.payload);
+            if (f.good())
+            {
+              std::string payloadStr((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+              scenario.payload = payloadStr;
+            }
+          }
+          if (scenario.luaScript.size())
+          {
+            std::ifstream f(scenario.luaScript);
+            if (f.good())
+            {
+              std::string luaScriptStr((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+              scenario.luaScript = luaScriptStr;
+            }
+          }
         }
         populate_config_from_json(config);
       }
