@@ -745,7 +745,7 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 scenario.method = config.crud_read_method;
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
-                    scenario.path.source = "sameWithLastUri";
+                    scenario.path.source = "sameWithLastOne";
                 }
                 else
                 {
@@ -772,7 +772,7 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 scenario.method = config.crud_update_method;
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
-                    scenario.path.source = "sameWithLastUri";
+                    scenario.path.source = "sameWithLastOne";
                 }
                 else
                 {
@@ -803,7 +803,7 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 }
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
-                    scenario.path.source = "sameWithLastUri";
+                    scenario.path.source = "sameWithLastOne";
                 }
                 else
                 {

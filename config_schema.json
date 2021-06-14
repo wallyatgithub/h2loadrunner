@@ -132,15 +132,11 @@
       "type":"integer"
     },
     "scenarios":{
-      "description":"Array of scenarioes",
+      "description":"Array of requests, each request has path, method, optional payload, optional addtional headers, and optionally an lua script for advanced users to generate the request",
       "type":"array",
       "minItems":1,
       "items": {
       "type": "object",
-        "required":[
-          "path",
-          "method"
-        ],
         "properties":{
           "path":{
             "description": "path of the uri",
@@ -148,15 +144,13 @@
             "properties":{
               "source": {
                 "type":"string",
-                "enum": ["input", "sameWithLastUri", "extractFromLastResponseHeader", "deriveFromLastResponseBodyWithLuaScript"]
+                "description": "Specifies where to get the path header for this request. input: direct input the path header in input field next; sameWithLastOne: same path header with last request; extractFromLastResponseHeader: extract the path for this request from a specific header (name specified in headerToExtract field) of last response; fromLuaScript: path is generated from lua script (see field luaScript)",
+                "enum": ["input", "sameWithLastOne", "extractFromLastResponseHeader", "fromLuaScript"]
               },
               "input": {
                 "type":"string"
               },
               "headerToExtract": {
-                "type":"string"
-              },
-              "luaScript": {
                 "type":"string"
               }
             }
@@ -175,6 +169,10 @@
           "items": {
              "type": "string"
             }
+          },
+          "luaScript": {
+            "type":"string",
+            "description": "lua script with a function named make_request, with 4 arguments: response_headers, response_payload, request_headers_to_send, request_payload_to_send; returning request_headers_to_send and request_payload_to_send. h2loadrunner passes the response headers and payload of last request within this scenarios sequence, and the request headers (path, method, additional headers) and payload specified here, to this lua function, which can update the request headers and request payload, and h2loadrunner will use the updated headers and payload for the request. Example script: function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send) return request_headers_to_send, request_payload_to_send end"
           }
         }
       }

@@ -52,6 +52,12 @@
 
 #include <openssl/ssl.h>
 
+extern "C" {
+      #include "lua.h"
+      #include "lualib.h"
+      #include "lauxlib.h"
+}
+
 #include "http2.h"
 #include "memchunk.h"
 #include "template.h"
@@ -400,6 +406,7 @@ struct Client {
   uint64_t curr_req_variable_value;
   std::deque<Request_Data> requests_to_submit;
   std::map<int32_t, Request_Data> requests_awaiting_response;
+  std::vector<lua_State *> lua_states;
 
   enum { ERR_CONNECT_FAIL = -100 };
 
@@ -474,7 +481,7 @@ struct Client {
   bool prepare_next_request(const Request_Data& data);
   void replace_variable(std::string& input, const std::string& variable_name, uint64_t variable_value);
   void update_content_length(Request_Data& data);
-  
+  void update_request_with_lua(lua_State * L, const Request_Data& finished_request, Request_Data& request_to_send);
 };
 
 } // namespace h2load

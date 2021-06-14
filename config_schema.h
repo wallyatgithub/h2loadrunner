@@ -12,18 +12,17 @@ public:
     std::string source;
     std::string input;
     std::string headerToExtract;
-    std::string luaScript;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("source", &this->source);
         h->add_property("input", &this->input, staticjson::Flags::Optional);
         h->add_property("headerToExtract", &this->headerToExtract, staticjson::Flags::Optional);
-        h->add_property("luaScript", &this->luaScript, staticjson::Flags::Optional);
     }
 };
 
 class Scenario {
 public:
+    std::string luaScript;
     Path path;
     std::string method;
     std::string payload;
@@ -31,6 +30,7 @@ public:
     std::map<std::string, std::string> headers_in_map;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
+        h->add_property("luaScript", &this->luaScript);
         h->add_property("path", &this->path);
         h->add_property("method", &this->method);
         h->add_property("payload", &this->payload, staticjson::Flags::Optional);

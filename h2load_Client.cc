@@ -62,6 +62,17 @@ Client::Client(uint32_t id, Worker *worker, size_t req_todo, Config* conf)
   ev_timer_init(&stream_timeout_watcher, stream_timeout_cb, 0., 0.);
   stream_timeout_watcher.data = this;
 
+  for (auto& scenario: conf->json_config_schema.scenarios)
+  {
+    lua_State * L = luaL_newstate();
+    luaL_openlibs(L);
+    if (scenario.luaScript.size())
+    {
+      luaL_dostring(L, scenario.luaScript.c_str());
+    }
+    lua_states.push_back(L);
+  }
+
 }
 
 Client::~Client() {
@@ -73,6 +84,11 @@ Client::~Client() {
 
   worker->sample_client_stat(&cstat);
   ++worker->client_smp.n;
+  for (auto& L: lua_states)
+  {
+    lua_close(L);
+  }
+  lua_states.clear();
 }
 
 int Client::do_read() { return readfn(*this); }
@@ -1076,22 +1092,22 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
         return false;
     }
 
-    Request_Data data;
-    data.user_id = finished_request.user_id;
-    data.method = config->json_config_schema.scenarios[finished_request.next_request].method;
-    data.req_payload = config->json_config_schema.scenarios[finished_request.next_request].payload;
-    data.req_headers = config->json_config_schema.scenarios[finished_request.next_request].headers_in_map;
-    replace_variable(data.path, config->json_config_schema.variable_name_in_path_and_data, data.user_id);
-    replace_variable(data.req_payload, config->json_config_schema.variable_name_in_path_and_data, data.user_id);
-    update_content_length(data);
+    Request_Data new_request;
+    new_request.user_id = finished_request.user_id;
+    new_request.method = config->json_config_schema.scenarios[finished_request.next_request].method;
+    new_request.req_payload = config->json_config_schema.scenarios[finished_request.next_request].payload;
+    new_request.req_headers = config->json_config_schema.scenarios[finished_request.next_request].headers_in_map;
+    replace_variable(new_request.path, config->json_config_schema.variable_name_in_path_and_data, new_request.user_id);
+    replace_variable(new_request.req_payload, config->json_config_schema.variable_name_in_path_and_data, new_request.user_id);
+    update_content_length(new_request);
 
     if (config->json_config_schema.scenarios[finished_request.next_request].path.source == "input")
     {
-        data.path = config->json_config_schema.scenarios[finished_request.next_request].path.input;
+        new_request.path = config->json_config_schema.scenarios[finished_request.next_request].path.input;
     }
-    else if (config->json_config_schema.scenarios[finished_request.next_request].path.source == "sameWithLastUri")
+    else if (config->json_config_schema.scenarios[finished_request.next_request].path.source == "sameWithLastOne")
     {
-        data.path = finished_request.path;
+        new_request.path = finished_request.path;
     }
     else if (config->json_config_schema.scenarios[finished_request.next_request].path.source == "extractFromLastResponseHeader")
     {
@@ -1103,7 +1119,7 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
             std::cerr << "invalid URI: " << header->second << std::endl;
           }
           else {
-            data.path = get_reqline(header->second.c_str(), u);
+            new_request.path = get_reqline(header->second.c_str(), u);
           }
         }
         else
@@ -1111,15 +1127,83 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
             return false;
         }
     }
-    else if (config->json_config_schema.scenarios[finished_request.next_request].path.source == "deriveFromLastResponseBodyWithLuaScript")
+
+    if (config->json_config_schema.scenarios[finished_request.next_request].luaScript.size())
     {
-        // TODO: add lua interaction, update path (and also headers and body) after lua execution
+        update_request_with_lua(lua_states[finished_request.next_request], finished_request, new_request);
     }
 
-    data.next_request = finished_request.next_request + 1;
+    new_request.next_request = finished_request.next_request + 1;
 
-    requests_to_submit.push_back(std::move(data));
+    requests_to_submit.push_back(std::move(new_request));
     return true;
+}
+
+void Client::update_request_with_lua(lua_State * L, const Request_Data& finished_request, Request_Data& request_to_send)
+{
+  lua_getglobal(L,"make_request");
+  if(lua_isfunction(L, -1))
+  {
+    lua_createtable(L, 0, finished_request.resp_headers.size());
+
+    for (auto& header: finished_request.resp_headers) {
+        lua_pushlstring(L, header.first.c_str(), header.first.size());
+        lua_pushlstring(L, header.second.c_str(), header.second.size());
+        lua_rawset(L, -3);
+    }
+    lua_pushlstring(L, finished_request.resp_payload.c_str(), finished_request.resp_payload.size());
+    lua_createtable(L, 0, request_to_send.req_headers.size());
+    for (auto& header: request_to_send.req_headers) {
+        lua_pushlstring(L, header.first.c_str(), header.first.size());
+        lua_pushlstring(L, header.second.c_str(), header.second.size());
+        lua_rawset(L, -3);
+    }
+    lua_pushlstring(L, request_to_send.req_payload.c_str(), request_to_send.req_payload.size());
+
+    lua_pcall(L, 4, 2, 0);
+
+    while (!lua_isnil(L, -1))
+    {
+        switch (lua_type(L, -1))
+        {
+            case LUA_TSTRING:
+            {
+                size_t len;
+                const char *str = lua_tolstring(L, -1, &len);
+                request_to_send.req_payload.assign(str, len);
+                break;
+            }
+            case LUA_TTABLE:
+            {
+                std::map<std::string, std::string> headers;
+                lua_pushnil(L);
+                while (lua_next(L, -2) != 0) {
+                  size_t len;
+                  /* uses 'key' (at index -2) and 'value' (at index -1) */
+                  if ((LUA_TSTRING != lua_type(L, -2))||(LUA_TSTRING != lua_type(L, -1)))
+                  {
+                      std::cerr<<"invalid http headers returned from lua function make_request"<<std::endl;
+                  }
+                  const char* k = lua_tolstring (L, -2, &len);
+                  std::string key(k, len);
+                  const char* v = lua_tolstring (L, -1, &len);
+                  std::string value(v, len);
+                  headers[key] = value;
+                  /* removes 'value'; keeps 'key' for next iteration */
+                  lua_pop(L, 1);
+                }
+                request_to_send.req_headers = headers;
+                break;
+            }
+            default:
+            {
+                std::cerr<<"invalid data returned from lua function make_request"<<std::endl;
+                break;
+            }
+        }
+        lua_pop(L,1);
+    }
+  }
 }
 
 }
