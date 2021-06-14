@@ -280,6 +280,43 @@ int Http1Session::on_write() {
   return 0;
 }
 
+int Http1Session::_submit_request()
+{
+  h2load::Request_Data data = client_->get_request_to_submit();
+  auto config = client_->worker->config;
+  std::string authority;
+  if (config->port != config->default_port)
+  {
+      authority = config->host + ":" + util::utos(config->port);
+  }
+  else
+  {
+      authority = config->host;
+  }
+  std::string req;
+  req.append(data.method).append(" ").append(data.path).append(" HTTP/1.1\r\n");
+  req.append("Host: ").append(authority).append("\r\n");
+
+  // TODO:    data.req_headers
+
+  client_->on_request_start(stream_req_counter_);
+
+  auto req_stat = client_->get_req_stat(stream_req_counter_);
+
+  client_->record_request_time(req_stat);
+  client_->wb.append(req);
+
+  if (config->data_fd == -1 || config->data_length == 0) {
+    // increment for next request
+    stream_req_counter_ += 2;
+
+    return 0;
+  }
+
+  return on_write();
+}
+
+
 void Http1Session::terminate() { complete_ = true; }
 
 Client *Http1Session::get_client() { return client_; }

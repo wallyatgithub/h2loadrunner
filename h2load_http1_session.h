@@ -46,6 +46,7 @@ public:
   virtual void terminate();
   virtual size_t max_concurrent_streams();
   Client *get_client();
+  int _submit_request();
   int32_t stream_req_counter_;
   int32_t stream_resp_counter_;
 
