@@ -239,6 +239,7 @@ void Client::disconnect() {
   ev_timer_stop(worker->loop, &conn_active_watcher);
   ev_timer_stop(worker->loop, &rps_watcher);
   ev_timer_stop(worker->loop, &request_timeout_watcher);
+  ev_timer_stop(worker->loop, &stream_timeout_watcher);
   streams.clear();
   session.reset();
   wb.reset();
