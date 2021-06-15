@@ -47,6 +47,7 @@ public:
   virtual size_t max_concurrent_streams();
   Client *get_client();
   int _submit_request();
+  int _on_write();
   int32_t stream_req_counter_;
   int32_t stream_resp_counter_;
 

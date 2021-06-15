@@ -176,6 +176,10 @@ void Http1Session::on_connect() { client_->signal_write(); }
 
 int Http1Session::submit_request() {
   auto config = client_->worker->config;
+  if (config->json_config_schema.scenarios.size()){
+    return _submit_request();
+  }
+
   const auto &req = config->h1reqs[client_->reqidx];
   client_->reqidx++;
 
@@ -234,6 +238,10 @@ int Http1Session::on_write() {
   }
 
   auto config = client_->worker->config;
+  if (config->json_config_schema.scenarios.size()){
+    return _on_write();
+  }
+
   auto req_stat = client_->get_req_stat(stream_req_counter_);
   if (!req_stat) {
     return 0;
@@ -297,7 +305,18 @@ int Http1Session::_submit_request()
   req.append(data.method).append(" ").append(data.path).append(" HTTP/1.1\r\n");
   req.append("Host: ").append(authority).append("\r\n");
 
-  // TODO:    data.req_headers
+  for (auto& header: data.req_headers)
+  {
+      if (header.first == ":path" || header.first == ":scheme" || header.first == ":authority" || header.first == ":method")
+      {
+          continue;
+      }
+      req.append(header.first);
+      req.append(": ");
+      req.append(header.second);
+      req.append("\r\n");
+  }
+  req += "\r\n";
 
   client_->on_request_start(stream_req_counter_);
 
@@ -306,14 +325,59 @@ int Http1Session::_submit_request()
   client_->record_request_time(req_stat);
   client_->wb.append(req);
 
-  if (config->data_fd == -1 || config->data_length == 0) {
+  if (data.req_payload.empty()) {
     // increment for next request
     stream_req_counter_ += 2;
 
     return 0;
   }
+  client_->requests_awaiting_response[stream_req_counter_] = data;
 
   return on_write();
+}
+
+int Http1Session::_on_write() {
+  if (complete_) {
+    return -1;
+  }
+
+  auto config = client_->worker->config;
+  auto req_stat = client_->get_req_stat(stream_req_counter_);
+  if (!req_stat) {
+    return 0;
+  }
+  auto request = client_->requests_awaiting_response.find(stream_req_counter_);
+  assert(request != client_->requests_awaiting_response.end());
+  std::string& stream_buffer = client_->requests_awaiting_response[stream_req_counter_].req_payload;
+
+  if (!stream_buffer.empty()) {
+    auto &wb = client_->wb;
+    size_t send_size = stream_buffer.size() > 16_k ? 16_k : stream_buffer.size();
+
+    wb.append(stream_buffer.c_str(), send_size);
+
+    if (client_->worker->config->verbose) {
+      std::cout << "[send " << send_size << " byte(s)]" << std::endl;
+    }
+
+    if (send_size < stream_buffer.size())
+    {
+        stream_buffer = stream_buffer.substr(send_size, std::string::npos);
+    }
+    else
+    {
+        // increment for next request
+        stream_req_counter_ += 2;
+
+        if (stream_resp_counter_ == stream_req_counter_)
+        {
+            // Response has already been received
+            client_->on_stream_close(stream_resp_counter_ - 2, true,
+                                   client_->final);
+        }
+    }
+  }
+  return 0;
 }
 
 
