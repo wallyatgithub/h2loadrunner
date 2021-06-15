@@ -74,7 +74,6 @@ public:
         schema("http"),
         host(""),
         port(80),
-        requests(0),
         threads(1),
         clients(1),
         max_concurrent_streams(1),
@@ -106,7 +105,6 @@ public:
         h->add_property("schema", &this->schema);
         h->add_property("host", &this->host);
         h->add_property("port", &this->port, staticjson::Flags::Optional);
-        h->add_property("requests", &this->requests, staticjson::Flags::Optional);
         h->add_property("threads", &this->threads, staticjson::Flags::Optional);
         h->add_property("clients", &this->clients, staticjson::Flags::Optional);
         h->add_property("max-concurrent-streams", &this->max_concurrent_streams, staticjson::Flags::Optional);

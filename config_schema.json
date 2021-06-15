@@ -16,59 +16,55 @@
       "description":"port, 80, 443 ,etc.",
       "type":"integer"
     },
-    "requests":{
-      "description":"Number of requests across all clients. Must be greater than zero if duration (time-based test) field does not have a value",
-      "default": 1,
-      "type":"integer"
-    },
     "threads":{
-      "description":"Number of native threads",
+      "description":"Number of native threads. Each thread can serve multiple connections (clients)",
       "default": 1,
       "type":"integer"
     },
     "clients":{
-      "description":"Number of concurrent clients.",
+      "description":"Total number of concurrent clients. If working together with rate field, this field specifies the total number of connections to be made. This field must have value no less than threads field.",
       "default": 1,
       "type":"integer"
     },
     "duration":{
-      "description":"Specifies the main duration (second) for the measurements in case of timing-based benchmarking. The duration field and the rate field are mutually exclusive.",
+      "description":"Specifies the duration (in second) for timing-based benchmarking. The duration field and the rate field are mutually exclusive.",
       "type":"integer"
     },
     "total-requests":{
-      "description":"Number of requests across all clients. This field is ignored if duration field has a valid value",
+      "description":"Number of requests across all clients. This field is ignored if duration field has a positive value, and this field must have a positive value if duration field does not",
+      "default": 1,
       "type":"integer"
     },
     "warm-up-time":{
-      "description":"Specifies the time period before starting the actual measurements, in case of timing-based benchmarking. Needs nopn-zero value in duration field for warm-up-time field to work.",
+      "description":"Specifies the time period (in second) before starting the actual measurements, in case of timing-based benchmarking. Needs non-zero value in duration field for warm-up-time field to work.",
       "type":"integer"
     },
     "max-concurrent-streams":{
-      "description":"max-concurrent-streams for each connection",
+      "description":"max-concurrent-streams for each connection, ignored for http 1.x test",
       "default": 1,
       "type":"integer"
     },
     "request-per-second":{
-      "description":"Specify request per second for each client.",
+      "description":"Specifies request per second for each client(connection). If no value is given in this field, it will try to send as many as possible requests for each client(connection)",
       "type":"number"
     },
     "rate":{
-      "description":"Specifies the fixed rate at which connections are created. The rate must be a positive integer, representing the number of connections to be made per rate period. The maximum number of connections to be made is given in client field. This rate will be distributed among threads as evenly as possible. For example, with thread=2 and date=4, each thread gets 2 connections per period.  When the rate is 0, the program will run as it normally does, creating connections at whatever variable rate it wants. The duration field and the rate field are mutually exclusive.",
+      "description":"Specifies a fixed rate at which connections are created. It must be a positive integer, representing the number of connections to be made per rate-period. The maximum number of connections to be made is given in clients field. This rate will be distributed among threads as evenly as possible. For example, with thread=2 and rate=4, each thread gets 2 connections per rate-period, until total number of connections specified in clients field is reached.  When the rate is 0, the program will run as it normally does, creating connections at whatever variable rate it wants. The duration field and the rate field are mutually exclusive.",
       "default": 0,
       "type":"integer"
     },
     "rate-period":{
-      "description":"Specifies the time period between creating connections. The period must be a positive number, representing the length of the period in time. This option is ignored if the rate option is not used.",
+      "description":"Specifies the time period between connection creating connections. The period must be a positive number, representing the length of the period in time. This option is ignored if the rate option is not used.",
       "default": 1,
       "type":"integer"
     },
     "stream-timeout":{
-      "description":"Specifies the maximum time (ms) that h2loadrunner would wait for response before resetting a stream.",
+      "description":"Specifies the maximum time (ms) that h2loadrunner would wait for response before resetting a stream. This field is not applicable for http 1.x test",
       "default": 5000,
       "type":"integer"
     },
     "variable-name-in-path-and-data":{
-      "description":"Specified the variable name in uri path and payload, which is to be replaced with an actual user ID specified next",
+      "description":"Specified the variable name in uri path and payload, which is to be replaced with an actual user ID specified next.",
       "type":"string"
     },
     "variable-range-start":{
