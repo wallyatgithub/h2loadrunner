@@ -394,6 +394,10 @@ int Http2Session::_submit_request()
   http2_nvs.push_back(http2::make_nv(method_header_name, data.method, false));
 
   for (auto &header : data.req_headers) {
+    if (header.first == ":path" || header.first == ":scheme" || header.first == ":authority" || header.first == ":method")
+    {
+        continue;
+    }
     http2_nvs.push_back(http2::make_nv(header.first, header.second, false));
   }
 

@@ -1151,13 +1151,30 @@ void Client::update_request_with_lua(lua_State * L, const Request_Data& finished
         lua_pushlstring(L, header.second.c_str(), header.second.size());
         lua_rawset(L, -3);
     }
+    static std::string method_name = ":method";
+    lua_pushlstring(L, method_name.c_str(), method_name.size());
+    lua_pushlstring(L, finished_request.method.c_str(), finished_request.method.size());
+    lua_rawset(L, -3);
+    static std::string path_name = ":path";
+    lua_pushlstring(L, path_name.c_str(), path_name.size());
+    lua_pushlstring(L, finished_request.path.c_str(), finished_request.path.size());
+    lua_rawset(L, -3);
+
     lua_pushlstring(L, finished_request.resp_payload.c_str(), finished_request.resp_payload.size());
+
     lua_createtable(L, 0, request_to_send.req_headers.size());
     for (auto& header: request_to_send.req_headers) {
         lua_pushlstring(L, header.first.c_str(), header.first.size());
         lua_pushlstring(L, header.second.c_str(), header.second.size());
         lua_rawset(L, -3);
     }
+    lua_pushlstring(L, method_name.c_str(), method_name.size());
+    lua_pushlstring(L, request_to_send.method.c_str(), request_to_send.method.size());
+    lua_rawset(L, -3);
+    lua_pushlstring(L, path_name.c_str(), path_name.size());
+    lua_pushlstring(L, request_to_send.path.c_str(), request_to_send.path.size());
+    lua_rawset(L, -3);
+
     lua_pushlstring(L, request_to_send.req_payload.c_str(), request_to_send.req_payload.size());
 
     lua_pcall(L, 4, 2, 0);
@@ -1192,6 +1209,10 @@ void Client::update_request_with_lua(lua_State * L, const Request_Data& finished
                   /* removes 'value'; keeps 'key' for next iteration */
                   lua_pop(L, 1);
                 }
+                request_to_send.method = headers[":method"];
+                headers.erase(":method");
+                request_to_send.path = headers[":path"];
+                headers.erase(":path");
                 request_to_send.req_headers = headers;
                 break;
             }
