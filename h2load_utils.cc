@@ -1,3 +1,7 @@
+#include <algorithm>
+#include <cctype>
+#include <string>
+
 #include <fstream>
 #include <unistd.h>
 #include <fcntl.h>
@@ -695,10 +699,13 @@ void populate_config_from_json(h2load::Config& config)
                          S_IRUSR | S_IWUSR | S_IRGRP);
 }
 
-void insert_customized_headers_to_Json_schema(h2load::Config& config)
+void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
 {
     for (auto& header: config.custom_headers)
     {
+        std::string header_name = header.name;
+        std::transform(header_name.begin(), header_name.end(), header_name.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
         for (auto& scenario: config.json_config_schema.scenarios)
         {
             scenario.headers_in_map[header.name] = header.value;
@@ -731,10 +738,6 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                     std::string payloadStr((std::istreambuf_iterator<char>(buffer)), std::istreambuf_iterator<char>());
                     scenario.payload = payloadStr;
                 }
-                for (auto& header: config.custom_headers)
-                {
-                    scenario.headers_in_map[header.name] = header.value;
-                }
                 config.json_config_schema.scenarios.push_back(scenario);
             }
 
@@ -759,10 +762,6 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                     std::string payloadStr((std::istreambuf_iterator<char>(buffer)), std::istreambuf_iterator<char>());
                     scenario.payload = payloadStr;
                 }
-                for (auto& header: config.custom_headers)
-                {
-                    scenario.headers_in_map[header.name] = header.value;
-                }
                 config.json_config_schema.scenarios.push_back(scenario);
             }
 
@@ -786,11 +785,6 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                     std::string payloadStr((std::istreambuf_iterator<char>(buffer)), std::istreambuf_iterator<char>());
                     scenario.payload = payloadStr;
                 }
-
-                for (auto& header: config.custom_headers)
-                {
-                    scenario.headers_in_map[header.name] = header.value;
-                }
                 config.json_config_schema.scenarios.push_back(scenario);
             }
 
@@ -811,10 +805,6 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                     scenario.path.headerToExtract = config.crud_resource_header_name;
                 }
                 header_tracked = true;
-                for (auto& header: config.custom_headers)
-                {
-                    scenario.headers_in_map[header.name] = header.value;
-                }
                 config.json_config_schema.scenarios.push_back(scenario);
             }
         }

@@ -878,11 +878,6 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (config.json_config_schema.scenarios.size() && config.custom_headers.size())
-  {
-    insert_customized_headers_to_Json_schema(config);
-  }
-
   if (argc == optind) {
     if (config.ifile.empty() && (config.host.empty() || config.scheme.empty())) {
       std::cerr << "no URI or input file given" << std::endl;
@@ -1212,6 +1207,11 @@ int main(int argc, char **argv) {
   if (!config.json_config_schema.scenarios.size())
   {
     convert_CRUD_operation_to_Json_scenarios(config);
+  }
+
+  if (config.json_config_schema.scenarios.size() && config.custom_headers.size())
+  {
+    insert_customized_headers_to_Json_scenarios(config);
   }
 
   resolve_host(config);

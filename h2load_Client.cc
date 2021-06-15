@@ -1,6 +1,9 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <regex>
+#include <algorithm>
+#include <cctype>
+#include <string>
 
 #include "h2load.h"
 #include "h2load_utils.h"
@@ -1047,7 +1050,7 @@ void Client::update_content_length(Request_Data& data)
 {
     if (data.req_payload.size())
     {
-        std::string content_length = "Content-Length";
+        std::string content_length = "content-length";
         data.req_headers.erase(content_length);
         data.req_headers[content_length] = std::to_string(data.req_payload.size());
     }
@@ -1205,6 +1208,8 @@ void Client::update_request_with_lua(lua_State * L, const Request_Data& finished
                   std::string key(k, len);
                   const char* v = lua_tolstring (L, -1, &len);
                   std::string value(v, len);
+                  std::transform(key.begin(), key.end(), key.begin(),
+                                 [](unsigned char c){ return std::tolower(c); });
                   headers[key] = value;
                   /* removes 'value'; keeps 'key' for next iteration */
                   lua_pop(L, 1);
