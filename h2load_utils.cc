@@ -808,7 +808,6 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 config.json_config_schema.scenarios.push_back(scenario);
             }
         }
+        std::cout<<"Scenarios to run:"<<std::endl<<staticjson::to_pretty_json_string(config.json_config_schema)<<std::endl;
     }
-
-    std::cout<<"Scenarios to run:"<<std::endl<<staticjson::to_pretty_json_string(config.json_config_schema)<<std::endl;
 }

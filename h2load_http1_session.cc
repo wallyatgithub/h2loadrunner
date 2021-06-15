@@ -325,13 +325,14 @@ int Http1Session::_submit_request()
   client_->record_request_time(req_stat);
   client_->wb.append(req);
 
+  client_->requests_awaiting_response[stream_req_counter_] = data;
+
   if (data.req_payload.empty()) {
     // increment for next request
     stream_req_counter_ += 2;
 
     return 0;
   }
-  client_->requests_awaiting_response[stream_req_counter_] = data;
 
   return on_write();
 }
