@@ -137,6 +137,7 @@ namespace {
 int htp_body_cb(llhttp_t *htp, const char *data, size_t len) {
   auto session = static_cast<Http1Session *>(htp->data);
   auto client = session->get_client();
+  client->on_data_chunk(session->stream_resp_counter_, (const uint8_t*)data, len);
 
   client->record_ttfb();
   client->worker->stats.bytes_body += len;
