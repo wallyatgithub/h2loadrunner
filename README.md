@@ -71,11 +71,12 @@
 
 # How to build
 
-  These packages are required to build h2loadrunner:
+  These packages are required to build h2loadrunner (take Ubuntu for example):
   
-    openssl
-    libev-dev
     libnghttp2-dev
+    openssl
+    libssl-dev
+    libev-dev
     liblua5.3-dev
     rapidjson-dev
 
