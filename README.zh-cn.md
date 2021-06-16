@@ -42,7 +42,7 @@
      https://github.com/Blazemeter/jmeter-http2-plugin
 
 
-  所以，JMeter加载Blazemeter的HTTP2插件的方式，不是很行。
+  所以，JMeter加载Blazemeter的HTTP2插件的方式，不是非常行。
 
   大家耳熟能详的HTTP性能测试工具，比如wrk, wrk2, 却又不支持HTTP2。
 
@@ -54,9 +54,17 @@
 
   如果去搜索"http 2 benchmark tool"，第一个出来的是h2load。
   
-  前面说了，h2load只能支持静态的URI和URI列表，无法做Request之间的关联，无法动态定制Request的内容，所以，好像其实根本没有轮子。
+  前面说了，h2load只能支持静态的URI和URI列表，无法做Request之间的关联，无法动态定制Request的内容。
+  
+  envoyproxy下面有一个性能测试项目，叫做nighthawk，看起来非常专业，既能支持HTTP1, 又能支持HTTP2。
+  
+  但是仔细一看，基本配置情况下，它似乎只能生成单一的静态请求，或者是重放之前记录的请求。虽然架构看起来很先进，但是要生成满足要求的测试流量，实际也不是那么轻而易举。
+  
+  
 
-  正因于此，造一个轮子也是不得已。
+  所以看起来，现存的工具要么直接不行，要么有局限性没有实际可用性，要么太重量级不好上手，并且存在不确定性。
+  
+  所以，再造一个轮子，也不算是多此一举。
 
   h2load基于libEv，底层是epoll，支持多线程并发，从性能角度考虑，应该没什么问题。
   

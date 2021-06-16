@@ -46,6 +46,8 @@
 
   Classic HTTP benchmarking tools, like wrk, wrk2, do NOT support HTTP2 at all.
   
+  envoyproxy/nighthawk, which is capable of HTTP2 benchmarking, will either generate single flavor of static request, or replay recorded requests, but it cannot dynamically generate customized requests with corelations between requests.
+  
   Gatling, which is believed to be powerful, yet, is heavy-weighted.
   
   Gatling requires Scala programing skill, is thus not easy for quick start and out-of-the-box usage.
@@ -53,7 +55,7 @@
   Locust, which aims to be a powerful tool for performance testing, however, requires Python programing skill, and is not ready for out-of-the-box usage.
   
   Besides, Locust has a number of terminologies like decorators, making it bit difficult for quick start.
-  
+    
   So, that is the background why this new tool is created.
   
   h2load is chosen to be the base of this new tool, as it comes from the nghttp2 project, which means it has the most native HTTP2 support.
