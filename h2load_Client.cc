@@ -1103,7 +1103,6 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
     new_request.req_headers = config->json_config_schema.scenarios[finished_request.next_request].headers_in_map;
     replace_variable(new_request.path, config->json_config_schema.variable_name_in_path_and_data, new_request.user_id);
     replace_variable(new_request.req_payload, config->json_config_schema.variable_name_in_path_and_data, new_request.user_id);
-    update_content_length(new_request);
 
     if (config->json_config_schema.scenarios[finished_request.next_request].path.source == "input")
     {
@@ -1136,6 +1135,8 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
     {
         update_request_with_lua(lua_states[finished_request.next_request], finished_request, new_request);
     }
+
+    update_content_length(new_request);
 
     new_request.next_request = finished_request.next_request + 1;
 

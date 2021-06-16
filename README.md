@@ -148,27 +148,38 @@
 
   h2loadrunner supports JSON based configuration.
   
-  With this feature, h2loadrunner can support flexibile scenario combinations, not limiting to CRUD (Create-Read-Update-Delete).
+  With this feature, h2loadrunner can support flexibile scenarios combinations, not limiting to typical CRUD (Create-Read-Update-Delete) scenarios.
   
   Json schema: https://github.com/wallyatgithub/h2loadrunner/blob/main/config_schema.json
   
   Example Json data: https://github.com/wallyatgithub/h2loadrunner/blob/main/example_config.json
   
-  It is recommended to use a Json editor to load the schema, and input data (Of course you can do it manually, but it is error-prone when dealing with scenarios section)
+  It is recommended to use a GUI Json editor to load the schema, and input data (Of course you can do it manually, but it is error-prone when dealing with scenarios section)
   
-  https://github.com/wallyatgithub/h2loadrunner/blob/main/Json_editor.png
+  Example sceenshot of GUI Json editor:
   
-  Export Json data, and save to a file <JSON FILE>
+  https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor.png
+  
+  When finish editing, export Json data, and save to a file <JSON FILE>
   
   Then use h2loadrunner --config-file=<JSON FILE> to start the load run
+  
+  When using Json configuration, if you want, it is still possible to override parameters with command line interface.
 
-  A handy Json editor (onde) is included this this repo under third-party/onde:
+  For example, with this command line:
 
-  Open the file third-party/onde/samples/app.html in a web browser (Firefox or Safari, won't work with Chrome locally due its strict cross-origin policy).
+    h2loadrunner --config-file=config.json -t 1 -c 3 --rps=1 -D 100  
+  
+  Command line input (1 thread, 3 connections, rps 100, duration 100) coming after --config-file will override those in config.json.
+  
+
+  A handy Json editor (named onde) is included this this repo under third-party/onde:
+
+  Open file third-party/onde/samples/app.html in a web browser (Firefox or Safari, may not work with Chrome locally due its strict cross-origin policy).
   
   Click the "Edit Schema" menu item.
   
-  Paste the Json schema into the text box
+  Paste the Json schema (content of config_schema.json) into the text box
   
   Push the "Update schema" button.
   
@@ -180,10 +191,78 @@
   
   Acknowledgements:
   ================
-  onde: https://github.com/exavolt/onde
+  This handy Json editor is named onde, project page: https://github.com/exavolt/onde
 
 # Lua script support
 
+  Like wrk/wrk2, h2loadrunner supports Lua script, capable of customizing every header and payload of the request to be sent.
 
+  In order to explain how it works, let's first introduce the schema defining how h2loadrunner will run the test.
+ 
+  h2loadrunner Json schema has a section called "scenarios", and "scenarios" is a list of requests h2loadrunner will execute sequentially.
+  
+  Note: Sequential execution is for requests within one "scenarios"; h2loadrunner will keep track of the request and response of each request, and the next request can be started only of the response of the prior request is received. 
+  
+  Each "scenarios" is executed sequentially, while h2loadrunner can run many "scenarios" in parallel.
+
+  For example, h2loadrunner can start 1000 "scenarios" on 100 connections (concurrent streams, -m option) in parallel, each "scenarios" represents a user's activity in sequence.
+  
+  The 1000 "scenarios" are executed in parallel, while within each "scenarios", the user activity is executed sequentially. 
+  
+  As said before, "scenarios" is a list of requests, while each request has several basic fields, like path, method, payload, and additonalHeaders, and also a field called "luaScript".
+  
+  path, method, payload, and additonalHeaders, as the names suggest, are the path header, method header, message body, and other additional headers (such as user-agent) to build the request.
+  
+  In which the path field is a compound structure, which aims to provide some quick and handy options for quick definition of some typical test scenarios. 
+  
+  For example, the user can specify in the path field to copy the path from the request prior to this one (sameWithLastOne), or to extract the path value from some specific header of the response of the request prior to this one (extractFromLastResponseHeader). Of course, direct input of the path is also supported.
+  
+  Now comes the "luaScript" field:
+  
+  The "luaScript" field is associated with each request of the "scenarios" section.
+
+  "luaScript" field can be filled with a snippet of needed lua script directly, or with the path/name of a file, which has the lua script.
+  
+  h2loadrunner expect the lua script in this format and naming convention:
+  
+  It must be named "make_request", and it takes 4 input arguments, and it can return 2 output arguments at most, a table and a string:
+  
+    function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send)
+        --[[
+        -- do something, typically, modify request_headers_to_send and request_payload_to_send, for example:
+        
+           request_headers_to_send["user-agent"] = "h2loadrunner with lua"
+           request_headers_to_send["authorization"] = response_header["authorization"]
+        
+        -- then, this function needs to return what is/are modified, a table and a string are expected at most 
+        -- the table is the full content of the headers and the string is the message body of the request that is to be sent out right after
+        -- the header naming convention need to follow http2 naming convention, i.e., :path, :method, etc, 
+        -- h2loadrunner will take care of the header name transformation needed for http 1.x
+        -- h2loadrunner wlll also take care of the content-length header, i.e., add/update the header according to updated payload
+        --]]
+        return request_headers_to_send, request_payload_to_send
+    end
+
+  In which, response_header, and response_payload, are the headers, and the message body, of the response to last request prior to the current one;
+  
+  request_headers_to_send, and request_payload_to_send, are the headers and message body of the current request; they are generated from path, method, payload, additonalHeaders fields.
+  
+  The lua function make_request can do whatever it wants, with the available information (all content of last response, all content of current request so far), and make necessary update to the current request headers and payload, and return the modified.
+  
+  To summarize: with Lua script and the information made available to the Lua script, theoretically, h2loadrunner can generate whatever request needed.
+  
+  Well, of course, to reach that, various Lua scripts are needed for various test needs. :)
+  
+  
+    
 # HTTP 1.x support
+  
+  Although named as 'h2'loadrunner (which is derived from h2load obviously), h2loadrunner can also support http 1.1 test without any known problem so far.
+  
+  h2loadrunner might not behave perfectly when dealing with http 1.0 servers, who will tear down the connection right after the response is sent.
+  
+  So in case of an old http 1.0 server, h2loadrunner may not be able to reach the QPS/RPS at the exact number specified by --rps (or "request-per-second" field in Json).
+  
+  
+
 
