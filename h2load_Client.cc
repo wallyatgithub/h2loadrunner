@@ -1350,7 +1350,10 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
 
     if (config->json_config_schema.scenarios[finished_request.next_request].luaScript.size())
     {
-        update_request_with_lua(lua_states[finished_request.next_request], finished_request, new_request);
+        if (!update_request_with_lua(lua_states[finished_request.next_request], finished_request, new_request));
+        {
+            return false; // lua script returns error, abort this sequence
+        }
     }
 
     update_content_length(new_request);
@@ -1361,9 +1364,10 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
     return true;
 }
 
-void Client::update_request_with_lua(lua_State* L, const Request_Data& finished_request, Request_Data& request_to_send)
+bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_request, Request_Data& request_to_send)
 {
     lua_getglobal(L, "make_request");
+    bool retCode = true;
     if (lua_isfunction(L, -1))
     {
         lua_createtable(L, 0, finished_request.resp_headers.size());
@@ -1448,13 +1452,20 @@ void Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
                 }
                 default:
                 {
-                    std::cerr << "invalid data returned from lua function make_request" << std::endl;
+                    std::cerr << "error occured in lua function make_request, abort the whole scenarios sequence" << std::endl;
+                    retCode = false;
                     break;
                 }
             }
             lua_pop(L, 1);
         }
     }
+    else
+    {
+        std::cerr << "lua script provisioned but required function not present, abort the whole scenarios sequence" << std::endl;
+        retCode = false;
+    }
+    return retCode;
 }
 
 }

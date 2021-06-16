@@ -495,7 +495,7 @@ struct Client
     bool prepare_next_request(const Request_Data& data);
     void replace_variable(std::string& input, const std::string& variable_name, uint64_t variable_value);
     void update_content_length(Request_Data& data);
-    void update_request_with_lua(lua_State* L, const Request_Data& finished_request, Request_Data& request_to_send);
+    bool update_request_with_lua(lua_State* L, const Request_Data& finished_request, Request_Data& request_to_send);
 };
 
 } // namespace h2load
