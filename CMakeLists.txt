@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.0)
 project(h2loadrunner VERSION 0.1)
 
+set(CMAKE_VERBOSE_MAKEFILE ON)
+
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
 add_subdirectory(third-party)
