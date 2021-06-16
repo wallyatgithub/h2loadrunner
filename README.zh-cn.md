@@ -37,7 +37,10 @@
 
      跑JMeter的机器如果不够强，跑的时间长一点，因为Java垃圾回收等原因，产生的测试流量波动很大
    
-  2. JMeter加载Blazemeter的HTTP2插件无法使用HTTP2的多stream并发的特性。
+  2. JMeter加载Blazemeter的HTTP2插件，无法使用HTTP2的多stream并发的特性。
+   
+     https://github.com/Blazemeter/jmeter-http2-plugin
+
 
   所以，JMeter加载Blazemeter的HTTP2插件的方式，不是很行。
 
@@ -49,7 +52,7 @@
 
   而至于Locust，则没有声称对HTTP2的支持，也许它所用的http client能自带HTTP2支持，但是疗效如何，暂时未知。
 
-  如果去搜索"http 2 benchmark tool"的，第一个出来的是h2load。
+  如果去搜索"http 2 benchmark tool"，第一个出来的是h2load。
   
   前面说了，h2load只能支持静态的URI和URI列表，无法做Request之间的关联，无法动态定制Request的内容，所以，好像其实根本没有轮子。
 
@@ -63,7 +66,7 @@
 
   所以，在h2load的基础上，加入了本文开头提到的几个性能测试必备的功能，就是h2loadrunner。
 
-  某种程度上，这可能不算造轮子，应算是找了一个合适的轮毂；
+  某种程度上，这可能不算造轮子，因为当下，只有轮毂；
   
   被造的，是安装到轮毂上的轮胎；毕竟，只有轮毂，车是没法跑的。
 
@@ -77,7 +80,7 @@
 
 # 基于JSON格式的配置，以及如何用图形界面编辑JSON配置数据
 
-  https://github.com/wallyatgithub/h2loadrunner#json-configuration-support-and-gui-interface-for-configruation
+  https://github.com/wallyatgithub/h2loadrunner#json-configuration-support-and-gui-interface-for-configuration
 
 # Lua脚本的支持
 
