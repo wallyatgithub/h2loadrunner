@@ -735,6 +735,11 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 if (config.crud_create_data_file_name.size())
                 {
                     std::ifstream buffer(config.crud_create_data_file_name);
+                    if (!buffer.good())
+                    {
+                        std::cerr << config.crud_create_data_file_name << " does not exist" << std::endl;
+                        exit(EXIT_FAILURE);
+                    }
                     std::string payloadStr((std::istreambuf_iterator<char>(buffer)), std::istreambuf_iterator<char>());
                     scenario.payload = payloadStr;
                 }
@@ -756,12 +761,6 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                     scenario.path.headerToExtract = config.crud_resource_header_name;
                 }
                 header_tracked = true;
-                if (config.crud_update_data_file_name.size())
-                {
-                    std::ifstream buffer(config.crud_update_data_file_name);
-                    std::string payloadStr((std::istreambuf_iterator<char>(buffer)), std::istreambuf_iterator<char>());
-                    scenario.payload = payloadStr;
-                }
                 config.json_config_schema.scenarios.push_back(scenario);
             }
 
@@ -782,6 +781,11 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 if (config.crud_update_data_file_name.size())
                 {
                     std::ifstream buffer(config.crud_update_data_file_name);
+                    if (!buffer.good())
+                    {
+                        std::cerr << config.crud_update_data_file_name << " does not exist" << std::endl;
+                        exit(EXIT_FAILURE);
+                    }
                     std::string payloadStr((std::istreambuf_iterator<char>(buffer)), std::istreambuf_iterator<char>());
                     scenario.payload = payloadStr;
                 }
