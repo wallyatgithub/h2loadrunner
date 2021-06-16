@@ -200,11 +200,11 @@
  
   h2loadrunner Json schema has a section called "scenarios", and "scenarios" is a list of requests h2loadrunner will execute sequentially.
   
-  Note: Sequential execution is for requests within one "scenarios"; h2loadrunner will keep track of the request and response of each request, and the next request can be started only of the response of the prior request is received. 
+  Note: Sequential execution is for requests within one "scenarios"; h2loadrunner will keep track of the request and response of each request, and the next request can be started only if the response of the prior request is received. 
   
   Each "scenarios" is executed sequentially, while h2loadrunner can run many "scenarios" in parallel.
 
-  For example, h2loadrunner can start 1000 "scenarios" on 100 connections (concurrent streams, -m option) in parallel, each "scenarios" represents a user's activity in sequence.
+  For example, h2loadrunner can start 1000 "scenarios" on 100 connections (concurrent streams, -m option) in parallel, each "scenarios" represents a user's activities in sequence.
   
   The 1000 "scenarios" are executed in parallel, while within each "scenarios", the user activity is executed sequentially. 
   
@@ -214,17 +214,21 @@
   
   In which the path field is a compound structure, which aims to provide some quick and handy options for quick definition of some typical test scenarios. 
   
-  For example, the user can specify in the path field to copy the path from the request prior to this one (sameWithLastOne), or to extract the path value from some specific header of the response of the request prior to this one (extractFromLastResponseHeader). Of course, direct input of the path is also supported.
+  For example, the user can specify in the path field to copy the path from the request prior to this one (sameWithLastOne), or to extract the path value from some specific header of the response responding to the request prior to this one (extractFromLastResponseHeader). Of course, direct input of the path is also supported.
   
   Now comes the "luaScript" field:
   
-  The "luaScript" field is associated with each request of the "scenarios" section.
+  The "luaScript" field is associated with each request within the "scenarios" section. The Lua script will be executed by h2loadrunner for the request, as long as "luaScript" field of the request has a valid snippet of script (see next for format and naming convention of the snippet of script).
 
-  "luaScript" field can be filled with a snippet of needed lua script directly, or with the path/name of a file, which has the lua script.
+  "luaScript" field can be filled with a snippet of needed lua script directly, or with the path/name of a file, which has the script.
+
+  Each request can have a different snippet of lua script, and lua scripts of different requests are executed indepdendently. 
   
-  h2loadrunner expect the lua script in this format and naming convention:
+  h2loadrunner requires the lua script of any request in this format and naming convention:
   
-  It must be named "make_request", and it takes 4 input arguments, and it can return 2 output arguments at most, a table and a string:
+  It must be named "make_request", and it takes 4 input arguments, and it can return up to 2 output arguments: one table and one string. 
+  
+  Example:
   
     function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send)
         --[[
@@ -233,21 +237,23 @@
            request_headers_to_send["user-agent"] = "h2loadrunner with lua"
            request_headers_to_send["authorization"] = response_header["authorization"]
         
-        -- then, this function needs to return what is/are modified, a table and a string are expected at most 
-        -- the table is the full content of the headers and the string is the message body of the request that is to be sent out right after
+        -- then, this function needs to return what is/are modified, a table, and a string, at most, are expected 
+        -- the table is the full list of the header, while the string is the full content of the payload, from which, the request is going to be built and sent out
+        -- h2loadrunner will take care of the content-length header, i.e., add/update the content-length header according to updated payload returned
         -- the header naming convention need to follow http2 naming convention, i.e., :path, :method, etc, 
         -- h2loadrunner will take care of the header name transformation needed for http 1.x
-        -- h2loadrunner will also take care of the content-length header, i.e., add/update the header according to updated payload
         --]]
         return request_headers_to_send, request_payload_to_send
     end
 
-  In which, response_header, and response_payload, are the headers, and the message body, of the response to last request prior to the current one;
+  Among the 4 input arguments, response_header, and response_payload, are the headers and body of the response message; the response message is to the last request; the last request is the request prior to the current request (being worked on) within the "scenarios" section;
   
-  request_headers_to_send, and request_payload_to_send, are the headers and message body of the current request; they are generated from path, method, payload, additonalHeaders fields.
+  request_headers_to_send, and request_payload_to_send, are the headers and message body of the current request; they are generated from path, method, payload, and additonalHeaders fields.
   
   The lua function make_request can do whatever it wants, with the available information (all content of last response, all content of current request so far), and make necessary update to the current request headers and payload, and return the modified.
   
+  For example, the "scenarios" section has 5 requests defined, and the 3rd request has a valid Lua function make_request, then when this make_request function is executed, it will have acess to not only the template of the 3rd request (built with the input of each Json fields of the request), but also the full content of the 2nd response. 
+
   To summarize: with Lua script and the information made available to the Lua script, theoretically, h2loadrunner can generate whatever request needed.
   
   Well, of course, to reach that, various Lua scripts are needed for various test needs. :)
