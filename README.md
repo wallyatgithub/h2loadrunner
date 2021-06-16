@@ -190,9 +190,9 @@
   
   Edit data
   
-  Click "Export", and copy the generated Json data, and save it to a file <JSON FILE>
+  Click "Export", and copy the generated Json data, and save it to a file JSON_FILE_NAME
   
-  Use h2loadrunner --config-file=<JSON FILE> to start the load run
+  Use h2loadrunner --config-file=JSON_FILE_NAME to start the load run
 
 # Lua script support
 
@@ -220,7 +220,7 @@
   
   Now comes the "luaScript" field:
   
-  The "luaScript" field is associated with each request within the "scenarios" section. The Lua script will be executed by h2loadrunner for the request, as long as "luaScript" field of the request has a valid snippet of script (see next for format and naming convention of the snippet of script).
+  The "luaScript" field is associated with each request within the "scenarios" section. The Lua script will be executed by h2loadrunner for the request, as long as the request has a valid snippet of script (see next for format and naming convention of the snippet of script).
 
   "luaScript" field can be filled with a snippet of needed lua script directly, or with the path/name of a file, which has the script.
 
