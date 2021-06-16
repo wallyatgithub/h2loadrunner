@@ -73,10 +73,11 @@
 
   These packages are required to build h2loadrunner:
   
-    openSSL
-    libEv
-    nghttp2
-    liblua
+    openssl
+    libev-dev
+    libnghttp2-dev
+    liblua5.3-dev
+    rapidjson-dev
 
   Use cmake to build
 
