@@ -1,3 +1,7 @@
+[![license](https://img.shields.io/github/license/wallyatgithub/h2loadrunner.svg?style=flat-square)](https://github.com/wallyatgithub/h2loadrunner)
+
+*Read this in other languages: [简体中文](README.zh-cn.md).*
+
 # h2loadrunner is an HTTP and HTTP2 benchmarking / load testing / performance testing tool
   h2loadrunner is a benchmarking tool supporting both HTTP 1.x and HTTP2.
   
@@ -5,7 +9,7 @@
   
   Thanks to libEv (w/ epoll/poll/kqueue), like h2load, h2loadrunner can generate a very large amount of load with multi-core.
   
-  Besides, h2loadrunner supports powerful features that are not present h2load:
+  Besides, h2loadrunner supports powerful features that are not present in h2load:
   
   1. Variable support in URI and message body.
   
@@ -32,7 +36,7 @@
 
   1. JMeter requires a considerable amount of compute resource, yet not generating very large amount of load.
 
-  2. Synchronized Request is used in jmeter http2 plugin, in order to assert the responses:
+  2. Synchronized Request is used in JMeter http2 plugin, in order to assert the responses:
 
      https://github.com/Blazemeter/jmeter-http2-plugin
 
@@ -61,62 +65,7 @@
   
   Is this kind of "reinventing the wheel"? 
   
-  Well, I think not, as there is no such tool before, which is, simple, light-weighted, easy to start, with native HTTP2 support, robust, and with fully customizable HTTP/HTTP2 message.
-
-
-# Basic Usage
-
-	h2loadrunner http://192.168.1.125:8080/nudm-ee/v2/imsi-2621012-USER_ID/sdm-subscriptions/  -t 5 -c 100 -D 10 -m 512 --rps=100 --crud-update-method=PATCH --crud-delete-method=DELETE --crud-create-method=POST --crud-request-variable-name="-USER_ID" --crud-request-variable-value-start=1 --crud-request-variable-value-end=1000000000 --crud-resource-header="location" --stream-timeout-interval-ms=2000 -m 512 --crud-create-data-file=datafile.json --crud-update-data-file=updatedatafile.json
-  
-  This runs a benchmark test for 10 seconds, using 5 threads, and keeping 100 HTTP2 connections open, with each connection @ 100 RPS/QPS, so total QPS/RPS = 100 * 100 = 10K RPS/s in this test.
-  
-  This test is done on a range of users, with user ID dynamically replaced and range specified in command line.
-  
-  This test also automatically tracks the response message for a specific header, and the subsequent request is built with the returned URI in this specific header.
-  
-  Output:
-  
-    finished in 11.03s, 9711.00 req/s, 772.10KB/s
-    requests: 99420 total, 99999 started, 99420 done, 90115 succeeded, 9305 failed, 2310 errored, 2312 timeout
-    status codes: 90115 2xx, 0 3xx, 6995 4xx, 0 5xx
-    traffic: 7.54MB (7906295) total, 4.32MB (4529697) headers (space savings 57.56%), 1.54MB (1619718) data
-                         min         max         mean         sd        +/- sd
-    time for request:      158us     17.80ms       946us       481us    81.73%
-    time for connect:      160us     15.78ms      3.94ms      2.56ms    70.00%
-    time to 1st byte:    15.39ms     28.06ms     20.01ms      3.30ms    68.00%
-    req/s           :      96.04       98.38       97.08        0.50    67.00%
-
-  Here is what is going on with the above command:
-
-  First, "POST" (--crud-create-method) request is sent to the URI (http://192.168.1.125:8080/nudm-ee/v2/imsi-2621012-USER_ID/sdm-subscriptions/) with "-USER_ID" replaced by an actual user ID whose range starts from 1 (--crud-request-variable-value-start) to 1000000000 (--crud-request-variable-value-end), with payload conent spelcified in file datafile.json (--crud-create-data-file)
-
-  Example content of datafile.json:
-      
-    {"callbackReference":"http://10.10.177.251:32050/nhss-ee/v1/msisdn-491971103488-USER_ID/ee-subscriptions","monitoringConfiguration":{"120984":{"eventType":"UE_REACHABILITY_FOR_SMS","immediateFlag":false,"referenceId":120984}},"reportingOptions":{"maxNumOfReports":0}}
-
-  The "POST" response is monitored for the header named "location" (--crud-resource-header), whose value is a URI, which is the resource (5G EE-subscription) creatd by "POST".
-
-  Next, "PATCH" (--crud-update-method) is sent to the URI above to update the resource created, with payload specified in updatedatafile.json (--crud-update-data-file), to modify the resource created.
-
-  At last, "DELETE" (--crud-delete-method) is sent to delete the created resource, which is actually an unsubscription here in this 5G EE-subscription case.
-
-  other parameters:
-
-    --stream-timeout-interval-ms:
-    
-    how long would h2loadrunner wait for a response to come; when this is exceeded, RST_STREAM is sent to release the resource
-    
-    --rps: desired request per second per connection
-    
-    -t: number of thread
-    
-    -c: number of client, which is typically the number of connections
-    
-    -D: how long the test should run
-    
-    -m: max concurrent streams per connection, this is a key feature of HTTP2.
-    
-    For other possible parameters (derived from h2load), type h2loadrunner --help
+  Well, maybe not, as there is no such tool so far, which is, simple, light-weighted, easy to start, with native HTTP2 support, robust, and with fully customizable HTTP/HTTP2 message.
 
 # How to build
 
@@ -143,28 +92,82 @@
     
     h2loadrunner would be generated
 
+# Basic Usage
 
-# JSON configuration support and GUI interface for configruation
+	h2loadrunner http://192.168.1.125:8080/nudm-ee/v2/imsi-2621012-USER_ID/sdm-subscriptions/  -t 5 -c 100 -D 10 -m 512 --rps=100 --crud-update-method=PATCH --crud-delete-method=DELETE --crud-create-method=POST --crud-request-variable-name="-USER_ID" --crud-request-variable-value-start=1 --crud-request-variable-value-end=1000000000 --crud-resource-header="location" --stream-timeout-interval-ms=2000 -m 512 --crud-create-data-file=datafile.json --crud-update-data-file=updatedatafile.json
+  
+  This runs a benchmark test for 10 seconds, using 5 threads, and keeping 100 HTTP2 connections open, with each connection @ 100 RPS/QPS, so total QPS/RPS = 100 * 100 = 10K RPS/s in this test.
+  
+  This test is done on a range of users, with user ID dynamically replaced and range specified in command line.
+  
+  This test also automatically tracks the response message for a specific header, and the subsequent request is built with the returned URI in this specific header.
+  
+  Output:
+  
+    finished in 11.03s, 9711.00 req/s, 772.10KB/s
+    requests: 99420 total, 99999 started, 99420 done, 90115 succeeded, 9305 failed, 2310 errored, 2312 timeout
+    status codes: 90115 2xx, 0 3xx, 6995 4xx, 0 5xx
+    traffic: 7.54MB (7906295) total, 4.32MB (4529697) headers (space savings 57.56%), 1.54MB (1619718) data
+                         min         max         mean         sd        +/- sd
+    time for request:      158us     17.80ms       946us       481us    81.73%
+    time for connect:      160us     15.78ms      3.94ms      2.56ms    70.00%
+    time to 1st byte:    15.39ms     28.06ms     20.01ms      3.30ms    68.00%
+    req/s           :      96.04       98.38       97.08        0.50    67.00%
+
+  Here is what is going on with the above command:
+
+  First, "POST" (--crud-create-method) request is sent to the URI (http://192.168.1.125:8080/nudm-ee/v2/imsi-2621012-USER_ID/sdm-subscriptions/) with "-USER_ID" replaced by an actual user ID whose range starts from 1 (--crud-request-variable-value-start) to 1000000000 (--crud-request-variable-value-end), with payload content specified in file datafile.json (--crud-create-data-file)
+
+  Example content of datafile.json:
+      
+    {"callbackReference":"http://10.10.177.251:32050/nhss-ee/v1/msisdn-491971103488-USER_ID/ee-subscriptions","monitoringConfiguration":{"120984":{"eventType":"UE_REACHABILITY_FOR_SMS","immediateFlag":false,"referenceId":120984}},"reportingOptions":{"maxNumOfReports":0}}
+
+  The "POST" response is monitored for the header named "location" (--crud-resource-header), whose value is a URI, which is the resource (5G EE-subscription) created by "POST".
+
+  Next, "PATCH" (--crud-update-method) is sent to the URI above to update the resource created, with payload specified in updatedatafile.json (--crud-update-data-file), to modify the resource created.
+
+  At last, "DELETE" (--crud-delete-method) is sent to delete the created resource, which is actually an unsubscription here in this 5G EE-subscription case.
+
+  other parameters:
+
+    --stream-timeout-interval-ms:
+    
+    how long would h2loadrunner wait for a response to come; when this is exceeded, RST_STREAM is sent to release the resource
+    
+    --rps: desired request per second per connection
+    
+    -t: number of thread
+    
+    -c: number of client, which is typically the number of connections
+    
+    -D: how long the test should run
+    
+    -m: max concurrent streams per connection, this is a key feature of HTTP2.
+    
+    For other possible parameters (derived from h2load), type h2loadrunner --help
+
+
+# JSON configuration support and GUI interface for configuration
 
   h2loadrunner supports JSON based configuration.
   
-  With this feature, h2loadrunner can support flexibile scenarios combinations, not limiting to typical CRUD (Create-Read-Update-Delete) scenarios.
+  With this feature, h2loadrunner can support flexible scenarios combinations, not limiting to typical CRUD (Create-Read-Update-Delete) scenarios.
   
   Json schema: https://github.com/wallyatgithub/h2loadrunner/blob/main/config_schema.json
   
   Example Json data: https://github.com/wallyatgithub/h2loadrunner/blob/main/example_config.json
   
-  It is recommended to use a GUI Json editor to load the schema, and input data (Of course you can do it manually, but it is error-prone when dealing with scenarios section)
+  It is recommended to use a GUI Json editor to load the schema, and input data (Of course it can be done manually, but it is error-prone when dealing with scenarios section)
   
-  Example sceenshot of GUI Json editor:
+  Example screenshot of GUI Json editor:
   
-  ![Example screenshot](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor.png)
+  https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor.png
   
   When finish editing, export Json data, and save to a file <JSON FILE>
   
   Then use h2loadrunner --config-file=<JSON FILE> to start the load run
   
-  When using Json configuration, if you want, it is still possible to override parameters with command line interface.
+  When using Json configuration, if wanted, it is still possible to override parameters with command line interface.
 
   For example, with this command line:
 
@@ -173,7 +176,7 @@
   Command line input (1 thread, 3 connections, rps 100, duration 100) coming after --config-file will override those in config.json.
   
 
-  A handy Json editor (named onde) is included this this repo under third-party/onde:
+  A handy Json editor (onde: https://github.com/exavolt/onde) is included this this repo under third-party/onde:
 
   Open file third-party/onde/samples/app.html in a web browser (Firefox or Safari, may not work with Chrome locally due its strict cross-origin policy).
   
@@ -188,16 +191,12 @@
   Click "Export", and copy the generated Json data, and save it to a file <JSON FILE>
   
   Use h2loadrunner --config-file=<JSON FILE> to start the load run
-  
-  Acknowledgements:
-  ================
-  This handy Json editor is named onde, project page: https://github.com/exavolt/onde
 
 # Lua script support
 
   Like wrk/wrk2, h2loadrunner supports Lua script, capable of customizing every header and payload of the request to be sent.
 
-  In order to explain how it works, let's first introduce the schema defining how h2loadrunner will run the test.
+  To explain how it works, let's first introduce the schema defining how h2loadrunner will run the test.
  
   h2loadrunner Json schema has a section called "scenarios", and "scenarios" is a list of requests h2loadrunner will execute sequentially.
   
@@ -238,7 +237,7 @@
         -- the table is the full content of the headers and the string is the message body of the request that is to be sent out right after
         -- the header naming convention need to follow http2 naming convention, i.e., :path, :method, etc, 
         -- h2loadrunner will take care of the header name transformation needed for http 1.x
-        -- h2loadrunner wlll also take care of the content-length header, i.e., add/update the header according to updated payload
+        -- h2loadrunner will also take care of the content-length header, i.e., add/update the header according to updated payload
         --]]
         return request_headers_to_send, request_payload_to_send
     end
@@ -252,7 +251,6 @@
   To summarize: with Lua script and the information made available to the Lua script, theoretically, h2loadrunner can generate whatever request needed.
   
   Well, of course, to reach that, various Lua scripts are needed for various test needs. :)
-  
   
     
 # HTTP 1.x support
