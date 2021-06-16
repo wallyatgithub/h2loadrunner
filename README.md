@@ -161,7 +161,7 @@
   
   Example screenshot of GUI Json editor:
   
-  https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor.png
+  ![Example of GUI configuration](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor.png)
   
   When finish editing, export Json data, and save to a file <JSON FILE>
   
