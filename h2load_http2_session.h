@@ -29,26 +29,28 @@
 
 #include <nghttp2/nghttp2.h>
 
-namespace h2load {
+namespace h2load
+{
 
 struct Client;
 
-class Http2Session : public Session {
+class Http2Session : public Session
+{
 public:
-  Http2Session(Client *client);
-  virtual ~Http2Session();
-  virtual void on_connect();
-  virtual int submit_request();
-  virtual int on_read(const uint8_t *data, size_t len);
-  virtual int on_write();
-  virtual void terminate();
-  virtual size_t max_concurrent_streams();
-  virtual void submit_rst_stream(int32_t stream_id);
+    Http2Session(Client* client);
+    virtual ~Http2Session();
+    virtual void on_connect();
+    virtual int submit_request();
+    virtual int on_read(const uint8_t* data, size_t len);
+    virtual int on_write();
+    virtual void terminate();
+    virtual size_t max_concurrent_streams();
+    virtual void submit_rst_stream(int32_t stream_id);
 
 private:
-  Client *client_;
-  nghttp2_session *session_;
-  int _submit_request();
+    Client* client_;
+    nghttp2_session* session_;
+    int _submit_request();
 };
 
 } // namespace h2load

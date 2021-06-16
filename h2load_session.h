@@ -33,26 +33,28 @@
 
 #include "h2load.h"
 
-namespace h2load {
+namespace h2load
+{
 
-class Session {
+class Session
+{
 public:
-  virtual ~Session() {}
-  // Called when the connection was made.
-  virtual void on_connect() = 0;
-  // Called when one request must be issued.
-  virtual int submit_request() = 0;
-  // Called when incoming bytes are available. The subclass has to
-  // return the number of bytes read.
-  virtual int on_read(const uint8_t *data, size_t len) = 0;
-  // Called when write is available. Returns 0 on success, otherwise
-  // return -1.
-  virtual int on_write() = 0;
-  // Called when the underlying session must be terminated.
-  virtual void terminate() = 0;
-  // Return the maximum concurrency per connection
-  virtual size_t max_concurrent_streams() = 0;
-  virtual void submit_rst_stream(int32_t stream_id) {};
+    virtual ~Session() {}
+    // Called when the connection was made.
+    virtual void on_connect() = 0;
+    // Called when one request must be issued.
+    virtual int submit_request() = 0;
+    // Called when incoming bytes are available. The subclass has to
+    // return the number of bytes read.
+    virtual int on_read(const uint8_t* data, size_t len) = 0;
+    // Called when write is available. Returns 0 on success, otherwise
+    // return -1.
+    virtual int on_write() = 0;
+    // Called when the underlying session must be terminated.
+    virtual void terminate() = 0;
+    // Return the maximum concurrency per connection
+    virtual size_t max_concurrent_streams() = 0;
+    virtual void submit_rst_stream(int32_t stream_id) {};
 };
 
 } // namespace h2load

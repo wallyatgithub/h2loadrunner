@@ -31,30 +31,32 @@
 
 #include "llhttp.h"
 
-namespace h2load {
+namespace h2load
+{
 
 struct Client;
 
-class Http1Session : public Session {
+class Http1Session : public Session
+{
 public:
-  Http1Session(Client *client);
-  virtual ~Http1Session();
-  virtual void on_connect();
-  virtual int submit_request();
-  virtual int on_read(const uint8_t *data, size_t len);
-  virtual int on_write();
-  virtual void terminate();
-  virtual size_t max_concurrent_streams();
-  Client *get_client();
-  int _submit_request();
-  int _on_write();
-  int32_t stream_req_counter_;
-  int32_t stream_resp_counter_;
+    Http1Session(Client* client);
+    virtual ~Http1Session();
+    virtual void on_connect();
+    virtual int submit_request();
+    virtual int on_read(const uint8_t* data, size_t len);
+    virtual int on_write();
+    virtual void terminate();
+    virtual size_t max_concurrent_streams();
+    Client* get_client();
+    int _submit_request();
+    int _on_write();
+    int32_t stream_req_counter_;
+    int32_t stream_resp_counter_;
 
 private:
-  Client *client_;
-  llhttp_t htp_;
-  bool complete_;
+    Client* client_;
+    llhttp_t htp_;
+    bool complete_;
 };
 
 } // namespace h2load
