@@ -17,6 +17,8 @@
   
   3. Transaction support with specific resource header tracking(e.g. location header in 5G SBA).
   
+     Other types of resource tracking are to be added in the future, like, XPath for XML message body, Json pointer for Json message body, etc.
+  
   4. Lua script support.
      With lua script, user can customize every header and the payload of the request to be sent.
   

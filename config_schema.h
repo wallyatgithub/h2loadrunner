@@ -9,14 +9,12 @@
 
 class Path {
 public:
-    std::string source;
+    std::string typeOfAction;
     std::string input;
-    std::string headerToExtract;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
-        h->add_property("source", &this->source);
+        h->add_property("typeOfAction", &this->typeOfAction);
         h->add_property("input", &this->input, staticjson::Flags::Optional);
-        h->add_property("headerToExtract", &this->headerToExtract, staticjson::Flags::Optional);
     }
 };
 

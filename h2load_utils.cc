@@ -845,7 +845,7 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
             {
                 Scenario scenario;
                 scenario.method = config.crud_create_method;
-                scenario.path.source = "input";
+                scenario.path.typeOfAction = "input";
                 scenario.path.input = uri;
                 if (config.crud_create_data_file_name.size())
                 {
@@ -868,12 +868,12 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 scenario.method = config.crud_read_method;
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
-                    scenario.path.source = "sameWithLastOne";
+                    scenario.path.typeOfAction = "sameWithLastOne";
                 }
                 else
                 {
-                    scenario.path.source = "extractFromLastResponseHeader";
-                    scenario.path.headerToExtract = config.crud_resource_header_name;
+                    scenario.path.typeOfAction = "fromResponseHeader";
+                    scenario.path.input = config.crud_resource_header_name;
                 }
                 header_tracked = true;
                 config.json_config_schema.scenarios.push_back(scenario);
@@ -885,12 +885,12 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 scenario.method = config.crud_update_method;
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
-                    scenario.path.source = "sameWithLastOne";
+                    scenario.path.typeOfAction = "sameWithLastOne";
                 }
                 else
                 {
-                    scenario.path.source = "extractFromLastResponseHeader";
-                    scenario.path.headerToExtract = config.crud_resource_header_name;
+                    scenario.path.typeOfAction = "fromResponseHeader";
+                    scenario.path.input = config.crud_resource_header_name;
                 }
                 header_tracked = true;
                 if (config.crud_update_data_file_name.size())
@@ -916,12 +916,12 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 }
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
-                    scenario.path.source = "sameWithLastOne";
+                    scenario.path.typeOfAction = "sameWithLastOne";
                 }
                 else
                 {
-                    scenario.path.source = "extractFromLastResponseHeader";
-                    scenario.path.headerToExtract = config.crud_resource_header_name;
+                    scenario.path.typeOfAction = "fromResponseHeader";
+                    scenario.path.input = config.crud_resource_header_name;
                 }
                 header_tracked = true;
                 config.json_config_schema.scenarios.push_back(scenario);

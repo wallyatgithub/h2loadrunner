@@ -1317,25 +1317,26 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
     replace_variable(new_request.req_payload, config->json_config_schema.variable_name_in_path_and_data,
                      new_request.user_id);
 
-    if (config->json_config_schema.scenarios[finished_request.next_request].path.source == "input")
+    if (config->json_config_schema.scenarios[finished_request.next_request].path.typeOfAction == "input")
     {
         new_request.path = config->json_config_schema.scenarios[finished_request.next_request].path.input;
     }
-    else if (config->json_config_schema.scenarios[finished_request.next_request].path.source == "sameWithLastOne")
+    else if (config->json_config_schema.scenarios[finished_request.next_request].path.typeOfAction == "sameWithLastOne")
     {
         new_request.path = finished_request.path;
     }
-    else if (config->json_config_schema.scenarios[finished_request.next_request].path.source ==
-             "extractFromLastResponseHeader")
+    else if (config->json_config_schema.scenarios[finished_request.next_request].path.typeOfAction ==
+             "fromResponseHeader")
     {
         auto header = finished_request.resp_headers.find(
-                          config->json_config_schema.scenarios[finished_request.next_request].path.headerToExtract);
+                          config->json_config_schema.scenarios[finished_request.next_request].path.input);
         if (header != finished_request.resp_headers.end())
         {
             http_parser_url u {};
             if (http_parser_parse_url(header->second.c_str(), header->second.size(), 0, &u) != 0)
             {
-                std::cerr << "invalid URI: " << header->second << std::endl;
+                std::cerr << "abort whole scenarios sequence, as invalid URI found in header: " << header->second << std::endl;
+                return false;
             }
             else
             {

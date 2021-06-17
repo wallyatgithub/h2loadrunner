@@ -913,7 +913,7 @@ int main(int argc, char** argv)
                         }
                         std::cout << "Use configuration from JSON:" << std::endl << staticjson::to_pretty_json_string(
                                       config.json_config_schema) << std::endl;
-                        assert(config.json_config_schema.scenarios[0].path.source == "input");
+                        assert(config.json_config_schema.scenarios[0].path.typeOfAction == "input");
 
                         for (auto& scenario : config.json_config_schema.scenarios)
                         {

@@ -123,7 +123,7 @@
       "type":"integer"
     },
     "scenarios":{
-      "description":"Array of requests, each request has path, method, optional payload, optional addtional headers, and optionally an lua script for advanced users to generate the request",
+      "description":"Array of requests, each request has path, method, optional payload, optional addtional headers, and optionally an lua script for advanced users to customize the request",
       "type":"array",
       "minItems":1,
       "items": {
@@ -133,15 +133,13 @@
             "description": "path of the uri",
             "type":"object",
             "properties":{
-              "source": {
+              "typeOfAction": {
                 "type":"string",
-                "description": "Specifies where to get the path header for this request. input: direct input the path header in input field next; sameWithLastOne: same path header with last request; extractFromLastResponseHeader: extract the path for this request from a specific header (name specified in headerToExtract field) of last response; fromLuaScript: path is generated from lua script (see field luaScript)",
-                "enum": ["input", "sameWithLastOne", "extractFromLastResponseHeader", "fromLuaScript"]
+                "description": "Specifies how to generate the path. input: direct input the path header in input field next; sameWithLastOne: same path header with last request; fromResponseHeader: extract the path (URI w/ host part) for this request from a specific header (name specified in input field) of last response; fromLuaScript: path is generated from lua script (see field luaScript); fromXpath: Search XML body of last response for the XPATH value given in input field (to be implemented); fromJsonPointer: Search Json body of last response body for the Json pointer value given in input field (to be implemented)",
+                "enum": ["input", "sameWithLastOne", "fromResponseHeader", "fromLuaScript", "fromXPath", "fromJsonPointer"]
               },
               "input": {
-                "type":"string"
-              },
-              "headerToExtract": {
+                "description": "input needed to execute the typeOfAction above",
                 "type":"string"
               }
             }

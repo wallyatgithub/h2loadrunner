@@ -40,7 +40,7 @@
     },
     {
       "path": {
-        "source": "extractFromLastResponseHeader",
+        "source": "fromResponseHeader",
         "headerToExtract": "location"
       },
       "method": "DELETE"
