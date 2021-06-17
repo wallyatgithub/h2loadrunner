@@ -31,7 +31,7 @@ set_source_files_properties(${c_sources} PROPERTIES
   COMPILE_FLAGS "${WARNCFLAGS}")
 file(GLOB cxx_sources *.cc)
 set_source_files_properties(${cxx_sources} PROPERTIES
-  COMPILE_FLAGS "-g -o0 ${WARNCXXFLAGS} ${CXX1XCXXFLAGS}")
+  COMPILE_FLAGS "${WARNCXXFLAGS} ${CXX1XCXXFLAGS}")
 
 
 include_directories(
