@@ -1272,6 +1272,7 @@ Request_Data Client::get_request_to_submit()
 {
     static thread_local size_t full_var_str_len =
                 std::to_string(config->json_config_schema.variable_range_end).size();
+    static Request_Data dummy_data;
 
     if (!requests_to_submit.empty())
     {
@@ -1282,8 +1283,9 @@ Request_Data Client::get_request_to_submit()
     else
     {
         Request_Data data;
+        size_t curr_index = 0;
         data.user_id = curr_req_variable_value;
-        auto& first_scenario = config->json_config_schema.scenarios[0];
+        auto& first_scenario = config->json_config_schema.scenarios[curr_index];
         data.path = reassemble_str_with_variable(first_scenario.tokenized_path,
                                                  data.user_id,
                                                  full_var_str_len);
@@ -1292,7 +1294,17 @@ Request_Data Client::get_request_to_submit()
                                                         data.user_id,
                                                         full_var_str_len);;
         data.req_headers = first_scenario.headers_in_map;
+
+        if (first_scenario.luaScript.size())
+        {
+            if (!update_request_with_lua(lua_states[curr_index], dummy_data, data))
+            {
+              std::cerr << "lua script failure for first request, cannot continue, exit"<< std::endl;
+              exit(EXIT_FAILURE);
+            }
+        }
         update_content_length(data);
+
         if (config->json_config_schema.variable_range_end)
         {
             curr_req_variable_value++;
