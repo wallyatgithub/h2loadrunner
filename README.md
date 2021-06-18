@@ -30,7 +30,7 @@
      h2loadrunner prints the test statistics every second; it also supports dynamic change of QPS/RPS.
 
 # How performant is h2loadrunner?
-  To execute 600K QPS/s of such test scenario, h2loadrunner needs only 1 logic core of an 8th Gen i3 CPU:
+  To execute 60K QPS/s of such test scenario, h2loadrunner needs only 1 logic core of an 8th Gen i3 CPU:
   
     POST with dynamic path generation and dynamic message body of 300 bytes 
     Upon POST response, extract the resource created by POST from response header, and send PATCH with dynamic message body of 300 bytes for resource update
