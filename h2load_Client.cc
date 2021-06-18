@@ -1359,7 +1359,7 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
 
     if (next_scenario.luaScript.size())
     {
-        if (!update_request_with_lua(lua_states[finished_request.next_request], finished_request, new_request));
+        if (!update_request_with_lua(lua_states[finished_request.next_request], finished_request, new_request))
         {
             return false; // lua script returns error, abort this sequence
         }
