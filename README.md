@@ -35,20 +35,23 @@
     Upon POST response, extract the resource created by POST from response header, and send PATCH with dynamic message body of 300 bytes for resource update
     Upon PATCH response, send DELETE to delete resource.
     
-  Need to mention that, to stress h2loadrunner, the mock server intentionally maks some requests fail, by not sending back the response, or sending back failure response.
+  Need to mention that, to stress h2loadrunner, the mock server intentionally maks some requests fail, by not sending back the response (3%), or sending back failure response.
   
-  Meaning, h2loadrunner needs to take care of a small portion of stream timeout case during the load test runnning.
+  Meaning, in this test, h2loadrunner needs to take care of a small portion (3%) of stream timeout case during the load test runnning.
     
   Result shows, h2loadrunner handles this situation without any problem:
   
-    Fri Jun 18 10:56:16 2021, actual RPS: 60034, successful responses: 58288, 3xx: 0, 4xx: 4196, 5xx: 0, max resp time (us): 2017290, min resp time (us): 344, successful rate: 97.0916%
-    Fri Jun 18 10:56:17 2021, actual RPS: 60010, successful responses: 58263, 3xx: 0, 4xx: 4194, 5xx: 0, max resp time (us): 2018600, min resp time (us): 399, successful rate: 97.0888%
-    Fri Jun 18 10:56:18 2021, actual RPS: 60003, successful responses: 58261, 3xx: 0, 4xx: 4222, 5xx: 0, max resp time (us): 2011354, min resp time (us): 300, successful rate: 97.0968%
-    Fri Jun 18 10:56:19 2021, actual RPS: 60024, successful responses: 58274, 3xx: 0, 4xx: 4174, 5xx: 0, max resp time (us): 2013469, min resp time (us): 383, successful rate: 97.0845%
-    Fri Jun 18 10:56:20 2021, actual RPS: 59954, successful responses: 58232, 3xx: 0, 4xx: 4231, 5xx: 0, max resp time (us): 2011852, min resp time (us): 379, successful rate: 97.1278%
-    Fri Jun 18 10:56:21 2021, actual RPS: 59985, successful responses: 58231, 3xx: 0, 4xx: 4114, 5xx: 0, max resp time (us): 2015352, min resp time (us): 385, successful rate: 97.0759%
-    Fri Jun 18 10:56:22 2021, actual RPS: 60081, successful responses: 58348, 3xx: 0, 4xx: 4185, 5xx: 0, max resp time (us): 2011433, min resp time (us): 387, successful rate: 97.1156%
-    Fri Jun 18 10:56:23 2021, actual RPS: 60052, successful responses: 58284, 3xx: 0, 4xx: 4191, 5xx: 0, max resp time (us): 2015944, min resp time (us): 306, successful rate: 97.0559%
+    Fri Jun 18 11:35:13 2021, send: 59939, received: 58208, 3xx: 0, 4xx: 4275, 5xx: 0, max resp time (us): 2012445, min resp time (us): 444, received/send: 97.1121%
+    Fri Jun 18 11:35:14 2021, send: 59952, received: 58204, 3xx: 0, 4xx: 4161, 5xx: 0, max resp time (us): 2012321, min resp time (us): 524, received/send: 97.0843%
+    Fri Jun 18 11:35:15 2021, send: 60003, received: 58256, 3xx: 0, 4xx: 4221, 5xx: 0, max resp time (us): 2012618, min resp time (us): 423, received/send: 97.0885%
+    Fri Jun 18 11:35:16 2021, send: 60068, received: 58294, 3xx: 0, 4xx: 4179, 5xx: 0, max resp time (us): 2012263, min resp time (us): 413, received/send: 97.0467%
+    Fri Jun 18 11:35:17 2021, send: 59977, received: 58229, 3xx: 0, 4xx: 4232, 5xx: 0, max resp time (us): 2012121, min resp time (us): 395, received/send: 97.0855%
+    Fri Jun 18 11:35:18 2021, send: 60106, received: 58372, 3xx: 0, 4xx: 4235, 5xx: 0, max resp time (us): 2012465, min resp time (us): 451, received/send: 97.1151%
+    Fri Jun 18 11:35:19 2021, send: 60000, received: 58257, 3xx: 0, 4xx: 4183, 5xx: 0, max resp time (us): 2012432, min resp time (us): 420, received/send: 97.095%
+    Fri Jun 18 11:35:20 2021, send: 59856, received: 58144, 3xx: 0, 4xx: 4165, 5xx: 0, max resp time (us): 2012015, min resp time (us): 409, received/send: 97.1398%
+    Fri Jun 18 11:35:21 2021, send: 60119, received: 58375, 3xx: 0, 4xx: 4246, 5xx: 0, max resp time (us): 2012814, min resp time (us): 478, received/send: 97.0991%
+    Fri Jun 18 11:35:22 2021, send: 59942, received: 58178, 3xx: 0, 4xx: 4176, 5xx: 0, max resp time (us): 2012436, min resp time (us): 502, received/send: 97.0572%
+    Fri Jun 18 11:35:23 2021, send: 60040, received: 58308, 3xx: 0, 4xx: 4221, 5xx: 0, max resp time (us): 2012505, min resp time (us): 419, received/send: 97.1153%
 
   CPU usage:
   
