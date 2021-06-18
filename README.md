@@ -27,7 +27,39 @@
      
   6. Dynamic report of the test, dynamic change of the QPS/RPS.
      h2loadrunner prints the test statistics every second; it also supports dynamic change of QPS/RPS.
+
+# How performant is h2loadrunner?
+  To execute 600K QPS/s of such test scenario, h2loadrunner needs only 1 logic core of an 8th Gen i3 CPU:
   
+    POST with dynamic path generation and dynamic message body of 300 bytes 
+    Upon POST response, extract the resource created by POST from response header, and send PATCH with dynamic message body of 300 bytes for resource update
+    Upon PATCH response, send DELETE to delete resource.
+    
+  Need to mention that, to stress h2loadrunner, the mock server intentionally maks some requests fail, by not sending back the response, or sending back failure response.
+  
+  Meaning, h2loadrunner needs to take care of a small portion of stream timeout case during the load test runnning.
+    
+  Result shows, h2loadrunner handles this situation without any problem:
+  
+    Fri Jun 18 10:56:16 2021, actual RPS: 60034, successful responses: 58288, 3xx: 0, 4xx: 4196, 5xx: 0, max resp time (us): 2017290, min resp time (us): 344, successful rate: 97.0916%
+    Fri Jun 18 10:56:17 2021, actual RPS: 60010, successful responses: 58263, 3xx: 0, 4xx: 4194, 5xx: 0, max resp time (us): 2018600, min resp time (us): 399, successful rate: 97.0888%
+    Fri Jun 18 10:56:18 2021, actual RPS: 60003, successful responses: 58261, 3xx: 0, 4xx: 4222, 5xx: 0, max resp time (us): 2011354, min resp time (us): 300, successful rate: 97.0968%
+    Fri Jun 18 10:56:19 2021, actual RPS: 60024, successful responses: 58274, 3xx: 0, 4xx: 4174, 5xx: 0, max resp time (us): 2013469, min resp time (us): 383, successful rate: 97.0845%
+    Fri Jun 18 10:56:20 2021, actual RPS: 59954, successful responses: 58232, 3xx: 0, 4xx: 4231, 5xx: 0, max resp time (us): 2011852, min resp time (us): 379, successful rate: 97.1278%
+    Fri Jun 18 10:56:21 2021, actual RPS: 59985, successful responses: 58231, 3xx: 0, 4xx: 4114, 5xx: 0, max resp time (us): 2015352, min resp time (us): 385, successful rate: 97.0759%
+    Fri Jun 18 10:56:22 2021, actual RPS: 60081, successful responses: 58348, 3xx: 0, 4xx: 4185, 5xx: 0, max resp time (us): 2011433, min resp time (us): 387, successful rate: 97.1156%
+    Fri Jun 18 10:56:23 2021, actual RPS: 60052, successful responses: 58284, 3xx: 0, 4xx: 4191, 5xx: 0, max resp time (us): 2015944, min resp time (us): 306, successful rate: 97.0559%
+
+  CPU usage:
+  
+    50037 root      20   0  327588  64840   7156 S 100.0   0.8   0:11.37 h2loadrunner
+    50037 root      20   0  327588  66160   7156 S 103.9   0.8   0:11.90 h2loadrunner
+    50037 root      20   0  327588  67216   7156 S 106.0   0.8   0:12.43 h2loadrunner
+    50037 root      20   0  327588  68272   7156 S 102.0   0.8   0:12.95 h2loadrunner
+    50037 root      20   0  327588  69592   7156 S 103.9   0.9   0:13.48 h2loadrunner
+    50037 root      20   0  327588  70648   7156 S 104.0   0.9   0:14.00 h2loadrunner
+    50037 root      20   0  327588  71704   7156 S 103.9   0.9   0:14.53 h2loadrunner
+
 
 # Why h2loadrunner?
   The initial motivation is to make a performant tool for 5G SBA load test on HTTP2.

@@ -1507,14 +1507,14 @@ int main(int argc, char** argv)
             auto now = std::chrono::system_clock::now();
             auto now_c = std::chrono::system_clock::to_time_t(now);
             std::cout << std::put_time(std::localtime(&now_c), "%c")
-                      << ", actual RPS: " << delta_TPS
-                      << ", successful responses: " << delta_TPS_success
+                      << ", send: " << delta_TPS
+                      << ", received: " << delta_TPS_success
                       << ", 3xx: " << delta_TPS_3xx
                       << ", 4xx: " << delta_TPS_4xx
                       << ", 5xx: " << delta_TPS_5xx
                       << ", max resp time (us): " << max_resp_time_us
                       << ", min resp time (us): " << min_resp_time_us
-                      << ", successful rate: "
+                      << ", received/send: "
                       << (((double)delta_TPS_success / delta_TPS) * 100) << "%" << std::endl;
             counter++;
 

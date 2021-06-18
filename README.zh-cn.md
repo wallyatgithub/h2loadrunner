@@ -26,6 +26,38 @@
   6. 动态报告测试进度和主要统计数据，并且支持动态的改变测试流量大小
   
 
+# h2loadrunner性能如何?
+  对于如下的测试场景，执行600K/s QPS的测试，h2loadrunner只需要消耗8th Gen i3的一个逻辑核心:
+  
+    POST，根据模板动态生成path，以及根据设定规则动态，更新消息体模板，并携带更新后的消息体，消息体大约300字节
+    监测POST响应，并根据设定好的规则从中检索出新的path，对新的path发起PATCH操作，并携带300字节的根据模板动态生成的消息体    
+    监测PATCH的响应，收到后发起DELETE请求
+    
+  需要额外备注的是，为了增加对h2loadrunner的压力，测试用的mock server刻意不响应其中一部分的应答，或者故意回复404应答，二者加起来总共大约是3%
+  
+  这使得h2loadrunner在测试的同时，同时需要处理一小部分响应超时的情况，不然的话，累积的超时请求会造成Stream资源无法释放，进而阻塞测试，
+  
+  测试结果显示，对于这样一个600K QPS/s的测试，外加一小部分响应超时，h2loadrunner应对的毫无压力：
+  
+    Fri Jun 18 10:56:16 2021, actual RPS: 60034, successful responses: 58288, 3xx: 0, 4xx: 4196, 5xx: 0, max resp time (us): 2017290, min resp time (us): 344, successful rate: 97.0916%
+    Fri Jun 18 10:56:17 2021, actual RPS: 60010, successful responses: 58263, 3xx: 0, 4xx: 4194, 5xx: 0, max resp time (us): 2018600, min resp time (us): 399, successful rate: 97.0888%
+    Fri Jun 18 10:56:18 2021, actual RPS: 60003, successful responses: 58261, 3xx: 0, 4xx: 4222, 5xx: 0, max resp time (us): 2011354, min resp time (us): 300, successful rate: 97.0968%
+    Fri Jun 18 10:56:19 2021, actual RPS: 60024, successful responses: 58274, 3xx: 0, 4xx: 4174, 5xx: 0, max resp time (us): 2013469, min resp time (us): 383, successful rate: 97.0845%
+    Fri Jun 18 10:56:20 2021, actual RPS: 59954, successful responses: 58232, 3xx: 0, 4xx: 4231, 5xx: 0, max resp time (us): 2011852, min resp time (us): 379, successful rate: 97.1278%
+    Fri Jun 18 10:56:21 2021, actual RPS: 59985, successful responses: 58231, 3xx: 0, 4xx: 4114, 5xx: 0, max resp time (us): 2015352, min resp time (us): 385, successful rate: 97.0759%
+    Fri Jun 18 10:56:22 2021, actual RPS: 60081, successful responses: 58348, 3xx: 0, 4xx: 4185, 5xx: 0, max resp time (us): 2011433, min resp time (us): 387, successful rate: 97.1156%
+    Fri Jun 18 10:56:23 2021, actual RPS: 60052, successful responses: 58284, 3xx: 0, 4xx: 4191, 5xx: 0, max resp time (us): 2015944, min resp time (us): 306, successful rate: 97.0559%
+
+  CPU usage:
+  
+    50037 root      20   0  327588  64840   7156 S 100.0   0.8   0:11.37 h2loadrunner
+    50037 root      20   0  327588  66160   7156 S 103.9   0.8   0:11.90 h2loadrunner
+    50037 root      20   0  327588  67216   7156 S 106.0   0.8   0:12.43 h2loadrunner
+    50037 root      20   0  327588  68272   7156 S 102.0   0.8   0:12.95 h2loadrunner
+    50037 root      20   0  327588  69592   7156 S 103.9   0.9   0:13.48 h2loadrunner
+    50037 root      20   0  327588  70648   7156 S 104.0   0.9   0:14.00 h2loadrunner
+    50037 root      20   0  327588  71704   7156 S 103.9   0.9   0:14.53 h2loadrunner
+
 # 为什么要重新造一个轮子?
   出发点：寻找一个合适的能支持5G SBA （基于HTTP2）性能测试工具。
 
