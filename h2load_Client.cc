@@ -1320,7 +1320,6 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
     auto& next_scenario = config->json_config_schema.scenarios[finished_request.next_request];
     new_request.user_id = finished_request.user_id;
     new_request.method = next_scenario.method;
-    new_request.req_payload = next_scenario.payload;
     new_request.req_headers = next_scenario.headers_in_map;
     new_request.req_payload = reassemble_str_with_variable(next_scenario.tokenized_payload,
                                                            new_request.user_id,
