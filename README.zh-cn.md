@@ -38,7 +38,7 @@
   
   这使得h2loadrunner在测试的同时，同时需要处理一小部分响应超时的情况，不然的话，累积的超时请求会造成Stream资源无法释放，进而阻塞测试，
   
-  测试结果显示，对于这样一个600K QPS/s的测试，外加3%响应超时，h2loadrunner应对的毫无压力：
+  测试结果显示，对于这样一个60K QPS/s的测试，外加3%响应超时，h2loadrunner应对的毫无压力：
   
     Fri Jun 18 11:35:13 2021, send: 59939, received: 58208, 3xx: 0, 4xx: 4275, 5xx: 0, max resp time (us): 2012445, min resp time (us): 444, received/send: 97.1121%
     Fri Jun 18 11:35:14 2021, send: 59952, received: 58204, 3xx: 0, 4xx: 4161, 5xx: 0, max resp time (us): 2012321, min resp time (us): 524, received/send: 97.0843%
