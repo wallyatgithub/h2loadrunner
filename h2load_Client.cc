@@ -1359,10 +1359,6 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
 
     if (next_scenario.luaScript.size())
     {
-        // in case the lua script need current user id, pass it to lua in path header, which is to be updated by lua anyway
-        new_request.path = reassemble_str_with_variable(next_scenario.tokenized_path,
-                                                        new_request.user_id,
-                                                        full_var_str_len);
         if (!update_request_with_lua(lua_states[finished_request.next_request], finished_request, new_request));
         {
             return false; // lua script returns error, abort this sequence
