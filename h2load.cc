@@ -1492,7 +1492,7 @@ int main(int argc, char** argv)
             {
                 auto& s = w->stats;
                 totalReq_till_now += s.req_done;
-                totalReq_success_till_now += s.req_success;
+                totalReq_success_till_now += s.req_status_success;
                 total3xx_till_now += s.status[3];
                 total4xx_till_now += s.status[4];
                 total5xx_till_now += s.status[5];
@@ -1508,13 +1508,13 @@ int main(int argc, char** argv)
             auto now_c = std::chrono::system_clock::to_time_t(now);
             std::cout << std::put_time(std::localtime(&now_c), "%c")
                       << ", send: " << delta_TPS
-                      << ", received: " << delta_TPS_success
+                      << ", successful: " << delta_TPS_success
                       << ", 3xx: " << delta_TPS_3xx
                       << ", 4xx: " << delta_TPS_4xx
                       << ", 5xx: " << delta_TPS_5xx
                       << ", max resp time (us): " << max_resp_time_us
                       << ", min resp time (us): " << min_resp_time_us
-                      << ", received/send: "
+                      << ", successful/send: "
                       << (((double)delta_TPS_success / delta_TPS) * 100) << "%" << std::endl;
             counter++;
 

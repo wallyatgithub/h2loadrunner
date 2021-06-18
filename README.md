@@ -42,17 +42,21 @@
     
   Result shows, h2loadrunner handles this situation without any problem:
   
-    Fri Jun 18 11:35:13 2021, send: 59939, received: 58208, 3xx: 0, 4xx: 4275, 5xx: 0, max resp time (us): 2012445, min resp time (us): 444, received/send: 97.1121%
-    Fri Jun 18 11:35:14 2021, send: 59952, received: 58204, 3xx: 0, 4xx: 4161, 5xx: 0, max resp time (us): 2012321, min resp time (us): 524, received/send: 97.0843%
-    Fri Jun 18 11:35:15 2021, send: 60003, received: 58256, 3xx: 0, 4xx: 4221, 5xx: 0, max resp time (us): 2012618, min resp time (us): 423, received/send: 97.0885%
-    Fri Jun 18 11:35:16 2021, send: 60068, received: 58294, 3xx: 0, 4xx: 4179, 5xx: 0, max resp time (us): 2012263, min resp time (us): 413, received/send: 97.0467%
-    Fri Jun 18 11:35:17 2021, send: 59977, received: 58229, 3xx: 0, 4xx: 4232, 5xx: 0, max resp time (us): 2012121, min resp time (us): 395, received/send: 97.0855%
-    Fri Jun 18 11:35:18 2021, send: 60106, received: 58372, 3xx: 0, 4xx: 4235, 5xx: 0, max resp time (us): 2012465, min resp time (us): 451, received/send: 97.1151%
-    Fri Jun 18 11:35:19 2021, send: 60000, received: 58257, 3xx: 0, 4xx: 4183, 5xx: 0, max resp time (us): 2012432, min resp time (us): 420, received/send: 97.095%
-    Fri Jun 18 11:35:20 2021, send: 59856, received: 58144, 3xx: 0, 4xx: 4165, 5xx: 0, max resp time (us): 2012015, min resp time (us): 409, received/send: 97.1398%
-    Fri Jun 18 11:35:21 2021, send: 60119, received: 58375, 3xx: 0, 4xx: 4246, 5xx: 0, max resp time (us): 2012814, min resp time (us): 478, received/send: 97.0991%
-    Fri Jun 18 11:35:22 2021, send: 59942, received: 58178, 3xx: 0, 4xx: 4176, 5xx: 0, max resp time (us): 2012436, min resp time (us): 502, received/send: 97.0572%
-    Fri Jun 18 11:35:23 2021, send: 60040, received: 58308, 3xx: 0, 4xx: 4221, 5xx: 0, max resp time (us): 2012505, min resp time (us): 419, received/send: 97.1153%
+    Fri Jun 18 18:52:10 2021, send: 60179, successful: 54199, 3xx: 0, 4xx: 4187, 5xx: 0, max resp time (us): 2020063, min resp time (us): 454, successful/send: 90.063%
+    Fri Jun 18 18:52:11 2021, send: 60007, successful: 54011, 3xx: 0, 4xx: 4286, 5xx: 0, max resp time (us): 2011914, min resp time (us): 410, successful/send: 90.0078%
+    Fri Jun 18 18:52:12 2021, send: 60044, successful: 54072, 3xx: 0, 4xx: 4229, 5xx: 0, max resp time (us): 2012212, min resp time (us): 308, successful/send: 90.054%
+    Fri Jun 18 18:52:13 2021, send: 59968, successful: 54036, 3xx: 0, 4xx: 4196, 5xx: 0, max resp time (us): 2012040, min resp time (us): 388, successful/send: 90.1081%
+    Fri Jun 18 18:52:14 2021, send: 59997, successful: 54092, 3xx: 0, 4xx: 4179, 5xx: 0, max resp time (us): 2012913, min resp time (us): 405, successful/send: 90.1578%
+    Fri Jun 18 18:52:15 2021, send: 60034, successful: 54029, 3xx: 0, 4xx: 4240, 5xx: 0, max resp time (us): 2011834, min resp time (us): 392, successful/send: 89.9973%
+    Fri Jun 18 18:52:16 2021, send: 60052, successful: 54125, 3xx: 0, 4xx: 4198, 5xx: 0, max resp time (us): 2011840, min resp time (us): 436, successful/send: 90.1302%
+    Fri Jun 18 18:52:17 2021, send: 59967, successful: 54018, 3xx: 0, 4xx: 4232, 5xx: 0, max resp time (us): 2011999, min resp time (us): 411, successful/send: 90.0795%
+    Fri Jun 18 18:52:18 2021, send: 59967, successful: 54032, 3xx: 0, 4xx: 4194, 5xx: 0, max resp time (us): 2012350, min resp time (us): 430, successful/send: 90.1029%
+    Fri Jun 18 18:52:19 2021, send: 60070, successful: 54098, 3xx: 0, 4xx: 4225, 5xx: 0, max resp time (us): 2011863, min resp time (us): 367, successful/send: 90.0583%
+    Fri Jun 18 18:52:20 2021, send: 60014, successful: 54134, 3xx: 0, 4xx: 4135, 5xx: 0, max resp time (us): 2011944, min resp time (us): 374, successful/send: 90.2023%
+    Fri Jun 18 18:52:21 2021, send: 59965, successful: 54092, 3xx: 0, 4xx: 4152, 5xx: 0, max resp time (us): 2012001, min resp time (us): 389, successful/send: 90.206%
+    Fri Jun 18 18:52:22 2021, send: 60015, successful: 54056, 3xx: 0, 4xx: 4257, 5xx: 0, max resp time (us): 2011907, min resp time (us): 415, successful/send: 90.0708%
+    Fri Jun 18 18:52:23 2021, send: 60048, successful: 54026, 3xx: 0, 4xx: 4239, 5xx: 0, max resp time (us): 2012352, min resp time (us): 449, successful/send: 89.9714%
+
 
   CPU usage:
   
