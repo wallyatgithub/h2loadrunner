@@ -1373,6 +1373,8 @@ int main(int argc, char** argv)
         insert_customized_headers_to_Json_scenarios(config);
     }
 
+    tokenize_path_and_payload_for_fast_var_replace(config);
+
     resolve_host(config);
 
     std::cout << "starting benchmark..." << std::endl;

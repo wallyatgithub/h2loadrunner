@@ -1270,6 +1270,9 @@ void Client::update_content_length(Request_Data& data)
 }
 Request_Data Client::get_request_to_submit()
 {
+    static thread_local size_t full_var_str_len =
+                std::to_string(config->json_config_schema.variable_range_end).size();
+
     if (!requests_to_submit.empty())
     {
         auto data = requests_to_submit.front();
@@ -1279,13 +1282,16 @@ Request_Data Client::get_request_to_submit()
     else
     {
         Request_Data data;
-        data.path = config->json_config_schema.scenarios[0].path.input;
-        data.method = config->json_config_schema.scenarios[0].method;
-        data.req_payload = config->json_config_schema.scenarios[0].payload;
-        data.req_headers = config->json_config_schema.scenarios[0].headers_in_map;
         data.user_id = curr_req_variable_value;
-        replace_variable(data.path, config->json_config_schema.variable_name_in_path_and_data, data.user_id);
-        replace_variable(data.req_payload, config->json_config_schema.variable_name_in_path_and_data, data.user_id);
+        auto& first_scenario = config->json_config_schema.scenarios[0];
+        data.path = reassemble_str_with_variable(first_scenario.tokenized_path,
+                                                 data.user_id,
+                                                 full_var_str_len);
+        data.method = first_scenario.method;
+        data.req_payload = reassemble_str_with_variable(first_scenario.tokenized_payload,
+                                                        data.user_id,
+                                                        full_var_str_len);;
+        data.req_headers = first_scenario.headers_in_map;
         update_content_length(data);
         if (config->json_config_schema.variable_range_end)
         {
@@ -1303,33 +1309,36 @@ Request_Data Client::get_request_to_submit()
 
 bool Client::prepare_next_request(const Request_Data& finished_request)
 {
+    static thread_local size_t full_var_str_len =
+                  std::to_string(config->json_config_schema.variable_range_end).size();
     if (finished_request.next_request >= config->json_config_schema.scenarios.size())
     {
         return false;
     }
 
     Request_Data new_request;
+    auto& next_scenario = config->json_config_schema.scenarios[finished_request.next_request];
     new_request.user_id = finished_request.user_id;
-    new_request.method = config->json_config_schema.scenarios[finished_request.next_request].method;
-    new_request.req_payload = config->json_config_schema.scenarios[finished_request.next_request].payload;
-    new_request.req_headers = config->json_config_schema.scenarios[finished_request.next_request].headers_in_map;
-    replace_variable(new_request.path, config->json_config_schema.variable_name_in_path_and_data, new_request.user_id);
-    replace_variable(new_request.req_payload, config->json_config_schema.variable_name_in_path_and_data,
-                     new_request.user_id);
+    new_request.method = next_scenario.method;
+    new_request.req_payload = next_scenario.payload;
+    new_request.req_headers = next_scenario.headers_in_map;
+    new_request.req_payload = reassemble_str_with_variable(next_scenario.tokenized_payload,
+                                                           new_request.user_id,
+                                                           full_var_str_len);
 
-    if (config->json_config_schema.scenarios[finished_request.next_request].path.typeOfAction == "input")
+    if (next_scenario.path.typeOfAction == "input")
     {
-        new_request.path = config->json_config_schema.scenarios[finished_request.next_request].path.input;
+         new_request.path = reassemble_str_with_variable(next_scenario.tokenized_path,
+                                                         new_request.user_id,
+                                                         full_var_str_len);
     }
-    else if (config->json_config_schema.scenarios[finished_request.next_request].path.typeOfAction == "sameWithLastOne")
+    else if (next_scenario.path.typeOfAction == "sameWithLastOne")
     {
         new_request.path = finished_request.path;
     }
-    else if (config->json_config_schema.scenarios[finished_request.next_request].path.typeOfAction ==
-             "fromResponseHeader")
+    else if (next_scenario.path.typeOfAction == "fromResponseHeader")
     {
-        auto header = finished_request.resp_headers.find(
-                          config->json_config_schema.scenarios[finished_request.next_request].path.input);
+        auto header = finished_request.resp_headers.find(next_scenario.path.input);
         if (header != finished_request.resp_headers.end())
         {
             http_parser_url u {};
@@ -1349,7 +1358,7 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
         }
     }
 
-    if (config->json_config_schema.scenarios[finished_request.next_request].luaScript.size())
+    if (next_scenario.luaScript.size())
     {
         if (!update_request_with_lua(lua_states[finished_request.next_request], finished_request, new_request));
         {

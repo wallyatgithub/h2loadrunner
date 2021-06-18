@@ -931,3 +931,60 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                   std::endl;
     }
 }
+
+std::vector<std::string> tokenize_string(const std::string& source, const std::string& delimeter)
+{
+    std::vector<std::string> retVec;
+    if (!delimeter.empty())
+    {
+        std::string str = source;
+        size_t pos = str.find(delimeter);
+        while (pos != std::string::npos) {
+            retVec.push_back(str.substr(0, pos));
+            str.erase(0, pos + delimeter.length());
+            pos = str.find(delimeter);
+        }
+        retVec.push_back(str);
+    }
+    else
+    {
+        retVec.push_back(source);
+    }
+    return retVec;
+}
+
+void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config)
+{
+  for (auto& scenario : config.json_config_schema.scenarios)
+  {
+      scenario.tokenized_path = tokenize_string(scenario.path.input, config.json_config_schema.variable_name_in_path_and_data);
+      scenario.tokenized_payload = tokenize_string(scenario.payload, config.json_config_schema.variable_name_in_path_and_data);
+  }
+}
+
+std::string reassemble_str_with_variable(const std::vector<std::string>& tokenized_source,
+                                                    uint64_t variable_value, size_t full_var_length)
+{
+    std::string retStr = tokenized_source[0];
+
+    if (tokenized_source.size() > 1)
+    {
+        std::string curr_var_value_str = std::to_string(variable_value);
+        std::string padding;
+        padding.reserve(full_var_length - curr_var_value_str.size());
+        for (size_t i = 0; i < full_var_length - curr_var_value_str.size(); i++)
+        {
+            padding.append("0");
+        }
+        curr_var_value_str.insert(0, padding);
+
+        std::string variable;
+        for (size_t i = 1; i < tokenized_source.size(); i++)
+        {
+            retStr.append(curr_var_value_str);
+            retStr.append(tokenized_source[i]);
+        }
+    }
+    return retStr;
+}
+

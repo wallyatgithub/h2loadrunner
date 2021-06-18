@@ -93,5 +93,11 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config);
 
 void insert_customized_headers_to_Json_scenarios(h2load::Config& config);
 
+void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config);
+
+std::vector<std::string> tokenize_string(const std::string& source, const std::string& delimeter);
+
+std::string reassemble_str_with_variable(const std::vector<std::string>& tokenized_source,
+                                                    uint64_t variable_value, size_t full_var_length);
 
 #endif

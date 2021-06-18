@@ -1,6 +1,7 @@
 #ifndef H2LOAD_CONFIG_SCHEMA_H
 #define H2LOAD_CONFIG_SCHEMA_H
 
+#include <iostream>
 
 #include "staticjson/document.hpp"
 #include "staticjson/staticjson.hpp"
@@ -26,6 +27,8 @@ public:
     std::string payload;
     std::vector<std::string> additonalHeaders;
     std::map<std::string, std::string> headers_in_map;
+    std::vector<std::string> tokenized_path;
+    std::vector<std::string> tokenized_payload;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("luaScript", &this->luaScript, staticjson::Flags::Optional);
