@@ -1,4 +1,5 @@
 [![license](https://img.shields.io/github/license/wallyatgithub/h2loadrunner.svg?style=flat-square)](https://github.com/wallyatgithub/h2loadrunner)
+[![build status](https://github.com/wallyatgithub/h2loadrunner/actions/workflows/cmake.yml/badge.svg)
 
 *Read this in other languages: [简体中文](README.zh-cn.md).*
 
