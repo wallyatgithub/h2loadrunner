@@ -119,7 +119,7 @@
     openssl
     libssl-dev
     libev-dev
-    liblua5.3-dev
+    libluajit-5.1-dev
     rapidjson-dev
 
   Use cmake to build
