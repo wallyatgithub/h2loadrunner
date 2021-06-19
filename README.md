@@ -30,43 +30,49 @@
      h2loadrunner prints the test statistics every second; it also supports dynamic change of QPS/RPS.
 
 # How performant is h2loadrunner?
-  To execute 60K QPS/s of such test scenario, h2loadrunner needs only 1 logic core of an 8th Gen i3 CPU:
+  For this test scenario, h2loadrunner will only need less than one logic core to reach 60K QPS/s:
   
-    POST with dynamic path generation and dynamic message body of 300 bytes 
-    Upon POST response, extract the resource created by POST from response header, and send PATCH with dynamic message body of 300 bytes for resource update
-    Upon PATCH response, send DELETE to delete resource.
-    
+   POST with dynamic path generation and dynamic message body of 300 bytes 
+   Upon POST response, extract the resource created by POST from response header, and send PATCH with dynamic message body of 300 bytes for resource update
+   Upon PATCH response, send DELETE to delete resource.
+
+  CPU usage @ 60K QPS/s:
+  
+   2756 root      20   0  366240  39668   7340 S  87.5   0.5   0:02.56 h2loadrunner
+   2756 root      20   0  366240  40988   7340 S  96.0   0.5   0:03.04 h2loadrunner
+   2756 root      20   0  366240  42044   7340 S  96.1   0.5   0:03.53 h2loadrunner
+   2756 root      20   0  366240  43364   7340 S  96.0   0.5   0:04.01 h2loadrunner
+   2756 root      20   0  366240  44684   7340 S  96.1   0.5   0:04.50 h2loadrunner
+   2756 root      20   0  366240  45740   7340 S  94.0   0.6   0:04.97 h2loadrunner
+
+  CPU usage @ 120K QPS/s, basically is double that of 60K QPS/s, without noticable overhead or bottleneck：
+  
+   2749 root      20   0  404640 102876   7460 S 198.0   1.3   0:23.21 h2loadrunner
+   2749 root      20   0  404640 102876   7460 S 190.2   1.3   0:24.18 h2loadrunner
+   2749 root      20   0  404640 102876   7460 S 198.0   1.3   0:25.17 h2loadrunner
+   2749 root      20   0  404640 102876   7460 S 190.2   1.3   0:26.14 h2loadrunner
+   2749 root      20   0  404640 102876   7460 S 198.0   1.3   0:27.13 h2loadrunner
+   2749 root      20   0  404640 102876   7460 S 190.2   1.3   0:28.10 h2loadrunner
+   2749 root      20   0  404640 102876   7460 S 196.0   1.3   0:29.08 h2loadrunner
+ 
+  So, the output of h2loadrunner can grow linearly on multi-core machines.
+  
   Need to mention that, to stress h2loadrunner, the mock server intentionally maks some requests fail, by not sending back the response (3%), or sending back failure response.
   
   Meaning, in this test, h2loadrunner needs to take care of a small portion (3%) of stream timeout case during the load test runnning.
-    
+  
   Result shows, h2loadrunner handles this situation without any problem:
   
-    Fri Jun 18 18:52:10 2021, send: 60179, successful: 54199, 3xx: 0, 4xx: 4187, 5xx: 0, max resp time (us): 2020063, min resp time (us): 454, successful/send: 90.063%
-    Fri Jun 18 18:52:11 2021, send: 60007, successful: 54011, 3xx: 0, 4xx: 4286, 5xx: 0, max resp time (us): 2011914, min resp time (us): 410, successful/send: 90.0078%
-    Fri Jun 18 18:52:12 2021, send: 60044, successful: 54072, 3xx: 0, 4xx: 4229, 5xx: 0, max resp time (us): 2012212, min resp time (us): 308, successful/send: 90.054%
-    Fri Jun 18 18:52:13 2021, send: 59968, successful: 54036, 3xx: 0, 4xx: 4196, 5xx: 0, max resp time (us): 2012040, min resp time (us): 388, successful/send: 90.1081%
-    Fri Jun 18 18:52:14 2021, send: 59997, successful: 54092, 3xx: 0, 4xx: 4179, 5xx: 0, max resp time (us): 2012913, min resp time (us): 405, successful/send: 90.1578%
-    Fri Jun 18 18:52:15 2021, send: 60034, successful: 54029, 3xx: 0, 4xx: 4240, 5xx: 0, max resp time (us): 2011834, min resp time (us): 392, successful/send: 89.9973%
-    Fri Jun 18 18:52:16 2021, send: 60052, successful: 54125, 3xx: 0, 4xx: 4198, 5xx: 0, max resp time (us): 2011840, min resp time (us): 436, successful/send: 90.1302%
-    Fri Jun 18 18:52:17 2021, send: 59967, successful: 54018, 3xx: 0, 4xx: 4232, 5xx: 0, max resp time (us): 2011999, min resp time (us): 411, successful/send: 90.0795%
-    Fri Jun 18 18:52:18 2021, send: 59967, successful: 54032, 3xx: 0, 4xx: 4194, 5xx: 0, max resp time (us): 2012350, min resp time (us): 430, successful/send: 90.1029%
-    Fri Jun 18 18:52:19 2021, send: 60070, successful: 54098, 3xx: 0, 4xx: 4225, 5xx: 0, max resp time (us): 2011863, min resp time (us): 367, successful/send: 90.0583%
-    Fri Jun 18 18:52:20 2021, send: 60014, successful: 54134, 3xx: 0, 4xx: 4135, 5xx: 0, max resp time (us): 2011944, min resp time (us): 374, successful/send: 90.2023%
-    Fri Jun 18 18:52:21 2021, send: 59965, successful: 54092, 3xx: 0, 4xx: 4152, 5xx: 0, max resp time (us): 2012001, min resp time (us): 389, successful/send: 90.206%
-    Fri Jun 18 18:52:22 2021, send: 60015, successful: 54056, 3xx: 0, 4xx: 4257, 5xx: 0, max resp time (us): 2011907, min resp time (us): 415, successful/send: 90.0708%
-    Fri Jun 18 18:52:23 2021, send: 60048, successful: 54026, 3xx: 0, 4xx: 4239, 5xx: 0, max resp time (us): 2012352, min resp time (us): 449, successful/send: 89.9714%
+   Sat Jun 19 12:44:11 2021, send: 121083, successful: 109202, 3xx: 0, 4xx: 8427, 5xx: 0, max resp time (us): 2031516, min resp time (us): 1204, successful/send: 90.1877%
+   Sat Jun 19 12:44:12 2021, send: 120320, successful: 108389, 3xx: 0, 4xx: 8489, 5xx: 0, max resp time (us): 2035583, min resp time (us): 1104, successful/send: 90.0839%
+   Sat Jun 19 12:44:13 2021, send: 120016, successful: 108134, 3xx: 0, 4xx: 8374, 5xx: 0, max resp time (us): 2022545, min resp time (us): 908, successful/send: 90.0997%
+   Sat Jun 19 12:44:14 2021, send: 120069, successful: 108211, 3xx: 0, 4xx: 8347, 5xx: 0, max resp time (us): 2018241, min resp time (us): 1080, successful/send: 90.124%
+   Sat Jun 19 12:44:15 2021, send: 120119, successful: 108290, 3xx: 0, 4xx: 8325, 5xx: 0, max resp time (us): 2017653, min resp time (us): 1012, successful/send: 90.1523%
+   Sat Jun 19 12:44:16 2021, send: 119963, successful: 108078, 3xx: 0, 4xx: 8455, 5xx: 0, max resp time (us): 2023169, min resp time (us): 1097, successful/send: 90.0928%
+   Sat Jun 19 12:44:17 2021, send: 119884, successful: 107971, 3xx: 0, 4xx: 8450, 5xx: 0, max resp time (us): 2022223, min resp time (us): 733, successful/send: 90.0629%
+   Sat Jun 19 12:44:18 2021, send: 120210, successful: 108380, 3xx: 0, 4xx: 8349, 5xx: 0, max resp time (us): 2021652, min resp time (us): 870, successful/send: 90.1589%
 
-
-  CPU usage:
-  
-    50037 root      20   0  327588  64840   7156 S 100.0   0.8   0:11.37 h2loadrunner
-    50037 root      20   0  327588  66160   7156 S 103.9   0.8   0:11.90 h2loadrunner
-    50037 root      20   0  327588  67216   7156 S 106.0   0.8   0:12.43 h2loadrunner
-    50037 root      20   0  327588  68272   7156 S 102.0   0.8   0:12.95 h2loadrunner
-    50037 root      20   0  327588  69592   7156 S 103.9   0.9   0:13.48 h2loadrunner
-    50037 root      20   0  327588  70648   7156 S 104.0   0.9   0:14.00 h2loadrunner
-    50037 root      20   0  327588  71704   7156 S 103.9   0.9   0:14.53 h2loadrunner
+   
 
 
 # Why h2loadrunner?
