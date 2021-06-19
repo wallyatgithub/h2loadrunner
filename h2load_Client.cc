@@ -527,7 +527,19 @@ void Client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
         header_name.assign((const char*)name, namelen);
         std::string header_value;
         header_value.assign((const char*)value, valuelen);
-        request->second.resp_headers[header_name] = header_value;
+        auto it = request->second.resp_headers.find(header_name);
+        if (it != request->second.resp_headers.end())
+        {
+            // Set-Cookie case most likely
+            std::string new_value;
+            new_value.reserve(it->second.size() + 2 + header_value.size());
+            new_value.append(it->second).append("; ").append(header_value);
+            it->second = new_value;
+        }
+        else
+        {
+            request->second.resp_headers[header_name] = header_value;
+        }
     }
 
     if (stream.status_success == -1 && namelen == 7 &&
