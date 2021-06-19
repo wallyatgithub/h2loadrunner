@@ -32,9 +32,9 @@
 # How performant is h2loadrunner?
   For this test scenario, h2loadrunner will only need less than one logic core to reach 60K QPS/s:
   
-   POST with dynamic path generation and dynamic message body of 300 bytes 
-   Upon POST response, extract the resource created by POST from response header, and send PATCH with dynamic message body of 300 bytes for resource update
-   Upon PATCH response, send DELETE to delete resource.
+    POST with dynamic path generation and dynamic message body of 300 bytes 
+    Upon POST response, extract the resource created by POST from response header, and send PATCH with dynamic message body of 300 bytes for resource update
+    Upon PATCH response, send DELETE to delete resource.
 
   CPU usage @ 60K QPS/s:
   
