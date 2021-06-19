@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include "template.h"
+#include "util.h"
+
 
 #include "h2load_utils.h"
 
@@ -815,12 +817,8 @@ void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
 {
     for (auto& header : config.custom_headers)
     {
-        std::string header_name = header.name;
-        std::transform(header_name.begin(), header_name.end(), header_name.begin(),
-                       [](unsigned char c)
-        {
-            return std::tolower(c);
-        });
+        //std::string header_name = header.name;
+        //util::inp_strlower(header_name);
         for (auto& scenario : config.json_config_schema.scenarios)
         {
             scenario.headers_in_map[header.name] = header.value;

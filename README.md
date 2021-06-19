@@ -72,50 +72,6 @@
    Sat Jun 19 12:44:17 2021, send: 119884, successful: 107971, 3xx: 0, 4xx: 8450, 5xx: 0, max resp time (us): 2022223, min resp time (us): 733, successful/send: 90.0629%
    Sat Jun 19 12:44:18 2021, send: 120210, successful: 108380, 3xx: 0, 4xx: 8349, 5xx: 0, max resp time (us): 2021652, min resp time (us): 870, successful/send: 90.1589%
 
-   
-
-
-# Why h2loadrunner?
-  The initial motivation is to make a performant tool for 5G SBA load test on HTTP2.
-
-  Currently, the common practice for HTTP2 performance test is to use JMeter with HTTP2 plugin from Blazemeter.
-
-  However, there are a number of problems with JMeter:
-
-  1. JMeter requires a considerable amount of compute resource, yet not generating very large amount of load.
-
-  2. Synchronized Request is used in JMeter http2 plugin, in order to assert the responses:
-
-     https://github.com/Blazemeter/jmeter-http2-plugin
-
-     This actually prevents concurrent streams and flow controls occurring, which are very key features of HTTP2.
-  
-  The conclusion is, JMeter is not an ideal tool for HTTP2 load testing, at least as of today.
-
-  Classic HTTP benchmarking tools, like wrk, wrk2, do NOT support HTTP2 at all.
-  
-  envoyproxy/nighthawk, which is capable of HTTP2 benchmarking, will either generate single flavor of static request, or replay recorded requests, but it cannot dynamically generate customized requests with corelations between requests.
-  
-  Gatling, which is believed to be powerful, yet, is heavy-weighted.
-  
-  Gatling requires Scala programing skill, is thus not easy for quick start and out-of-the-box usage.
-  
-  Locust, which aims to be a powerful tool for performance testing, however, requires Python programing skill, and is not ready for out-of-the-box usage.
-  
-  Besides, Locust has a number of terminologies like decorators, making it bit difficult for quick start.
-    
-  So, that is the background why this new tool is created.
-  
-  h2load is chosen to be the base of this new tool, as it comes from the nghttp2 project, which means it has the most native HTTP2 support.
-  
-  h2load uses libEv which is based on epoll/poll/kqueue, which makes it very performant with less footprint.
-  
-  Based on h2load, this new tool h2loadrunner is created, with a list of features added, making it at least a very good replacement to wrk/wrk2, yet, with full HTTP2 support.
-  
-  
-  Is this kind of "reinventing the wheel"? 
-  
-  Well, maybe not, as there is no such tool so far, which is, simple, light-weighted, easy to start, with native HTTP2 support, robust, and with fully customizable HTTP/HTTP2 message.
 
 # How to build
 

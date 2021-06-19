@@ -71,65 +71,6 @@
    Sat Jun 19 12:44:18 2021, send: 120210, successful: 108380, 3xx: 0, 4xx: 8349, 5xx: 0, max resp time (us): 2021652, min resp time (us): 870, successful/send: 90.1589%
    
 
-# 为什么要重新造一个轮子?
-  出发点：寻找一个合适的能支持5G SBA （基于HTTP2）性能测试工具。
-
-  当前，比较常见的HTTP2性能测试工具，大概应该是JMeter加载Blazemeter的HTTP2插件。
-
-  但是，这个方法有几个比较明显的缺点：
-
-  1. 性能不太好，需要的硬件资源多，但是产生的测试流量却不够大。
-
-     跑JMeter的机器如果不够强，跑的时间长一点，因为Java垃圾回收等原因，产生的测试流量波动很大
-   
-  2. JMeter加载Blazemeter的HTTP2插件，无法使用HTTP2的多stream并发的特性。
-   
-     https://github.com/Blazemeter/jmeter-http2-plugin
-
-
-  所以，JMeter加载Blazemeter的HTTP2插件的方式，不是非常行。
-
-  大家耳熟能详的HTTP性能测试工具，比如wrk, wrk2, 却又不支持HTTP2。
-
-  有一些其它看起来很高大上的项目，比如Gatling，还有Locust，看上去就挺沉重，需要用户具有一定的编程功力，对想要快速上手的人不够友好。
-  
-  而且虽然Gatling宣称支持HTTP2，但是到底坑有几个，性能如何，并没有明确的数据。
-
-  而至于Locust，则没有声称对HTTP2的支持，也许它所用的http client能自带HTTP2支持，但是疗效如何，暂时未知。
-
-  如果去搜索"http 2 benchmark tool"，第一个出来的是h2load。
-  
-  前面说了，h2load只能支持静态的URI和URI列表，无法做Request之间的关联，无法动态定制Request的内容。
-  
-  envoyproxy下面有一个性能测试项目，叫做nighthawk，看起来非常专业，既能支持HTTP1, 又能支持HTTP2。
-  
-  但是仔细一看，基本配置情况下，它似乎只能生成单一的静态请求，或者是重放之前记录的请求。虽然架构看起来很先进，但是要生成满足要求的测试流量，实际也不是那么轻而易举。
-  
-  
-
-  所以看起来，现存的工具要么直接不行，要么有局限性没有实际可用性，要么太重量级不好上手，并且存在不确定性。
-  
-  所以，再造一个轮子，也不算是多此一举。
-
-  h2load基于libEv，底层是epoll，支持多线程并发，从性能角度考虑，应该没什么问题。
-  
-  而且h2load出自nghttp2项目，对HTTP2的支持应该非常正统。
-
-  基于h2load来造这个轮子，是一个很好的选择。
-
-  所以，在h2load的基础上，加入了本文开头提到的几个性能测试必备的功能，就成了h2loadrunner。
-
-  某种程度上，这不算造轮子，因为不造的话，只有轮毂，而只有轮毂，车是跑不动的；
-  
-  被造的，是安装到轮毂上的轮胎。
-
-  问：为什么不把改动合并回nghttp2项目？
-
-  答：pull request长时间没人理，是一个原因。
-
-  而且，这些改动并不属于nghttp2的核心，即协议部分，h2load本身就是一个独立的工具，所以把h2loadrunner作为一个单独的工具，解除对nghttp2特定版本的绑定，未尝不可。
-
-
 # 如何编译构建目标可执行文件
 
   https://github.com/wallyatgithub/h2loadrunner#how-to-build

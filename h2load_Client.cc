@@ -1329,6 +1329,19 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
     }
 
     Request_Data new_request;
+
+    std::string session_cookie;
+    if (finished_request.resp_headers.find("Set-Cookie"))
+    {
+        session_cookie = finished_request.resp_headers["Set-Cookie"];
+    }
+    else
+    {
+        session_cookie = finished_request.session_cookie;
+    }
+    new_request.session_cookie = session_cookie;
+    finished_request.resp_headers["Set-Cookie"] = new_request.session_cookie;
+
     auto& next_scenario = config->json_config_schema.scenarios[finished_request.next_request];
     new_request.user_id = finished_request.user_id;
     new_request.method = next_scenario.method;
@@ -1455,11 +1468,7 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
                         std::string key(k, len);
                         const char* v = lua_tolstring(L, -1, &len);
                         std::string value(v, len);
-                        std::transform(key.begin(), key.end(), key.begin(),
-                                       [](unsigned char c)
-                        {
-                            return std::tolower(c);
-                        });
+                        //util::inp_strlower(key);
                         headers[key] = value;
                         /* removes 'value'; keeps 'key' for next iteration */
                         lua_pop(L, 1);
