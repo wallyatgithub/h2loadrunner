@@ -1427,8 +1427,8 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
         lua_pushlstring(L, request_to_send.req_payload.c_str(), request_to_send.req_payload.size());
 
         lua_pcall(L, 4, 2, 0);
-
-        while (!lua_isnil(L, -1))
+        int top = lua_gettop(L);
+        for (int i = 0; i < top; i++)
         {
             switch (lua_type(L, -1))
             {

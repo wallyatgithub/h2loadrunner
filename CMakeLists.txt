@@ -8,7 +8,7 @@ set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 add_subdirectory(third-party)
 find_package(OpenSSL 1.0.1)
 find_package(Libev 4.11)
-find_package(Lua)
+find_package(LuaJIT)
 
 include(GNUInstallDirs)
 # Checks for header files.
