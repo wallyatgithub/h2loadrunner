@@ -819,16 +819,16 @@ void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
     {
         //std::string header_name = header.name;
         //util::inp_strlower(header_name);
-        for (auto& scenario : config.json_config_schema.scenarios)
+        for (auto& request : config.json_config_schema.scenario)
         {
-            scenario.headers_in_map[header.name] = header.value;
+            request.headers_in_map[header.name] = header.value;
         }
     }
 }
 
 void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
 {
-    if (config.json_config_schema.scenarios.empty() &&
+    if (config.json_config_schema.scenario.empty() &&
         (config.crud_create_method.size() ||
          config.crud_read_method.size() ||
          config.crud_update_method.size() ||
@@ -841,10 +841,10 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
         for (auto& uri : config.reqlines)
         {
             {
-                Scenario scenario;
-                scenario.method = config.crud_create_method;
-                scenario.path.typeOfAction = "input";
-                scenario.path.input = uri;
+                Request request;
+                request.method = config.crud_create_method;
+                request.path.typeOfAction = "input";
+                request.path.input = uri;
                 if (config.crud_create_data_file_name.size())
                 {
                     std::ifstream buffer(config.crud_create_data_file_name);
@@ -854,41 +854,41 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                         exit(EXIT_FAILURE);
                     }
                     std::string payloadStr((std::istreambuf_iterator<char>(buffer)), std::istreambuf_iterator<char>());
-                    scenario.payload = payloadStr;
+                    request.payload = payloadStr;
                 }
-                config.json_config_schema.scenarios.push_back(scenario);
+                config.json_config_schema.scenario.push_back(request);
             }
 
             bool header_tracked = false;
             if (config.crud_read_method.size())
             {
-                Scenario scenario;
-                scenario.method = config.crud_read_method;
+                Request request;
+                request.method = config.crud_read_method;
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
-                    scenario.path.typeOfAction = "sameWithLastOne";
+                    request.path.typeOfAction = "sameWithLastOne";
                 }
                 else
                 {
-                    scenario.path.typeOfAction = "fromResponseHeader";
-                    scenario.path.input = config.crud_resource_header_name;
+                    request.path.typeOfAction = "fromResponseHeader";
+                    request.path.input = config.crud_resource_header_name;
                 }
                 header_tracked = true;
-                config.json_config_schema.scenarios.push_back(scenario);
+                config.json_config_schema.scenario.push_back(request);
             }
 
             if (config.crud_update_method.size())
             {
-                Scenario scenario;
-                scenario.method = config.crud_update_method;
+                Request request;
+                request.method = config.crud_update_method;
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
-                    scenario.path.typeOfAction = "sameWithLastOne";
+                    request.path.typeOfAction = "sameWithLastOne";
                 }
                 else
                 {
-                    scenario.path.typeOfAction = "fromResponseHeader";
-                    scenario.path.input = config.crud_resource_header_name;
+                    request.path.typeOfAction = "fromResponseHeader";
+                    request.path.input = config.crud_resource_header_name;
                 }
                 header_tracked = true;
                 if (config.crud_update_data_file_name.size())
@@ -900,32 +900,32 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                         exit(EXIT_FAILURE);
                     }
                     std::string payloadStr((std::istreambuf_iterator<char>(buffer)), std::istreambuf_iterator<char>());
-                    scenario.payload = payloadStr;
+                    request.payload = payloadStr;
                 }
-                config.json_config_schema.scenarios.push_back(scenario);
+                config.json_config_schema.scenario.push_back(request);
             }
 
             if (config.crud_delete_method.size())
             {
-                Scenario scenario;
-                scenario.method = config.crud_delete_method;
+                Request request;
+                request.method = config.crud_delete_method;
                 if (config.crud_resource_header_name.size())
                 {
                 }
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
-                    scenario.path.typeOfAction = "sameWithLastOne";
+                    request.path.typeOfAction = "sameWithLastOne";
                 }
                 else
                 {
-                    scenario.path.typeOfAction = "fromResponseHeader";
-                    scenario.path.input = config.crud_resource_header_name;
+                    request.path.typeOfAction = "fromResponseHeader";
+                    request.path.input = config.crud_resource_header_name;
                 }
                 header_tracked = true;
-                config.json_config_schema.scenarios.push_back(scenario);
+                config.json_config_schema.scenario.push_back(request);
             }
         }
-        std::cout << "Scenarios to run:" << std::endl << staticjson::to_pretty_json_string(config.json_config_schema) <<
+        std::cout << "Scenario to run:" << std::endl << staticjson::to_pretty_json_string(config.json_config_schema) <<
                   std::endl;
     }
 }
@@ -953,10 +953,10 @@ std::vector<std::string> tokenize_string(const std::string& source, const std::s
 
 void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config)
 {
-  for (auto& scenario : config.json_config_schema.scenarios)
+  for (auto& request : config.json_config_schema.scenario)
   {
-      scenario.tokenized_path = tokenize_string(scenario.path.input, config.json_config_schema.variable_name_in_path_and_data);
-      scenario.tokenized_payload = tokenize_string(scenario.payload, config.json_config_schema.variable_name_in_path_and_data);
+      request.tokenized_path = tokenize_string(request.path.input, config.json_config_schema.variable_name_in_path_and_data);
+      request.tokenized_payload = tokenize_string(request.payload, config.json_config_schema.variable_name_in_path_and_data);
   }
 }
 

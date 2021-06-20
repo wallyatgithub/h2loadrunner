@@ -122,7 +122,7 @@
       "default": 30,
       "type":"integer"
     },
-    "scenarios":{
+    "scenario":{
       "description":"Array of requests, each request has path, method, optional payload, optional addtional headers, and optionally an lua script for advanced users to customize the request",
       "type":"array",
       "minItems":1,
@@ -175,7 +175,7 @@
   "required":[
     "schema",
     "host",
-    "scenarios"
+    "scenario"
   ]
 }
 

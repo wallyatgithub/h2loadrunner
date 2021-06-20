@@ -26,10 +26,10 @@
   "window-bits": 30,
   "connection-window-bits": 30,
   "log-file": "",
-  "scenarios": [
+  "scenario": [
     {
       "path": {
-        "source": "input",
+        "typeOfAction": "input",
         "input": "/nudm-ee/v2/imsi-2621012-USER-ID/ee-subscriptions"
       },
       "method": "POST",
@@ -40,7 +40,7 @@
     },
     {
       "path": {
-        "source": "fromResponseHeader",
+        "typeOfAction": "fromResponseHeader",
         "headerToExtract": "location"
       },
       "method": "DELETE"

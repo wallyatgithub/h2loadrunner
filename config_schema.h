@@ -36,7 +36,7 @@ public:
     }
 };
 
-class Scenario {
+class Request {
 public:
     std::string luaScript;
     Path path;
@@ -86,7 +86,7 @@ public:
     uint64_t variable_range_end;
     uint64_t nreqs;
     uint32_t stream_timeout_in_ms;
-    std::vector<Scenario> scenarios;
+    std::vector<Request> scenario;
 
     Config_Schema():
         schema("http"),
@@ -146,7 +146,7 @@ public:
         h->add_property("variable-name-in-path-and-data", &this->variable_name_in_path_and_data, staticjson::Flags::Optional);
         h->add_property("variable-range-start", &this->variable_range_start, staticjson::Flags::Optional);
         h->add_property("variable-range-end", &this->variable_range_end, staticjson::Flags::Optional);
-        h->add_property("scenarios", &this->scenarios);
+        h->add_property("scenario", &this->scenario);
     }
 
 };

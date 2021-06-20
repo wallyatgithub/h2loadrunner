@@ -913,11 +913,11 @@ int main(int argc, char** argv)
                         }
                         std::cout << "Use configuration from JSON:" << std::endl << staticjson::to_pretty_json_string(
                                       config.json_config_schema) << std::endl;
-                        assert(config.json_config_schema.scenarios[0].path.typeOfAction == "input");
+                        assert(config.json_config_schema.scenario[0].path.typeOfAction == "input");
 
-                        for (auto& scenario : config.json_config_schema.scenarios)
+                        for (auto& request : config.json_config_schema.scenario)
                         {
-                            for (auto& header_with_value : scenario.additonalHeaders)
+                            for (auto& header_with_value : request.additonalHeaders)
                             {
                                 size_t t = header_with_value.find(":", 1);
                                 if ((t == std::string::npos) ||
@@ -940,24 +940,24 @@ int main(int argc, char** argv)
                                               << std::endl;
                                     continue;
                                 }
-                                scenario.headers_in_map[header_name] = header_value;
+                                request.headers_in_map[header_name] = header_value;
                             }
-                            if (scenario.payload.size())
+                            if (request.payload.size())
                             {
-                                std::ifstream f(scenario.payload);
+                                std::ifstream f(request.payload);
                                 if (f.good())
                                 {
                                     std::string payloadStr((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-                                    scenario.payload = payloadStr;
+                                    request.payload = payloadStr;
                                 }
                             }
-                            if (scenario.luaScript.size())
+                            if (request.luaScript.size())
                             {
-                                std::ifstream f(scenario.luaScript);
+                                std::ifstream f(request.luaScript);
                                 if (f.good())
                                 {
                                     std::string luaScriptStr((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-                                    scenario.luaScript = luaScriptStr;
+                                    request.luaScript = luaScriptStr;
                                 }
                             }
                         }
@@ -1363,12 +1363,12 @@ int main(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
 
-    if (!config.json_config_schema.scenarios.size())
+    if (!config.json_config_schema.scenario.size())
     {
         convert_CRUD_operation_to_Json_scenarios(config);
     }
 
-    if (config.json_config_schema.scenarios.size() && config.custom_headers.size())
+    if (config.json_config_schema.scenario.size() && config.custom_headers.size())
     {
         insert_customized_headers_to_Json_scenarios(config);
     }

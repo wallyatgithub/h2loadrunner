@@ -68,13 +68,13 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf)
     ev_timer_init(&stream_timeout_watcher, stream_timeout_cb, 0., 0.);
     stream_timeout_watcher.data = this;
 
-    for (auto& scenario : conf->json_config_schema.scenarios)
+    for (auto& request : conf->json_config_schema.scenario)
     {
         lua_State* L = luaL_newstate();
         luaL_openlibs(L);
-        if (scenario.luaScript.size())
+        if (request.luaScript.size())
         {
-            luaL_dostring(L, scenario.luaScript.c_str());
+            luaL_dostring(L, request.luaScript.c_str());
         }
         lua_states.push_back(L);
     }
@@ -1294,17 +1294,17 @@ Request_Data Client::get_request_to_submit()
         Request_Data data;
         size_t curr_index = 0;
         data.user_id = curr_req_variable_value;
-        auto& first_scenario = config->json_config_schema.scenarios[curr_index];
-        data.path = reassemble_str_with_variable(first_scenario.tokenized_path,
+        auto& first_request = config->json_config_schema.scenario[curr_index];
+        data.path = reassemble_str_with_variable(first_request.tokenized_path,
                                                  data.user_id,
                                                  full_var_str_len);
-        data.method = first_scenario.method;
-        data.req_payload = reassemble_str_with_variable(first_scenario.tokenized_payload,
+        data.method = first_request.method;
+        data.req_payload = reassemble_str_with_variable(first_request.tokenized_payload,
                                                         data.user_id,
                                                         full_var_str_len);;
-        data.req_headers = first_scenario.headers_in_map;
+        data.req_headers = first_request.headers_in_map;
 
-        if (first_scenario.luaScript.size())
+        if (first_request.luaScript.size())
         {
             if (!update_request_with_lua(lua_states[curr_index], dummy_data, data))
             {
@@ -1332,39 +1332,39 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
 {
     static thread_local size_t full_var_str_len =
                   std::to_string(config->json_config_schema.variable_range_end).size();
-    if (finished_request.next_request >= config->json_config_schema.scenarios.size())
+    if (finished_request.next_request >= config->json_config_schema.scenario.size())
     {
         return false;
     }
 
     Request_Data new_request;
-    auto& next_scenario = config->json_config_schema.scenarios[finished_request.next_request];
+    auto& next_request = config->json_config_schema.scenario[finished_request.next_request];
     new_request.user_id = finished_request.user_id;
-    new_request.method = next_scenario.method;
-    new_request.req_headers = next_scenario.headers_in_map;
-    new_request.req_payload = reassemble_str_with_variable(next_scenario.tokenized_payload,
+    new_request.method = next_request.method;
+    new_request.req_headers = next_request.headers_in_map;
+    new_request.req_payload = reassemble_str_with_variable(next_request.tokenized_payload,
                                                            new_request.user_id,
                                                            full_var_str_len);
 
-    if (next_scenario.path.typeOfAction == "input")
+    if (next_request.path.typeOfAction == "input")
     {
-         new_request.path = reassemble_str_with_variable(next_scenario.tokenized_path,
+         new_request.path = reassemble_str_with_variable(next_request.tokenized_path,
                                                          new_request.user_id,
                                                          full_var_str_len);
     }
-    else if (next_scenario.path.typeOfAction == "sameWithLastOne")
+    else if (next_request.path.typeOfAction == "sameWithLastOne")
     {
         new_request.path = finished_request.path;
     }
-    else if (next_scenario.path.typeOfAction == "fromResponseHeader")
+    else if (next_request.path.typeOfAction == "fromResponseHeader")
     {
-        auto header = finished_request.resp_headers.find(next_scenario.path.input);
+        auto header = finished_request.resp_headers.find(next_request.path.input);
         if (header != finished_request.resp_headers.end())
         {
             http_parser_url u {};
             if (http_parser_parse_url(header->second.c_str(), header->second.size(), 0, &u) != 0)
             {
-                std::cerr << "abort whole scenarios sequence, as invalid URI found in header: " << header->second << std::endl;
+                std::cerr << "abort whole scenario sequence, as invalid URI found in header: " << header->second << std::endl;
                 return false;
             }
             else
@@ -1378,7 +1378,7 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
         }
     }
 
-    if (next_scenario.luaScript.size())
+    if (next_request.luaScript.size())
     {
         if (!update_request_with_lua(lua_states[finished_request.next_request], finished_request, new_request))
         {
@@ -1478,7 +1478,7 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
                 }
                 default:
                 {
-                    std::cerr << "error occured in lua function make_request, abort the whole scenarios sequence" << std::endl;
+                    std::cerr << "error occured in lua function make_request, abort the whole scenario sequence" << std::endl;
                     retCode = false;
                     break;
                 }
@@ -1488,7 +1488,7 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
     }
     else
     {
-        std::cerr << "lua script provisioned but required function not present, abort the whole scenarios sequence" << std::endl;
+        std::cerr << "lua script provisioned but required function not present, abort the whole scenario sequence" << std::endl;
         retCode = false;
     }
     return retCode;
