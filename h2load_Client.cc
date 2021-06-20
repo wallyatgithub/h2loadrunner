@@ -1370,6 +1370,15 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
             else
             {
                 new_request.path = get_reqline(header->second.c_str(), u);
+                if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
+                {
+                    new_request.schema = util::get_uri_field(header->second.c_str(), u, UF_SCHEMA).str();
+                    new_request.authority = util::get_uri_field(header->second.c_str(), u, UF_HOST).str();
+                    if (util::has_uri_field(u, UF_PORT))
+                    {
+                        new_request.authority.append(":").append(util::utos(u.port));
+                    }
+                }
             }
         }
         else
@@ -1474,6 +1483,10 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
                     request_to_send.path = headers[":path"];
                     headers.erase(":path");
                     request_to_send.req_headers = headers;
+                    request_to_send.authority = headers[":authority"];
+                    headers.erase(":authority");
+                    request_to_send.schema = headers[":schema"];
+                    headers.erase(":schema");
                     break;
                 }
                 default:

@@ -345,6 +345,8 @@ struct Stream
 
 struct Request_Data
 {
+    std::string schema;
+    std::string authority;
     std::string req_payload;
     std::string path;
     uint64_t user_id;

@@ -337,14 +337,17 @@ int Http1Session::_submit_request()
 {
     h2load::Request_Data data = client_->get_request_to_submit();
     auto config = client_->worker->config;
-    std::string authority;
-    if (config->port != config->default_port)
+    std::string authority = data.authority;
+    if (authority.empty())
     {
-        authority = config->host + ":" + util::utos(config->port);
-    }
-    else
-    {
-        authority = config->host;
+        if (config->port != config->default_port)
+        {
+            authority = config->host + ":" + util::utos(config->port);
+        }
+        else
+        {
+            authority = config->host;
+        }
     }
     std::string req;
     req.append(data.method).append(" ").append(data.path).append(" HTTP/1.1\r\n");
