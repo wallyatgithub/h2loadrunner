@@ -19,14 +19,16 @@
   3. Transaction support with specific resource header tracking(e.g. location header in 5G SBA).
   
      Other types of resource tracking are to be added in the future, like, XPath for XML message body, Json pointer for Json message body, etc.
+
+  4. Cookie support without manual intervention, yet provides the flexibility of clearing cookies before the execution of a request.
   
-  4. Lua script support.
+  5. Lua script support.
      With lua script, user can customize every header and the payload of the request to be sent.
   
-  5. Both command line interface and JSON based configuration.
+  6. Both command line interface and JSON based configuration.
      With JSON configuration, user can build the test scenario with a GUI editor.
      
-  6. Dynamic report of the test, dynamic change of the QPS/RPS.
+  7. Dynamic report of the test, dynamic change of the QPS/RPS.
      h2loadrunner prints the test statistics every second; it also supports dynamic change of QPS/RPS.
 
 # How performant is h2loadrunner?
