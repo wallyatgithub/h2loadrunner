@@ -21,6 +21,7 @@
   3. 前后Request之间的跟踪关联（典型场景：5G SBA中的事件订阅机制）
   
   4. 原生支持解析处理Set-Cookie，以及发送Cookie；并且支持可选的配置，允许在一个Request执行之前清空Cookie
+  
      Cookie的处理遵照此处的约定：https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Cookies
   
   5. 支持加载Lua脚本，实现对HTTP / HTTP2 Request消息的完全定制
