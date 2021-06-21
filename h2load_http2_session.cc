@@ -425,21 +425,9 @@ int Http2Session::_submit_request()
     http2_nvs.push_back(http2::make_nv(path_header_name, data.path, false));
 
     static std::string scheme_header_name = ":scheme";
-    http2_nvs.push_back(http2::make_nv(scheme_header_name, (data.schema.empty()? config->scheme : data.schema), false));
-    std::string authority = data.authority;
-    if (authority.empty())
-    {
-        if (config->port != config->default_port)
-        {
-            authority = config->host + ":" + util::utos(config->port);
-        }
-        else
-        {
-            authority = config->host;
-        }
-    }
+    http2_nvs.push_back(http2::make_nv(scheme_header_name, data.schema, false));
     static std::string authority_header_name = ":authority";
-    http2_nvs.push_back(http2::make_nv(authority_header_name, authority, false));
+    http2_nvs.push_back(http2::make_nv(authority_header_name, data.authority, false));
 
     static std::string method_header_name = ":method";
     http2_nvs.push_back(http2::make_nv(method_header_name, data.method, false));

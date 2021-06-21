@@ -144,17 +144,22 @@
               }
             }
           },
+          "clear-old-cookies":{
+            "description": "clear cookies before executing this request: cookies received prior to this request, will be cleared, and will not be included in Cookie header of this request and after; Cookies header (if any) in additonalHeaders below for this request, will still be sent (but will not be passed on to next request)",
+            "default": "GET",
+            "type":"boolean"
+          },
           "method":{
             "description": "method of the HTTP(2) request",
-            "default": "GET",
+            "default": false,
             "type":"string"
           },
           "payload":{
-            "description": "payload data",
             "description": "http message content, or a filename containing the actual content",
             "type":"string"
           },
           "additonalHeaders":{
+          "description": "additional headers to include in this request. Valid format for each header: pair of strings with : in the middle; for example, user-agent: h2loadrunner",
           "type": "array",
           "items": {
              "type": "string"

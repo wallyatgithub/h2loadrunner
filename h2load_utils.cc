@@ -863,6 +863,7 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
             if (config.crud_read_method.size())
             {
                 Request request;
+                request.clear_old_cookies = false;
                 request.method = config.crud_read_method;
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
@@ -880,6 +881,7 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
             if (config.crud_update_method.size())
             {
                 Request request;
+                request.clear_old_cookies = false;
                 request.method = config.crud_update_method;
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
@@ -908,6 +910,7 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
             if (config.crud_delete_method.size())
             {
                 Request request;
+                request.clear_old_cookies = false;
                 request.method = config.crud_delete_method;
                 if (config.crud_resource_header_name.size())
                 {
@@ -933,20 +936,21 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
 std::vector<std::string> tokenize_string(const std::string& source, const std::string& delimeter)
 {
     std::vector<std::string> retVec;
+    size_t start = 0;
+    size_t delimeter_len = delimeter.length();
     if (!delimeter.empty())
     {
-        std::string str = source;
-        size_t pos = str.find(delimeter);
+        size_t pos = source.find(delimeter, start);
         while (pos != std::string::npos) {
-            retVec.push_back(str.substr(0, pos));
-            str.erase(0, pos + delimeter.length());
-            pos = str.find(delimeter);
+            retVec.push_back(source.substr(start, (pos-start)));
+            start = pos + delimeter_len;
+            pos = source.find(delimeter, start);
         }
-        retVec.push_back(str);
+        retVec.emplace_back(source.substr(start, std::string::npos));
     }
     else
     {
-        retVec.push_back(source);
+        retVec.emplace_back(source);
     }
     return retVec;
 }
@@ -985,4 +989,64 @@ std::string reassemble_str_with_variable(const std::vector<std::string>& tokeniz
     }
     return retStr;
 }
+
+std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string, const std::string& origin_authority, const std::string& origin_schema)
+{
+    static std::set<std::string> cookie_attributes {"Secure", "HttpOnly", "Expires", "Domain", "Path", "SameSite"};
+    std::vector <Cookie> parsed_cookies;
+
+    std::string origin_host = tokenize_string(origin_authority, ":")[0];
+    bool secure_origin = (origin_schema.compare("https") == 0);
+    std::vector<std::string> tokens = tokenize_string(cookie_string, "; ");
+
+    for (auto& token: tokens)
+    {
+        std::vector<std::string> key_value_pair = tokenize_string(token, "=");
+        if ((cookie_attributes.count(key_value_pair[0]) == 0) && (key_value_pair.size() == 2))
+        {
+            parsed_cookies.emplace_back(h2load::Cookie());
+            parsed_cookies.back().origin_host = origin_host;
+            parsed_cookies.back().secure_origin = secure_origin;
+            parsed_cookies.back().cookie_key = key_value_pair[0];
+            parsed_cookies.back().cookie_value = key_value_pair[1];
+        }
+        else if (cookie_attributes.count(key_value_pair[0]) == 1)
+        {
+            if (parsed_cookies.size() == 0)
+            {
+                continue;
+            }
+            if (key_value_pair[0] == "Expires" && key_value_pair.size() == 2)
+            {
+                parsed_cookies.back().expires = key_value_pair[1];
+            }
+            else if (key_value_pair[0] == "Secure" && key_value_pair.size() == 1)
+            {
+                parsed_cookies.back().secure = true;
+            }
+            else if (key_value_pair[0] == "HttpOnly" && key_value_pair.size() == 1)
+            {
+                parsed_cookies.back().httpOnly = true;
+            }
+            else if (key_value_pair[0] == "Domain" && key_value_pair.size() == 1)
+            {
+                parsed_cookies.back().domain = key_value_pair[1];
+            }
+            else if (key_value_pair[0] == "Path" && key_value_pair.size() == 1)
+            {
+                parsed_cookies.back().path = key_value_pair[1];
+            }
+             else if (key_value_pair[0] == "SameSite" && key_value_pair.size() == 1)
+            {
+                parsed_cookies.back().sameSite = key_value_pair[1];
+            }
+        }
+        else
+        {
+            std::cerr<<"invalid token in cookie string:"<<key_value_pair[0]<<std::endl;
+        }
+    }
+    return parsed_cookies;
+}
+
 

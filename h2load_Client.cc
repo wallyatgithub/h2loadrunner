@@ -1299,6 +1299,16 @@ Request_Data Client::get_request_to_submit()
                                                  data.user_id,
                                                  full_var_str_len);
         data.method = first_request.method;
+        data.schema = config->scheme;
+        if (config->port != config->default_port)
+        {
+            data.authority = config->host + ":" + util::utos(config->port);
+        }
+        else
+        {
+            data.authority = config->host;
+        }
+
         data.req_payload = reassemble_str_with_variable(first_request.tokenized_payload,
                                                         data.user_id,
                                                         full_var_str_len);;
@@ -1328,7 +1338,40 @@ Request_Data Client::get_request_to_submit()
     }
 }
 
-bool Client::prepare_next_request(const Request_Data& finished_request)
+void Client::parse_and_transfer_cookies(Request_Data& finished_request, Request_Data& new_request)
+{
+    if (finished_request.resp_headers.find("Set-Cookie") != finished_request.resp_headers.end())
+    {
+        auto new_cookies = parse_cookie_string(finished_request.resp_headers["Set-Cookie"],
+                                               finished_request.authority, finished_request.schema);
+        for (auto& cookie: new_cookies)
+        {
+            finished_request.accumulated_cookies[cookie.cookie_key] = std::move(cookie);
+        }
+    }
+    new_request.accumulated_cookies.swap(finished_request.accumulated_cookies);
+}
+
+void Client::output_cookies_to_req_headers(Request_Data& req_to_be_sent)
+{
+    if (req_to_be_sent.accumulated_cookies.empty())
+    {
+        return;
+    }
+    std::string& cookie_header_value = req_to_be_sent.req_headers["Cookie"];
+    std::string cookie_delimeter = "; ";
+    for (auto& cookie: req_to_be_sent.accumulated_cookies)
+    {
+        if (!cookie_header_value.empty())
+        {
+            cookie_header_value.append(cookie_delimeter);
+        }
+        // TODO: add check of domain, host, security, etc
+        cookie_header_value.append(cookie.first).append("=").append(cookie.second.cookie_value);
+    }
+}
+
+bool Client::prepare_next_request(Request_Data& finished_request)
 {
     static thread_local size_t full_var_str_len =
                   std::to_string(config->json_config_schema.variable_range_end).size();
@@ -1341,7 +1384,24 @@ bool Client::prepare_next_request(const Request_Data& finished_request)
     auto& next_request = config->json_config_schema.scenario[finished_request.next_request];
     new_request.user_id = finished_request.user_id;
     new_request.method = next_request.method;
+    new_request.schema = config->scheme;
+    if (config->port != config->default_port)
+    {
+        new_request.authority = config->host + ":" + util::utos(config->port);
+    }
+    else
+    {
+        new_request.authority = config->host;
+    }
+
     new_request.req_headers = next_request.headers_in_map;
+
+    if (!next_request.clear_old_cookies)
+    {
+        parse_and_transfer_cookies(finished_request, new_request);
+        output_cookies_to_req_headers(new_request);
+    }
+
     new_request.req_payload = reassemble_str_with_variable(next_request.tokenized_payload,
                                                            new_request.user_id,
                                                            full_var_str_len);
@@ -1505,6 +1565,23 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
         retCode = false;
     }
     return retCode;
+}
+
+std::ostream& operator<<(std::ostream& o, const Cookie& cookie)
+{
+    o << "Cookie: { "
+      << "key:" << cookie.cookie_key
+      << ", value:" << cookie.cookie_value
+      << ", origin_host:" << cookie.origin_host
+      << ", secure_origin:" << cookie.secure_origin
+      << ", expires:" << cookie.expires
+      << ", secure:" << cookie.secure
+      << ", httpOnly:" << cookie.httpOnly
+      << ", domain:" << cookie.domain
+      << ", path:" << cookie.path
+      << ", sameSite:" << cookie.sameSite
+      << " }";
+    return o;
 }
 
 }

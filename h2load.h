@@ -343,6 +343,22 @@ struct Stream
     Stream();
 };
 
+struct Cookie
+{
+    std::string origin_host;
+    bool        secure_origin;
+    std::string cookie_key;
+    std::string cookie_value;
+    std::string expires; // not handled as it is not possible to expire in such short interval during load test
+    bool        secure;
+    bool        httpOnly; // not handled as no JavaScript interaction for load test
+    std::string domain;
+    std::string path;
+    std::string sameSite;
+};
+
+std::ostream& operator<<(std::ostream& o, const Cookie& cookie);
+
 struct Request_Data
 {
     std::string schema;
@@ -355,6 +371,7 @@ struct Request_Data
     std::string resp_payload;
     std::map<std::string, std::string, ci_less> resp_headers;
     uint16_t status_code;
+    std::map<std::string, Cookie> accumulated_cookies;
     size_t next_request;
 };
 
@@ -494,11 +511,14 @@ struct Client
     void signal_write();
 
     Request_Data get_request_to_submit();
-    bool prepare_next_request(const Request_Data& data);
+    bool prepare_next_request(Request_Data& data);
     void replace_variable(std::string& input, const std::string& variable_name, uint64_t variable_value);
     void update_content_length(Request_Data& data);
     bool update_request_with_lua(lua_State* L, const Request_Data& finished_request, Request_Data& request_to_send);
+    void output_cookies_to_req_headers(Request_Data& req_to_be_sent);
+    void parse_and_transfer_cookies(Request_Data& finished_request, Request_Data& new_request);
 };
+
 
 } // namespace h2load
 

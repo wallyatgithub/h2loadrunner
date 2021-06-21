@@ -100,4 +100,7 @@ std::vector<std::string> tokenize_string(const std::string& source, const std::s
 std::string reassemble_str_with_variable(const std::vector<std::string>& tokenized_source,
                                                     uint64_t variable_value, size_t full_var_length);
 
+std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string, const std::string& origin_authority, const std::string& origin_schema);
+
+
 #endif

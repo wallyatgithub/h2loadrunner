@@ -38,6 +38,7 @@ public:
 
 class Request {
 public:
+    bool clear_old_cookies;
     std::string luaScript;
     Path path;
     std::string method;
@@ -53,6 +54,7 @@ public:
         h->add_property("method", &this->method);
         h->add_property("payload", &this->payload, staticjson::Flags::Optional);
         h->add_property("additonalHeaders", &this->additonalHeaders, staticjson::Flags::Optional);
+        h->add_property("clear-old-cookies", &this->clear_old_cookies, staticjson::Flags::Optional);
     }
 };
 
