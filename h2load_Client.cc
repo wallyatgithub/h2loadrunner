@@ -1346,10 +1346,87 @@ void Client::parse_and_transfer_cookies(Request_Data& finished_request, Request_
                                                finished_request.authority, finished_request.schema);
         for (auto& cookie: new_cookies)
         {
+            if (cookie.cookie_key.find("__Host-") == 0)
+            {
+                if (!cookie.secure || !cookie.secure_origin || !cookie.domain.empty() || cookie.path != "/")
+                {
+                    // __Host- check failed, this cookie is not accepted
+                    continue;
+                }
+            }
+            if (cookie.cookie_key.find("__Secure-") == 0)
+            {
+                if (!cookie.secure || !cookie.secure_origin)
+                {
+                    // _Secure- check failed, this cookie is not accepted
+                    continue;
+                }
+            }
             finished_request.accumulated_cookies[cookie.cookie_key] = std::move(cookie);
         }
     }
     new_request.accumulated_cookies.swap(finished_request.accumulated_cookies);
+}
+
+bool Client::is_cookie_valid_for_request(Cookie cookie, Request_Data& new_request)
+{
+    if (cookie.secure && (new_request.schema == "http" || new_request.schema == "HTTP"))
+    {
+        return false;
+    }
+
+    if (cookie.domain.size())
+    {
+        std::string this_host = tokenize_string(new_request.authority, ":")[0];
+        util::inp_strlower(this_host);
+        std::string domain = cookie.domain;
+        util::inp_strlower(domain);
+        size_t pos = this_host.rfind(domain);
+        if (pos == std::string::npos || ((this_host.size() - pos) != domain.size()))
+        {
+            return false;
+        }
+    }
+    else // domain empty, origin exact match with no sub domain allowed
+    {
+      std::string origin = cookie.origin;
+      util::inp_strlower(origin);
+      std::string authority = new_request.authority;
+      util::inp_strlower(authority);
+      if (origin != authority)
+      {
+          return false;
+      }
+    }
+
+    if (cookie.path.size() && new_request.path.size())
+    {
+        size_t pos = new_request.path.find(cookie.path);
+        if (pos != 0)
+        {
+            return false;
+        }
+    }
+
+    if (cookie.sameSite.size() && cookie.sameSite != "None")
+    {
+        std::string origin = cookie.origin;
+        util::inp_strlower(origin);
+        std::string authority = new_request.authority;
+        util::inp_strlower(authority);
+        if (origin != authority)
+        {
+            if (cookie.sameSite == "Strict")
+            {
+                return false;
+            }
+            else if (cookie.sameSite == "Lax" && new_request.next_request != 1)
+            {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 void Client::output_cookies_to_req_headers(Request_Data& req_to_be_sent)
@@ -1359,14 +1436,32 @@ void Client::output_cookies_to_req_headers(Request_Data& req_to_be_sent)
         return;
     }
     std::string& cookie_header_value = req_to_be_sent.req_headers["Cookie"];
+    std::set<std::string> cookies_overriding_from_config;
+    if (cookie_header_value.size())
+    {
+        auto cookie_vec = parse_cookie_string(cookie_header_value, req_to_be_sent.authority, req_to_be_sent.schema);
+        for (auto& cookie: cookie_vec)
+        {
+            cookies_overriding_from_config.insert(cookie.cookie_key);
+        }
+    }
     std::string cookie_delimeter = "; ";
     for (auto& cookie: req_to_be_sent.accumulated_cookies)
     {
+        if (cookies_overriding_from_config.count(cookie.first))
+        {
+            // an overriding header from config carries the same cookie, config takes precedence
+            continue;
+        }
+        else if (!is_cookie_valid_for_request(cookie.second, req_to_be_sent))
+        {
+            // cookie not allowed to be sent for this request
+            continue;
+        }
         if (!cookie_header_value.empty())
         {
             cookie_header_value.append(cookie_delimeter);
         }
-        // TODO: add check of domain, host, security, etc
         cookie_header_value.append(cookie.first).append("=").append(cookie.second.cookie_value);
     }
 }
@@ -1395,12 +1490,6 @@ bool Client::prepare_next_request(Request_Data& finished_request)
     }
 
     new_request.req_headers = next_request.headers_in_map;
-
-    if (!next_request.clear_old_cookies)
-    {
-        parse_and_transfer_cookies(finished_request, new_request);
-        output_cookies_to_req_headers(new_request);
-    }
 
     new_request.req_payload = reassemble_str_with_variable(next_request.tokenized_payload,
                                                            new_request.user_id,
@@ -1445,6 +1534,12 @@ bool Client::prepare_next_request(Request_Data& finished_request)
         {
             return false;
         }
+    }
+
+    if (!next_request.clear_old_cookies)
+    {
+        parse_and_transfer_cookies(finished_request, new_request);
+        output_cookies_to_req_headers(new_request);
     }
 
     if (next_request.luaScript.size())
@@ -1572,7 +1667,7 @@ std::ostream& operator<<(std::ostream& o, const Cookie& cookie)
     o << "Cookie: { "
       << "key:" << cookie.cookie_key
       << ", value:" << cookie.cookie_value
-      << ", origin_host:" << cookie.origin_host
+      << ", origin:" << cookie.origin
       << ", secure_origin:" << cookie.secure_origin
       << ", expires:" << cookie.expires
       << ", secure:" << cookie.secure

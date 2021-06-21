@@ -345,7 +345,7 @@ struct Stream
 
 struct Cookie
 {
-    std::string origin_host;
+    std::string origin;
     bool        secure_origin;
     std::string cookie_key;
     std::string cookie_value;
@@ -517,6 +517,7 @@ struct Client
     bool update_request_with_lua(lua_State* L, const Request_Data& finished_request, Request_Data& request_to_send);
     void output_cookies_to_req_headers(Request_Data& req_to_be_sent);
     void parse_and_transfer_cookies(Request_Data& finished_request, Request_Data& new_request);
+    bool is_cookie_valid_for_request(Cookie cookie, Request_Data& new_request);
 };
 
 

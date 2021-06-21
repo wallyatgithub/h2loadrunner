@@ -20,7 +20,8 @@
   
      Other types of resource tracking are to be added in the future, like, XPath for XML message body, Json pointer for Json message body, etc.
 
-  4. Cookie support without manual intervention, yet provides the flexibility of clearing cookies before the execution of a request.
+  4. Natively support Set-Cookie and Cookie headers, yet provides the flexibility of clearing Cookie before the execution of one request.
+     Cookies handling is complying with: https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies
   
   5. Lua script support.
      With lua script, user can customize every header and the payload of the request to be sent.

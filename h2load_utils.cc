@@ -995,7 +995,6 @@ std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string
     static std::set<std::string> cookie_attributes {"Secure", "HttpOnly", "Expires", "Domain", "Path", "SameSite"};
     std::vector <Cookie> parsed_cookies;
 
-    std::string origin_host = tokenize_string(origin_authority, ":")[0];
     bool secure_origin = (origin_schema.compare("https") == 0);
     std::vector<std::string> tokens = tokenize_string(cookie_string, "; ");
 
@@ -1005,7 +1004,7 @@ std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string
         if ((cookie_attributes.count(key_value_pair[0]) == 0) && (key_value_pair.size() == 2))
         {
             parsed_cookies.emplace_back(h2load::Cookie());
-            parsed_cookies.back().origin_host = origin_host;
+            parsed_cookies.back().origin = origin_authority;
             parsed_cookies.back().secure_origin = secure_origin;
             parsed_cookies.back().cookie_key = key_value_pair[0];
             parsed_cookies.back().cookie_value = key_value_pair[1];
@@ -1028,15 +1027,15 @@ std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string
             {
                 parsed_cookies.back().httpOnly = true;
             }
-            else if (key_value_pair[0] == "Domain" && key_value_pair.size() == 1)
+            else if (key_value_pair[0] == "Domain" && key_value_pair.size() == 2)
             {
                 parsed_cookies.back().domain = key_value_pair[1];
             }
-            else if (key_value_pair[0] == "Path" && key_value_pair.size() == 1)
+            else if (key_value_pair[0] == "Path" && key_value_pair.size() == 2)
             {
                 parsed_cookies.back().path = key_value_pair[1];
             }
-             else if (key_value_pair[0] == "SameSite" && key_value_pair.size() == 1)
+             else if (key_value_pair[0] == "SameSite" && key_value_pair.size() == 2)
             {
                 parsed_cookies.back().sameSite = key_value_pair[1];
             }
