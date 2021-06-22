@@ -371,6 +371,7 @@ struct Request_Data
     std::string resp_payload;
     std::map<std::string, std::string, ci_less> resp_headers;
     uint16_t status_code;
+    uint16_t expected_status_code;
     std::map<std::string, Cookie> saved_cookies;
     size_t next_request;
 };
@@ -520,6 +521,8 @@ struct Client
     void move_cookies_to_new_request(Request_Data& finished_request, Request_Data& new_request);
     bool is_cookie_allowed_to_be_sent(Cookie cookie, Request_Data& new_request);
     bool is_cookie_acceptable(const Cookie& cookie);
+    void populate_request_from_config_template(Request_Data& new_request,
+                                                              size_t index_in_config_template);
 };
 
 

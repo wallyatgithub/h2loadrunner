@@ -354,6 +354,11 @@ int Http1Session::_submit_request()
     }
     req += "\r\n";
 
+    if (config->verbose)
+    {
+        std::cout<<"sending headers:"<<req<<std::endl;
+    }
+
     client_->on_request_start(stream_req_counter_);
 
     auto req_stat = client_->get_req_stat(stream_req_counter_);

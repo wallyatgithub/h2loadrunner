@@ -587,10 +587,10 @@ void Client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
 void Client::on_status_code(int32_t stream_id, uint16_t status)
 {
 
-    auto request = requests_awaiting_response.find(stream_id);
-    if (request != requests_awaiting_response.end())
+    auto request_data = requests_awaiting_response.find(stream_id);
+    if (request_data != requests_awaiting_response.end())
     {
-        request->second.status_code = status;
+        request_data->second.status_code = status;
     }
 
     auto itr = streams.find(stream_id);
@@ -625,6 +625,19 @@ void Client::on_status_code(int32_t stream_id, uint16_t status)
     else
     {
         stream.status_success = 0;
+    }
+
+    if (request_data != requests_awaiting_response.end() &&
+        request_data->second.expected_status_code)
+    {
+        if (status != request_data->second.expected_status_code)
+        {
+            stream.status_success = 0;
+        }
+        else
+        {
+            stream.status_success = 1;
+        }
     }
 }
 
@@ -1277,66 +1290,6 @@ void Client::update_content_length(Request_Data& data)
         data.req_headers[content_length] = std::to_string(data.req_payload.size());
     }
 }
-Request_Data Client::get_request_to_submit()
-{
-    static thread_local size_t full_var_str_len =
-                std::to_string(config->json_config_schema.variable_range_end).size();
-    static Request_Data dummy_data;
-
-    if (!requests_to_submit.empty())
-    {
-        auto data = requests_to_submit.front();
-        requests_to_submit.pop_front();
-        return data;
-    }
-    else
-    {
-        Request_Data data;
-        size_t curr_index = 0;
-        data.user_id = curr_req_variable_value;
-        auto& first_request = config->json_config_schema.scenario[curr_index];
-        data.path = reassemble_str_with_variable(first_request.tokenized_path,
-                                                 data.user_id,
-                                                 full_var_str_len);
-        data.method = first_request.method;
-        data.schema = config->scheme;
-        if (config->port != config->default_port)
-        {
-            data.authority = config->host + ":" + util::utos(config->port);
-        }
-        else
-        {
-            data.authority = config->host;
-        }
-
-        data.req_payload = reassemble_str_with_variable(first_request.tokenized_payload,
-                                                        data.user_id,
-                                                        full_var_str_len);;
-        data.req_headers = first_request.headers_in_map;
-
-        if (first_request.luaScript.size())
-        {
-            if (!update_request_with_lua(lua_states[curr_index], dummy_data, data))
-            {
-              std::cerr << "lua script failure for first request, cannot continue, exit"<< std::endl;
-              exit(EXIT_FAILURE);
-            }
-        }
-        update_content_length(data);
-
-        if (config->json_config_schema.variable_range_end)
-        {
-            curr_req_variable_value++;
-            if (curr_req_variable_value > config->json_config_schema.variable_range_end)
-            {
-                curr_req_variable_value = config->json_config_schema.variable_range_start;
-            }
-        }
-
-        data.next_request = 1;
-        return data;
-    }
-}
 
 bool Client::is_cookie_acceptable(const Cookie& cookie)
 {
@@ -1494,19 +1447,21 @@ void Client::produce_request_cookie_header(Request_Data& req_to_be_sent)
     }
 }
 
-bool Client::prepare_next_request(Request_Data& finished_request)
+void Client::populate_request_from_config_template(Request_Data& new_request,
+                                                                  size_t index_in_config_template)
 {
     static thread_local size_t full_var_str_len =
-                  std::to_string(config->json_config_schema.variable_range_end).size();
-    if (finished_request.next_request >= config->json_config_schema.scenario.size())
-    {
-        return false;
-    }
+                std::to_string(config->json_config_schema.variable_range_end).size();
 
-    Request_Data new_request;
-    auto& next_request = config->json_config_schema.scenario[finished_request.next_request];
-    new_request.user_id = finished_request.user_id;
-    new_request.method = next_request.method;
+    auto& request_template = config->json_config_schema.scenario[index_in_config_template];
+
+    if (index_in_config_template == 0)
+    {
+        new_request.path = reassemble_str_with_variable(request_template.tokenized_path,
+                                                        new_request.user_id,
+                                                        full_var_str_len);
+    }
+    new_request.method = request_template.method;
     new_request.schema = config->scheme;
     if (config->port != config->default_port)
     {
@@ -1517,25 +1472,83 @@ bool Client::prepare_next_request(Request_Data& finished_request)
         new_request.authority = config->host;
     }
 
-    new_request.req_headers = next_request.headers_in_map;
-
-    new_request.req_payload = reassemble_str_with_variable(next_request.tokenized_payload,
+    new_request.req_payload = reassemble_str_with_variable(request_template.tokenized_payload,
                                                            new_request.user_id,
-                                                           full_var_str_len);
+                                                           full_var_str_len);;
+    new_request.req_headers = request_template.headers_in_map;
+    new_request.expected_status_code = request_template.expected_status_code;
+}
 
-    if (next_request.path.typeOfAction == "input")
+Request_Data Client::get_request_to_submit()
+{
+    static thread_local size_t full_var_str_len =
+                std::to_string(config->json_config_schema.variable_range_end).size();
+    static Request_Data dummy_data;
+
+    if (!requests_to_submit.empty())
     {
-         new_request.path = reassemble_str_with_variable(next_request.tokenized_path,
+        auto request_data = requests_to_submit.front();
+        requests_to_submit.pop_front();
+        return request_data;
+    }
+    else
+    {
+        Request_Data request_data;
+        size_t curr_index = 0;
+        request_data.user_id = curr_req_variable_value;
+        populate_request_from_config_template(request_data, 0);
+
+        if (config->json_config_schema.scenario[curr_index].luaScript.size())
+        {
+            if (!update_request_with_lua(lua_states[curr_index], dummy_data, request_data))
+            {
+              std::cerr << "lua script failure for first request, cannot continue, exit"<< std::endl;
+              exit(EXIT_FAILURE);
+            }
+        }
+        update_content_length(request_data);
+
+        if (config->json_config_schema.variable_range_end)
+        {
+            curr_req_variable_value++;
+            if (curr_req_variable_value > config->json_config_schema.variable_range_end)
+            {
+                curr_req_variable_value = config->json_config_schema.variable_range_start;
+            }
+        }
+
+        request_data.next_request = (curr_index + 1);
+        return request_data;
+    }
+}
+
+bool Client::prepare_next_request(Request_Data& finished_request)
+{
+    static thread_local size_t full_var_str_len =
+                  std::to_string(config->json_config_schema.variable_range_end).size();
+    if (finished_request.next_request >= config->json_config_schema.scenario.size())
+    {
+        return false;
+    }
+
+    Request_Data new_request;
+    auto& request_template = config->json_config_schema.scenario[finished_request.next_request];
+    new_request.user_id = finished_request.user_id;
+    populate_request_from_config_template(new_request, finished_request.next_request);
+
+    if (request_template.path.typeOfAction == "input")
+    {
+         new_request.path = reassemble_str_with_variable(request_template.tokenized_path,
                                                          new_request.user_id,
                                                          full_var_str_len);
     }
-    else if (next_request.path.typeOfAction == "sameWithLastOne")
+    else if (request_template.path.typeOfAction == "sameWithLastOne")
     {
         new_request.path = finished_request.path;
     }
-    else if (next_request.path.typeOfAction == "fromResponseHeader")
+    else if (request_template.path.typeOfAction == "fromResponseHeader")
     {
-        auto header = finished_request.resp_headers.find(next_request.path.input);
+        auto header = finished_request.resp_headers.find(request_template.path.input);
         if (header != finished_request.resp_headers.end())
         {
             http_parser_url u {};
@@ -1566,14 +1579,14 @@ bool Client::prepare_next_request(Request_Data& finished_request)
         }
     }
 
-    if (!next_request.clear_old_cookies)
+    if (!request_template.clear_old_cookies)
     {
         parse_and_save_cookies(finished_request);
         move_cookies_to_new_request(finished_request, new_request);
         produce_request_cookie_header(new_request);
     }
 
-    if (next_request.luaScript.size())
+    if (request_template.luaScript.size())
     {
         if (!update_request_with_lua(lua_states[finished_request.next_request], finished_request, new_request))
         {

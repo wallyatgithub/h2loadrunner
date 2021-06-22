@@ -44,6 +44,7 @@ public:
     std::string method;
     std::string payload;
     std::vector<std::string> additonalHeaders;
+    uint32_t expected_status_code; // staticJson does not accept uint16_t
     std::map<std::string, std::string, ci_less> headers_in_map;
     std::vector<std::string> tokenized_path;
     std::vector<std::string> tokenized_payload;
@@ -55,6 +56,7 @@ public:
         h->add_property("payload", &this->payload, staticjson::Flags::Optional);
         h->add_property("additonalHeaders", &this->additonalHeaders, staticjson::Flags::Optional);
         h->add_property("clear-old-cookies", &this->clear_old_cookies, staticjson::Flags::Optional);
+        h->add_property("expected-status-code", &this->expected_status_code, staticjson::Flags::Optional);
     }
 };
 

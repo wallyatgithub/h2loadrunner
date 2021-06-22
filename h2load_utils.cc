@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include "template.h"
 #include "util.h"
+#include "config_schema.h"
 
 
 #include "h2load_utils.h"
@@ -992,7 +993,7 @@ std::string reassemble_str_with_variable(const std::vector<std::string>& tokeniz
 
 std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string, const std::string& origin_authority, const std::string& origin_schema)
 {
-    static std::set<std::string> cookie_attributes {"Secure", "HttpOnly", "Expires", "Domain", "Path", "SameSite"};
+    static std::set<std::string, ci_less> cookie_attributes {"Secure", "HttpOnly", "Expires", "Domain", "Path", "SameSite"};
     std::vector <Cookie> parsed_cookies;
 
     bool secure_origin = (origin_schema == "https");

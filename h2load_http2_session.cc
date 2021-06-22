@@ -193,6 +193,11 @@ ssize_t buffer_read_callback(nghttp2_session* session, int32_t stream_id,
     assert(request != client->requests_awaiting_response.end());
     std::string& stream_buffer = client->requests_awaiting_response[stream_id].req_payload;
 
+    if (config->verbose)
+    {
+        std::cout<<"sending data:"<<stream_buffer<<std::endl;
+    }
+
     if (length >= stream_buffer.size())
     {
         memcpy(buf, stream_buffer.c_str(), stream_buffer.size());
@@ -439,6 +444,17 @@ int Http2Session::_submit_request()
             continue;
         }
         http2_nvs.push_back(http2::make_nv(header.first, header.second, false));
+    }
+
+    if (config->verbose)
+    {
+        std::cout<<"sending headers:"<<std::endl;
+        for (auto nv: http2_nvs)
+        {
+            std::string name((const char*)nv.name, nv.namelen);
+            std::string value((const char*)nv.value, nv.valuelen);
+            std::cout<<name<<":"<<value<<std::endl;
+        }
     }
 
     int32_t stream_id =
