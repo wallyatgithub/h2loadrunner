@@ -10,7 +10,7 @@ namespace h2load
 
 std::vector<h2load::Cookie> Cookie::parse_cookie_string(const std::string& cookie_string, const std::string& origin_authority, const std::string& origin_schema)
 {
-    static std::set<std::string, ci_less> cookie_attributes {"Secure", "HttpOnly", "Expires", "Domain", "Path", "SameSite"};
+    static std::set<std::string, ci_less> cookie_attributes {"Secure", "HttpOnly", "Expires", "Domain", "Path", "SameSite", "Max-Age"};
     std::vector <Cookie> parsed_cookies;
 
     bool secure_origin = (origin_schema == "https");
@@ -35,31 +35,37 @@ std::vector<h2load::Cookie> Cookie::parse_cookie_string(const std::string& cooki
             {
                 continue;
             }
-            if (key_value_pair[0] == "Expires" && key_value_pair.size() == 2)
+            util::inp_strlower(key_value_pair[0]);
+            if (key_value_pair[0] == "expires" && key_value_pair.size() == 2)
             {
                 parsed_cookies.back().expires = key_value_pair[1];
             }
-            else if (key_value_pair[0] == "Secure" && key_value_pair.size() == 1)
+            else if (key_value_pair[0] == "secure" && key_value_pair.size() == 1)
             {
                 parsed_cookies.back().secure = true;
             }
-            else if (key_value_pair[0] == "HttpOnly" && key_value_pair.size() == 1)
+            else if (key_value_pair[0] == "httponly" && key_value_pair.size() == 1)
             {
                 parsed_cookies.back().httpOnly = true;
             }
-            else if (key_value_pair[0] == "Domain" && key_value_pair.size() == 2)
+            else if (key_value_pair[0] == "domain" && key_value_pair.size() == 2)
             {
                 parsed_cookies.back().domain = key_value_pair[1];
                 util::inp_strlower(parsed_cookies.back().domain);
             }
-            else if (key_value_pair[0] == "Path" && key_value_pair.size() == 2)
+            else if (key_value_pair[0] == "path" && key_value_pair.size() == 2)
             {
                 parsed_cookies.back().path = key_value_pair[1];
             }
-            else if (key_value_pair[0] == "SameSite" && key_value_pair.size() == 2)
+            else if (key_value_pair[0] == "samesite" && key_value_pair.size() == 2)
             {
                 parsed_cookies.back().sameSite = key_value_pair[1];
             }
+            else if (key_value_pair[0] == "max-age" && key_value_pair.size() == 2)
+            {
+                parsed_cookies.back().maxAge = key_value_pair[1];
+            }
+
         }
         else
         {
@@ -115,7 +121,7 @@ bool Cookie::is_cookie_allowed_to_be_sent(Cookie cookie, const std::string dest_
     {
         return false;
     }
-    
+
     std::string authority = dest_authority;
     util::inp_strlower(authority);
 

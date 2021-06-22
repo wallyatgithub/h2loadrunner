@@ -42,7 +42,7 @@ struct Request_Data
     std::map<std::string, std::string, ci_less> resp_headers;
     uint16_t status_code;
     uint16_t expected_status_code;
-    std::map<std::string, Cookie> saved_cookies;
+    std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
     size_t next_request;
 };
 

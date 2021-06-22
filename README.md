@@ -22,7 +22,7 @@
 
   4. Natively support Set-Cookie and Cookie headers, yet provides the flexibility of clearing Cookie before the execution of one request.
   
-     Cookies handling is complying with: https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies
+     Cookies handling complies to https://tools.ietf.org/html/rfc6265
   
   5. Lua script support.
      With lua script, user can customize every header and the payload of the request to be sent.

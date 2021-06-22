@@ -14,12 +14,13 @@ struct Cookie
     bool        secure_origin;
     std::string cookie_key;
     std::string cookie_value;
-    std::string expires; // not handled as it is not possible to expire in such short interval during load test
+    std::string expires; // parsing supported, but not handled as it is not possible to expire in such short interval during load test
     bool        secure;
-    bool        httpOnly; // not handled as no JavaScript interaction for load test
+    bool        httpOnly; // parsing supported, but not handled as no JavaScript interaction for load test
     std::string domain;
     std::string path;
     std::string sameSite;
+    std::string maxAge; // parsing supported, but not handled, same reason with expires
 
     static std::vector<Cookie> parse_cookie_string(const std::string& cookie_string,
                                                    const std::string& origin_authority,
