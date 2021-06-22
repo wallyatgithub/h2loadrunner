@@ -911,6 +911,8 @@ int main(int argc, char** argv)
                             std::cout << "error reading config file:" << result.description() << std::endl;
                             exit(EXIT_FAILURE);
                         }
+                        util::inp_strlower(config.json_config_schema.host);
+                        util::inp_strlower(config.json_config_schema.schema);
                         std::cout << "Use configuration from JSON:" << std::endl << staticjson::to_pretty_json_string(
                                       config.json_config_schema) << std::endl;
                         assert(config.json_config_schema.scenario[0].path.typeOfAction == "input");

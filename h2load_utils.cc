@@ -995,7 +995,7 @@ std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string
     static std::set<std::string> cookie_attributes {"Secure", "HttpOnly", "Expires", "Domain", "Path", "SameSite"};
     std::vector <Cookie> parsed_cookies;
 
-    bool secure_origin = (origin_schema.compare("https") == 0);
+    bool secure_origin = (origin_schema == "https");
     std::vector<std::string> tokens = tokenize_string(cookie_string, "; ");
 
     for (auto& token: tokens)
@@ -1008,6 +1008,7 @@ std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string
             parsed_cookies.back().secure_origin = secure_origin;
             parsed_cookies.back().cookie_key = key_value_pair[0];
             parsed_cookies.back().cookie_value = key_value_pair[1];
+            parsed_cookies.back().sameSite = "Lax";
         }
         else if (cookie_attributes.count(key_value_pair[0]) == 1)
         {
@@ -1035,7 +1036,7 @@ std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string
             {
                 parsed_cookies.back().path = key_value_pair[1];
             }
-             else if (key_value_pair[0] == "SameSite" && key_value_pair.size() == 2)
+            else if (key_value_pair[0] == "SameSite" && key_value_pair.size() == 2)
             {
                 parsed_cookies.back().sameSite = key_value_pair[1];
             }

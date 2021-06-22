@@ -371,7 +371,7 @@ struct Request_Data
     std::string resp_payload;
     std::map<std::string, std::string, ci_less> resp_headers;
     uint16_t status_code;
-    std::map<std::string, Cookie> accumulated_cookies;
+    std::map<std::string, Cookie> saved_cookies;
     size_t next_request;
 };
 
@@ -515,9 +515,11 @@ struct Client
     void replace_variable(std::string& input, const std::string& variable_name, uint64_t variable_value);
     void update_content_length(Request_Data& data);
     bool update_request_with_lua(lua_State* L, const Request_Data& finished_request, Request_Data& request_to_send);
-    void output_cookies_to_req_headers(Request_Data& req_to_be_sent);
-    void parse_and_transfer_cookies(Request_Data& finished_request, Request_Data& new_request);
-    bool is_cookie_valid_for_request(Cookie cookie, Request_Data& new_request);
+    void produce_request_cookie_header(Request_Data& req_to_be_sent);
+    void parse_and_save_cookies(Request_Data& finished_request);
+    void move_cookies_to_new_request(Request_Data& finished_request, Request_Data& new_request);
+    bool is_cookie_allowed_to_be_sent(Cookie cookie, Request_Data& new_request);
+    bool is_cookie_acceptable(const Cookie& cookie);
 };
 
 

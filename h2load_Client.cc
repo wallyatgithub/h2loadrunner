@@ -1338,7 +1338,45 @@ Request_Data Client::get_request_to_submit()
     }
 }
 
-void Client::parse_and_transfer_cookies(Request_Data& finished_request, Request_Data& new_request)
+bool Client::is_cookie_acceptable(const Cookie& cookie)
+{
+    if (cookie.cookie_key.find("__Host-") == 0)
+    {
+        /*
+        If a cookie name has this prefix,
+        it is accepted in a Set-Cookie header only if
+        it is also marked with the Secure attribute,
+        was sent from a secure origin,
+        does not include a Domain attribute,
+        and has the Path attribute set to "/"
+        */
+        if (!cookie.secure || !cookie.secure_origin || !cookie.domain.empty() || cookie.path != "/")
+        {
+            return false;
+        }
+    }
+    if (cookie.cookie_key.find("__Secure-") == 0)
+    {
+        /*
+        If a cookie name has this prefix,
+        it is accepted in a Set-Cookie header only if
+        it is marked with the Secure attribute and was sent from a secure origin
+        */
+        if (!cookie.secure || !cookie.secure_origin)
+        {
+            // _Secure- check failed, this cookie is not accepted
+            return false;
+        }
+    }
+    if (cookie.sameSite == "None" && !cookie.secure)
+    {
+        // if SameSite=None then the Secure attribute must also be set
+        return false;
+    }
+    return true;
+}
+
+void Client::parse_and_save_cookies(Request_Data& finished_request)
 {
     if (finished_request.resp_headers.find("Set-Cookie") != finished_request.resp_headers.end())
     {
@@ -1346,31 +1384,22 @@ void Client::parse_and_transfer_cookies(Request_Data& finished_request, Request_
                                                finished_request.authority, finished_request.schema);
         for (auto& cookie: new_cookies)
         {
-            if (cookie.cookie_key.find("__Host-") == 0)
+            if (is_cookie_acceptable(cookie))
             {
-                if (!cookie.secure || !cookie.secure_origin || !cookie.domain.empty() || cookie.path != "/")
-                {
-                    // __Host- check failed, this cookie is not accepted
-                    continue;
-                }
+                finished_request.saved_cookies[cookie.cookie_key] = std::move(cookie);
             }
-            if (cookie.cookie_key.find("__Secure-") == 0)
-            {
-                if (!cookie.secure || !cookie.secure_origin)
-                {
-                    // _Secure- check failed, this cookie is not accepted
-                    continue;
-                }
-            }
-            finished_request.accumulated_cookies[cookie.cookie_key] = std::move(cookie);
         }
     }
-    new_request.accumulated_cookies.swap(finished_request.accumulated_cookies);
 }
 
-bool Client::is_cookie_valid_for_request(Cookie cookie, Request_Data& new_request)
+void Client::move_cookies_to_new_request(Request_Data& finished_request, Request_Data& new_request)
 {
-    if (cookie.secure && (new_request.schema == "http" || new_request.schema == "HTTP"))
+    new_request.saved_cookies.swap(finished_request.saved_cookies);
+}
+
+bool Client::is_cookie_allowed_to_be_sent(Cookie cookie, Request_Data& new_request)
+{
+    if (cookie.secure && new_request.schema == "http")
     {
         return false;
     }
@@ -1416,44 +1445,43 @@ bool Client::is_cookie_valid_for_request(Cookie cookie, Request_Data& new_reques
         util::inp_strlower(authority);
         if (origin != authority)
         {
-            if (cookie.sameSite == "Strict")
-            {
-                return false;
-            }
-            else if (cookie.sameSite == "Lax" && new_request.next_request != 1)
-            {
-                return false;
-            }
+            return false;
         }
+        /* not a browser, difference between Strict and Lax is not considered
+        else if (cookie.sameSite == "Strict" && previous URL is not same with cookie origin)
+        {
+            return false;
+        }
+        */
     }
     return true;
 }
 
-void Client::output_cookies_to_req_headers(Request_Data& req_to_be_sent)
+void Client::produce_request_cookie_header(Request_Data& req_to_be_sent)
 {
-    if (req_to_be_sent.accumulated_cookies.empty())
+    if (req_to_be_sent.saved_cookies.empty())
     {
         return;
     }
     std::string& cookie_header_value = req_to_be_sent.req_headers["Cookie"];
-    std::set<std::string> cookies_overriding_from_config;
+    std::set<std::string> cookies_from_config;
     if (cookie_header_value.size())
     {
         auto cookie_vec = parse_cookie_string(cookie_header_value, req_to_be_sent.authority, req_to_be_sent.schema);
         for (auto& cookie: cookie_vec)
         {
-            cookies_overriding_from_config.insert(cookie.cookie_key);
+            cookies_from_config.insert(cookie.cookie_key);
         }
     }
     std::string cookie_delimeter = "; ";
-    for (auto& cookie: req_to_be_sent.accumulated_cookies)
+    for (auto& cookie: req_to_be_sent.saved_cookies)
     {
-        if (cookies_overriding_from_config.count(cookie.first))
+        if (cookies_from_config.count(cookie.first))
         {
             // an overriding header from config carries the same cookie, config takes precedence
             continue;
         }
-        else if (!is_cookie_valid_for_request(cookie.second, req_to_be_sent))
+        else if (!is_cookie_allowed_to_be_sent(cookie.second, req_to_be_sent))
         {
             // cookie not allowed to be sent for this request
             continue;
@@ -1522,7 +1550,9 @@ bool Client::prepare_next_request(Request_Data& finished_request)
                 if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
                 {
                     new_request.schema = util::get_uri_field(header->second.c_str(), u, UF_SCHEMA).str();
+                    util::inp_strlower(new_request.schema);
                     new_request.authority = util::get_uri_field(header->second.c_str(), u, UF_HOST).str();
+                    util::inp_strlower(new_request.authority);
                     if (util::has_uri_field(u, UF_PORT))
                     {
                         new_request.authority.append(":").append(util::utos(u.port));
@@ -1538,8 +1568,9 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     if (!next_request.clear_old_cookies)
     {
-        parse_and_transfer_cookies(finished_request, new_request);
-        output_cookies_to_req_headers(new_request);
+        parse_and_save_cookies(finished_request);
+        move_cookies_to_new_request(finished_request, new_request);
+        produce_request_cookie_header(new_request);
     }
 
     if (next_request.luaScript.size())
