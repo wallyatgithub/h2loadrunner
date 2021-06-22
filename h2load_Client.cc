@@ -6,6 +6,12 @@
 #include <string>
 
 #include "h2load.h"
+#include "h2load_Client.h"
+#include "h2load_Config.h"
+#include "h2load_Worker.h"
+#include "h2load_Cookie.h"
+
+
 #include "h2load_utils.h"
 #include "tls.h"
 
@@ -1291,53 +1297,15 @@ void Client::update_content_length(Request_Data& data)
     }
 }
 
-bool Client::is_cookie_acceptable(const Cookie& cookie)
-{
-    if (cookie.cookie_key.find("__Host-") == 0)
-    {
-        /*
-        If a cookie name has this prefix,
-        it is accepted in a Set-Cookie header only if
-        it is also marked with the Secure attribute,
-        was sent from a secure origin,
-        does not include a Domain attribute,
-        and has the Path attribute set to "/"
-        */
-        if (!cookie.secure || !cookie.secure_origin || !cookie.domain.empty() || cookie.path != "/")
-        {
-            return false;
-        }
-    }
-    if (cookie.cookie_key.find("__Secure-") == 0)
-    {
-        /*
-        If a cookie name has this prefix,
-        it is accepted in a Set-Cookie header only if
-        it is marked with the Secure attribute and was sent from a secure origin
-        */
-        if (!cookie.secure || !cookie.secure_origin)
-        {
-            // _Secure- check failed, this cookie is not accepted
-            return false;
-        }
-    }
-    if (cookie.sameSite == "None" && !cookie.secure)
-    {
-        // if SameSite=None then the Secure attribute must also be set
-        return false;
-    }
-    return true;
-}
-
 void Client::parse_and_save_cookies(Request_Data& finished_request)
 {
     if (finished_request.resp_headers.find("Set-Cookie") != finished_request.resp_headers.end())
     {
-        auto new_cookies = parse_cookie_string(finished_request.resp_headers["Set-Cookie"],
+        auto new_cookies = Cookie::parse_cookie_string(finished_request.resp_headers["Set-Cookie"],
                                                finished_request.authority, finished_request.schema);
         for (auto& cookie: new_cookies)
         {
-            if (is_cookie_acceptable(cookie))
+            if (Cookie::is_cookie_acceptable(cookie))
             {
                 finished_request.saved_cookies[cookie.cookie_key] = std::move(cookie);
             }
@@ -1350,83 +1318,24 @@ void Client::move_cookies_to_new_request(Request_Data& finished_request, Request
     new_request.saved_cookies.swap(finished_request.saved_cookies);
 }
 
-bool Client::is_cookie_allowed_to_be_sent(Cookie cookie, Request_Data& new_request)
-{
-    if (cookie.secure && new_request.schema == "http")
-    {
-        return false;
-    }
-
-    if (cookie.domain.size())
-    {
-        std::string this_host = tokenize_string(new_request.authority, ":")[0];
-        util::inp_strlower(this_host);
-        std::string domain = cookie.domain;
-        util::inp_strlower(domain);
-        size_t pos = this_host.rfind(domain);
-        if (pos == std::string::npos || ((this_host.size() - pos) != domain.size()))
-        {
-            return false;
-        }
-    }
-    else // domain empty, origin exact match with no sub domain allowed
-    {
-      std::string origin = cookie.origin;
-      util::inp_strlower(origin);
-      std::string authority = new_request.authority;
-      util::inp_strlower(authority);
-      if (origin != authority)
-      {
-          return false;
-      }
-    }
-
-    if (cookie.path.size() && new_request.path.size())
-    {
-        size_t pos = new_request.path.find(cookie.path);
-        if (pos != 0)
-        {
-            return false;
-        }
-    }
-
-    if (cookie.sameSite.size() && cookie.sameSite != "None")
-    {
-        std::string origin = cookie.origin;
-        util::inp_strlower(origin);
-        std::string authority = new_request.authority;
-        util::inp_strlower(authority);
-        if (origin != authority)
-        {
-            return false;
-        }
-        /* not a browser, difference between Strict and Lax is not considered
-        else if (cookie.sameSite == "Strict" && previous URL is not same with cookie origin)
-        {
-            return false;
-        }
-        */
-    }
-    return true;
-}
-
 void Client::produce_request_cookie_header(Request_Data& req_to_be_sent)
 {
     if (req_to_be_sent.saved_cookies.empty())
     {
         return;
     }
-    std::string& cookie_header_value = req_to_be_sent.req_headers["Cookie"];
+    auto iter = req_to_be_sent.req_headers.find("Cookie");
     std::set<std::string> cookies_from_config;
-    if (cookie_header_value.size())
+    if (iter != req_to_be_sent.req_headers.end())
     {
-        auto cookie_vec = parse_cookie_string(cookie_header_value, req_to_be_sent.authority, req_to_be_sent.schema);
+        auto cookie_vec = Cookie::parse_cookie_string(iter->second, req_to_be_sent.authority, req_to_be_sent.schema);
         for (auto& cookie: cookie_vec)
         {
             cookies_from_config.insert(cookie.cookie_key);
         }
     }
-    std::string cookie_delimeter = "; ";
+    const std::string cookie_delimeter = "; ";
+    std::string cookies_to_append;
     for (auto& cookie: req_to_be_sent.saved_cookies)
     {
         if (cookies_from_config.count(cookie.first))
@@ -1434,16 +1343,27 @@ void Client::produce_request_cookie_header(Request_Data& req_to_be_sent)
             // an overriding header from config carries the same cookie, config takes precedence
             continue;
         }
-        else if (!is_cookie_allowed_to_be_sent(cookie.second, req_to_be_sent))
+        else if (!Cookie::is_cookie_allowed_to_be_sent(cookie.second, req_to_be_sent.schema, req_to_be_sent.authority, req_to_be_sent.path))
         {
             // cookie not allowed to be sent for this request
             continue;
         }
-        if (!cookie_header_value.empty())
+        if (!cookies_to_append.empty())
         {
-            cookie_header_value.append(cookie_delimeter);
+            cookies_to_append.append(cookie_delimeter);
         }
-        cookie_header_value.append(cookie.first).append("=").append(cookie.second.cookie_value);
+        cookies_to_append.append(cookie.first).append("=").append(cookie.second.cookie_value);
+    }
+    if (!cookies_to_append.empty())
+    {
+        if (iter != req_to_be_sent.req_headers.end() && !iter->second.empty())
+        {
+            iter->second.append(cookie_delimeter).append(cookies_to_append);
+        }
+        else
+        {
+            req_to_be_sent.req_headers["Cookie"] = std::move(cookies_to_append);
+        }
     }
 }
 
@@ -1706,22 +1626,6 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
     return retCode;
 }
 
-std::ostream& operator<<(std::ostream& o, const Cookie& cookie)
-{
-    o << "Cookie: { "
-      << "key:" << cookie.cookie_key
-      << ", value:" << cookie.cookie_value
-      << ", origin:" << cookie.origin
-      << ", secure_origin:" << cookie.secure_origin
-      << ", expires:" << cookie.expires
-      << ", secure:" << cookie.secure
-      << ", httpOnly:" << cookie.httpOnly
-      << ", domain:" << cookie.domain
-      << ", path:" << cookie.path
-      << ", sameSite:" << cookie.sameSite
-      << " }";
-    return o;
-}
 
 }
 

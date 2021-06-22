@@ -63,6 +63,8 @@ set(H2LOAD_SOURCES
   h2load_utils.cc
   h2load_Client.cc
   h2load_Worker.cc
+  h2load_Config.cc
+  h2load_Cookie.cc
   timegm.c
   tls.cc
   h2load_http2_session.cc

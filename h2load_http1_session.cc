@@ -28,6 +28,10 @@
 #include <cerrno>
 
 #include "h2load.h"
+#include "h2load_Config.h"
+#include "h2load_Client.h"
+#include "h2load_Worker.h"
+
 #include "util.h"
 #include "template.h"
 

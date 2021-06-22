@@ -1,8 +1,21 @@
 #ifndef H2LOAD_UTILS_H
 #define H2LOAD_UTILS_H
 #include <iostream>
+#include <atomic>
+#include <set>
+
+#include <ev.h>
+#include <openssl/ssl.h>
+
+#include "http2.h"
+#include "template.h"
+#include "memchunk.h"
 
 #include "h2load.h"
+#include "h2load_Config.h"
+#include "h2load_Client.h"
+#include "h2load_Worker.h"
+
 #include "h2load_http1_session.h"
 #include "h2load_http2_session.h"
 
@@ -86,6 +99,7 @@ int client_select_next_proto_cb(SSL* ssl, unsigned char** out,
                                 unsigned char* outlen, const unsigned char* in,
                                 unsigned int inlen, void* arg);
 #endif // !OPENSSL_NO_NEXTPROTONEG
+
 
 void populate_config_from_json(h2load::Config& config);
 

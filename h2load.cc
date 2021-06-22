@@ -25,12 +25,6 @@
 #include <fstream>
 #include <streambuf>
 
-#include "staticjson/document.hpp"
-#include "staticjson/staticjson.hpp"
-#include "rapidjson/schema.h"
-#include "rapidjson/prettywriter.h"
-#include "config_schema.h"
-
 #include "h2load.h"
 
 #include <getopt.h>
@@ -44,21 +38,34 @@
 #  include <fcntl.h>
 #endif // HAVE_FCNTL_H
 
+#include <sys/types.h>
+#ifdef HAVE_SYS_SOCKET_H
+#  include <sys/socket.h>
+#endif // HAVE_SYS_SOCKET_H
+#ifdef HAVE_NETDB_H
+#  include <netdb.h>
+#endif // HAVE_NETDB_H
+#include <sys/un.h>
+
 #include <cstdio>
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
 #include <iomanip>
-#include <fstream>
 #include <chrono>
 #include <thread>
 #include <future>
 #include <random>
 #include <vector>
-#include <regex>
+
 
 #include <openssl/err.h>
+#include <openssl/ssl.h>
 
+#include <nghttp2/nghttp2.h>
+
+#include "memchunk.h"
+#include "template.h"
 #include "url-parser/url_parser.h"
 
 #include "h2load_http1_session.h"
@@ -68,6 +75,17 @@
 #include "util.h"
 #include "template.h"
 #include "h2load_utils.h"
+#include "h2load_Config.h"
+#include "h2load_Client.h"
+#include "h2load_Worker.h"
+#include "h2load_stats.h"
+#include "staticjson/document.hpp"
+#include "staticjson/staticjson.hpp"
+#include "rapidjson/schema.h"
+#include "rapidjson/prettywriter.h"
+#include "config_schema.h"
+
+
 
 #ifndef O_BINARY
 #  define O_BINARY (0)
@@ -78,87 +96,7 @@ using namespace nghttp2;
 namespace h2load
 {
 
-
-bool Config::is_rate_mode() const
-{
-    return (this->rate != 0);
-}
-bool Config::is_timing_based_mode() const
-{
-    return (this->duration > 0);
-}
-bool Config::has_base_uri() const
-{
-    return (!this->base_uri.empty());
-}
-bool Config::rps_enabled() const
-{
-    return this->rps > 0.0;
-}
 Config config;
-
-
-
-Config::Config()
-    : ciphers(tls::DEFAULT_CIPHER_LIST),
-      data_length(-1),
-      addrs(nullptr),
-      nreqs(1),
-      nclients(1),
-      nthreads(1),
-      max_concurrent_streams(1),
-      window_bits(30),
-      connection_window_bits(30),
-      rate(0),
-      rate_period(1.0),
-      duration(0.0),
-      warm_up_time(0.0),
-      conn_active_timeout(0.),
-      conn_inactivity_timeout(0.),
-      no_tls_proto(PROTO_HTTP2),
-      header_table_size(4_k),
-      encoder_header_table_size(4_k),
-      data_fd(-1),
-      log_fd(-1),
-      port(0),
-      default_port(0),
-      connect_to_port(0),
-      verbose(false),
-      timing_script(false),
-      base_uri_unix(false),
-      unix_addr {},
-            rps(0.),
-            req_variable_start(0),
-            req_variable_end(0),
-            req_variable_name(""),
-            crud_resource_header_name(""),
-            crud_create_method(""),
-            crud_update_method(""),
-            crud_delete_method(""),
-            crud_create_data_file_name(""),
-            crud_update_data_file_name(""),
-stream_timeout_in_ms(5000) {}
-
-Config::~Config()
-{
-    if (addrs)
-    {
-        if (base_uri_unix)
-        {
-            delete addrs;
-        }
-        else
-        {
-            freeaddrinfo(addrs);
-        }
-    }
-
-    if (data_fd != -1)
-    {
-        close(data_fd);
-    }
-}
-
 
 namespace
 {
@@ -451,40 +389,6 @@ Options:
 
 } // namespace
 
-namespace
-{
-void remove_header_field_from_nva(std::vector<nghttp2_nv>& nva, const std::string& header_name)
-{
-    auto it =
-        std::find_if(std::begin(nva), std::end(nva),
-                     [&header_name](const nghttp2_nv & nv)
-    {
-        std::string name((const char*)nv.name, nv.namelen);
-        return name == header_name;
-    });
-    if (it != std::end(nva))
-    {
-        nva.erase(it);
-    }
-}
-}
-
-void replace_header_in_nva(std::vector<nghttp2_nv>& nva, const std::string& header_name,
-                           const std::string& header_value)
-{
-    auto it =
-        std::find_if(std::begin(nva), std::end(nva),
-                     [&header_name](const nghttp2_nv & nv)
-    {
-        std::string name((const char*)nv.name, nv.namelen);
-        return name == header_name;
-    });
-    if (it != std::end(nva))
-    {
-        it->value = (uint8_t*)header_value.c_str();
-        it->valuelen = header_value.size();
-    }
-}
 
 int main(int argc, char** argv)
 {

@@ -1,5 +1,7 @@
 #include "h2load.h"
 #include "h2load_utils.h"
+#include "h2load_Worker.h"
+#include "h2load_Config.h"
 
 
 
