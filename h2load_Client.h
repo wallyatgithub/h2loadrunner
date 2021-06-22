@@ -22,7 +22,7 @@ extern "C" {
 #include "h2load_Worker.h"
 #include "h2load_session.h"
 #include "h2load_stats.h"
-#include "h2load_cookie.h"
+#include "h2load_Cookie.h"
 
 
 namespace h2load

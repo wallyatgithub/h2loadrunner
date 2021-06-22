@@ -1,6 +1,6 @@
 #include <set>
 
-#include "h2load_cookie.h"
+#include "h2load_Cookie.h"
 #include "config_schema.h"
 #include "h2load_utils.h"
 
