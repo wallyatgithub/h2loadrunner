@@ -380,37 +380,6 @@ void Client::process_abandoned_streams()
     req_left = 0;
 }
 
-void restart_client_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
-{
-    auto client = static_cast<Client*>(w->data);
-    ev_timer_stop(client->worker->loop, &client->retart_client_watcher);
-    std::cout << "Restart client:" << std::endl;
-    client->terminate_session();
-    client->disconnect();
-    auto new_client = std::make_unique<Client>(client->id, client->worker, client->req_todo, client->config);
-    if (new_client->connect() != 0)
-    {
-        std::cerr << "client could not connect to host" << std::endl;
-        new_client->fail();
-    }
-    else
-    {
-        for (auto& cl : client->worker->clients)
-        {
-            if (cl == client)
-            {
-                auto index = &cl - &client->worker->clients[0];
-                client->req_todo = client->req_done;
-                client->worker->stats.req_todo += client->req_todo;
-                client->worker->clients[index] = new_client.get();
-                new_client->ancestor.reset(client);
-                break;
-            }
-        }
-        new_client.release();
-    }
-}
-
 void Client::process_request_failure(int errCode)
 {
     if (worker->current_phase != Phase::MAIN_DURATION)
@@ -781,7 +750,7 @@ void Client::on_data_chunk(int32_t stream_id, const uint8_t* data, size_t len)
     auto request = requests_awaiting_response.find(stream_id);
     if (request != requests_awaiting_response.end())
     {
-        request->second.resp_payload.assign((const char*)data, len);
+        request->second.resp_payload.append((const char*)data, len);
     }
 }
 RequestStat* Client::get_req_stat(int32_t stream_id)

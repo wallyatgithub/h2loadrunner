@@ -991,4 +991,34 @@ std::string reassemble_str_with_variable(const std::vector<std::string>& tokeniz
     return retStr;
 }
 
+void restart_client_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
+{
+    auto client = static_cast<Client*>(w->data);
+    ev_timer_stop(client->worker->loop, &client->retart_client_watcher);
+    std::cout << "Restart client:" << std::endl;
+    client->terminate_session();
+    client->disconnect();
+    auto new_client = std::make_unique<Client>(client->id, client->worker, client->req_todo, client->config);
+    if (new_client->connect() != 0)
+    {
+        std::cerr << "client could not connect to host" << std::endl;
+        new_client->fail();
+    }
+    else
+    {
+        for (auto& cl : client->worker->clients)
+        {
+            if (cl == client)
+            {
+                auto index = &cl - &client->worker->clients[0];
+                client->req_todo = client->req_done;
+                client->worker->stats.req_todo += client->req_todo;
+                client->worker->clients[index] = new_client.get();
+                new_client->ancestor.reset(client);
+                break;
+            }
+        }
+        new_client.release();
+    }
+}
 

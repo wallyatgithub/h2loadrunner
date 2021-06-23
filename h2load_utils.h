@@ -48,6 +48,8 @@ void warmup_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
 void rps_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
+void restart_client_w_cb(struct ev_loop* loop, ev_timer* w, int revents);
+
 void stream_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
 // Called when an a connection has been inactive for a set period of time
