@@ -1014,7 +1014,7 @@ void restart_client_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
                 client->req_todo = client->req_done;
                 client->worker->stats.req_todo += client->req_todo;
                 client->worker->clients[index] = new_client.get();
-                new_client->ancestor.reset(client);
+                new_client->ancestor_to_release.reset(client);
                 break;
             }
         }

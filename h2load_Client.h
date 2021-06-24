@@ -105,13 +105,17 @@ struct Client
     // and it is only used if --rps is given.
     size_t rps_req_inflight;
     int32_t curr_stream_id;
-    std::unique_ptr<Client> ancestor;
+    std::unique_ptr<Client> ancestor_to_release;
     ev_timer retart_client_watcher;
     Config* config;
     uint64_t curr_req_variable_value;
     std::deque<Request_Data> requests_to_submit;
     std::map<int32_t, Request_Data> requests_awaiting_response;
     std::vector<lua_State*> lua_states;
+    std::map<std::string, Client*> dest_client;
+    Client* controller;
+    std::string schema;
+    std::string authority;
 
     enum { ERR_CONNECT_FAIL = -100 };
 
@@ -192,6 +196,9 @@ struct Client
     void move_cookies_to_new_request(Request_Data& finished_request, Request_Data& new_request);
     void populate_request_from_config_template(Request_Data& new_request,
                                                               size_t index_in_config_template);
+
+    Client* find_or_create_dest_client(Request_Data& request_to_send);
+
 };
 
 }

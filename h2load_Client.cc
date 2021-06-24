@@ -103,6 +103,12 @@ Client::~Client()
         lua_close(L);
     }
     lua_states.clear();
+    if (controller)
+    {
+        std::string this_dest = schema;
+        this_dest.append("://").append(authority);
+        controller->dest_client.erase(this_dest);
+    }
 }
 
 int Client::do_read()
@@ -1042,7 +1048,7 @@ int Client::connected()
     }
     ev_io_start(worker->loop, &rev);
     ev_io_stop(worker->loop, &wev);
-    ancestor.reset();
+    ancestor_to_release.reset();
 
     if (ssl)
     {
@@ -1595,6 +1601,17 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
     return retCode;
 }
 
+Client* Client::find_or_create_dest_client(Request_Data& request_to_send)
+{
+    std::string dest = request_to_send.schema;
+    dest.append("://").append(request_to_send.authority);
+    auto it = dest_client.find(dest);
+    if (it == dest_client.end())
+    {
+        // TODO: create client, insert into map, trigger c-ares DNS resolution, set up resolution fd cb, in that cb trigger connect
+    }
+    return dest_client[dest];
+}
 
 }
 
