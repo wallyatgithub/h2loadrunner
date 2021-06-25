@@ -42,9 +42,9 @@ Worker::Worker(uint32_t id, SSL_CTX* ssl_ctx, size_t req_todo, size_t nclients,
 
     // Below timeout is not needed in case of timing-based benchmarking
     // create timer that will go off every rate_period
-    ev_timer_init(&timeout_watcher, rate_period_timeout_w_cb, 0.,
+    ev_timer_init(&rate_mode_timeout_watcher, rate_period_timeout_w_cb, 0.,
                   config->rate_period);
-    timeout_watcher.data = this;
+    rate_mode_timeout_watcher.data = this;
 
     if (config->is_timing_based_mode())
     {
@@ -78,7 +78,7 @@ Worker::Worker(uint32_t id, SSL_CTX* ssl_ctx, size_t req_todo, size_t nclients,
 
 Worker::~Worker()
 {
-    ev_timer_stop(loop, &timeout_watcher);
+    ev_timer_stop(loop, &rate_mode_timeout_watcher);
     ev_timer_stop(loop, &duration_watcher);
     ev_timer_stop(loop, &warmup_watcher);
     ev_loop_destroy(loop);
@@ -137,15 +137,15 @@ void Worker::run()
     }
     else if (config->is_rate_mode())
     {
-        ev_timer_again(loop, &timeout_watcher);
+        ev_timer_again(loop, &rate_mode_timeout_watcher);
 
         // call callback so that we don't waste the first rate_period
-        rate_period_timeout_w_cb(loop, &timeout_watcher, 0);
+        rate_period_timeout_w_cb(loop, &rate_mode_timeout_watcher, 0);
     }
     else
     {
         // call the callback to start for one single time
-        rate_period_timeout_w_cb(loop, &timeout_watcher, 0);
+        rate_period_timeout_w_cb(loop, &rate_mode_timeout_watcher, 0);
     }
     ev_run(loop, 0);
 }

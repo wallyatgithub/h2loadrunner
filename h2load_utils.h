@@ -55,7 +55,7 @@ void stream_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
 // Called when an a connection has been inactive for a set period of time
 // or a fixed amount of time after all requests have been made on a
 // connection
-void conn_timeout_cb(EV_P_ ev_timer* w, int revents);
+void conn_activity_timeout_cb(EV_P_ ev_timer* w, int revents);
 
 bool check_stop_client_request_timeout(h2load::Client* client, ev_timer* w);
 
@@ -117,6 +117,8 @@ std::string reassemble_str_with_variable(const std::vector<std::string>& tokeniz
                                                     uint64_t variable_value, size_t full_var_length);
 
 std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string, const std::string& origin_authority, const std::string& origin_schema);
+
+void client_connection_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
 
 #endif

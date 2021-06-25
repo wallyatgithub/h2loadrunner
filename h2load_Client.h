@@ -93,6 +93,7 @@ struct Client
     // generate a new request.
     ev_timer rps_watcher;
     ev_timer stream_timeout_watcher;
+    ev_timer connection_timeout_watcher;
     // The timestamp that starts the period which contributes to the
     // next request generation.
     ev_tstamp rps_duration_started;

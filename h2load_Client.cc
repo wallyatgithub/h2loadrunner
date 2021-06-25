@@ -57,11 +57,11 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf)
     wev.data = this;
     rev.data = this;
 
-    ev_timer_init(&conn_inactivity_watcher, conn_timeout_cb, 0.,
+    ev_timer_init(&conn_inactivity_watcher, conn_activity_timeout_cb, 0.,
                   worker->config->conn_inactivity_timeout);
     conn_inactivity_watcher.data = this;
 
-    ev_timer_init(&conn_active_watcher, conn_timeout_cb,
+    ev_timer_init(&conn_active_watcher, conn_activity_timeout_cb,
                   worker->config->conn_active_timeout, 0.);
     conn_active_watcher.data = this;
 
@@ -73,6 +73,9 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf)
 
     ev_timer_init(&stream_timeout_watcher, stream_timeout_cb, 0., 0.);
     stream_timeout_watcher.data = this;
+
+    ev_timer_init(&connection_timeout_watcher, client_connection_timeout_cb, 2., 0.);
+    connection_timeout_watcher.data = this;
 
     for (auto& request : conf->json_config_schema.scenario)
     {
@@ -103,12 +106,12 @@ Client::~Client()
         lua_close(L);
     }
     lua_states.clear();
-    if (controller)
+
+    for (auto& client: dest_client)
     {
-        std::string this_dest = schema;
-        this_dest.append("://").append(authority);
-        controller->dest_client.erase(this_dest);
+        delete client.second;
     }
+    dest_client.clear();
 }
 
 int Client::do_read()
@@ -217,6 +220,9 @@ int Client::connect()
     }
 
     writefn = &Client::connected;
+    state = CLIENT_CONNECTING;
+    ev_timer_start(worker->loop, &connection_timeout_watcher);
+
 
     ev_io_set(&rev, fd, EV_READ);
     ev_io_set(&wev, fd, EV_WRITE);
@@ -292,6 +298,7 @@ void Client::disconnect()
     ev_timer_stop(worker->loop, &rps_watcher);
     ev_timer_stop(worker->loop, &request_timeout_watcher);
     ev_timer_stop(worker->loop, &stream_timeout_watcher);
+    ev_timer_stop(worker->loop, &connection_timeout_watcher);
     streams.clear();
     session.reset();
     wb.reset();

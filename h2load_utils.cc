@@ -330,10 +330,18 @@ void stream_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 
 }
 
+void client_connection_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
+{
+    // TODO: call disconnect, and more?
+    auto client = static_cast<Client*>(w->data);
+    client->disconnect();
+}
+
+
 // Called when an a connection has been inactive for a set period of time
 // or a fixed amount of time after all requests have been made on a
 // connection
-void conn_timeout_cb(EV_P_ ev_timer* w, int revents)
+void conn_activity_timeout_cb(EV_P_ ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
 

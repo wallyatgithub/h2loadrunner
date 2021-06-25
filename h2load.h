@@ -38,7 +38,7 @@ namespace h2load
 constexpr auto BACKOFF_WRITE_BUFFER_THRES = 16_k;
 constexpr int MAX_STREAM_TO_BE_EXHAUSTED = -2;
 
-enum ClientState { CLIENT_IDLE, CLIENT_CONNECTED };
+enum ClientState { CLIENT_IDLE, CLIENT_CONNECTING, CLIENT_CONNECTED };
 
 // This type tells whether the client is in warmup phase or not or is over
 enum class Phase
