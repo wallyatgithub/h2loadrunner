@@ -5,6 +5,8 @@
 #include <cctype>
 #include <string>
 
+#include <ares.h>
+
 #include "h2load.h"
 #include "h2load_Client.h"
 #include "h2load_Config.h"
@@ -88,6 +90,16 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf)
         lua_states.push_back(L);
     }
 
+    struct ares_options options;
+    options.sock_state_cb = ares_socket_state_cb;
+    options.sock_state_cb_data = this;
+    auto optmask = ARES_OPT_SOCK_STATE_CB;
+    auto status = ares_init_options(&channel, &options, optmask);
+    if (status)
+    {
+        std::cerr<<"c-ares ares_init_options failed: "<<status<<std::endl;
+        exit(EXIT_FAILURE);
+    }
 }
 
 Client::~Client()
@@ -123,14 +135,19 @@ int Client::do_write()
     return writefn(*this);
 }
 
-int Client::make_socket(addrinfo* addr)
+template<class T>
+int Client::make_socket(T* addr)
 {
     fd = util::create_nonblock_socket(addr->ai_family);
     if (fd == -1)
     {
         return -1;
     }
-    if (config->scheme == "https")
+    if (schema.empty())
+    {
+        schema = config->scheme;
+    }
+    if (schema == "https")
     {
         if (!ssl)
         {
@@ -138,10 +155,15 @@ int Client::make_socket(addrinfo* addr)
         }
 
         auto config = worker->config;
-
-        if (!util::numeric_host(config->host.c_str()))
+        std::string host = tokenize_string(authority, ":")[0];
+        if (host.empty())
         {
-            SSL_set_tlsext_host_name(ssl, config->host.c_str());
+            host = config->host;
+        }
+
+        if (!util::numeric_host(host.c_str()))
+        {
+            SSL_set_tlsext_host_name(ssl, host.c_str());
         }
 
         SSL_set_fd(ssl, fd);
@@ -195,7 +217,7 @@ int Client::connect()
             return -1;
         }
     }
-    else
+    else if (next_addr)
     {
         addrinfo* addr = nullptr;
         while (next_addr)
@@ -217,6 +239,15 @@ int Client::connect()
         assert(addr);
 
         current_addr = addr;
+    }
+    else if (ares_addr)
+    {
+      rv = make_socket(ares_addr->nodes);
+      
+      if (fd == -1)
+      {
+          return -1;
+      }
     }
 
     writefn = &Client::connected;
@@ -1616,9 +1647,84 @@ Client* Client::find_or_create_dest_client(Request_Data& request_to_send)
     if (it == dest_client.end())
     {
         // TODO: create client, insert into map, trigger c-ares DNS resolution, set up resolution fd cb, in that cb trigger connect
+
+        auto new_client = std::make_unique<Client>(this->id, this->worker, this->req_todo, this->config);
+        new_client->authority = request_to_send.authority;
+        new_client->schema = request_to_send.schema;
+        
+        /*
+        if (new_client->connect_to_host(new_client->schema, new_client->authority) != 0)
+        {
+            std::cerr << "client could not connect to host" << std::endl;
+            new_client->fail();
+        }
+        else
+        {
+            dest_client[dest] = new_client.get();
+            new_client.release();
+        }
+        */
+        
+
     }
     return dest_client[dest];
 }
 
+int Client::resolve_fqdn_and_connect(const std::string& schema, const std::string& authority)
+{
+    state = CLIENT_CONNECTING;
+    std::string port;
+    auto vec = tokenize_string(authority, ":");
+    if (vec.size() == 1)
+    {
+        if (schema == "https")
+        {
+            port = "443";
+        }
+        else
+        {
+            port = "80";
+        }
+    }
+    else
+    {
+        port = vec[1];
+    }
+    ares_addrinfo_hints hints;
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = 0;
+    hints.ai_flags = AI_ADDRCONFIG;
+    ares_getaddrinfo(channel, vec[0].c_str(), port.c_str(), &hints, ares_addrinfo_query_callback, this);
+    return 0;
 }
+
+int Client::connect_to_host(const std::string& schema, const std::string& authority)
+{
+    std::string host = tokenize_string(authority, ":")[0];
+    if (is_valid_ipv4_address(host) || is_valid_ipv6_address(host))
+    {
+        // TODO:: set up addr
+        return connect();
+    }
+    else
+    {
+        return resolve_fqdn_and_connect(schema, authority);
+    }
+}
+
+bool Client::is_valid_ipv4_address(const std::string& address)
+{
+    struct sockaddr_in dummy_addr;
+    return inet_pton(AF_INET, address.c_str(), &(dummy_addr.sin_addr)) != 0;
+}
+
+bool Client::is_valid_ipv6_address(const std::string& address)
+{
+    struct sockaddr_in6 dummy_addr;
+    return inet_pton(AF_INET6, address.c_str(), &(dummy_addr.sin6_addr)) != 0;
+}
+
+}
+
 

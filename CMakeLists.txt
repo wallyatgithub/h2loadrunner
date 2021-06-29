@@ -5,7 +5,9 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
+
 add_subdirectory(third-party)
+
 find_package(OpenSSL 1.0.1)
 find_package(Libev 4.11)
 find_package(LuaJIT)
@@ -41,7 +43,11 @@ include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/llhttp/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/StaticJSON/include"
   "${LUA_INCLUDE_DIR}"
+#  "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/include"
 )
+
+
+link_directories(${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib)
 
 link_libraries(
   nghttp2
@@ -73,6 +79,9 @@ set(H2LOAD_SOURCES
 
 add_executable(h2loadrunner ${H2LOAD_SOURCES} $<TARGET_OBJECTS:llhttp>
   $<TARGET_OBJECTS:url-parser> $<TARGET_OBJECTS:staticjson>)
+target_link_libraries(h2loadrunner cares_static)
+
+target_include_directories(h2loadrunner PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/include")
 
 install(TARGETS h2loadrunner
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")

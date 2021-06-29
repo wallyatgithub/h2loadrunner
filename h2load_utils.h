@@ -6,6 +6,9 @@
 
 #include <ev.h>
 #include <openssl/ssl.h>
+extern "C" {
+#include <ares.h>
+}
 
 #include "http2.h"
 #include "template.h"
@@ -120,5 +123,10 @@ std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string
 
 void client_connection_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
+void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ares_addrinfo* res);
+
+void ares_socket_state_cb(void *data, int s, int read, int write);
+
+void ares_io_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
 
 #endif

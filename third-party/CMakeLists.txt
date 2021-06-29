@@ -1,4 +1,7 @@
 
+
+add_subdirectory(c-ares)
+
 set(LIBLLHTTP_SOURCES
 llhttp/src/api.c
 llhttp/src/http.c

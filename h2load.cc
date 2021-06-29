@@ -61,6 +61,9 @@
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+extern "C" {
+#include <ares.h>
+}
 
 #include <nghttp2/nghttp2.h>
 
@@ -393,6 +396,7 @@ Options:
 int main(int argc, char** argv)
 {
     tls::libssl_init();
+    ares_library_init(ARES_LIB_INIT_ALL);
 
 #ifndef NOTHREADS
     tls::LibsslGlobalLock lock;
@@ -1610,6 +1614,8 @@ time for request: )"
     {
         close(config.log_fd);
     }
+
+    ares_library_cleanup();
 
     return 0;
 }

@@ -23,6 +23,7 @@ extern "C" {
 #include "h2load_session.h"
 #include "h2load_stats.h"
 #include "h2load_Cookie.h"
+#include <ares.h>
 
 
 namespace h2load
@@ -46,7 +47,6 @@ struct Request_Data
     size_t next_request;
 };
 
-
 struct Client
 {
     DefaultMemchunks wb;
@@ -66,6 +66,7 @@ struct Client
     // trying next address though next_addr.  To try new address, set
     // nullptr to current_addr before calling connect().
     addrinfo* current_addr;
+    ares_addrinfo* ares_addr;
     size_t reqidx;
     ClientState state;
     // The number of requests this client has to issue.
@@ -117,12 +118,15 @@ struct Client
     Client* controller;
     std::string schema;
     std::string authority;
+    ares_channel channel;
+    std::map<int, ev_io> ares_io_watchers;
 
     enum { ERR_CONNECT_FAIL = -100 };
 
     Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf);
     ~Client();
-    int make_socket(addrinfo* addr);
+    template<class T>
+    int make_socket(T* addr);
     int connect();
     void disconnect();
     void fail();
@@ -199,6 +203,11 @@ struct Client
                                                               size_t index_in_config_template);
 
     Client* find_or_create_dest_client(Request_Data& request_to_send);
+
+    int resolve_fqdn_and_connect(const std::string& schema, const std::string& authority);
+    bool is_valid_ipv4_address(const std::string& address);
+    bool is_valid_ipv6_address(const std::string& address);
+    int connect_to_host(const std::string& schema, const std::string& authority);
 
 };
 

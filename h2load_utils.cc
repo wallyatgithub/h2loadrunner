@@ -2,6 +2,10 @@
 #include <cctype>
 #include <string>
 
+extern "C" {
+#include <ares.h>
+}
+
 #include <fstream>
 #include <unistd.h>
 #include <fcntl.h>
@@ -1027,6 +1031,67 @@ void restart_client_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
             }
         }
         new_client.release();
+    }
+}
+
+void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ares_addrinfo* res) 
+{
+
+  Client* client = static_cast<Client*>(arg);
+
+  if (status == ARES_SUCCESS)
+  {
+      /*
+      addrinfo addressInfo;
+      addressInfo.ai_flags = res->ai_flags;
+      addressInfo.ai_family = res->ai_family;
+      addressInfo.ai_socktype = res->ai_socktype;
+      addressInfo.ai_protocol = res->ai_protocol;
+      addressInfo.ai_addrlen = res->ai_addrlen;
+      addressInfo.ai_addr = res->ai_addr;
+      addressInfo.ai_canonname = nullptr;
+      */
+      client->ares_addr = res;
+      client->next_addr = nullptr;
+      client->current_addr = nullptr;
+      client->connect();
+  }
+  else
+  {
+      client->fail();
+  }
+}
+
+void ares_io_cb(struct ev_loop *loop, struct ev_io *watcher, int revents)
+{
+    Client* client = static_cast<Client*>(watcher->data);
+
+    ares_process_fd(client->channel,
+                    revents & EV_READ ? watcher->fd : ARES_SOCKET_BAD,
+                    revents & EV_WRITE ? watcher->fd : ARES_SOCKET_BAD);
+}
+
+
+void ares_socket_state_cb(void *data, int s, int read, int write)
+{
+    Client* client = static_cast<Client*>(data);
+
+    if (read != 0 || write != 0)
+    {
+        if (client->ares_io_watchers.find(s) == client->ares_io_watchers.end())
+        {
+             ev_io watcher;
+             watcher.data = client;
+             client->ares_io_watchers[s] = watcher;
+             ev_init(&client->ares_io_watchers[s], ares_io_cb);
+        }
+        ev_io_set(&client->ares_io_watchers[s], s, (read ? EV_READ : 0) | (write ? EV_WRITE : 0));
+        ev_io_start(client->worker->loop, &client->ares_io_watchers[s]);
+    }
+    else if (client->ares_io_watchers.find(s) != client->ares_io_watchers.end())
+    {
+        ev_io_stop(client->worker->loop, &client->ares_io_watchers[s]);
+        client->ares_io_watchers.erase(s);
     }
 }
 
