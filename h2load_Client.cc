@@ -30,7 +30,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf)
         ssl(nullptr),
         next_addr(conf->addrs),
         current_addr(nullptr),
-        ares_addr(nullptr);
+        ares_addr(nullptr),
         reqidx(0),
         state(CLIENT_IDLE),
         req_todo(req_todo),
