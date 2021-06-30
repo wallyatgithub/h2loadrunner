@@ -1041,16 +1041,6 @@ void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ar
 
   if (status == ARES_SUCCESS)
   {
-      /*
-      addrinfo addressInfo;
-      addressInfo.ai_flags = res->ai_flags;
-      addressInfo.ai_family = res->ai_family;
-      addressInfo.ai_socktype = res->ai_socktype;
-      addressInfo.ai_protocol = res->ai_protocol;
-      addressInfo.ai_addrlen = res->ai_addrlen;
-      addressInfo.ai_addr = res->ai_addr;
-      addressInfo.ai_canonname = nullptr;
-      */
       client->ares_addr = res;
       client->next_addr = nullptr;
       client->current_addr = nullptr;

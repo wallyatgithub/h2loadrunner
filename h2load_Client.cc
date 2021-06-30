@@ -30,6 +30,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf)
         ssl(nullptr),
         next_addr(conf->addrs),
         current_addr(nullptr),
+        ares_addr(nullptr);
         reqidx(0),
         state(CLIENT_IDLE),
         req_todo(req_todo),
@@ -124,6 +125,8 @@ Client::~Client()
         delete client.second;
     }
     dest_client.clear();
+
+    ares_freeaddrinfo(ares_addr);
 }
 
 int Client::do_read()
@@ -1701,16 +1704,7 @@ int Client::resolve_fqdn_and_connect(const std::string& schema, const std::strin
 
 int Client::connect_to_host(const std::string& schema, const std::string& authority)
 {
-    std::string host = tokenize_string(authority, ":")[0];
-    if (is_valid_ipv4_address(host) || is_valid_ipv6_address(host))
-    {
-        // TODO:: set up addr
-        return connect();
-    }
-    else
-    {
-        return resolve_fqdn_and_connect(schema, authority);
-    }
+    return resolve_fqdn_and_connect(schema, authority);
 }
 
 bool Client::is_valid_ipv4_address(const std::string& address)
