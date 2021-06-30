@@ -237,6 +237,19 @@ int Http1Session::submit_request()
         return 0;
     }
 
+    if (config->nclients > 1)
+    {
+        std::random_device                  rand_dev;
+        std::mt19937                        generator(rand_dev());
+        std::uniform_int_distribution<uint64_t>  distr(config->json_config_schema.variable_range_start,
+                                                       config->json_config_schema.variable_range_end);
+        client_->curr_req_variable_value = distr(generator);
+    }
+    else
+    {
+        client_->curr_req_variable_value = config->json_config_schema.variable_range_start;
+    }
+
     return on_write();
 }
 

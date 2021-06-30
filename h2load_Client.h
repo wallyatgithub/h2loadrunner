@@ -115,7 +115,7 @@ struct Client
     std::map<int32_t, Request_Data> requests_awaiting_response;
     std::vector<lua_State*> lua_states;
     std::map<std::string, Client*> dest_client;
-    Client* controller;
+    Client* parent_client;
     std::string schema;
     std::string authority;
     ares_channel channel;
@@ -123,7 +123,9 @@ struct Client
 
     enum { ERR_CONNECT_FAIL = -100 };
 
-    Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf);
+    Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
+             Client* initiating_client=nullptr, const std::string& dest_schema="",
+             const std::string& dest_authority="");
     ~Client();
     template<class T>
     int make_socket(T* addr);
@@ -205,9 +207,9 @@ struct Client
     Client* find_or_create_dest_client(Request_Data& request_to_send);
 
     int resolve_fqdn_and_connect(const std::string& schema, const std::string& authority);
-    bool is_valid_ipv4_address(const std::string& address);
-    bool is_valid_ipv6_address(const std::string& address);
     int connect_to_host(const std::string& schema, const std::string& authority);
+
+    bool any_request_to_submit();
 
 };
 

@@ -22,7 +22,9 @@ namespace h2load
 
 
 
-Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf)
+Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
+             Client* initiating_client, const std::string& dest_schema,
+             const std::string& dest_authority)
     : wb(&worker->mcpool),
       cstat {},
         worker(worker),
@@ -46,7 +48,10 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf)
         rps_req_pending(0),
         rps_req_inflight(0),
         curr_stream_id(0),
-        curr_req_variable_value(0)
+        curr_req_variable_value(0),
+        parent_client(initiating_client),
+        schema(dest_schema),
+        authority(dest_authority)
 {
     if (req_todo == 0)   // this means infinite number of requests are to be made
     {
@@ -101,6 +106,28 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf)
         std::cerr<<"c-ares ares_init_options failed: "<<status<<std::endl;
         exit(EXIT_FAILURE);
     }
+
+    if (schema.empty())
+    {
+        schema = conf->scheme;
+    }
+    if (authority.empty())
+    {
+        if (conf->port != conf->default_port)
+        {
+            authority = conf->host + ":" + util::utos(conf->port);
+        }
+        else
+        {
+            authority = conf->host;
+        }
+    }
+    if (!initiating_client)
+    {
+        std::string dest = schema;
+        dest.append("://").append(authority);
+        dest_client[dest] = this;
+    }
 }
 
 Client::~Client()
@@ -122,7 +149,10 @@ Client::~Client()
 
     for (auto& client: dest_client)
     {
-        delete client.second;
+        if (client.second != this)
+        {
+            delete client.second;
+        }
     }
     dest_client.clear();
 
@@ -1511,6 +1541,7 @@ bool Client::prepare_next_request(Request_Data& finished_request)
         }
         else
         {
+            std::cerr << "abort whole scenario sequence, as header not found: " << request_template.path.input << std::endl;
             return false;
         }
     }
@@ -1534,7 +1565,8 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     new_request.next_request = finished_request.next_request + 1;
 
-    requests_to_submit.push_back(std::move(new_request));
+    find_or_create_dest_client(new_request)->requests_to_submit.push_back(std::move(new_request));
+
     return true;
 }
 
@@ -1644,33 +1676,25 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
 
 Client* Client::find_or_create_dest_client(Request_Data& request_to_send)
 {
-    std::string dest = request_to_send.schema;
-    dest.append("://").append(request_to_send.authority);
-    auto it = dest_client.find(dest);
-    if (it == dest_client.end())
+    if (!parent_client) // this is the first connection
     {
-        // TODO: create client, insert into map, trigger c-ares DNS resolution, set up resolution fd cb, in that cb trigger connect
-
-        auto new_client = std::make_unique<Client>(this->id, this->worker, this->req_todo, this->config);
-        new_client->authority = request_to_send.authority;
-        new_client->schema = request_to_send.schema;
-        
-        /*
-        if (new_client->connect_to_host(new_client->schema, new_client->authority) != 0)
+        std::string dest = request_to_send.schema;
+        dest.append("://").append(request_to_send.authority);
+        auto it = dest_client.find(dest);
+        if (it == dest_client.end())
         {
-            std::cerr << "client could not connect to host" << std::endl;
-            new_client->fail();
-        }
-        else
-        {
+            auto new_client = std::make_unique<Client>(this->id, this->worker, this->req_todo, this->config,
+                                                       this, request_to_send.schema, request_to_send.authority);
             dest_client[dest] = new_client.get();
+            connect_to_host(new_client->schema, new_client->authority);
             new_client.release();
         }
-        */
-        
-
+        return dest_client[dest];
     }
-    return dest_client[dest];
+    else
+    {
+        return parent_client->find_or_create_dest_client(request_to_send);
+    }
 }
 
 int Client::resolve_fqdn_and_connect(const std::string& schema, const std::string& authority)
@@ -1704,19 +1728,23 @@ int Client::resolve_fqdn_and_connect(const std::string& schema, const std::strin
 
 int Client::connect_to_host(const std::string& schema, const std::string& authority)
 {
+    if (config->verbose)
+    {
+        std::cout<<"connecting to "<<schema<<"://"<<authority<<std::endl;
+    }
     return resolve_fqdn_and_connect(schema, authority);
 }
 
-bool Client::is_valid_ipv4_address(const std::string& address)
+bool Client::any_request_to_submit()
 {
-    struct sockaddr_in dummy_addr;
-    return inet_pton(AF_INET, address.c_str(), &(dummy_addr.sin_addr)) != 0;
-}
-
-bool Client::is_valid_ipv6_address(const std::string& address)
-{
-    struct sockaddr_in6 dummy_addr;
-    return inet_pton(AF_INET6, address.c_str(), &(dummy_addr.sin6_addr)) != 0;
+    if (!parent_client)
+    {
+        return true;
+    }
+    else
+    {
+        return (!requests_to_submit.empty());
+    }
 }
 
 }
