@@ -276,11 +276,11 @@ int Client::connect()
     else if (ares_addr)
     {
       rv = make_socket(ares_addr->nodes);
-      
-      if (fd == -1)
-      {
-          return -1;
-      }
+    }
+
+    if (fd == -1)
+    {
+        return -1;
     }
 
     writefn = &Client::connected;

@@ -1043,6 +1043,7 @@ void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ar
 
   if (status == ARES_SUCCESS)
   {
+      ares_freeaddrinfo(client->ares_addr);
       client->ares_addr = res;
       client->next_addr = nullptr;
       client->current_addr = nullptr;
