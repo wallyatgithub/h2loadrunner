@@ -51,8 +51,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         curr_req_variable_value(0),
         parent_client(initiating_client),
         schema(dest_schema),
-        authority(dest_authority),
-        next_to_run(nullptr)
+        authority(dest_authority)
 {
     if (req_todo == 0)   // this means infinite number of requests are to be made
     {
@@ -395,20 +394,8 @@ int Client::submit_request()
 {
     if (!any_request_to_submit())
     {
-        if (next_to_run)
-        {
-            return next_to_run->submit_request();
-        }
-        else
-        {
-            return 0;
-        }
+        return 0;
     }
-    else if (next_to_run && next_to_run != this)
-    {
-        next_to_run->submit_request();
-    }
-
     auto retCode = session->submit_request();
     if (retCode != 0)
     {
@@ -1508,8 +1495,6 @@ Request_Data Client::get_request_to_submit()
 
 bool Client::prepare_next_request(Request_Data& finished_request)
 {
-    next_to_run = nullptr;
-
     static thread_local size_t full_var_str_len =
                   std::to_string(config->json_config_schema.variable_range_end).size();
     if (finished_request.next_request >= config->json_config_schema.scenario.size())
@@ -1585,14 +1570,11 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     new_request.next_request = finished_request.next_request + 1;
 
-    Client* client_of_next_request = find_or_create_dest_client(new_request);
+    Client* next_client_to_run = find_or_create_dest_client(new_request);
 
-    client_of_next_request->requests_to_submit.push_back(std::move(new_request));
+    next_client_to_run->requests_to_submit.push_back(std::move(new_request));
 
-    if (client_of_next_request->state == CLIENT_CONNECTED && !config->rps_enabled())
-    {
-        next_to_run = client_of_next_request;
-    }
+    Submit_Requet_Wrapper auto_submitter(this, next_client_to_run);
 
     return true;
 }

@@ -29,7 +29,6 @@ extern "C" {
 namespace h2load
 {
 
-
 struct Request_Data
 {
     std::string schema;
@@ -120,7 +119,6 @@ struct Client
     std::string authority;
     ares_channel channel;
     std::map<int, ev_io> ares_io_watchers;
-    Client* next_to_run;
 
     enum { ERR_CONNECT_FAIL = -100 };
 
@@ -212,7 +210,36 @@ struct Client
 
     bool any_request_to_submit();
 
+    void submit_request_to_next_client();
+
 };
+
+class Submit_Requet_Wrapper
+{
+public:
+  Client* client;
+
+  Submit_Requet_Wrapper(Client* this_client, Client* next_client)
+  {
+      if (next_client != this_client && next_client)
+      {
+          client = next_client;
+      }
+      else
+      {
+          client = nullptr;
+      }
+  };
+  ~Submit_Requet_Wrapper()
+  {
+      if (client && !client->config->rps_enabled() && client->state == CLIENT_CONNECTED)
+      {
+          client->submit_request();
+      }
+
+  };
+};
+
 
 }
 #endif
