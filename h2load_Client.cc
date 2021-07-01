@@ -1120,6 +1120,7 @@ int Client::connected()
     ev_io_start(worker->loop, &rev);
     ev_io_stop(worker->loop, &wev);
     ancestor_to_release.reset();
+    ev_timer_stop(worker->loop, &connection_timeout_watcher);
 
     if (ssl)
     {
