@@ -120,6 +120,7 @@ struct Client
     std::string authority;
     ares_channel channel;
     std::map<int, ev_io> ares_io_watchers;
+    Client* next_to_run;
 
     enum { ERR_CONNECT_FAIL = -100 };
 
