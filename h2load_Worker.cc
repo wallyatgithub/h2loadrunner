@@ -91,19 +91,19 @@ void Worker::stop_all_clients()
         if (client && client->session)
         {
             client->terminate_session();
+            client->terminate_sub_clients();
         }
     }
 }
 
 void Worker::free_client(Client* deleted_client)
 {
-    for (auto& client : clients)
+    for (size_t index = 0; index < clients.size(); index++)
     {
-        if (client == deleted_client)
+        if (clients[index] == deleted_client)
         {
-            client->req_todo = client->req_done;
-            stats.req_todo += client->req_todo;
-            auto index = &client - &clients[0];
+            clients[index]->req_todo = clients[index]->req_done;
+            stats.req_todo += clients[index]->req_todo;
             clients[index] = NULL;
             return;
         }

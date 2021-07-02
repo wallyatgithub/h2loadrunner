@@ -129,4 +129,7 @@ void ares_socket_state_cb(void *data, int s, int read, int write);
 
 void ares_io_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
 
+void release_ancestor_cb(struct ev_loop* loop, ev_timer* w, int revents);
+
+
 #endif

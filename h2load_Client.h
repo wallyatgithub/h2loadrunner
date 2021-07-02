@@ -119,6 +119,7 @@ struct Client
     std::string authority;
     ares_channel channel;
     std::map<int, ev_io> ares_io_watchers;
+    ev_timer release_ancestor_watcher;
 
     enum { ERR_CONNECT_FAIL = -100 };
 
@@ -211,6 +212,9 @@ struct Client
     bool any_request_to_submit();
 
     void submit_request_to_next_client();
+    void terminate_sub_clients();
+
+    void substitute_ancestor(Client* ancestor);
 
 };
 

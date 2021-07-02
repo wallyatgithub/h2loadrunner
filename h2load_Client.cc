@@ -83,6 +83,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
     stream_timeout_watcher.data = this;
 
     ev_timer_init(&connection_timeout_watcher, client_connection_timeout_cb, 2., 0.);
+    ev_timer_init(&release_ancestor_watcher, client_connection_timeout_cb, 5., 5.);
     connection_timeout_watcher.data = this;
 
     for (auto& request : conf->json_config_schema.scenario)
@@ -286,6 +287,10 @@ int Client::connect()
     writefn = &Client::connected;
     state = CLIENT_CONNECTING;
     ev_timer_start(worker->loop, &connection_timeout_watcher);
+    if (ancestor_to_release.get())
+    {
+        ev_timer_start(worker->loop, &release_ancestor_watcher);
+    }
 
 
     ev_io_set(&rev, fd, EV_READ);
@@ -636,6 +641,19 @@ void Client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
         else
         {
             stream.status_success = 0;
+        }
+
+        if (request != requests_awaiting_response.end() &&
+            request->second.expected_status_code)
+        {
+            if (status != request->second.expected_status_code)
+            {
+                stream.status_success = 0;
+            }
+            else
+            {
+                stream.status_success = 1;
+            }
         }
     }
 }
@@ -1123,7 +1141,6 @@ int Client::connected()
     }
     ev_io_start(worker->loop, &rev);
     ev_io_stop(worker->loop, &wev);
-    ancestor_to_release.reset();
     ev_timer_stop(worker->loop, &connection_timeout_watcher);
 
     if (ssl)
@@ -1753,6 +1770,58 @@ bool Client::any_request_to_submit()
     else
     {
         return (!requests_to_submit.empty());
+    }
+}
+
+void Client::terminate_sub_clients()
+{
+    for (auto& sub_client: dest_client)
+    {
+        if (sub_client.second->session)
+        {
+            sub_client.second->terminate_session();
+        }
+    }
+}
+
+void Client::substitute_ancestor(Client* ancestor)
+{
+    worker = ancestor->worker;
+    requests_to_submit.swap(ancestor->requests_to_submit);
+    parent_client = ancestor->parent_client;
+    schema = ancestor->schema;
+    authority = ancestor->authority;
+    req_todo = ancestor->req_todo;
+    req_left = ancestor->req_left;
+    ancestor_to_release.reset(ancestor);
+
+    if (parent_client)
+    {
+        dest_client.swap(ancestor->dest_client);
+
+        std::string dest = schema;
+        dest.append("://").append(authority);
+
+        if (parent_client->dest_client[dest] == ancestor)
+        {
+            parent_client->dest_client[dest] = this;
+        }
+        else
+        {
+            abort(); // this should not happen, abort for debug purpose
+        }
+    }
+    else
+    {
+        for (size_t index = 0; index < worker->clients.size(); index++)
+        {
+            if (worker->clients[index] == ancestor)
+            {
+                worker->clients[index] = this;
+                break;
+            }
+        }
+
     }
 }
 
