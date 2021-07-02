@@ -853,6 +853,7 @@ void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
         for (auto& request : config.json_config_schema.scenario)
         {
             request.headers_in_map[header.name] = header.value;
+            request.additonalHeaders.emplace_back(header.name + ":" + header.value);
         }
     }
 }
@@ -963,8 +964,6 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 config.json_config_schema.scenario.push_back(request);
             }
         }
-        std::cout << "Scenario to run:" << std::endl << staticjson::to_pretty_json_string(config.json_config_schema) <<
-                  std::endl;
     }
 }
 

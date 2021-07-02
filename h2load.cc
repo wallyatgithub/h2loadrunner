@@ -1287,6 +1287,8 @@ int main(int argc, char** argv)
     {
         insert_customized_headers_to_Json_scenarios(config);
     }
+    std::cout << "Scenario to run:" << std::endl << staticjson::to_pretty_json_string(config.json_config_schema)
+              <<std::endl;
 
     tokenize_path_and_payload_for_fast_var_replace(config);
 
