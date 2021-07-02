@@ -556,6 +556,18 @@ void Client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
         {
             stream.status_success = 0;
         }
+        if (request != requests_awaiting_response.end() &&
+            request->second.expected_status_code)
+        {
+            if (status != request->second.expected_status_code)
+            {
+                stream.status_success = 0;
+            }
+            else
+            {
+                stream.status_success = 1;
+            }
+        }
     }
 }
 
