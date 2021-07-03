@@ -401,6 +401,11 @@ int Client::submit_request()
     {
         return 0;
     }
+    if (session->max_concurrent_streams() <= streams.size())
+    {
+        return 0;
+    }
+
     auto retCode = session->submit_request();
     if (retCode != 0)
     {
@@ -1567,7 +1572,16 @@ bool Client::prepare_next_request(Request_Data& finished_request)
         }
         else
         {
-            std::cerr << "abort whole scenario sequence, as header not found: " << request_template.path.input << std::endl;
+            if (config->verbose)
+            {
+                std::cout<<"response status code:"<<finished_request.status_code<<std::endl;
+                std::cerr << "abort whole scenario sequence, as header not found: " << request_template.path.input << std::endl;
+                for (auto& header: finished_request.resp_headers)
+                {
+                    std::cout<<header.first<<":"<<header.second<<std::endl;
+                }
+                std::cout<<"response payload:"<<finished_request.resp_payload<<std::endl;
+            }
             return false;
         }
     }
@@ -1595,7 +1609,7 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     next_client_to_run->requests_to_submit.push_back(std::move(new_request));
 
-    Submit_Requet_Wrapper auto_submitter(this, next_client_to_run);
+    //Submit_Requet_Wrapper auto_submitter(this, next_client_to_run);
 
     return true;
 }
@@ -1758,7 +1772,7 @@ int Client::resolve_fqdn_and_connect(const std::string& schema, const std::strin
 
 int Client::connect_to_host(const std::string& schema, const std::string& authority)
 {
-    if (config->verbose)
+    //if (config->verbose)
     {
         std::cout<<"===============connecting to "<<schema<<"://"<<authority<<"==============="<<std::endl;
     }

@@ -236,7 +236,10 @@ public:
   };
   ~Submit_Requet_Wrapper()
   {
-      if (client && !client->config->rps_enabled() && client->state == CLIENT_CONNECTED)
+      if (client &&
+          !client->config->rps_enabled() &&
+          client->state == CLIENT_CONNECTED &&
+          client->session->max_concurrent_streams() > client->streams.size())
       {
           client->submit_request();
       }
