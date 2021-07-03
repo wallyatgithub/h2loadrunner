@@ -1135,6 +1135,10 @@ int Client::write_clear()
 
 int Client::connected()
 {
+    if (config->verbose)
+    {
+        std::cout<<"===============connected to "<<authority<<"==============="<<std::endl;
+    }
     if (!util::check_socket_connected(fd))
     {
         return ERR_CONNECT_FAIL;
@@ -1712,7 +1716,7 @@ Client* Client::find_or_create_dest_client(Request_Data& request_to_send)
             auto new_client = std::make_unique<Client>(this->id, this->worker, this->req_todo, this->config,
                                                        this, request_to_send.schema, request_to_send.authority);
             dest_client[dest] = new_client.get();
-            connect_to_host(new_client->schema, new_client->authority);
+            new_client->connect_to_host(new_client->schema, new_client->authority);
             new_client.release();
         }
         return dest_client[dest];
@@ -1756,7 +1760,7 @@ int Client::connect_to_host(const std::string& schema, const std::string& author
 {
     if (config->verbose)
     {
-        std::cout<<"connecting to "<<schema<<"://"<<authority<<std::endl;
+        std::cout<<"===============connecting to "<<schema<<"://"<<authority<<"==============="<<std::endl;
     }
     return resolve_fqdn_and_connect(schema, authority);
 }
@@ -1793,6 +1797,7 @@ void Client::substitute_ancestor(Client* ancestor)
     authority = ancestor->authority;
     req_todo = ancestor->req_todo;
     req_left = ancestor->req_left;
+    curr_req_variable_value = ancestor->curr_req_variable_value;
     ancestor_to_release.reset(ancestor);
 
     if (parent_client)

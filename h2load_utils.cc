@@ -1063,7 +1063,6 @@ void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ar
 void ares_io_cb(struct ev_loop *loop, struct ev_io *watcher, int revents)
 {
     Client* client = static_cast<Client*>(watcher->data);
-
     ares_process_fd(client->channel,
                     revents & EV_READ ? watcher->fd : ARES_SOCKET_BAD,
                     revents & EV_WRITE ? watcher->fd : ARES_SOCKET_BAD);
@@ -1073,7 +1072,6 @@ void ares_io_cb(struct ev_loop *loop, struct ev_io *watcher, int revents)
 void ares_socket_state_cb(void *data, int s, int read, int write)
 {
     Client* client = static_cast<Client*>(data);
-
     if (read != 0 || write != 0)
     {
         if (client->ares_io_watchers.find(s) == client->ares_io_watchers.end())

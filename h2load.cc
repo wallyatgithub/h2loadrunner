@@ -396,8 +396,13 @@ Options:
 int main(int argc, char** argv)
 {
     tls::libssl_init();
-    ares_library_init(ARES_LIB_INIT_ALL);
-
+    auto status = ares_library_init(ARES_LIB_INIT_ALL);
+    if (status != ARES_SUCCESS)
+    {
+        std::cout<<"ares_library_init failed"<<std::endl;
+        exit(EXIT_FAILURE);
+        return 1;
+    }
 #ifndef NOTHREADS
     tls::LibsslGlobalLock lock;
 #endif // NOTHREADS
