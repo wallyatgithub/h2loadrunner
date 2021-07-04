@@ -847,6 +847,7 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 request.method = config.crud_create_method;
                 request.path.typeOfAction = "input";
                 request.path.input = uri;
+                request.expected_status_code = 0;
                 if (config.crud_create_data_file_name.size())
                 {
                     std::ifstream buffer(config.crud_create_data_file_name);
@@ -867,6 +868,7 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 Request request;
                 request.clear_old_cookies = false;
                 request.method = config.crud_read_method;
+                request.expected_status_code = 0;
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
                     request.path.typeOfAction = "sameWithLastOne";
@@ -885,6 +887,7 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 Request request;
                 request.clear_old_cookies = false;
                 request.method = config.crud_update_method;
+                request.expected_status_code = 0;
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
                     request.path.typeOfAction = "sameWithLastOne";
@@ -914,6 +917,7 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 Request request;
                 request.clear_old_cookies = false;
                 request.method = config.crud_delete_method;
+                request.expected_status_code = 0;
                 if (config.crud_resource_header_name.size())
                 {
                 }
