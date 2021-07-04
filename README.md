@@ -32,6 +32,12 @@
      
   7. Dynamic report of the test, dynamic change of the QPS/RPS.
      h2loadrunner prints the test statistics every second; it also supports dynamic change of QPS/RPS.
+     
+  8. Support connection to multiple host
+  
+     H2loadrunner supports different hosts for different requests; when a new host is identified, h2loadrunner will initiate async DNS resolution and connect to the host dynamically
+     
+     Dynamic connections are re-used among different requests with same authority (host) header.
 
 # How performant is h2loadrunner?
   For this test scenario, h2loadrunner will only need less than one logic core to reach 60K QPS/s:
