@@ -171,6 +171,7 @@
           },
           "expected-status-code": {
             "description":"the expected http status code for this request; if the returned status code matches the one specified here, this request is considered successful; if nothing specified here, 2xx status codes (i.e., 200, 201, 204, etc.) are all considered successful",
+            "default": "0",
             "type":"integer"
           }
         },

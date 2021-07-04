@@ -211,7 +211,6 @@ struct Client
 
     bool any_request_to_submit();
 
-    void submit_request_to_next_client();
     void terminate_sub_clients();
 
     void substitute_ancestor(Client* ancestor);

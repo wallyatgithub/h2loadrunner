@@ -1146,6 +1146,7 @@ int Client::connected()
 
     if (!util::check_socket_connected(fd))
     {
+        std::cout<<"check_socket_connected failed"<<std::endl;
         return ERR_CONNECT_FAIL;
     }
     ev_io_start(worker->loop, &rev);

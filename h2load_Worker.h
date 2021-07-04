@@ -38,7 +38,7 @@ struct Worker
     size_t rate;
     // maximum number of samples in this worker thread
     size_t max_samples;
-    ev_timer rate_mode_timeout_watcher;
+    ev_timer rate_mode_period_watcher;
     // The next client ID this worker assigns
     uint32_t next_client_id;
     // Keeps track of the current phase (for timing-based experiment) for the
