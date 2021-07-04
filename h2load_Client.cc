@@ -360,6 +360,8 @@ void Client::fail()
 
 void Client::disconnect()
 {
+    std::cout<<"===============disconnected from "<<authority<<"==============="<<std::endl;
+
     record_client_end_time();
 
     ev_timer_stop(worker->loop, &conn_inactivity_watcher);
@@ -1140,10 +1142,8 @@ int Client::write_clear()
 
 int Client::connected()
 {
-    if (config->verbose)
-    {
-        std::cout<<"===============connected to "<<authority<<"==============="<<std::endl;
-    }
+    std::cout<<"===============connected to "<<authority<<"==============="<<std::endl;
+
     if (!util::check_socket_connected(fd))
     {
         return ERR_CONNECT_FAIL;
@@ -1609,7 +1609,7 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     next_client_to_run->requests_to_submit.push_back(std::move(new_request));
 
-    //Submit_Requet_Wrapper auto_submitter(this, next_client_to_run);
+    Submit_Requet_Wrapper auto_submitter(this, next_client_to_run);
 
     return true;
 }
