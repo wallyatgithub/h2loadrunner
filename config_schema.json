@@ -170,13 +170,13 @@
             "description": "lua script (or a filename containing the actual script) with a function named make_request, with 4 arguments: response_headers, response_payload, request_headers_to_send, request_payload_to_send; returning request_headers_to_send and request_payload_to_send. h2loadrunner passes the response headers and payload of last request within this scenarios sequence, and the request headers (path, method, additional headers) and payload specified here, to this lua function, which can update the request headers and request payload, and h2loadrunner will use the updated headers and payload for the request. Example script: function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send) return request_headers_to_send, request_payload_to_send end"
           },
           "expected-status-code": {
-            "description":"the expected http status code for this request; if the returned status code matches the one specified here, this request is considered successful; if nothing specified here, 2xx status codes (i.e., 200, 201, 204, etc.) are all considered successful",
-            "default": "0",
+            "description":"the expected http status code for this request; if the returned status code matches the one specified here, this request is considered successful in statistics report; if nothing specified here, 2xx status codes (i.e., 200, 201, 204, etc.) are all considered successful",
+            "default": 0,
             "type":"integer"
           },
           "delay-before-executing-next": {
             "description":"miliseconds to delay before executing the next request within the same scenario; granularity: 10ms, i.e., setting 115ms delay would cause an actual delay of 120ms",
-            "default": "0",
+            "default": 0,
             "type":"integer"
           }
         },
