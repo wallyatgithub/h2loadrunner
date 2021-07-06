@@ -41,7 +41,7 @@
     {
       "path": {
         "typeOfAction": "fromResponseHeader",
-        "headerToExtract": "location"
+        "input": "location"
       },
       "method": "DELETE"
     }
