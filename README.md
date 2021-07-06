@@ -97,12 +97,21 @@
     libev-dev
     libluajit-5.1-dev
     rapidjson-dev
+    c-ares (included in third-party/c-ares, as the c-ares devel package of linux distro is too old)
 
   Use cmake to build
 
     $git clone https://github.com/wallyatgithub/h2loadrunner.git
     
     $cd h2loadrunner
+    
+    $cd third-party/c-ares
+    
+    $cmake ./
+    
+    $cmake --build ./
+    
+    $cd ../../
     
     $mkdir build
     

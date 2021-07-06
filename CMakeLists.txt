@@ -44,10 +44,14 @@ include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/StaticJSON/include"
   "${LUA_INCLUDE_DIR}"
 #  "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/include"
+#  "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares"
 )
 
 
-link_directories(${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib)
+link_directories(
+${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib
+${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib64
+)
 
 link_libraries(
   nghttp2
@@ -82,6 +86,7 @@ add_executable(h2loadrunner ${H2LOAD_SOURCES} $<TARGET_OBJECTS:llhttp>
 target_link_libraries(h2loadrunner cares_static)
 
 target_include_directories(h2loadrunner PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/include")
+target_include_directories(h2loadrunner PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares")
 
 install(TARGETS h2loadrunner
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
