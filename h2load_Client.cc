@@ -79,13 +79,14 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
     ev_timer_init(&rps_watcher, rps_cb, 0., 0.);
     rps_watcher.data = this;
 
-    ev_timer_init(&stream_timeout_watcher, stream_timeout_cb, 0., 0.);
-    stream_timeout_watcher.data = this;
-
+    ev_timer_init(&stream_timeout_watcher, stream_timeout_cb, 0., 0.01);
     ev_timer_init(&connection_timeout_watcher, client_connection_timeout_cb, 2., 0.);
     ev_timer_init(&release_ancestor_watcher, client_connection_timeout_cb, 5., 5.);
     ev_timer_init(&delayed_request_watcher, delayed_request_cb, 0.01, 0.01);
+    stream_timeout_watcher.data = this;
     connection_timeout_watcher.data = this;
+    release_ancestor_watcher.data = this;
+    delayed_request_watcher.data = this;
 
     for (auto& request : conf->json_config_schema.scenario)
     {
@@ -1546,6 +1547,8 @@ bool Client::prepare_next_request(Request_Data& finished_request)
     else if (request_template.path.typeOfAction == "sameWithLastOne")
     {
         new_request.path = finished_request.path;
+        new_request.schema = finished_request.schema;
+        new_request.authority= finished_request.authority;
     }
     else if (request_template.path.typeOfAction == "fromResponseHeader")
     {
@@ -1601,7 +1604,7 @@ bool Client::prepare_next_request(Request_Data& finished_request)
     {
         if (!update_request_with_lua(lua_states[finished_request.next_request], finished_request, new_request))
         {
-            return false; // lua script returns error, abort this sequence
+            return false; // lua script returns error or kills the request, abort this scenario
         }
     }
 
@@ -1626,8 +1629,8 @@ void Client::enqueue_request(Request_Data& finished_request, Request_Data&& new_
     {
         const std::chrono::milliseconds delay_duration(finished_request.delay_before_executing_next);
         std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
-        std::chrono::steady_clock::time_point timeout_timepoint = curr_time_point - delay_duration;
-        delayed_requests_to_submit.insert(std::make_pair(timeout_timepoint, std::move(new_request)));
+        std::chrono::steady_clock::time_point timeout_timepoint = curr_time_point + delay_duration;
+        next_client_to_run->delayed_requests_to_submit.insert(std::make_pair(timeout_timepoint, std::move(new_request)));
     }
 }
 

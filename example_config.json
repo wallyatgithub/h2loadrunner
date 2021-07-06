@@ -36,12 +36,13 @@
       "additonalHeaders": [
         "content-type: text/plain"
       ],
-      "payload": "hello world: -USER-ID"
+      "payload": "hello world: -USER-ID",
+      "delay-before-executing-next":5000
     },
     {
       "path": {
         "typeOfAction": "fromResponseHeader",
-        "headerToExtract": "location"
+        "input": "location"
       },
       "method": "DELETE"
     }
