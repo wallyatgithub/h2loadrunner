@@ -85,8 +85,11 @@ add_executable(h2loadrunner ${H2LOAD_SOURCES} $<TARGET_OBJECTS:llhttp>
   $<TARGET_OBJECTS:url-parser> $<TARGET_OBJECTS:staticjson>)
 target_link_libraries(h2loadrunner cares_static)
 
-target_include_directories(h2loadrunner PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/include")
-target_include_directories(h2loadrunner PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares")
+target_include_directories(h2loadrunner PUBLIC 
+"${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/include"
+"${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares"
+)
+
 
 install(TARGETS h2loadrunner
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
