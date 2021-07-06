@@ -173,6 +173,11 @@
             "description":"the expected http status code for this request; if the returned status code matches the one specified here, this request is considered successful; if nothing specified here, 2xx status codes (i.e., 200, 201, 204, etc.) are all considered successful",
             "default": "0",
             "type":"integer"
+          },
+          "delay-before-executing-next": {
+            "description":"miliseconds to delay before executing the next request within the same scenario; granularity: 10ms, i.e., setting 115ms delay would cause an actual delay of 120ms",
+            "default": "0",
+            "type":"integer"
           }
         },
         "required":[

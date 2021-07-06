@@ -84,6 +84,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
 
     ev_timer_init(&connection_timeout_watcher, client_connection_timeout_cb, 2., 0.);
     ev_timer_init(&release_ancestor_watcher, client_connection_timeout_cb, 5., 5.);
+    ev_timer_init(&delayed_request_watcher, delayed_request_cb, 0.01, 0.01);
     connection_timeout_watcher.data = this;
 
     for (auto& request : conf->json_config_schema.scenario)
@@ -1152,6 +1153,7 @@ int Client::connected()
     ev_io_start(worker->loop, &rev);
     ev_io_stop(worker->loop, &wev);
     ev_timer_stop(worker->loop, &connection_timeout_watcher);
+    ev_timer_start(worker->loop, &delayed_request_watcher);
 
     if (ssl)
     {
@@ -1475,6 +1477,7 @@ void Client::populate_request_from_config_template(Request_Data& new_request,
                                                            full_var_str_len);;
     new_request.req_headers = request_template.headers_in_map;
     new_request.expected_status_code = request_template.expected_status_code;
+    new_request.delay_before_executing_next = request_template.delay_before_executing_next;
 }
 
 Request_Data Client::get_request_to_submit()
@@ -1606,16 +1609,26 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     new_request.next_request = finished_request.next_request + 1;
 
-    enqueue_request(new_request);
+    enqueue_request(finished_request, std::move(new_request));
 
     return true;
 }
 
-void Client::enqueue_request(Request_Data& new_request)
+void Client::enqueue_request(Request_Data& finished_request, Request_Data&& new_request)
 {
     Client* next_client_to_run = find_or_create_dest_client(new_request);
-    next_client_to_run->requests_to_submit.push_back(std::move(new_request));
-    Submit_Requet_Wrapper auto_submitter(this, next_client_to_run);
+    if (!finished_request.delay_before_executing_next)
+    {
+        next_client_to_run->requests_to_submit.push_back(std::move(new_request));
+        Submit_Requet_Wrapper auto_submitter(this, next_client_to_run);
+    }
+    else
+    {
+        const std::chrono::milliseconds delay_duration(finished_request.delay_before_executing_next);
+        std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
+        std::chrono::steady_clock::time_point timeout_timepoint = curr_time_point - delay_duration;
+        delayed_requests_to_submit.insert(std::make_pair(timeout_timepoint, std::move(new_request)));
+    }
 }
 
 bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_request, Request_Data& request_to_send)

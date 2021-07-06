@@ -48,6 +48,7 @@ public:
     std::map<std::string, std::string, ci_less> headers_in_map;
     std::vector<std::string> tokenized_path;
     std::vector<std::string> tokenized_payload;
+    uint32_t delay_before_executing_next;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("luaScript", &this->luaScript, staticjson::Flags::Optional);
@@ -57,11 +58,13 @@ public:
         h->add_property("additonalHeaders", &this->additonalHeaders, staticjson::Flags::Optional);
         h->add_property("clear-old-cookies", &this->clear_old_cookies, staticjson::Flags::Optional);
         h->add_property("expected-status-code", &this->expected_status_code, staticjson::Flags::Optional);
+        h->add_property("delay-before-executing-next", &this->delay_before_executing_next, staticjson::Flags::Optional);
     }
     explicit Request()
     {
         clear_old_cookies = false;
         expected_status_code = 0;
+        delay_before_executing_next = 0;
     }
 };
 

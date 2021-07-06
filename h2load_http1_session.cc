@@ -352,7 +352,7 @@ int Http1Session::on_write()
 
 int Http1Session::_submit_request()
 {
-    h2load::Request_Data data = client_->get_request_to_submit();
+    auto data = std::move(client_->get_request_to_submit());
     auto config = client_->worker->config;
     std::string req;
     req.append(data.method).append(" ").append(data.path).append(" HTTP/1.1\r\n");

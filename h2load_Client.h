@@ -42,6 +42,7 @@ struct Request_Data
     std::map<std::string, std::string, ci_less> resp_headers;
     uint16_t status_code;
     uint16_t expected_status_code;
+    uint32_t delay_before_executing_next;
     std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
     size_t next_request;
 };
@@ -111,6 +112,7 @@ struct Client
     Config* config;
     uint64_t curr_req_variable_value;
     std::deque<Request_Data> requests_to_submit;
+    std::multimap<std::chrono::steady_clock::time_point, Request_Data> delayed_requests_to_submit;
     std::map<int32_t, Request_Data> requests_awaiting_response;
     std::vector<lua_State*> lua_states;
     std::map<std::string, Client*> dest_client;
@@ -120,6 +122,7 @@ struct Client
     ares_channel channel;
     std::map<int, ev_io> ares_io_watchers;
     ev_timer release_ancestor_watcher;
+    ev_timer delayed_request_watcher;
 
     enum { ERR_CONNECT_FAIL = -100 };
 
@@ -215,7 +218,7 @@ struct Client
 
     void substitute_ancestor(Client* ancestor);
 
-    void enqueue_request(Request_Data& new_request);
+    void enqueue_request(Request_Data& finished_request, Request_Data&& new_request);
 
 };
 

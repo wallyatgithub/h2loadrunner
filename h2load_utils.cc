@@ -343,6 +343,21 @@ void client_connection_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents
     client->disconnect();
 }
 
+void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents)
+{
+    auto client = static_cast<Client*>(w->data);
+    std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
+    auto barrier = client->delayed_requests_to_submit.upper_bound(curr_time_point);
+    auto it = client->delayed_requests_to_submit.begin();
+    while (it != barrier)
+    {
+        client->requests_to_submit.push_back(std::move(it->second));
+        h2load::Submit_Requet_Wrapper auto_submitter(nullptr, client);
+        it = client->delayed_requests_to_submit.erase(it);
+    }
+}
+
+
 void release_ancestor_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);

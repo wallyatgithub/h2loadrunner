@@ -131,5 +131,7 @@ void ares_io_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
 
 void release_ancestor_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
+void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents);
+
 
 #endif
