@@ -1606,13 +1606,16 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     new_request.next_request = finished_request.next_request + 1;
 
-    Client* next_client_to_run = find_or_create_dest_client(new_request);
-
-    next_client_to_run->requests_to_submit.push_back(std::move(new_request));
-
-    Submit_Requet_Wrapper auto_submitter(this, next_client_to_run);
+    enqueue_request(new_request);
 
     return true;
+}
+
+void Client::enqueue_request(Request_Data& new_request)
+{
+    Client* next_client_to_run = find_or_create_dest_client(new_request);
+    next_client_to_run->requests_to_submit.push_back(std::move(new_request));
+    Submit_Requet_Wrapper auto_submitter(this, next_client_to_run);
 }
 
 bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_request, Request_Data& request_to_send)

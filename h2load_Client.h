@@ -215,6 +215,8 @@ struct Client
 
     void substitute_ancestor(Client* ancestor);
 
+    void enqueue_request(Request_Data& new_request);
+
 };
 
 class Submit_Requet_Wrapper

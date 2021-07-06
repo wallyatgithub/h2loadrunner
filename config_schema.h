@@ -58,6 +58,11 @@ public:
         h->add_property("clear-old-cookies", &this->clear_old_cookies, staticjson::Flags::Optional);
         h->add_property("expected-status-code", &this->expected_status_code, staticjson::Flags::Optional);
     }
+    explicit Request()
+    {
+        clear_old_cookies = false;
+        expected_status_code = 0;
+    }
 };
 
 class Config_Schema
