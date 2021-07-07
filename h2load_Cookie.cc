@@ -113,9 +113,9 @@ bool Cookie::is_cookie_acceptable(const Cookie& cookie)
     return true;
 }
 
-bool Cookie::is_cookie_allowed_to_be_sent(Cookie cookie, const std::string dest_schema,
-                                                     const std::string dest_authority,
-                                                     const std::string dest_path)
+bool Cookie::is_cookie_allowed_to_be_sent(const Cookie& cookie, const std::string dest_schema,
+                                                     const std::string& dest_authority,
+                                                     const std::string& dest_path)
 {
     if (cookie.secure && dest_schema == "http")
     {

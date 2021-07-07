@@ -528,10 +528,10 @@ int main(int argc, char** argv)
                 }
                 *value = 0;
                 value++;
-                while (isspace(*value))
-                {
-                    value++;
-                }
+                //while (isspace(*value))
+                //{
+                //    value++;
+                //}
                 if (*value == 0)
                 {
                     // This could also be a valid case for suppressing a header
@@ -843,11 +843,13 @@ int main(int argc, char** argv)
                                 }
                                 std::string header_name = header_with_value.substr(0, t);
                                 std::string header_value = header_with_value.substr(t + 1);
+                                /*
                                 header_value.erase(header_value.begin(), std::find_if(header_value.begin(), header_value.end(),
                                                                                       [](unsigned char ch)
                                 {
                                     return !std::isspace(ch);
                                 }));
+                                */
 
                                 if (header_value.empty())
                                 {

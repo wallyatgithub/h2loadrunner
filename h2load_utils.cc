@@ -280,7 +280,6 @@ void warmup_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 void rps_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
-    //std::cout<<__FUNCTION__<<":"<<__LINE__<<std::endl;
     auto& session = client->session;
     client->reset_timeout_requests();
     assert(!client->config->timing_script);
@@ -290,12 +289,11 @@ void rps_cb(struct ev_loop* loop, ev_timer* w, int revents)
         ev_timer_stop(loop, w);
         return;
     }
-    //std::cout<<__FUNCTION__<<":"<<__LINE__<<std::endl;
 
     auto now = ev_now(loop);
     auto d = now - client->rps_duration_started;
     auto n = static_cast<size_t>(round(d * client->config->rps));
-    client->rps_req_pending += n;
+    client->rps_req_pending = n; // += n; do not accumulate to avoid burst of load
     client->rps_duration_started = now - d + static_cast<double>(n) / client->config->rps;
 
     if (client->rps_req_pending == 0)
