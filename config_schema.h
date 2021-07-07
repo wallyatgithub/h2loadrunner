@@ -25,7 +25,7 @@ struct ci_less
   }
 };
 
-class Path {
+class Uri {
 public:
     std::string typeOfAction;
     std::string input;
@@ -40,7 +40,10 @@ class Request {
 public:
     bool clear_old_cookies;
     std::string luaScript;
-    Path path;
+    std::string schema;
+    std::string authority;
+    std::string path;
+    Uri uri;
     std::string method;
     std::string payload;
     std::vector<std::string> additonalHeaders;
@@ -52,7 +55,7 @@ public:
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("luaScript", &this->luaScript, staticjson::Flags::Optional);
-        h->add_property("path", &this->path);
+        h->add_property("uri", &this->uri);
         h->add_property("method", &this->method);
         h->add_property("payload", &this->payload, staticjson::Flags::Optional);
         h->add_property("additonalHeaders", &this->additonalHeaders, staticjson::Flags::Optional);

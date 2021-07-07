@@ -28,9 +28,9 @@
   "log-file": "",
   "scenario": [
     {
-      "path": {
+      "uri": {
         "typeOfAction": "input",
-        "input": "/nudm-ee/v2/imsi-2621012-USER-ID/ee-subscriptions"
+        "input": "http://192.168.1.125:8080/nudm-ee/v2/imsi-2621012-USER_ID/sdm-subscriptions/"
       },
       "method": "POST",
       "additonalHeaders": [
@@ -40,7 +40,7 @@
       "delay-before-executing-next":5000
     },
     {
-      "path": {
+      "uri": {
         "typeOfAction": "fromResponseHeader",
         "input": "location"
       },

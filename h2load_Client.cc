@@ -1463,16 +1463,8 @@ void Client::populate_request_from_config_template(Request_Data& new_request,
                                                         full_var_str_len);
     }
     new_request.method = request_template.method;
-    new_request.schema = config->scheme;
-    if (config->port != config->default_port)
-    {
-        new_request.authority = config->host + ":" + util::utos(config->port);
-    }
-    else
-    {
-        new_request.authority = config->host;
-    }
-
+    new_request.schema = request_template.schema;
+    new_request.authority = request_template.authority;
     new_request.req_payload = reassemble_str_with_variable(request_template.tokenized_payload,
                                                            new_request.user_id,
                                                            full_var_str_len);;
@@ -1538,21 +1530,21 @@ bool Client::prepare_next_request(Request_Data& finished_request)
     new_request.user_id = finished_request.user_id;
     populate_request_from_config_template(new_request, finished_request.next_request);
 
-    if (request_template.path.typeOfAction == "input")
+    if (request_template.uri.typeOfAction == "input")
     {
          new_request.path = reassemble_str_with_variable(request_template.tokenized_path,
                                                          new_request.user_id,
                                                          full_var_str_len);
     }
-    else if (request_template.path.typeOfAction == "sameWithLastOne")
+    else if (request_template.uri.typeOfAction == "sameWithLastOne")
     {
         new_request.path = finished_request.path;
         new_request.schema = finished_request.schema;
         new_request.authority= finished_request.authority;
     }
-    else if (request_template.path.typeOfAction == "fromResponseHeader")
+    else if (request_template.uri.typeOfAction == "fromResponseHeader")
     {
-        auto header = finished_request.resp_headers.find(request_template.path.input);
+        auto header = finished_request.resp_headers.find(request_template.uri.input);
         if (header != finished_request.resp_headers.end())
         {
             http_parser_url u {};
@@ -1582,7 +1574,7 @@ bool Client::prepare_next_request(Request_Data& finished_request)
             if (config->verbose)
             {
                 std::cout<<"response status code:"<<finished_request.status_code<<std::endl;
-                std::cerr << "abort whole scenario sequence, as header not found: " << request_template.path.input << std::endl;
+                std::cerr << "abort whole scenario sequence, as header not found: " << request_template.uri.input << std::endl;
                 for (auto& header: finished_request.resp_headers)
                 {
                     std::cout<<header.first<<":"<<header.second<<std::endl;

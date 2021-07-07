@@ -888,9 +888,8 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
             {
                 Request request;
                 request.method = config.crud_create_method;
-                request.path.typeOfAction = "input";
-                request.path.input = uri;
-                request.expected_status_code = 0;
+                request.uri.typeOfAction = "input";
+                request.path = uri;
                 if (config.crud_create_data_file_name.size())
                 {
                     std::ifstream buffer(config.crud_create_data_file_name);
@@ -911,15 +910,14 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 Request request;
                 request.clear_old_cookies = false;
                 request.method = config.crud_read_method;
-                request.expected_status_code = 0;
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
-                    request.path.typeOfAction = "sameWithLastOne";
+                    request.uri.typeOfAction = "sameWithLastOne";
                 }
                 else
                 {
-                    request.path.typeOfAction = "fromResponseHeader";
-                    request.path.input = config.crud_resource_header_name;
+                    request.uri.typeOfAction = "fromResponseHeader";
+                    request.uri.input = config.crud_resource_header_name;
                 }
                 header_tracked = true;
                 config.json_config_schema.scenario.push_back(request);
@@ -930,15 +928,14 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 Request request;
                 request.clear_old_cookies = false;
                 request.method = config.crud_update_method;
-                request.expected_status_code = 0;
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
-                    request.path.typeOfAction = "sameWithLastOne";
+                    request.uri.typeOfAction = "sameWithLastOne";
                 }
                 else
                 {
-                    request.path.typeOfAction = "fromResponseHeader";
-                    request.path.input = config.crud_resource_header_name;
+                    request.uri.typeOfAction = "fromResponseHeader";
+                    request.uri.input = config.crud_resource_header_name;
                 }
                 header_tracked = true;
                 if (config.crud_update_data_file_name.size())
@@ -960,18 +957,14 @@ void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
                 Request request;
                 request.clear_old_cookies = false;
                 request.method = config.crud_delete_method;
-                request.expected_status_code = 0;
-                if (config.crud_resource_header_name.size())
-                {
-                }
                 if (header_tracked || config.crud_resource_header_name.empty())
                 {
-                    request.path.typeOfAction = "sameWithLastOne";
+                    request.uri.typeOfAction = "sameWithLastOne";
                 }
                 else
                 {
-                    request.path.typeOfAction = "fromResponseHeader";
-                    request.path.input = config.crud_resource_header_name;
+                    request.uri.typeOfAction = "fromResponseHeader";
+                    request.uri.input = config.crud_resource_header_name;
                 }
                 header_tracked = true;
                 config.json_config_schema.scenario.push_back(request);
@@ -1006,7 +999,7 @@ void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config)
 {
   for (auto& request : config.json_config_schema.scenario)
   {
-      request.tokenized_path = tokenize_string(request.path.input, config.json_config_schema.variable_name_in_path_and_data);
+      request.tokenized_path = tokenize_string(request.path, config.json_config_schema.variable_name_in_path_and_data);
       request.tokenized_payload = tokenize_string(request.payload, config.json_config_schema.variable_name_in_path_and_data);
   }
 }
@@ -1107,3 +1100,34 @@ void ares_socket_state_cb(void *data, int s, int read, int write)
     }
 }
 
+void normalize_request_templates(h2load::Config* config)
+{
+    for (auto& request : config->json_config_schema.scenario)
+    {
+        if (request.schema.empty())
+        {
+            request.schema = config->scheme;
+        }
+        if (request.authority.empty())
+        {
+            if (config->port != config->default_port)
+            {
+                request.authority = config->host + ":" + util::utos(config->port);
+            }
+            else
+            {
+                request.authority = config->host;
+            }
+        }
+        if (request.uri.typeOfAction == "input")
+        {
+            // for output to user to let user know the actual scenario to execute
+            request.uri.input = request.schema + "://" + request.authority + request.path;
+        }
+    }
+    if (config->json_config_schema.scenario.size())
+    {
+        auto& req = config->json_config_schema.scenario[0];
+        parse_base_uri(StringRef(req.uri.input), *config);
+    }
+}

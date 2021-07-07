@@ -133,5 +133,7 @@ void release_ancestor_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
 void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
+void normalize_request_templates(h2load::Config* config);
+
 
 #endif

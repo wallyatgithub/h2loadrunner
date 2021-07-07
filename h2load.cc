@@ -828,7 +828,7 @@ int main(int argc, char** argv)
                         util::inp_strlower(config.json_config_schema.schema);
                         std::cout << "Use configuration from JSON:" << std::endl << staticjson::to_pretty_json_string(
                                       config.json_config_schema) << std::endl;
-                        assert(config.json_config_schema.scenario[0].path.typeOfAction == "input");
+                        assert(config.json_config_schema.scenario[0].uri.typeOfAction == "input");
 
                         for (auto& request : config.json_config_schema.scenario)
                         {
@@ -875,6 +875,27 @@ int main(int argc, char** argv)
                                 {
                                     std::string luaScriptStr((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
                                     request.luaScript = luaScriptStr;
+                                }
+                            }
+                            if (request.uri.typeOfAction == "input")
+                            {
+                                http_parser_url u {};
+                                if (http_parser_parse_url(request.uri.input.c_str(), request.uri.input.size(), 0, &u) != 0)
+                                {
+                                    std::cerr << "invalid URI given: " << request.uri.input << std::endl;
+                                    exit(EXIT_FAILURE);
+                                }
+                                request.path = get_reqline(request.uri.input.c_str(), u);
+                                if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
+                                {
+                                    request.schema = util::get_uri_field(request.uri.input.c_str(), u, UF_SCHEMA).str();
+                                    util::inp_strlower(request.schema);
+                                    request.authority = util::get_uri_field(request.uri.input.c_str(), u, UF_HOST).str();
+                                    util::inp_strlower(request.authority);
+                                    if (util::has_uri_field(u, UF_PORT))
+                                    {
+                                        request.authority.append(":").append(util::utos(u.port));
+                                    }
                                 }
                             }
                         }
@@ -1289,6 +1310,9 @@ int main(int argc, char** argv)
     {
         insert_customized_headers_to_Json_scenarios(config);
     }
+
+    normalize_request_templates(&config);
+
     std::cout << "Scenario to run:" << std::endl << staticjson::to_pretty_json_string(config.json_config_schema)
               <<std::endl;
 

@@ -129,8 +129,8 @@
       "items": {
       "type": "object",
         "properties":{
-          "path":{
-            "description": "path of the uri",
+          "URI":{
+            "description": "This could be a full featured URI with schema, authority, path, etc., or, it can be path only, in this case, the global schema, host, port would be used",
             "type":"object",
             "properties":{
               "typeOfAction": {
