@@ -1533,10 +1533,7 @@ void Client::populate_request_from_config_template(Request_Data& new_request,
 
 bool Client::prepare_first_request()
 {
-    if (parent_client)
-    {
-        return parent_client->prepare_first_request();
-    }
+    auto controller = parent_client ? parent_client : this;
 
     static thread_local size_t full_var_str_len =
                 std::to_string(config->json_config_schema.variable_range_end).size();
@@ -1547,13 +1544,13 @@ bool Client::prepare_first_request()
     size_t curr_index = 0;
     new_request.next_request = ((curr_index + 1) % config->json_config_schema.scenario.size());
 
-    new_request.user_id = curr_req_variable_value;
-    if (req_variable_value_end)
+    new_request.user_id = controller->curr_req_variable_value;
+    if (controller->req_variable_value_end)
     {
-        curr_req_variable_value++;
-        if (curr_req_variable_value > req_variable_value_end)
+        controller->curr_req_variable_value++;
+        if (controller->curr_req_variable_value > controller->req_variable_value_end)
         {
-            curr_req_variable_value = req_variable_value_start;
+            controller->curr_req_variable_value = controller->req_variable_value_start;
         }
     }
 
