@@ -303,18 +303,6 @@ void Http2Session::on_connect()
     auto connection_window = (1 << config->connection_window_bits) - 1;
     nghttp2_session_set_local_window_size(session_, NGHTTP2_FLAG_NONE, 0,
                                           connection_window);
-    if (config->nclients > 1)
-    {
-        std::random_device                  rand_dev;
-        std::mt19937                        generator(rand_dev());
-        std::uniform_int_distribution<uint64_t>  distr(config->json_config_schema.variable_range_start,
-                                                       config->json_config_schema.variable_range_end);
-        client_->curr_req_variable_value = distr(generator);
-    }
-    else
-    {
-        client_->curr_req_variable_value = config->json_config_schema.variable_range_start;
-    }
     client_->signal_write();
 }
 

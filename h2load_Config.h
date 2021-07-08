@@ -83,6 +83,7 @@ struct Config
     std::string rps_file;
     Config_Schema json_config_schema;
     std::vector<std::string> reqlines;
+    bool variable_range_slicing;
 
     Config();
     ~Config();

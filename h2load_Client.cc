@@ -966,6 +966,70 @@ int Client::connection_made()
 
     state = CLIENT_CONNECTED;
 
+    if (config->nclients > 1 && (nullptr == parent_client))
+    {
+        if (!config->variable_range_slicing)
+        {
+            std::random_device                  rand_dev;
+            std::mt19937                        generator(rand_dev());
+            std::uniform_int_distribution<uint64_t>  distr(config->json_config_schema.variable_range_start,
+                                                           config->json_config_schema.variable_range_end);
+            curr_req_variable_value = distr(generator);
+            req_variable_value_start = config->req_variable_start;
+            req_variable_value_end = config->req_variable_end;
+        }
+        else
+        {
+            size_t nclients_per_worker = config->nclients / config->nthreads;
+            ssize_t extra_clients = config->nclients % config->nthreads;
+
+            uint64_t this_work_id = worker->id;
+            uint64_t this_client_id = id;
+            uint64_t req_per_client = (config->req_variable_end - config->req_variable_start)/
+                                      (config->nclients);
+
+            uint64_t req_per_client_left = (config->req_variable_end - config->req_variable_start)%
+                                      (config->nclients);
+
+            uint64_t normal_reqs_per_worker = req_per_client * nclients_per_worker;
+            uint64_t this_client_req_value_start = config->req_variable_start +
+                                                   this_work_id * normal_reqs_per_worker +
+                                                   this_client_id * req_per_client;
+            if (extra_clients)
+            {
+                // all workers before handle 1 more client
+                this_client_req_value_start += (this_work_id > extra_clients ? extra_clients:this_work_id)* req_per_client;
+            }
+
+            if ((this_work_id + 1 == config->nthreads) && (this_client_id +1  == nclients_per_worker))
+            {
+                req_per_client += req_per_client_left;
+            }
+
+            req_variable_value_start = this_client_req_value_start;
+            curr_req_variable_value = req_variable_value_start;
+            req_variable_value_end = this_client_req_value_start + req_per_client - 1;
+            std::cout<<"worker Id:"<<this_work_id
+                     <<", client Id:"<<this_client_id
+                     <<", start:"<<req_variable_value_start
+                     <<", end:"<<req_variable_value_end
+                     <<std::endl;
+        }
+    }
+    else
+    {
+        curr_req_variable_value = config->json_config_schema.variable_range_start;
+        req_variable_value_start = config->req_variable_start;
+        req_variable_value_end = config->req_variable_end;
+    }
+
+    if (!any_request_to_submit())
+    {
+        for (size_t i = 0; i < session->max_concurrent_streams(); i++)
+        {
+            prepare_first_request();
+        }
+    }
     session->on_connect();
 
     record_connect_time();
@@ -1456,12 +1520,6 @@ void Client::populate_request_from_config_template(Request_Data& new_request,
 
     auto& request_template = config->json_config_schema.scenario[index_in_config_template];
 
-    if (index_in_config_template == 0)
-    {
-        new_request.path = reassemble_str_with_variable(request_template.tokenized_path,
-                                                        new_request.user_id,
-                                                        full_var_str_len);
-    }
     new_request.method = request_template.method;
     new_request.schema = request_template.schema;
     new_request.authority = request_template.authority;
@@ -1473,46 +1531,73 @@ void Client::populate_request_from_config_template(Request_Data& new_request,
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
 }
 
-Request_Data Client::get_request_to_submit()
+bool Client::prepare_first_request()
 {
+    if (parent_client)
+    {
+        return parent_client->prepare_first_request();
+    }
+
     static thread_local size_t full_var_str_len =
                 std::to_string(config->json_config_schema.variable_range_end).size();
-    static Request_Data dummy_data;
+
+    static thread_local Request_Data dummy_data;
+
+    Request_Data new_request;
+    size_t curr_index = 0;
+    new_request.next_request = ((curr_index + 1) % config->json_config_schema.scenario.size());
+
+    new_request.user_id = curr_req_variable_value;
+    if (req_variable_value_end)
+    {
+        curr_req_variable_value++;
+        if (curr_req_variable_value > req_variable_value_end)
+        {
+            curr_req_variable_value = req_variable_value_start;
+        }
+    }
+
+    populate_request_from_config_template(new_request, curr_index);
+
+    auto& request_template = config->json_config_schema.scenario[curr_index];
+    new_request.path = reassemble_str_with_variable(request_template.tokenized_path,
+                                                    new_request.user_id,
+                                                    full_var_str_len);
+
+    if (config->json_config_schema.scenario[curr_index].luaScript.size())
+    {
+        if (!update_request_with_lua(lua_states[curr_index], dummy_data, new_request))
+        {
+          std::cerr << "lua script failure for first request, cannot continue, exit"<< std::endl;
+          exit(EXIT_FAILURE);
+        }
+    }
+    update_content_length(new_request);
+    enqueue_request(dummy_data, std::move(new_request));
+
+    return true;
+}
+
+
+Request_Data Client::get_request_to_submit()
+{
+    if (requests_to_submit.empty())
+    {
+        prepare_first_request();
+    }
 
     if (!requests_to_submit.empty())
     {
-        auto request_data = requests_to_submit.front();
+        auto new_request = requests_to_submit.front();
         requests_to_submit.pop_front();
-        return request_data;
+        return new_request;
     }
     else
     {
-        Request_Data request_data;
-        size_t curr_index = 0;
-        request_data.user_id = curr_req_variable_value;
-        populate_request_from_config_template(request_data, 0);
-
-        if (config->json_config_schema.scenario[curr_index].luaScript.size())
-        {
-            if (!update_request_with_lua(lua_states[curr_index], dummy_data, request_data))
-            {
-              std::cerr << "lua script failure for first request, cannot continue, exit"<< std::endl;
-              exit(EXIT_FAILURE);
-            }
-        }
-        update_content_length(request_data);
-
-        if (config->json_config_schema.variable_range_end)
-        {
-            curr_req_variable_value++;
-            if (curr_req_variable_value > config->json_config_schema.variable_range_end)
-            {
-                curr_req_variable_value = config->json_config_schema.variable_range_start;
-            }
-        }
-
-        request_data.next_request = (curr_index + 1);
-        return request_data;
+        // this should never be hit
+        abort();
+        Request_Data dummy_data;
+        return dummy_data;
     }
 }
 
@@ -1520,15 +1605,21 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 {
     static thread_local size_t full_var_str_len =
                   std::to_string(config->json_config_schema.variable_range_end).size();
-    if (finished_request.next_request >= config->json_config_schema.scenario.size())
+
+    size_t curr_index = finished_request.next_request;
+
+    if (curr_index == 0)
     {
-        return false;
+        return prepare_first_request();
     }
 
     Request_Data new_request;
-    auto& request_template = config->json_config_schema.scenario[finished_request.next_request];
+    new_request.next_request =
+        ((curr_index + 1) % config->json_config_schema.scenario.size());
+
+    auto& request_template = config->json_config_schema.scenario[curr_index];
     new_request.user_id = finished_request.user_id;
-    populate_request_from_config_template(new_request, finished_request.next_request);
+    populate_request_from_config_template(new_request, curr_index);
 
     if (request_template.uri.typeOfAction == "input")
     {
@@ -1594,15 +1685,13 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     if (request_template.luaScript.size())
     {
-        if (!update_request_with_lua(lua_states[finished_request.next_request], finished_request, new_request))
+        if (!update_request_with_lua(lua_states[curr_index], finished_request, new_request))
         {
             return false; // lua script returns error or kills the request, abort this scenario
         }
     }
 
     update_content_length(new_request);
-
-    new_request.next_request = finished_request.next_request + 1;
 
     enqueue_request(finished_request, std::move(new_request));
 
@@ -1793,14 +1882,7 @@ int Client::connect_to_host(const std::string& schema, const std::string& author
 
 bool Client::any_request_to_submit()
 {
-    if (!parent_client) // this is the parent
-    {
-        return true;
-    }
-    else
-    {
-        return (!requests_to_submit.empty());
-    }
+    return (!requests_to_submit.empty());
 }
 
 void Client::terminate_sub_clients()

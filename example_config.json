@@ -9,7 +9,7 @@
   "duration": 200,
   "request-per-second": 1,
   "stream-timeout": 5000,
-  "variable-name-in-path-and-data": "-USER-ID",
+  "variable-name-in-path-and-data": "-USER_ID",
   "variable-range-start": 1,
   "variable-range-end": 100000,
   "ciphers": "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256",
@@ -36,7 +36,7 @@
       "additonalHeaders": [
         "content-type: text/plain"
       ],
-      "payload": "hello world: -USER-ID",
+      "payload": "hello world: -USER_ID",
       "delay-before-executing-next":5000
     },
     {

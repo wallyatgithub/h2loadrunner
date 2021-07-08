@@ -75,6 +75,11 @@
       "description":"Specify variable range end.",
       "type":"integer"
     },
+    "variable-range-slicing":{
+        "description": "true: Slice the variable range, each client get a sub range; e.g.: range 1-1000, with 10 clients, each client gets a sub range of 100 (1-100, 101-200...); false: each client gets a full range independently",
+        "default": false,
+        "type":"boolean"
+    },
     "ciphers":{
       "description":"Set allowed cipher list. The format of the string is described in OpenSSL ciphers(1)",
       "type":"string",
@@ -146,12 +151,12 @@
           },
           "clear-old-cookies":{
             "description": "clear cookies before executing this request: cookies received prior to this request, will be cleared, and will not be included in Cookie header of this request and after; Cookies header (if any) in additonalHeaders below for this request, will still be sent (but will not be passed on to next request)",
-            "default": "GET",
+            "default": false,
             "type":"boolean"
           },
           "method":{
             "description": "method of the HTTP(2) request",
-            "default": false,
+            "default": "GET",
             "type":"string"
           },
           "payload":{

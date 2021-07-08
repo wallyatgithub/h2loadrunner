@@ -852,6 +852,7 @@ void populate_config_from_json(h2load::Config& config)
     config.window_bits = config.json_config_schema.window_bits;
     config.connection_window_bits = config.json_config_schema.connection_window_bits;
     config.warm_up_time = config.json_config_schema.warm_up_time;
+    config.variable_range_slicing = config.json_config_schema.variable_range_slicing;
     close(config.log_fd);
     config.log_fd = open(config.json_config_schema.log_file.c_str(), O_WRONLY | O_CREAT | O_APPEND,
                          S_IRUSR | S_IWUSR | S_IRGRP);
@@ -1125,9 +1126,11 @@ void normalize_request_templates(h2load::Config* config)
             request.uri.input = request.schema + "://" + request.authority + request.path;
         }
     }
+    /*
     if (config->json_config_schema.scenario.size())
     {
         auto& req = config->json_config_schema.scenario[0];
         parse_base_uri(StringRef(req.uri.input), *config);
     }
+    */
 }

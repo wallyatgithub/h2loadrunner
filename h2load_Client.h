@@ -45,6 +45,15 @@ struct Request_Data
     uint32_t delay_before_executing_next;
     std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
     size_t next_request;
+
+    explicit Request_Data()
+    {
+        user_id = 0;
+        status_code = 0;
+        expected_status_code = 0;
+        delay_before_executing_next = 0;
+        next_request = 0;
+    };
 };
 
 struct Client
@@ -123,6 +132,8 @@ struct Client
     std::map<int, ev_io> ares_io_watchers;
     ev_timer release_ancestor_watcher;
     ev_timer delayed_request_watcher;
+    uint64_t req_variable_value_start;
+    uint64_t req_variable_value_end;
 
     enum { ERR_CONNECT_FAIL = -100 };
 
@@ -197,6 +208,7 @@ struct Client
     void signal_write();
 
     Request_Data get_request_to_submit();
+    bool prepare_first_request();
     bool prepare_next_request(Request_Data& data);
     void replace_variable(std::string& input, const std::string& variable_name, uint64_t variable_value);
     void update_content_length(Request_Data& data);

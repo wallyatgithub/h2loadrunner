@@ -349,6 +349,9 @@ Options:
               An integer to specify the start of the range.
   --crud-request-variable-value-end=<end-value>
               An integer to specify the end of the range.
+  --crud-request-variable-range-slicing
+              Slice the  variable range,  each  client get a sub range
+              Otherwise, each client runs with full variable range
   --crud-create-method=<METHOD>
               HTTP METHOD for Create operationto override the  default
               method (GET/POST)
@@ -457,6 +460,7 @@ int main(int argc, char** argv)
             {"stream-timeout-interval-ms", required_argument, &flag, 23},
             {"rps-input-file", required_argument, &flag, 24},
             {"config-file", required_argument, &flag, 25},
+            {"crud-request-variable-range-slicing", required_argument, &flag, 26},
             {nullptr, 0, nullptr, 0}
         };
         int option_index = 0;
@@ -900,6 +904,11 @@ int main(int argc, char** argv)
                             }
                         }
                         populate_config_from_json(config);
+                    }
+                    break;
+                    case 26:
+                    {
+                        config.variable_range_slicing = true;
                     }
                     break;
                 }
