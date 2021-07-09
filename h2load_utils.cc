@@ -853,6 +853,8 @@ void populate_config_from_json(h2load::Config& config)
     config.connection_window_bits = config.json_config_schema.connection_window_bits;
     config.warm_up_time = config.json_config_schema.warm_up_time;
     config.variable_range_slicing = config.json_config_schema.variable_range_slicing;
+    config.req_variable_start = config.json_config_schema.variable_range_start;
+    config.req_variable_end = config.json_config_schema.variable_range_end;
     //close(config.log_fd);
     //config.log_fd = open(config.json_config_schema.log_file.c_str(), O_WRONLY | O_CREAT | O_APPEND,
     //                     S_IRUSR | S_IWUSR | S_IRGRP);

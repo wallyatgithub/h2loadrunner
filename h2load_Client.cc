@@ -975,8 +975,8 @@ int Client::connection_made()
             std::uniform_int_distribution<uint64_t>  distr(config->json_config_schema.variable_range_start,
                                                            config->json_config_schema.variable_range_end);
             curr_req_variable_value = distr(generator);
-            req_variable_value_start = config->req_variable_start;
-            req_variable_value_end = config->req_variable_end;
+            req_variable_value_start = config->json_config_schema.variable_range_start;
+            req_variable_value_end = config->json_config_schema.variable_range_end;
         }
         else
         {
@@ -985,14 +985,14 @@ int Client::connection_made()
 
             uint64_t this_work_id = worker->id;
             uint64_t this_client_id = id;
-            uint64_t req_per_client = (config->req_variable_end - config->req_variable_start)/
+            uint64_t req_per_client = (config->json_config_schema.variable_range_end - config->json_config_schema.variable_range_start)/
                                       (config->nclients);
 
-            uint64_t req_per_client_left = (config->req_variable_end - config->req_variable_start)%
+            uint64_t req_per_client_left = (config->json_config_schema.variable_range_end - config->json_config_schema.variable_range_start)%
                                       (config->nclients);
 
             uint64_t normal_reqs_per_worker = req_per_client * nclients_per_worker;
-            uint64_t this_client_req_value_start = config->req_variable_start +
+            uint64_t this_client_req_value_start = config->json_config_schema.variable_range_start +
                                                    this_work_id * normal_reqs_per_worker +
                                                    this_client_id * req_per_client;
             if (extra_clients)
@@ -1019,8 +1019,8 @@ int Client::connection_made()
     else
     {
         curr_req_variable_value = config->json_config_schema.variable_range_start;
-        req_variable_value_start = config->req_variable_start;
-        req_variable_value_end = config->req_variable_end;
+        req_variable_value_start = config->json_config_schema.variable_range_start;
+        req_variable_value_end = config->json_config_schema.variable_range_end;
     }
 
     if (!any_request_to_submit())
