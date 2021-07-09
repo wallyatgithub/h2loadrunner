@@ -5,7 +5,7 @@
   "type":"object",
   "properties":{
     "schema":{
-      "description":"schema of the uri, http, or https",
+      "description":"http or https",
       "type":"string"
     },
     "host":{
@@ -17,12 +17,12 @@
       "type":"integer"
     },
     "threads":{
-      "description":"Number of native threads. Each thread can serve multiple connections (clients)",
+      "description":"Number of threads. Each thread can serve multiple connections (clients). Recommendation: thead number matches number of cores",
       "default": 1,
       "type":"integer"
     },
     "clients":{
-      "description":"Total number of concurrent clients. If working together with rate field, this field specifies the total number of connections to be made. This field must have value no less than threads field.",
+      "description":"Total number of concurrent clients(connections). If working together with rate field, this field specifies the total number of connections to be made. This field must have value no less than threads field.",
       "default": 1,
       "type":"integer"
     },
@@ -31,7 +31,7 @@
       "type":"integer"
     },
     "total-requests":{
-      "description":"Number of requests across all clients. This field is ignored if duration field has a positive value, and this field must have a positive value if duration field does not",
+      "description":"Number of requests across all clients. This field is ignored if duration field has a positive value, and this field must have a positive value if duration field is blank",
       "default": 1,
       "type":"integer"
     },
@@ -47,6 +47,10 @@
     "request-per-second":{
       "description":"Specifies request per second for each client(connection). If no value is given in this field, it will try to send as many as possible requests for each client(connection)",
       "type":"number"
+    },
+    "request-per-second-feed-file":{
+      "description":"If given, h2loadrunner will monitor this file; if the file is changed, h2loadrunner will read the first line, and try to interpret it as a number, and if successful, request-per-second is updated with the number dynamically",
+      "type":"string"
     },
     "rate":{
       "description":"Specifies a fixed rate at which connections are created. It must be a positive integer, representing the number of connections to be made per rate-period. The maximum number of connections to be made is given in clients field. This rate will be distributed among threads as evenly as possible. For example, with thread=2 and rate=4, each thread gets 2 connections per rate-period, until total number of connections specified in clients field is reached.  When the rate is 0, the program will run as it normally does, creating connections at whatever variable rate it wants. The duration field and the rate field are mutually exclusive.",
@@ -64,7 +68,7 @@
       "type":"integer"
     },
     "variable-name-in-path-and-data":{
-      "description":"Specified the variable name in uri path and payload, which is to be replaced with an actual user ID specified next.",
+      "description":"Specified the variable name in uri path and payload, which is to be replaced with an actual value between variable-range-start and variable-range-end.",
       "type":"string"
     },
     "variable-range-start":{
@@ -76,7 +80,7 @@
       "type":"integer"
     },
     "variable-range-slicing":{
-        "description": "true: Slice the variable range, each client get a sub range; e.g.: range 1-1000, with 10 clients, each client gets a sub range of 100 (1-100, 101-200...); false: each client gets a full range independently",
+        "description": "true: Slice the variable range, each client get a sub range; e.g.: full range 1-1000, with 10 clients, each client gets a sub range of 100 (1-100, 101-200...); false: each client gets a full range",
         "default": false,
         "type":"boolean"
     },
@@ -114,7 +118,7 @@
       "type":"integer"
     },
     "log-file":{
-      "description":"Write per-request information to a file",
+      "description":"Write per-request information to a file with name specified here",
       "type":"string"
     },
     "window-bits":{
@@ -128,19 +132,19 @@
       "type":"integer"
     },
     "scenario":{
-      "description":"Array of requests, each request has path, method, optional payload, optional addtional headers, and optionally an lua script for advanced users to customize the request",
+      "description":"Array of requests, each request has URI, method, optional payload, optional addtional headers, and optionally an lua script for advanced users to customize the request",
       "type":"array",
       "minItems":1,
       "items": {
       "type": "object",
         "properties":{
           "URI":{
-            "description": "This could be a full featured URI with schema, authority, path, etc., or, it can be path only, in this case, the global schema, host, port would be used",
+            "description": "This could be a full URI with schema, authority, path, etc., or, it can be path only, in this case, the global schema, host, port fields would be used to construct the full URI",
             "type":"object",
             "properties":{
               "typeOfAction": {
                 "type":"string",
-                "description": "Specifies how to generate the path. input: direct input the path header in input field next; sameWithLastOne: same path header with last request; fromResponseHeader: extract the path (URI w/ host part) for this request from a specific header (name specified in input field) of last response; fromLuaScript: path is generated from lua script (see field luaScript); fromXpath: Search XML body of last response for the XPATH value given in input field (to be implemented); fromJsonPointer: Search Json body of last response body for the Json pointer value given in input field (to be implemented)",
+                "description": "Specifies how to generate the URI. input: direct input in input field followed next; sameWithLastOne: same URI with last request; fromResponseHeader: extract the URI for this request from a specific header (name specified in input field) of last response; fromLuaScript: provide URI by lua script (see field luaScript); fromXpath: Search XML body of last response for the XPATH value given in input field (to be implemented); fromJsonPointer: Search Json body of last response body for the Json pointer value given in input field (to be implemented)",
                 "enum": ["input", "sameWithLastOne", "fromResponseHeader", "fromLuaScript", "fromXPath", "fromJsonPointer"]
               },
               "input": {
@@ -172,7 +176,7 @@
           },
           "luaScript": {
             "type":"string",
-            "description": "lua script (or a filename containing the actual script) with a function named make_request, with 4 arguments: response_headers, response_payload, request_headers_to_send, request_payload_to_send; returning request_headers_to_send and request_payload_to_send. h2loadrunner passes the response headers and payload of last request within this scenarios sequence, and the request headers (path, method, additional headers) and payload specified here, to this lua function, which can update the request headers and request payload, and h2loadrunner will use the updated headers and payload for the request. Example script: function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send) return request_headers_to_send, request_payload_to_send end"
+            "description": "lua script (or a filename containing the actual script) with a function named make_request, handling 4 arguments: response_headers, response_payload, request_headers_to_send, request_payload_to_send; returning request_headers_to_send and request_payload_to_send. h2loadrunner passes the response headers and payload of last request within this scenarios sequence, and the request headers (path, method, additional headers) and payload specified here, to this lua function, which can update the request headers and request payload, and h2loadrunner will use the updated headers and payload for the request. Example script: function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send) return request_headers_to_send, request_payload_to_send end"
           },
           "expected-status-code": {
             "description":"the expected http status code for this request; if the returned status code matches the one specified here, this request is considered successful in statistics report; if nothing specified here, 2xx status codes (i.e., 200, 201, 204, etc.) are all considered successful",
@@ -186,7 +190,7 @@
           }
         },
         "required":[
-           "path",
+           "URI",
            "method"
         ]
       }

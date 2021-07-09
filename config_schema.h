@@ -96,6 +96,7 @@ public:
     uint64_t encoder_header_table_size;
     std::string log_file;
     double request_per_second;
+    std::string rps_file;
     std::string variable_name_in_path_and_data;
     uint64_t variable_range_start;
     uint64_t variable_range_end;
@@ -159,6 +160,7 @@ public:
         h->add_property("encoder-header-table-size", &this->encoder_header_table_size, staticjson::Flags::Optional);
         h->add_property("log-file", &this->log_file, staticjson::Flags::Optional);
         h->add_property("request-per-second", &this->request_per_second, staticjson::Flags::Optional);
+        h->add_property("request-per-second-feed-file", &this->rps_file, staticjson::Flags::Optional);
         h->add_property("variable-name-in-path-and-data", &this->variable_name_in_path_and_data, staticjson::Flags::Optional);
         h->add_property("variable-range-start", &this->variable_range_start, staticjson::Flags::Optional);
         h->add_property("variable-range-end", &this->variable_range_end, staticjson::Flags::Optional);

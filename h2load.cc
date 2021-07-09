@@ -904,6 +904,7 @@ int main(int argc, char** argv)
                             }
                         }
                         populate_config_from_json(config);
+                        logfile = config.json_config_schema.log_file;
                     }
                     break;
                     case 26:

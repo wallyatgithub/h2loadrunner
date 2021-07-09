@@ -1734,6 +1734,15 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
         lua_pushlstring(L, path_name.c_str(), path_name.size());
         lua_pushlstring(L, finished_request.path.c_str(), finished_request.path.size());
         lua_rawset(L, -3);
+        static std::string schema_name = ":schema";
+        lua_pushlstring(L, schema_name.c_str(), schema_name.size());
+        lua_pushlstring(L, finished_request.schema.c_str(), finished_request.schema.size());
+        lua_rawset(L, -3);
+        static std::string authority_name = ":authority";
+        lua_pushlstring(L, authority_name.c_str(), authority_name.size());
+        lua_pushlstring(L, finished_request.authority.c_str(), finished_request.authority.size());
+        lua_rawset(L, -3);
+
 
         lua_pushlstring(L, finished_request.resp_payload.c_str(), finished_request.resp_payload.size());
 
@@ -1749,6 +1758,12 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
         lua_rawset(L, -3);
         lua_pushlstring(L, path_name.c_str(), path_name.size());
         lua_pushlstring(L, request_to_send.path.c_str(), request_to_send.path.size());
+        lua_rawset(L, -3);
+        lua_pushlstring(L, schema_name.c_str(), schema_name.size());
+        lua_pushlstring(L, request_to_send.schema.c_str(), request_to_send.schema.size());
+        lua_rawset(L, -3);
+        lua_pushlstring(L, authority_name.c_str(), authority_name.size());
+        lua_pushlstring(L, request_to_send.authority.c_str(), request_to_send.authority.size());
         lua_rawset(L, -3);
 
         lua_pushlstring(L, request_to_send.req_payload.c_str(), request_to_send.req_payload.size());
