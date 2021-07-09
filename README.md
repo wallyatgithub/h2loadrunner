@@ -222,6 +222,19 @@
   Click "Export", and copy the generated Json data, and save it to a file JSON_FILE_NAME
   
   Use h2loadrunner --config-file=JSON_FILE_NAME to start the load run
+  
+  
+  There are other JSON editors available, for example: https://json-editor.github.io/json-editor/
+  
+  Paste content of https://github.com/wallyatgithub/h2loadrunner/blob/main/config_schema.json to "Schema" field of the above link
+  
+  Then click "Update Schema", a form named h2loadrunner_configuration is available on top for Edit
+  
+  After finishing editing, click "Update Form" to get the JSON data at the right side.
+  
+  Save it to a file <JSON FILE>, then use h2loadrunner --config-file=<JSON FILE> to start the load run
+  
+  You can also paste stored JSON data back to the right side, and click "Update Form", to sychronize that in the left side form for further edit in GUI.
 
 # Lua script support
 
