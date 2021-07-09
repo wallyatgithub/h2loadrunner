@@ -138,7 +138,7 @@
       "items": {
       "type": "object",
         "properties":{
-          "URI":{
+          "uri":{
             "description": "This could be a full URI with schema, authority, path, etc., or, it can be path only, in this case, the global schema, host, port fields would be used to construct the full URI",
             "type":"object",
             "properties":{
@@ -190,7 +190,7 @@
           }
         },
         "required":[
-           "URI",
+           "uri",
            "method"
         ]
       }
