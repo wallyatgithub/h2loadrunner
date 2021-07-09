@@ -226,7 +226,7 @@
   
   There are other JSON editors available, for example: https://json-editor.github.io/json-editor/
   
-  Paste content of https://github.com/wallyatgithub/h2loadrunner/blob/main/config_schema.json to "Schema" field of the above link
+  Paste content of https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/config_schema.json to "Schema" field of the above link
   
   Then click "Update Schema", a form named h2loadrunner_configuration is available on top for Edit
   
