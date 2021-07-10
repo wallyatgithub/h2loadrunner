@@ -242,6 +242,7 @@ void duration_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
               << ". Stopping all clients." << std::endl;
     worker->stop_all_clients();
     std::cout << "Stopped all clients for thread #" << worker->id << std::endl;
+    //ev_break (EV_A_ EVBREAK_ALL);
 }
 
 // Called when the warmup duration for infinite number of requests are over

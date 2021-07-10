@@ -150,6 +150,9 @@ Client::~Client()
     }
     lua_states.clear();
 
+/*
+ * client is deleted in writecb/readcb
+
     for (auto& client: dest_client)
     {
         if (client.second != this)
@@ -158,7 +161,7 @@ Client::~Client()
         }
     }
     dest_client.clear();
-
+*/
     ares_freeaddrinfo(ares_addr);
 }
 
@@ -372,12 +375,19 @@ void Client::disconnect()
     ev_timer_stop(worker->loop, &request_timeout_watcher);
     ev_timer_stop(worker->loop, &stream_timeout_watcher);
     ev_timer_stop(worker->loop, &connection_timeout_watcher);
+    ev_timer_stop(worker->loop, &delayed_request_watcher);
+    ev_timer_stop(worker->loop, &release_ancestor_watcher);
+    ev_timer_stop(worker->loop, &retart_client_watcher);
     streams.clear();
     session.reset();
     wb.reset();
     state = CLIENT_IDLE;
     ev_io_stop(worker->loop, &wev);
     ev_io_stop(worker->loop, &rev);
+    for (auto& it: ares_io_watchers)
+    {
+        ev_io_stop(worker->loop, &it.second);
+    }
     if (ssl)
     {
         SSL_set_shutdown(ssl, SSL_get_shutdown(ssl) | SSL_RECEIVED_SHUTDOWN);
@@ -815,7 +825,10 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
     auto request = requests_awaiting_response.find(stream_id);
     if (request != requests_awaiting_response.end())
     {
-        prepare_next_request(request->second);
+        if (!prepare_next_request(request->second))
+        {
+            prepare_first_request();
+        }
         if (is_it_the_AllSpark(request->second) && !any_request_to_submit())
         {
             prepare_first_request();
@@ -1904,7 +1917,7 @@ void Client::terminate_sub_clients()
 {
     for (auto& sub_client: dest_client)
     {
-        if (sub_client.second->session)
+        if (sub_client.second != this && sub_client.second->session)
         {
             sub_client.second->terminate_session();
         }
