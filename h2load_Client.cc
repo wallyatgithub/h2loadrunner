@@ -1946,9 +1946,47 @@ void Client::substitute_ancestor(Client* ancestor)
                 break;
             }
         }
-
+        for (auto& it: dest_client)
+        {
+            it.second->parent_client = this;
+        }
     }
 }
+
+std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
+{
+    o << "Request_Data: { "<<std::endl
+      << "schema:" << request_data.schema<<std::endl
+      << "authority:" << request_data.authority<<std::endl
+      << "req_payload:" << request_data.req_payload<<std::endl
+      << "path:" << request_data.path<<std::endl
+      << "user_id:" << request_data.user_id<<std::endl
+      << "method:" << request_data.method<<std::endl
+      << "expected_status_code:" << request_data.expected_status_code<<std::endl
+      << "delay_before_executing_next:" << request_data.delay_before_executing_next<<std::endl;
+
+    for (auto& it: request_data.req_headers)
+    {
+        o << "request header name: "<<it.first<<", header value: " <<it.second<<std::endl;
+    }
+
+    o << "response status code:" << request_data.status_code<<std::endl;
+    o << "resp_payload:" << request_data.resp_payload<<std::endl;
+    for (auto& it: request_data.resp_headers)
+    {
+        o << "response header name: "<<it.first<<", header value: " <<it.second<<std::endl;
+    }
+    o << "next request index: "<<request_data.next_request<<std::endl;
+
+    for (auto& it: request_data.saved_cookies)
+    {
+        o << "cookie name: "<<it.first<<", cookie content: " <<it.second<<std::endl;
+    }
+
+    o << "}"<<std::endl;
+    return o;
+}
+
 
 }
 

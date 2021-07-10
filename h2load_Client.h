@@ -56,6 +56,8 @@ struct Request_Data
     };
 };
 
+std::ostream& operator<<(std::ostream& o, const Request_Data& request_data);
+
 struct Client
 {
     DefaultMemchunks wb;
@@ -258,6 +260,7 @@ public:
           client->session->max_concurrent_streams() > client->streams.size())
       {
           client->submit_request();
+          client->signal_write();
       }
 
   };

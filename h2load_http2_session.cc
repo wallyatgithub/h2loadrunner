@@ -440,6 +440,7 @@ int Http2Session::_submit_request()
 
     if (config->verbose)
     {
+        std::cout<<std::endl<<"Dump request to send: "<<std::endl<<data<<std::endl;
         std::cout<<"sending headers:"<<std::endl;
         for (auto nv: http2_nvs)
         {
