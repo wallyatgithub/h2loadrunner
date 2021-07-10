@@ -234,6 +234,8 @@ struct Client
 
     void enqueue_request(Request_Data& finished_request, Request_Data&& new_request);
 
+    bool is_it_the_AllSpark(Request_Data& finished_request);
+
 };
 
 class Submit_Requet_Wrapper

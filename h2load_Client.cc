@@ -815,7 +815,8 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
     auto request = requests_awaiting_response.find(stream_id);
     if (request != requests_awaiting_response.end())
     {
-        if (!prepare_next_request(request->second))
+        prepare_next_request(request->second);
+        if (is_it_the_AllSpark(request->second) && !any_request_to_submit())
         {
             prepare_first_request();
         }
@@ -1614,8 +1615,7 @@ bool Client::prepare_next_request(Request_Data& finished_request)
     }
 
     Request_Data new_request;
-    new_request.next_request =
-        ((curr_index + 1) % config->json_config_schema.scenario.size());
+    new_request.next_request = ((curr_index + 1) % config->json_config_schema.scenario.size());
 
     auto& request_template = config->json_config_schema.scenario[curr_index];
     new_request.user_id = finished_request.user_id;
@@ -1955,6 +1955,20 @@ void Client::substitute_ancestor(Client* ancestor)
         }
     }
 }
+
+bool Client::is_it_the_AllSpark(Request_Data& finished_request)
+{
+    if (config->json_config_schema.scenario.size() == 1)
+    {
+        return true;
+    }
+    else if (finished_request.next_request == 1)
+    {
+        return true;
+    }
+    return false;
+}
+
 
 std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
 {
