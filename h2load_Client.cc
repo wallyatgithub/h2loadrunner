@@ -815,7 +815,10 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
     auto request = requests_awaiting_response.find(stream_id);
     if (request != requests_awaiting_response.end())
     {
-        prepare_next_request(request->second);
+        if (!prepare_next_request(request->second))
+        {
+            prepare_first_request();
+        }
         requests_awaiting_response.erase(request);
     }
 
