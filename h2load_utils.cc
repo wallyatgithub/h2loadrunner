@@ -289,7 +289,7 @@ void rps_cb(struct ev_loop* loop, ev_timer* w, int revents)
     auto now = ev_now(loop);
     auto d = now - client->rps_duration_started;
     auto n = static_cast<size_t>(round(d * client->config->rps));
-    client->rps_req_pending += n;
+    client->rps_req_pending = n;
     client->rps_duration_started = now - d + static_cast<double>(n) / client->config->rps;
 
     if (client->rps_req_pending == 0)
