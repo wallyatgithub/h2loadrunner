@@ -71,7 +71,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf)
     ev_timer_init(&rps_watcher, rps_cb, 0., 0.);
     rps_watcher.data = this;
 
-    ev_timer_init(&stream_timeout_watcher, stream_timeout_cb, 0., 0.);
+    ev_timer_init(&stream_timeout_watcher, stream_timeout_cb, 0., 0.01);
     stream_timeout_watcher.data = this;
 
     for (auto& request : conf->json_config_schema.scenario)
@@ -84,7 +84,8 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf)
         }
         lua_states.push_back(L);
     }
-
+    ev_timer_init(&delayed_request_watcher, delayed_request_cb, 0.01, 0.01);
+    delayed_request_watcher.data = this;
 }
 
 Client::~Client()
@@ -869,6 +870,62 @@ int Client::connection_made()
     }
 
     state = CLIENT_CONNECTED;
+    if (config->nclients > 1)
+    {
+        if (!config->variable_range_slicing)
+        {
+            std::random_device                  rand_dev;
+            std::mt19937                        generator(rand_dev());
+            std::uniform_int_distribution<uint64_t>  distr(config->json_config_schema.variable_range_start,
+                                                           config->json_config_schema.variable_range_end);
+            curr_req_variable_value = distr(generator);
+            req_variable_value_start = config->json_config_schema.variable_range_start;
+            req_variable_value_end = config->json_config_schema.variable_range_end;
+        }
+        else
+        {
+            size_t nclients_per_worker = config->nclients / config->nthreads;
+            ssize_t extra_clients = config->nclients % config->nthreads;
+
+            uint64_t this_work_id = worker->id;
+            uint64_t this_client_id = id;
+            uint64_t req_per_client = (config->json_config_schema.variable_range_end - config->json_config_schema.variable_range_start)/
+                                      (config->nclients);
+
+            uint64_t req_per_client_left = (config->json_config_schema.variable_range_end - config->json_config_schema.variable_range_start)%
+                                      (config->nclients);
+
+            uint64_t normal_reqs_per_worker = req_per_client * nclients_per_worker;
+            uint64_t this_client_req_value_start = config->json_config_schema.variable_range_start +
+                                                   this_work_id * normal_reqs_per_worker +
+                                                   this_client_id * req_per_client;
+            if (extra_clients)
+            {
+                // all workers before handle 1 more client
+                this_client_req_value_start += (this_work_id > extra_clients ? extra_clients:this_work_id)* req_per_client;
+            }
+
+            if ((this_work_id + 1 == config->nthreads) && (this_client_id +1  == nclients_per_worker))
+            {
+                req_per_client += req_per_client_left;
+            }
+
+            req_variable_value_start = this_client_req_value_start;
+            curr_req_variable_value = req_variable_value_start;
+            req_variable_value_end = this_client_req_value_start + req_per_client - 1;
+            std::cout<<"worker Id:"<<this_work_id
+                     <<", client Id:"<<this_client_id
+                     <<", start:"<<req_variable_value_start
+                     <<", end:"<<req_variable_value_end
+                     <<std::endl;
+        }
+    }
+    else
+    {
+        curr_req_variable_value = config->json_config_schema.variable_range_start;
+        req_variable_value_start = config->json_config_schema.variable_range_start;
+        req_variable_value_end = config->json_config_schema.variable_range_end;
+    }
 
     session->on_connect();
 
@@ -1054,6 +1111,7 @@ int Client::connected()
     }
     ev_io_start(worker->loop, &rev);
     ev_io_stop(worker->loop, &wev);
+    ev_timer_start(worker->loop, &delayed_request_watcher);
     ancestor.reset();
 
     if (ssl)
@@ -1378,6 +1436,7 @@ void Client::populate_request_from_config_template(Request_Data& new_request,
                                                            full_var_str_len);;
     new_request.req_headers = request_template.headers_in_map;
     new_request.expected_status_code = request_template.expected_status_code;
+    new_request.delay_before_executing_next = request_template.delay_before_executing_next;
 }
 
 Request_Data Client::get_request_to_submit()
@@ -1412,9 +1471,9 @@ Request_Data Client::get_request_to_submit()
         if (config->json_config_schema.variable_range_end)
         {
             curr_req_variable_value++;
-            if (curr_req_variable_value > config->json_config_schema.variable_range_end)
+            if (curr_req_variable_value > req_variable_value_end)
             {
-                curr_req_variable_value = config->json_config_schema.variable_range_start;
+                curr_req_variable_value = req_variable_value_start;
             }
         }
 
@@ -1427,6 +1486,11 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 {
     static thread_local size_t full_var_str_len =
                   std::to_string(config->json_config_schema.variable_range_end).size();
+    if (config->verbose)
+    {
+        std::cout<<"finished_request: "<<finished_request<<std::endl;
+    }
+
     if (finished_request.next_request >= config->json_config_schema.scenario.size())
     {
         return false;
@@ -1499,7 +1563,23 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     new_request.next_request = finished_request.next_request + 1;
 
-    requests_to_submit.push_back(std::move(new_request));
+    if (config->verbose)
+    {
+        std::cout<<"new_request: "<<new_request<<std::endl;
+    }
+
+    if (!finished_request.delay_before_executing_next)
+    {
+        requests_to_submit.push_back(std::move(new_request));
+    }
+    else
+    {
+        const std::chrono::milliseconds delay_duration(finished_request.delay_before_executing_next);
+        std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
+        std::chrono::steady_clock::time_point timeout_timepoint = curr_time_point + delay_duration;
+        delayed_requests_to_submit.insert(std::make_pair(timeout_timepoint, std::move(new_request)));
+    }
+
     return true;
 }
 
@@ -1607,6 +1687,39 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
     return retCode;
 }
 
+std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
+{
+    o << "Request_Data: { "<<std::endl
+      << "schema:" << request_data.schema<<std::endl
+      << "authority:" << request_data.authority<<std::endl
+      << "req_payload:" << request_data.req_payload<<std::endl
+      << "path:" << request_data.path<<std::endl
+      << "user_id:" << request_data.user_id<<std::endl
+      << "method:" << request_data.method<<std::endl
+      << "expected_status_code:" << request_data.expected_status_code<<std::endl
+      << "delay_before_executing_next:" << request_data.delay_before_executing_next<<std::endl;
+
+    for (auto& it: request_data.req_headers)
+    {
+        o << "request header name: "<<it.first<<", header value: " <<it.second<<std::endl;
+    }
+
+    o << "response status code:" << request_data.status_code<<std::endl;
+    o << "resp_payload:" << request_data.resp_payload<<std::endl;
+    for (auto& it: request_data.resp_headers)
+    {
+        o << "response header name: "<<it.first<<", header value: " <<it.second<<std::endl;
+    }
+    o << "next request index: "<<request_data.next_request<<std::endl;
+
+    for (auto& it: request_data.saved_cookies)
+    {
+        o << "cookie name: "<<it.first<<", cookie content: " <<it.second<<std::endl;
+    }
+
+    o << "}"<<std::endl;
+    return o;
+}
 
 }
 

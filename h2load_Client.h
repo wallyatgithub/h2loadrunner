@@ -44,8 +44,18 @@ struct Request_Data
     uint16_t expected_status_code;
     std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
     size_t next_request;
+    uint32_t delay_before_executing_next;
+    explicit Request_Data()
+    {
+        user_id = 0;
+        status_code = 0;
+        expected_status_code = 0;
+        delay_before_executing_next = 0;
+        next_request = 0;
+    };
 };
 
+std::ostream& operator<<(std::ostream& o, const Request_Data& request_data);
 
 struct Client
 {
@@ -110,8 +120,12 @@ struct Client
     Config* config;
     uint64_t curr_req_variable_value;
     std::deque<Request_Data> requests_to_submit;
+    std::multimap<std::chrono::steady_clock::time_point, Request_Data> delayed_requests_to_submit;
     std::map<int32_t, Request_Data> requests_awaiting_response;
     std::vector<lua_State*> lua_states;
+    uint64_t req_variable_value_start;
+    uint64_t req_variable_value_end;
+    ev_timer delayed_request_watcher;
 
     enum { ERR_CONNECT_FAIL = -100 };
 

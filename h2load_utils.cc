@@ -809,9 +809,7 @@ void populate_config_from_json(h2load::Config& config)
     config.window_bits = config.json_config_schema.window_bits;
     config.connection_window_bits = config.json_config_schema.connection_window_bits;
     config.warm_up_time = config.json_config_schema.warm_up_time;
-    close(config.log_fd);
-    config.log_fd = open(config.json_config_schema.log_file.c_str(), O_WRONLY | O_CREAT | O_APPEND,
-                         S_IRUSR | S_IWUSR | S_IRGRP);
+    config.variable_range_slicing = config.json_config_schema.variable_range_slicing;
 }
 
 void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
@@ -1022,6 +1020,19 @@ void restart_client_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
             }
         }
         new_client.release();
+    }
+}
+
+void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents)
+{
+    auto client = static_cast<Client*>(w->data);
+    std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
+    auto barrier = client->delayed_requests_to_submit.upper_bound(curr_time_point);
+    auto it = client->delayed_requests_to_submit.begin();
+    while (it != barrier)
+    {
+        client->requests_to_submit.push_back(std::move(it->second));
+        it = client->delayed_requests_to_submit.erase(it);
     }
 }
 

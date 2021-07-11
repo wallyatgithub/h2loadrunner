@@ -48,6 +48,7 @@ public:
     std::map<std::string, std::string, ci_less> headers_in_map;
     std::vector<std::string> tokenized_path;
     std::vector<std::string> tokenized_payload;
+    uint32_t delay_before_executing_next;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("luaScript", &this->luaScript, staticjson::Flags::Optional);
@@ -57,6 +58,13 @@ public:
         h->add_property("additonalHeaders", &this->additonalHeaders, staticjson::Flags::Optional);
         h->add_property("clear-old-cookies", &this->clear_old_cookies, staticjson::Flags::Optional);
         h->add_property("expected-status-code", &this->expected_status_code, staticjson::Flags::Optional);
+        h->add_property("delay-before-executing-next", &this->delay_before_executing_next, staticjson::Flags::Optional);
+    }
+    explicit Request()
+    {
+        clear_old_cookies = false;
+        expected_status_code = 0;
+        delay_before_executing_next = 0;
     }
 };
 
@@ -91,6 +99,7 @@ public:
     uint64_t nreqs;
     uint32_t stream_timeout_in_ms;
     std::vector<Request> scenario;
+    bool variable_range_slicing;
 
     Config_Schema():
         schema("http"),
@@ -150,6 +159,7 @@ public:
         h->add_property("variable-name-in-path-and-data", &this->variable_name_in_path_and_data, staticjson::Flags::Optional);
         h->add_property("variable-range-start", &this->variable_range_start, staticjson::Flags::Optional);
         h->add_property("variable-range-end", &this->variable_range_end, staticjson::Flags::Optional);
+        h->add_property("variable-range-slicing", &this->variable_range_slicing, staticjson::Flags::Optional);
         h->add_property("scenario", &this->scenario);
     }
 
