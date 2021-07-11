@@ -825,10 +825,7 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
     auto request = requests_awaiting_response.find(stream_id);
     if (request != requests_awaiting_response.end())
     {
-        if (!prepare_next_request(request->second))
-        {
-            prepare_first_request();
-        }
+        prepare_next_request(request->second);
 
         requests_awaiting_response.erase(request);
     }
@@ -1556,7 +1553,7 @@ bool Client::prepare_first_request()
 
     Request_Data new_request;
     size_t curr_index = 0;
-    new_request.next_request = ((curr_index + 1) % config->json_config_schema.scenario.size());
+    new_request.next_request_idx = ((curr_index + 1) % config->json_config_schema.scenario.size());
 
     new_request.user_id = controller->curr_req_variable_value;
     if (controller->req_variable_value_end)
@@ -1617,15 +1614,15 @@ bool Client::prepare_next_request(Request_Data& finished_request)
     static thread_local size_t full_var_str_len =
                   std::to_string(config->json_config_schema.variable_range_end).size();
 
-    size_t curr_index = finished_request.next_request;
+    size_t curr_index = finished_request.next_request_idx;
 
     if (curr_index == 0)
     {
-        return prepare_first_request();
+        return false; //prepare_first_request();
     }
 
     Request_Data new_request;
-    new_request.next_request = ((curr_index + 1) % config->json_config_schema.scenario.size());
+    new_request.next_request_idx = ((curr_index + 1) % config->json_config_schema.scenario.size());
 
     auto& request_template = config->json_config_schema.scenario[curr_index];
     new_request.user_id = finished_request.user_id;
@@ -1708,6 +1705,21 @@ bool Client::prepare_next_request(Request_Data& finished_request)
     return true;
 }
 
+std::map<std::string, Client*>::const_iterator Client::get_client_serving_first_request()
+{
+    std::string key = config->json_config_schema.scenario[0].schema;
+    key.append("://");
+    key.append(config->json_config_schema.scenario[0].authority);
+    if (parent_client)
+    {
+        return parent_client->dest_client.find(key);
+    }
+    else
+    {
+        return this->dest_client.find(key);
+    }
+}
+
 void Client::enqueue_request(Request_Data& finished_request, Request_Data&& new_request)
 {
     Client* next_client_to_run = find_or_create_dest_client(new_request);
@@ -1722,7 +1734,17 @@ void Client::enqueue_request(Request_Data& finished_request, Request_Data&& new_
         std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
         std::chrono::steady_clock::time_point timeout_timepoint = curr_time_point + delay_duration;
         next_client_to_run->delayed_requests_to_submit.insert(std::make_pair(timeout_timepoint, std::move(new_request)));
-        prepare_first_request();
+        /*
+        static thread_local auto it = get_client_serving_first_request();
+        if (!it->second->any_request_to_submit())
+        {
+            if (id == 0)
+            {
+                std::cout<<"prepare_first_request"<<std::endl;
+            }
+            prepare_first_request();
+        }
+        */
     }
 }
 
@@ -1908,7 +1930,17 @@ int Client::connect_to_host(const std::string& schema, const std::string& author
 
 bool Client::any_request_to_submit()
 {
-    return (!requests_to_submit.empty());
+    if (!parent_client)
+    {
+        // no parent_client, means "this" is the parent, i.e., the bootstraper
+        // the bootstraper always has request to submit,
+        // if none from queue, create from template
+        return true;
+    }
+    else
+    {
+        return (!requests_to_submit.empty());
+    }
 }
 
 void Client::terminate_sub_clients()
@@ -1990,7 +2022,7 @@ std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
     {
         o << "response header name: "<<it.first<<", header value: " <<it.second<<std::endl;
     }
-    o << "next request index: "<<request_data.next_request<<std::endl;
+    o << "next request index: "<<request_data.next_request_idx<<std::endl;
 
     for (auto& it: request_data.saved_cookies)
     {

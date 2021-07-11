@@ -44,14 +44,14 @@ struct Request_Data
     uint16_t expected_status_code;
     uint32_t delay_before_executing_next;
     std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
-    size_t next_request;
+    size_t next_request_idx;
     explicit Request_Data()
     {
         user_id = 0;
         status_code = 0;
         expected_status_code = 0;
         delay_before_executing_next = 0;
-        next_request = 0;
+        next_request_idx = 0;
     };
 };
 
@@ -232,6 +232,8 @@ struct Client
     void substitute_ancestor(Client* ancestor);
 
     void enqueue_request(Request_Data& finished_request, Request_Data&& new_request);
+
+    std::map<std::string, Client*>::const_iterator get_client_serving_first_request();
 };
 
 class Submit_Requet_Wrapper
