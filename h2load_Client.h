@@ -45,6 +45,7 @@ struct Request_Data
     uint32_t delay_before_executing_next;
     std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
     size_t next_request;
+    bool bootstrap;
 
     explicit Request_Data()
     {
@@ -53,6 +54,7 @@ struct Request_Data
         expected_status_code = 0;
         delay_before_executing_next = 0;
         next_request = 0;
+        bootstrap = false;
     };
 };
 
@@ -136,6 +138,7 @@ struct Client
     ev_timer delayed_request_watcher;
     uint64_t req_variable_value_start;
     uint64_t req_variable_value_end;
+    bool bootstrap_mode;
 
     enum { ERR_CONNECT_FAIL = -100 };
 
@@ -210,7 +213,7 @@ struct Client
     void signal_write();
 
     Request_Data get_request_to_submit();
-    bool prepare_first_request();
+    bool prepare_first_request(bool bootstrap = false);
     bool prepare_next_request(Request_Data& data);
     void replace_variable(std::string& input, const std::string& variable_name, uint64_t variable_value);
     void update_content_length(Request_Data& data);
@@ -234,7 +237,13 @@ struct Client
 
     void enqueue_request(Request_Data& finished_request, Request_Data&& new_request);
 
-    bool is_it_the_AllSpark(Request_Data& finished_request);
+    bool bootstrap_capacity_reached(Request_Data& finished_request);
+
+    bool is_leading_request(Request_Data& finished_request);
+
+    bool is_bootstrap_request(Request_Data& finished_request);
+
+    void turn_off_bootstrap_mode();
 
 };
 

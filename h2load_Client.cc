@@ -51,7 +51,8 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         curr_req_variable_value(0),
         parent_client(initiating_client),
         schema(dest_schema),
-        authority(dest_authority)
+        authority(dest_authority),
+        bootstrap_mode(true)
 {
     if (req_todo == 0)   // this means infinite number of requests are to be made
     {
@@ -827,12 +828,21 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
     {
         if (!prepare_next_request(request->second))
         {
-            prepare_first_request();
+            prepare_first_request(true);
         }
-        if (is_it_the_AllSpark(request->second) && !any_request_to_submit())
+
+/*
+        if ( bootstrap_mode && bootstrap_capacity_reached(request->second))
         {
-            prepare_first_request();
+            std::cout<<"bootstrap is off now: "<<request->second<<std::endl;
+            turn_off_bootstrap_mode();
         }
+
+        if (bootstrap_mode && is_bootstrap_request(request->second) && !any_request_to_submit())
+        {
+            prepare_first_request(true);
+        }
+*/
         requests_awaiting_response.erase(request);
     }
 
@@ -869,6 +879,12 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
         }
     }
 }
+
+void Client::turn_off_bootstrap_mode()
+{
+    bootstrap_mode = false;
+}
+
 
 void Client::on_data_chunk(int32_t stream_id, const uint8_t* data, size_t len)
 {
@@ -1044,7 +1060,7 @@ int Client::connection_made()
     {
         for (size_t i = 0; i < session->max_concurrent_streams(); i++)
         {
-            prepare_first_request();
+            prepare_first_request(true);
         }
     }
     session->on_connect();
@@ -1548,7 +1564,7 @@ void Client::populate_request_from_config_template(Request_Data& new_request,
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
 }
 
-bool Client::prepare_first_request()
+bool Client::prepare_first_request(bool bootstrap)
 {
     auto controller = parent_client ? parent_client : this;
 
@@ -1587,6 +1603,7 @@ bool Client::prepare_first_request()
         }
     }
     update_content_length(new_request);
+    new_request.bootstrap = bootstrap;
     enqueue_request(dummy_data, std::move(new_request));
 
     return true;
@@ -1714,7 +1731,7 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 void Client::enqueue_request(Request_Data& finished_request, Request_Data&& new_request)
 {
     Client* next_client_to_run = find_or_create_dest_client(new_request);
-    if (!finished_request.delay_before_executing_next)
+    if (true) // TODO: (!finished_request.delay_before_executing_next)
     {
         next_client_to_run->requests_to_submit.push_back(std::move(new_request));
         Submit_Requet_Wrapper auto_submitter(this, next_client_to_run);
@@ -1934,6 +1951,7 @@ void Client::substitute_ancestor(Client* ancestor)
     req_todo = ancestor->req_todo;
     req_left = ancestor->req_left;
     curr_req_variable_value = ancestor->curr_req_variable_value;
+    bootstrap_mode = ancestor->bootstrap_mode;
     ancestor_to_release.reset(ancestor);
 
     if (parent_client)
@@ -1969,16 +1987,37 @@ void Client::substitute_ancestor(Client* ancestor)
     }
 }
 
-bool Client::is_it_the_AllSpark(Request_Data& finished_request)
+bool Client::is_leading_request(Request_Data& finished_request)
 {
+    bool leading_request = false;
+
     if (config->json_config_schema.scenario.size() == 1)
     {
-        return true;
+        leading_request = true;
     }
-    else if (finished_request.next_request == 1)
+    else if (config->json_config_schema.scenario.size() > 1 && finished_request.next_request == 1)
+    {
+        leading_request = true;
+    }
+    return leading_request;
+}
+
+bool Client::is_bootstrap_request(Request_Data& finished_request)
+{
+  if (is_leading_request(finished_request) && finished_request.bootstrap)
+  {
+      return true;
+  }
+  return false;
+}
+
+bool Client::bootstrap_capacity_reached(Request_Data& finished_request)
+{
+    if (is_leading_request(finished_request) && !finished_request.bootstrap)
     {
         return true;
     }
+
     return false;
 }
 
