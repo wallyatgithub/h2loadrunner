@@ -26,6 +26,13 @@ struct RequestStat
     bool completed;
 };
 
+struct TransactionStat
+{
+    std::chrono::steady_clock::time_point start_time;
+    std::chrono::steady_clock::time_point end_time;
+    bool successful;
+};
+
 struct ClientStat
 {
     // time client started (i.e., first connect starts)
@@ -110,6 +117,8 @@ struct Stats
     std::vector<ClientStat> client_stats;
     std::atomic<uint64_t> max_resp_time_us;
     std::atomic<uint64_t> min_resp_time_us;
+    size_t transaction_done;
+    size_t transaction_success;
 };
 
 

@@ -45,6 +45,7 @@ struct Request_Data
     uint32_t delay_before_executing_next;
     std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
     size_t next_request_idx;
+    std::shared_ptr<TransactionStat> transaction_stat;
     explicit Request_Data()
     {
         user_id = 0;
@@ -52,6 +53,7 @@ struct Request_Data
         expected_status_code = 0;
         delay_before_executing_next = 0;
         next_request_idx = 0;
+        transaction_stat = nullptr;
     };
 };
 
@@ -209,7 +211,7 @@ struct Client
     void signal_write();
 
     Request_Data get_request_to_submit();
-    bool prepare_first_request();
+    Request_Data prepare_first_request();
     bool prepare_next_request(Request_Data& data);
     void replace_variable(std::string& input, const std::string& variable_name, uint64_t variable_value);
     void update_content_length(Request_Data& data);

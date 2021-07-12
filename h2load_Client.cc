@@ -1034,13 +1034,6 @@ int Client::connection_made()
         req_variable_value_end = config->json_config_schema.variable_range_end;
     }
 
-    if (!any_request_to_submit())
-    {
-        for (size_t i = 0; i < session->max_concurrent_streams(); i++)
-        {
-            prepare_first_request();
-        }
-    }
     session->on_connect();
 
     record_connect_time();
@@ -1542,7 +1535,7 @@ void Client::populate_request_from_config_template(Request_Data& new_request,
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
 }
 
-bool Client::prepare_first_request()
+Request_Data Client::prepare_first_request()
 {
     auto controller = parent_client ? parent_client : this;
 
@@ -1581,31 +1574,24 @@ bool Client::prepare_first_request()
         }
     }
     update_content_length(new_request);
-    enqueue_request(dummy_data, std::move(new_request));
+    new_request.transaction_stat = std::make_shared<TransactionStat>();
+    new_request.transaction_stat->start_time = std::chrono::steady_clock::now();
 
-    return true;
+    return new_request;
 }
 
 
 Request_Data Client::get_request_to_submit()
 {
-    if (requests_to_submit.empty())
-    {
-        prepare_first_request();
-    }
-
     if (!requests_to_submit.empty())
     {
-        auto new_request = requests_to_submit.front();
+        auto queued_request = std::move(requests_to_submit.front());
         requests_to_submit.pop_front();
-        return new_request;
+        return queued_request;
     }
     else
     {
-        // this should never be hit
-        abort();
-        Request_Data dummy_data;
-        return dummy_data;
+        return prepare_first_request();
     }
 }
 
@@ -1618,10 +1604,11 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     if (curr_index == 0)
     {
-        return false; //prepare_first_request();
+        return false;
     }
 
     Request_Data new_request;
+    new_request.transaction_stat = finished_request.transaction_stat;
     new_request.next_request_idx = ((curr_index + 1) % config->json_config_schema.scenario.size());
 
     auto& request_template = config->json_config_schema.scenario[curr_index];
@@ -1734,17 +1721,6 @@ void Client::enqueue_request(Request_Data& finished_request, Request_Data&& new_
         std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
         std::chrono::steady_clock::time_point timeout_timepoint = curr_time_point + delay_duration;
         next_client_to_run->delayed_requests_to_submit.insert(std::make_pair(timeout_timepoint, std::move(new_request)));
-        /*
-        static thread_local auto it = get_client_serving_first_request();
-        if (!it->second->any_request_to_submit())
-        {
-            if (id == 0)
-            {
-                std::cout<<"prepare_first_request"<<std::endl;
-            }
-            prepare_first_request();
-        }
-        */
     }
 }
 
