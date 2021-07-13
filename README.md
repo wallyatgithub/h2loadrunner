@@ -236,7 +236,7 @@
   
   You can also paste stored JSON data back to the right side, and click "Update Form", to sychronize that in the left side form for further edit in GUI.
   
-  Other online JSON editor: https://pmk65.github.io/jedemov2/dist/demo.html
+  Another online JSON editor: https://pmk65.github.io/jedemov2/dist/demo.html
 
 # Lua script support
 
