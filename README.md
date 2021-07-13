@@ -44,7 +44,7 @@
   10. Support configurable status code to determine if a response is successful in statistics report
 
 # How performant is h2loadrunner?
-  For this test scenario, h2loadrunner will only need less than one logic core to reach 60K QPS/s:
+  For this test scenario, h2loadrunner will only need less than one core to reach 60K QPS/s:
   
     POST with dynamic path generation and dynamic message body of 300 bytes 
     Upon POST response, extract the resource created by POST from response header, and send PATCH with dynamic message body of 300 bytes for resource update
