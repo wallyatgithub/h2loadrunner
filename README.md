@@ -190,7 +190,7 @@
   
   It is recommended to use a GUI Json editor to load the schema, and input data (Of course it can be done manually, but it is error-prone when dealing with scenario section)
   
-  Example screenshot of GUI Json editor:
+  Example screenshot of GUI Json editor with https://pmk65.github.io/jedemov2/dist/demo.html:
   
   ![Example of GUI configuration](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor.png)
   ![Example of GUI configuration of scenario](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor-scenario.png)
