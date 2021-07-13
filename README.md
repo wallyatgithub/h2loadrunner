@@ -193,6 +193,7 @@
   Example screenshot of GUI Json editor:
   
   ![Example of GUI configuration](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor.png)
+  ![Example of GUI configuration of scenario](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor-scenario.png)
   
   When finish editing, export Json data, and save to a file <JSON FILE>
   
