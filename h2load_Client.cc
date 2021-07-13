@@ -81,7 +81,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
 
     ev_timer_init(&stream_timeout_watcher, stream_timeout_cb, 0., 0.01);
     ev_timer_init(&connection_timeout_watcher, client_connection_timeout_cb, 2., 0.);
-    ev_timer_init(&release_ancestor_watcher, client_connection_timeout_cb, 5., 5.);
+    ev_timer_init(&release_ancestor_watcher, release_ancestor_cb, 5., 5.);
     ev_timer_init(&delayed_request_watcher, delayed_request_cb, 0.01, 0.01);
     stream_timeout_watcher.data = this;
     connection_timeout_watcher.data = this;
@@ -650,7 +650,7 @@ void Client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
         else if (status < 400)
         {
             ++worker->stats.status[3];
-            stream.status_success = 1;
+            stream.status_success = 0;
         }
         else if (status < 600)
         {
@@ -663,7 +663,7 @@ void Client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
         }
 
         if (request != requests_awaiting_response.end() &&
-            request->second.expected_status_code)
+            request->second.expected_status_code > 0)
         {
             if (status != request->second.expected_status_code)
             {
@@ -781,11 +781,11 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
         ++worker->stats.req_done;
         ++req_done;
 
-        auto resp_time_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        auto resp_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                 req_stat->stream_close_time - req_stat->request_time);
 
-        worker->stats.max_resp_time_us = std::max(worker->stats.max_resp_time_us.load(), (uint64_t)resp_time_us.count());
-        worker->stats.min_resp_time_us = std::min(worker->stats.min_resp_time_us.load(), (uint64_t)resp_time_us.count());
+        worker->stats.max_resp_time_ms = std::max(worker->stats.max_resp_time_ms.load(), (uint64_t)resp_time_ms.count());
+        worker->stats.min_resp_time_ms = std::min(worker->stats.min_resp_time_ms.load(), (uint64_t)resp_time_ms.count());
 
         if (worker->config->log_fd != -1)
         {
@@ -820,15 +820,16 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
     }
 
     worker->report_progress();
-    streams.erase(stream_id);
 
     auto request = requests_awaiting_response.find(stream_id);
     if (request != requests_awaiting_response.end())
     {
+        request->second.transaction_stat->successful = (streams[stream_id].status_success == 1);
         prepare_next_request(request->second);
-
         requests_awaiting_response.erase(request);
     }
+
+    streams.erase(stream_id);
 
     if (req_left == 0 && req_inflight == 0)
     {
@@ -1554,6 +1555,7 @@ Request_Data Client::prepare_first_request()
         controller->curr_req_variable_value++;
         if (controller->curr_req_variable_value > controller->req_variable_value_end)
         {
+            std::cout<<"user id (variable_value) wrapped, start over from range start"<<std::endl;
             controller->curr_req_variable_value = controller->req_variable_value_start;
         }
     }
@@ -1575,7 +1577,7 @@ Request_Data Client::prepare_first_request()
     }
     update_content_length(new_request);
     new_request.transaction_stat = std::make_shared<TransactionStat>();
-    new_request.transaction_stat->start_time = std::chrono::steady_clock::now();
+    worker->stats.transaction_done++;
 
     return new_request;
 }
@@ -1604,6 +1606,18 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     if (curr_index == 0)
     {
+        if (finished_request.transaction_stat->successful)
+        {
+            worker->stats.transaction_successful++;
+            auto end_time = std::chrono::steady_clock::now();
+            auto trans_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  end_time - finished_request.transaction_stat->start_time);
+
+            worker->stats.trans_max_resp_time_ms = std::max(worker->stats.trans_max_resp_time_ms.load(),
+                                                            (uint64_t)trans_duration.count());
+            worker->stats.trans_min_resp_time_ms = std::min(worker->stats.trans_min_resp_time_ms.load(),
+                                                            (uint64_t)trans_duration.count());
+        }
         return false;
     }
 

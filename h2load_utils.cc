@@ -227,7 +227,11 @@ void rate_period_timeout_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
     else
     {
         // To check whether all created clients are pushed correctly
-        assert(worker->nclients == worker->clients.size());
+        if (worker->nclients != worker->clients.size())
+        {
+            std::cout << "client not started successfully, exit" << worker->id << std::endl;
+            exit(EXIT_FAILURE);
+        }
     }
 }
 
@@ -340,6 +344,7 @@ void client_connection_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents
     // TODO: call disconnect, and more?
     auto client = static_cast<Client*>(w->data);
     client->disconnect();
+    ev_break (EV_A_ EVBREAK_ALL);
 }
 
 void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents)

@@ -120,8 +120,13 @@ Stats::Stats(size_t req_todo, size_t nclients)
       bytes_head_decomp(0),
       bytes_body(0),
       status(),
-      max_resp_time_us(0),
-      min_resp_time_us(0xFFFFFFFFFFFFFFFE) {}
+      max_resp_time_ms(0),
+      min_resp_time_ms(0xFFFFFFFFFFFFFFFE),
+      trans_max_resp_time_ms(0),
+      trans_min_resp_time_ms(0xFFFFFFFFFFFFFFFE),
+      transaction_done(0),
+      transaction_successful(0)
+      {}
 
 Stream::Stream() : req_stat {}, status_success(-1) {}
 
@@ -1426,6 +1431,8 @@ int main(int argc, char** argv)
         size_t total3xx_till_now = 0;
         size_t total4xx_till_now = 0;
         size_t total5xx_till_now = 0;
+        size_t totalTrans_till_now = 0;
+        size_t totalTrans_success_till_now = 0;
         while (!workers_stopped)
         {
             size_t total_req_till_last_interval = totalReq_till_now;
@@ -1433,14 +1440,20 @@ int main(int argc, char** argv)
             size_t total3xx_till_last_interval = total3xx_till_now;
             size_t total4xx_till_last_interval = total4xx_till_now;
             size_t total5xx_till_last_interval = total5xx_till_now;
+            size_t totalTrans_till_last_interval = totalTrans_till_now;
+            size_t totalTrans_success_till_last_interval = totalTrans_success_till_now;
             std::this_thread::sleep_for(std::chrono::seconds(1));
             totalReq_till_now = 0;
             totalReq_success_till_now = 0;
             total3xx_till_now = 0;
             total4xx_till_now = 0;
             total5xx_till_now = 0;
-            uint64_t max_resp_time_us = 0;
-            uint64_t min_resp_time_us = 0xFFFFFFFFFFFFFFFE;
+            totalTrans_till_now = 0;
+            totalTrans_success_till_now = 0;
+            uint64_t max_resp_time_ms = 0;
+            uint64_t min_resp_time_ms = 0xFFFFFFFFFFFFFFFE;
+            uint64_t trans_max_resp_time_ms = 0;
+            uint64_t trans_min_resp_time_ms = 0xFFFFFFFFFFFFFFFE;
             for (auto& w : workers)
             {
                 auto& s = w->stats;
@@ -1449,26 +1462,41 @@ int main(int argc, char** argv)
                 total3xx_till_now += s.status[3];
                 total4xx_till_now += s.status[4];
                 total5xx_till_now += s.status[5];
-                max_resp_time_us = std::max(max_resp_time_us, s.max_resp_time_us.exchange(0));
-                min_resp_time_us = std::min(min_resp_time_us, s.min_resp_time_us.exchange(0xFFFFFFFFFFFFFFFE));
+                max_resp_time_ms = std::max(max_resp_time_ms, s.max_resp_time_ms.exchange(0));
+                min_resp_time_ms = std::min(min_resp_time_ms, s.min_resp_time_ms.exchange(0xFFFFFFFFFFFFFFFE));
+                trans_max_resp_time_ms = std::max(trans_max_resp_time_ms, s.trans_max_resp_time_ms.exchange(0));
+                trans_min_resp_time_ms = std::min(trans_min_resp_time_ms, s.trans_min_resp_time_ms.exchange(0xFFFFFFFFFFFFFFFE));
+                totalTrans_till_now += s.transaction_done;
+                totalTrans_success_till_now += s.transaction_successful;
             }
-            size_t delta_TPS = totalReq_till_now - total_req_till_last_interval;
-            size_t delta_TPS_success = totalReq_success_till_now - totalReq_success_till_last_interval;
-            size_t delta_TPS_3xx = total3xx_till_now - total3xx_till_last_interval;
-            size_t delta_TPS_4xx = total4xx_till_now - total4xx_till_last_interval;
-            size_t delta_TPS_5xx = total5xx_till_now - total5xx_till_last_interval;
+            size_t delta_RPS = totalReq_till_now - total_req_till_last_interval;
+            size_t delta_RPS_success = totalReq_success_till_now - totalReq_success_till_last_interval;
+            size_t delta_RPS_3xx = total3xx_till_now - total3xx_till_last_interval;
+            size_t delta_RPS_4xx = total4xx_till_now - total4xx_till_last_interval;
+            size_t delta_RPS_5xx = total5xx_till_now - total5xx_till_last_interval;
+            size_t delta_trans = totalTrans_till_now - totalTrans_till_last_interval;
+            size_t delta_trans_success = totalTrans_success_till_now - totalTrans_success_till_last_interval;
             auto now = std::chrono::system_clock::now();
             auto now_c = std::chrono::system_clock::to_time_t(now);
             std::cout << std::put_time(std::localtime(&now_c), "%c")
-                      << ", send: " << delta_TPS
-                      << ", successful: " << delta_TPS_success
-                      << ", 3xx: " << delta_TPS_3xx
-                      << ", 4xx: " << delta_TPS_4xx
-                      << ", 5xx: " << delta_TPS_5xx
-                      << ", max resp time (us): " << max_resp_time_us
-                      << ", min resp time (us): " << min_resp_time_us
+                      << ", send: " << delta_RPS
+                      << ", successful: " << delta_RPS_success
+                      << ", 3xx: " << delta_RPS_3xx
+                      << ", 4xx: " << delta_RPS_4xx
+                      << ", 5xx: " << delta_RPS_5xx
+                      << ", max resp time: " << max_resp_time_ms<<" ms"
+                      << ", min resp time: " << min_resp_time_ms<<" ms"
                       << ", successful/send: "
-                      << (((double)delta_TPS_success / delta_TPS) * 100) << "%" << std::endl;
+                      << (((double)delta_RPS_success / delta_RPS) * 100) << "%" << std::endl;
+            /*
+            std::cout << std::put_time(std::localtime(&now_c), "%c")
+                      << ", transaction (scenario) initiated: " << delta_trans
+                      << ", transaction successful: " << delta_trans_success
+                      << ", max transaction duration: " << max_resp_time_ms<<" ms"
+                      << ", min transaction duration: " << min_resp_time_ms<<" ms"
+                      << ", transaction successful/send: "
+                      << (((double)delta_trans_success / delta_trans) * 100) << "%" << std::endl;
+            */
             counter++;
 
             if (counter == 30)
