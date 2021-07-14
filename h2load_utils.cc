@@ -355,7 +355,7 @@ void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents)
     auto it = client->delayed_requests_to_submit.begin();
     while (it != barrier)
     {
-        client->requests_to_submit.push_back(std::move(it->second));
+        client->requests_to_submit.emplace_back(std::move(it->second));
         h2load::Submit_Requet_Wrapper auto_submitter(nullptr, client);
         it = client->delayed_requests_to_submit.erase(it);
     }
@@ -991,7 +991,7 @@ std::vector<std::string> tokenize_string(const std::string& source, const std::s
     {
         size_t pos = source.find(delimeter, start);
         while (pos != std::string::npos) {
-            retVec.push_back(source.substr(start, (pos-start)));
+            retVec.emplace_back(source.substr(start, (pos-start)));
             start = pos + delimeter_len;
             pos = source.find(delimeter, start);
         }

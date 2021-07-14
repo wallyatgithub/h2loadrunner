@@ -1749,7 +1749,7 @@ void Client::enqueue_request(Request_Data& finished_request, Request_Data&& new_
     Client* next_client_to_run = find_or_create_dest_client(new_request);
     if (!finished_request.delay_before_executing_next)
     {
-        next_client_to_run->requests_to_submit.push_back(std::move(new_request));
+        next_client_to_run->requests_to_submit.emplace_back(std::move(new_request));
         Submit_Requet_Wrapper auto_submitter(this, next_client_to_run);
     }
     else
