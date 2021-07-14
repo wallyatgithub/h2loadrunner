@@ -135,5 +135,7 @@ void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
 void normalize_request_templates(h2load::Config* config);
 
+void adaptive_traffic_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
+
 
 #endif

@@ -55,9 +55,42 @@ struct Request_Data
         next_request_idx = 0;
         transaction_stat = nullptr;
     };
-};
 
-std::ostream& operator<<(std::ostream& o, const Request_Data& request_data);
+    friend std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
+    {
+        o << "Request_Data: { "<<std::endl
+          << "schema:" << request_data.schema<<std::endl
+          << "authority:" << request_data.authority<<std::endl
+          << "req_payload:" << request_data.req_payload<<std::endl
+          << "path:" << request_data.path<<std::endl
+          << "user_id:" << request_data.user_id<<std::endl
+          << "method:" << request_data.method<<std::endl
+          << "expected_status_code:" << request_data.expected_status_code<<std::endl
+          << "delay_before_executing_next:" << request_data.delay_before_executing_next<<std::endl;
+
+        for (auto& it: request_data.req_headers)
+        {
+            o << "request header name: "<<it.first<<", header value: " <<it.second<<std::endl;
+        }
+
+        o << "response status code:" << request_data.status_code<<std::endl;
+        o << "resp_payload:" << request_data.resp_payload<<std::endl;
+        for (auto& it: request_data.resp_headers)
+        {
+            o << "response header name: "<<it.first<<", header value: " <<it.second<<std::endl;
+        }
+        o << "next request index: "<<request_data.next_request_idx<<std::endl;
+
+        for (auto& it: request_data.saved_cookies)
+        {
+            o << "cookie name: "<<it.first<<", cookie content: " <<it.second<<std::endl;
+        }
+
+        o << "}"<<std::endl;
+        return o;
+    };
+
+};
 
 struct Client
 {
@@ -137,6 +170,12 @@ struct Client
     ev_timer delayed_request_watcher;
     uint64_t req_variable_value_start;
     uint64_t req_variable_value_end;
+    size_t totalTrans_till_last_check = 0;
+    std::chrono::time_point<std::chrono::steady_clock> timestamp_of_last_tps_check;
+    size_t total_leading_Req_till_last_check = 0;
+    std::chrono::time_point<std::chrono::steady_clock> timestamp_of_last_rps_check;
+    double rps;
+    ev_timer adaptive_traffic_watcher;
 
     enum { ERR_CONNECT_FAIL = -100 };
 
@@ -236,6 +275,19 @@ struct Client
     void enqueue_request(Request_Data& finished_request, Request_Data&& new_request);
 
     std::map<std::string, Client*>::const_iterator get_client_serving_first_request();
+
+    double calc_tps();
+    double calc_rps();
+
+    bool rps_mode();
+    double adjust_traffic_needed();
+    void switch_to_non_rps_mode();
+    void switch_mode(double new_rps);
+    void init_and_start_watcher(ev_timer& watch,
+                                         double init_duration, double repeat_duration,
+                                         void (*callback)(struct ev_loop*, ev_timer*, int));
+    bool is_leading_request(Request_Data& request);
+
 };
 
 class Submit_Requet_Wrapper
@@ -257,7 +309,7 @@ public:
   ~Submit_Requet_Wrapper()
   {
       if (client &&
-          !client->config->rps_enabled() &&
+          !client->rps_mode() &&
           client->state == CLIENT_CONNECTED &&
           client->session->max_concurrent_streams() > client->streams.size())
       {

@@ -51,7 +51,10 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         curr_req_variable_value(0),
         parent_client(initiating_client),
         schema(dest_schema),
-        authority(dest_authority)
+        authority(dest_authority),
+        totalTrans_till_last_check(0),
+        total_leading_Req_till_last_check(0),
+        rps(conf->rps)
 {
     if (req_todo == 0)   // this means infinite number of requests are to be made
     {
@@ -131,6 +134,9 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         dest.append("://").append(authority);
         dest_client[dest] = this;
     }
+
+    timestamp_of_last_rps_check = std::chrono::steady_clock::now();
+    timestamp_of_last_tps_check = timestamp_of_last_rps_check;
 }
 
 Client::~Client()
@@ -378,6 +384,7 @@ void Client::disconnect()
     ev_timer_stop(worker->loop, &delayed_request_watcher);
     ev_timer_stop(worker->loop, &release_ancestor_watcher);
     ev_timer_stop(worker->loop, &retart_client_watcher);
+    ev_timer_stop(worker->loop, &adaptive_traffic_watcher);
     streams.clear();
     session.reset();
     wb.reset();
@@ -742,7 +749,7 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
         {
             --req_inflight;
         }
-        if (config->rps_enabled() && rps_req_inflight)
+        if (rps_mode() && rps_req_inflight)
         {
             --rps_req_inflight;
         }
@@ -824,6 +831,10 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
     auto request = requests_awaiting_response.find(stream_id);
     if (request != requests_awaiting_response.end())
     {
+        if (is_leading_request(request->second))
+        {
+            cstat.leading_req_done++;
+        }
         request->second.transaction_stat->successful = (streams[stream_id].status_success == 1);
         prepare_next_request(request->second);
         requests_awaiting_response.erase(request);
@@ -846,7 +857,7 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
                 ev_feed_event(worker->loop, &request_timeout_watcher, EV_TIMER);
             }
         }
-        else if (!config->rps_enabled())
+        else if (!rps_mode())
         {
             if (submit_request() != 0)
             {
@@ -1039,17 +1050,21 @@ int Client::connection_made()
 
     record_connect_time();
 
-    if (config->rps_enabled())
+    if (rps_mode())
     {
-        rps_watcher.repeat = std::max(0.01, 1. / config->rps);
+        rps_watcher.repeat = std::max(0.01, 1. / rps);
         ev_timer_again(worker->loop, &rps_watcher);
         rps_duration_started = ev_now(worker->loop);
+    }
+    else
+    {
+        init_and_start_watcher(adaptive_traffic_watcher, 1.0, 1.0, adaptive_traffic_timeout_cb);
     }
 
     stream_timeout_watcher.repeat = 0.01;
     ev_timer_again(worker->loop, &stream_timeout_watcher);
 
-    if (config->rps_enabled())
+    if (rps_mode())
     {
         assert(req_left);
 
@@ -1618,6 +1633,14 @@ bool Client::prepare_next_request(Request_Data& finished_request)
             worker->stats.trans_min_resp_time_ms = std::min(worker->stats.trans_min_resp_time_ms.load(),
                                                             (uint64_t)trans_duration.count());
         }
+        if (parent_client)
+        {
+            parent_client->cstat.trans_done++;
+        }
+        else
+        {
+            cstat.trans_done++;
+        }
         return false;
     }
 
@@ -1989,40 +2012,151 @@ void Client::substitute_ancestor(Client* ancestor)
     }
 }
 
-std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
+double Client::calc_tps()
 {
-    o << "Request_Data: { "<<std::endl
-      << "schema:" << request_data.schema<<std::endl
-      << "authority:" << request_data.authority<<std::endl
-      << "req_payload:" << request_data.req_payload<<std::endl
-      << "path:" << request_data.path<<std::endl
-      << "user_id:" << request_data.user_id<<std::endl
-      << "method:" << request_data.method<<std::endl
-      << "expected_status_code:" << request_data.expected_status_code<<std::endl
-      << "delay_before_executing_next:" << request_data.delay_before_executing_next<<std::endl;
-
-    for (auto& it: request_data.req_headers)
+    if (parent_client != nullptr)
     {
-        o << "request header name: "<<it.first<<", header value: " <<it.second<<std::endl;
+        // sub client does not have control over transaction
+        return calc_rps();
     }
 
-    o << "response status code:" << request_data.status_code<<std::endl;
-    o << "resp_payload:" << request_data.resp_payload<<std::endl;
-    for (auto& it: request_data.resp_headers)
-    {
-        o << "response header name: "<<it.first<<", header value: " <<it.second<<std::endl;
-    }
-    o << "next request index: "<<request_data.next_request_idx<<std::endl;
+    size_t totalTrans = cstat.trans_done;
+    auto curr_timestamp = std::chrono::steady_clock::now();
 
-    for (auto& it: request_data.saved_cookies)
-    {
-        o << "cookie name: "<<it.first<<", cookie content: " <<it.second<<std::endl;
-    }
+    auto delta_trans = totalTrans - totalTrans_till_last_check;
+    totalTrans_till_last_check = totalTrans;
 
-    o << "}"<<std::endl;
-    return o;
+    auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(curr_timestamp - timestamp_of_last_tps_check);
+    timestamp_of_last_tps_check = curr_timestamp;
+
+    return delta_ms.count()>0 ? (double)((1000*delta_trans)/delta_ms.count()) : 0;
 }
 
+double Client::calc_rps()
+{
+    size_t totalReq = cstat.leading_req_done;
+    auto curr_timestamp = std::chrono::steady_clock::now();
+
+    auto delta_reqs = totalReq - total_leading_Req_till_last_check;
+    total_leading_Req_till_last_check = totalReq;
+
+    auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(curr_timestamp - timestamp_of_last_rps_check);
+    timestamp_of_last_rps_check = curr_timestamp;
+
+    return delta_ms.count()>0 ? (double)((1000*delta_reqs)/delta_ms.count()) : 0;
+}
+
+double Client::adjust_traffic_needed()
+{
+    const uint32_t gap_in_second = 5;
+    double no_adjust = 0.0;
+
+    if (config->rps_enabled())
+    {
+        // respect user configured rps, even it is too large
+        // in this case, user will observe lower rps reported than configured
+        return no_adjust;
+    }
+    if (parent_client != nullptr)
+    {
+        return no_adjust;
+    }
+
+    auto tps = calc_tps();
+    auto rps = calc_rps();
+
+    if ((rps > tps) && (tps>0.0) && ((total_leading_Req_till_last_check - totalTrans_till_last_check)/tps >= gap_in_second))
+    {
+        std::cout<<"adjust traffic needed for this connection, client id: "<<id
+                 <<", schema: "<<schema<<", authority: "<<authority
+                 <<", total Reqquest done: "<<total_leading_Req_till_last_check
+                 <<", total transaction done: "<<totalTrans_till_last_check
+                 <<", actual transaction per second:"<<tps
+                 <<std::endl;
+        return tps;
+    }
+    return no_adjust;
+}
+
+bool Client::rps_mode()
+{
+    return (rps > 0.0);
+}
+
+void Client::switch_to_non_rps_mode()
+{
+    ev_timer_stop(worker->loop, &rps_watcher);
+    rps = 0.0;
+
+    auto nreq = config->is_timing_based_mode()
+                ? std::max(req_left, (session->max_concurrent_streams() - streams.size()))
+                : std::min(req_left, (session->max_concurrent_streams() - streams.size()));
+
+    bool write_socket = false;
+    for (; nreq > 0; --nreq)
+    {
+        if (submit_request() != 0)
+        {
+            process_request_failure();
+            break;
+        }
+        write_socket = true;
+    }
+    if (write_socket)
+    {
+        signal_write();
+    }
+}
+void Client::switch_mode(double new_rps)
+{
+    bool old_rps_mode = rps_mode();
+    rps = new_rps;
+    bool new_rps_mode = rps_mode();
+
+    if (!old_rps_mode && new_rps_mode)
+    {
+        std::cout<<"switching controller connection to rps mode to lower the traffic"
+                 <<", rps: "<<rps
+                 <<std::endl;
+        rps_watcher.repeat = std::max(0.01, 1. / rps);
+        ev_timer_again(worker->loop, &rps_watcher);
+        rps_duration_started = ev_now(worker->loop);
+    }
+    else if (old_rps_mode && !new_rps_mode)
+    {
+        switch_to_non_rps_mode();
+    }
+    else if (old_rps_mode && new_rps_mode)
+    {
+        ev_timer_again(worker->loop, &rps_watcher);
+    }
+    else
+    {
+        switch_to_non_rps_mode();
+    }
+}
+
+void Client::init_and_start_watcher(ev_timer& watch,
+                                          double init_duration, double repeat_duration,
+                                          void (*callback)(struct ev_loop*, ev_timer*, int))
+{
+    ev_timer_init(&watch, callback, init_duration, repeat_duration);
+    watch.data = this;
+    ev_timer_again(worker->loop, &watch);
+}
+
+bool Client::is_leading_request(Request_Data& request)
+{
+    if (config->json_config_schema.scenario.size() == 1 && request.next_request_idx == 0)
+    {
+        return true;
+    }
+    else if (request.next_request_idx == 1)
+    {
+        return true;
+    }
+    return false;
+}
 
 }
 

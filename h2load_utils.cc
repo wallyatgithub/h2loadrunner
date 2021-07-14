@@ -1143,3 +1143,14 @@ void normalize_request_templates(h2load::Config* config)
     }
 
 }
+
+void adaptive_traffic_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
+{
+    auto client = static_cast<Client*>(w->data);
+    auto tps_to_set = client->adjust_traffic_needed();
+    if (tps_to_set > 0.0)
+    {
+        client->switch_mode(tps_to_set);
+    }
+}
+

@@ -1478,25 +1478,27 @@ int main(int argc, char** argv)
             size_t delta_trans_success = totalTrans_success_till_now - totalTrans_success_till_last_interval;
             auto now = std::chrono::system_clock::now();
             auto now_c = std::chrono::system_clock::to_time_t(now);
-            std::cout << std::put_time(std::localtime(&now_c), "%c")
-                      << ", send: " << delta_RPS
+            std::cout<<std::endl;
+            std::cout << std::put_time(std::localtime(&now_c), "%c")<<std::endl
+                      << "send: " << delta_RPS
                       << ", successful: " << delta_RPS_success
                       << ", 3xx: " << delta_RPS_3xx
                       << ", 4xx: " << delta_RPS_4xx
                       << ", 5xx: " << delta_RPS_5xx
-                      << ", max resp time: " << max_resp_time_ms<<" ms"
-                      << ", min resp time: " << min_resp_time_ms<<" ms"
+                      << ", max latency: " << max_resp_time_ms<<" ms"
+                      << ", min latency: " << min_resp_time_ms<<" ms"
                       << ", successful/send: "
-                      << (((double)delta_RPS_success / delta_RPS) * 100) << "%" << std::endl;
-            /*
-            std::cout << std::put_time(std::localtime(&now_c), "%c")
-                      << ", transaction (scenario) initiated: " << delta_trans
-                      << ", transaction successful: " << delta_trans_success
-                      << ", max transaction duration: " << max_resp_time_ms<<" ms"
-                      << ", min transaction duration: " << min_resp_time_ms<<" ms"
-                      << ", transaction successful/send: "
+                      << (((double)delta_RPS_success / delta_RPS) * 100) << "%"
+                      <<std::endl;
+/*
+                      std::cout
+                      << "scenario initiated: " << delta_trans
+                      << ", successful: " << delta_trans_success
+                      << ", max duration: " << max_resp_time_ms<<" ms"
+                      << ", min duration: " << min_resp_time_ms<<" ms"
+                      << ", successful/send: "
                       << (((double)delta_trans_success / delta_trans) * 100) << "%" << std::endl;
-            */
+*/
             counter++;
 
             if (counter == 30)

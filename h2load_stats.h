@@ -47,6 +47,8 @@ struct ClientStat
     // The number of requests completed successful, but not necessarily
     // means successful HTTP status code.
     size_t req_success;
+    size_t leading_req_done;
+    size_t trans_done;
 
     // The following 3 numbers are overwritten each time when connection
     // is made.
@@ -57,6 +59,13 @@ struct ClientStat
     std::chrono::steady_clock::time_point connect_time;
     // time to first byte (TTFB)
     std::chrono::steady_clock::time_point ttfb;
+
+    ClientStat()
+    {
+        req_success = 0;
+        leading_req_done = 0;
+        trans_done = 0;
+    }
 };
 
 struct SDStat
