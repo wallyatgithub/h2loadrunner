@@ -203,9 +203,8 @@ Options:
               are used solely.  Definition of a base URI overrides all
               scheme, host or port values.
   -m, --max-concurrent-streams=<N>
-              Max  concurrent  streams  to issue  per  session.   When
-              http/1.1  is used,  this  specifies the  number of  HTTP
-              pipelining requests in-flight.
+              Max concurrent streams  to issue  per session.  Not used
+              for http/1.1
               Default: 1
   -w, --window-bits=<N>
               Sets the stream level initial window size to (2**<N>)-1.
