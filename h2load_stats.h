@@ -130,6 +130,7 @@ struct Stats
     std::vector<ClientStat> client_stats;
     std::atomic<uint64_t> max_resp_time_ms;
     std::atomic<uint64_t> min_resp_time_ms;
+    std::atomic<uint64_t> total_resp_time_ms;
     std::atomic<uint64_t> trans_max_resp_time_ms;
     std::atomic<uint64_t> trans_min_resp_time_ms;
     size_t transaction_done;

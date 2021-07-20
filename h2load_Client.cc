@@ -785,14 +785,14 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
             ++worker->stats.req_failed;
             ++worker->stats.req_error;
         }
-        ++worker->stats.req_done;
-        ++req_done;
-
         auto resp_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                 req_stat->stream_close_time - req_stat->request_time);
-
         worker->stats.max_resp_time_ms = std::max(worker->stats.max_resp_time_ms.load(), (uint64_t)resp_time_ms.count());
         worker->stats.min_resp_time_ms = std::min(worker->stats.min_resp_time_ms.load(), (uint64_t)resp_time_ms.count());
+        worker->stats.total_resp_time_ms += resp_time_ms.count();
+
+        ++worker->stats.req_done;
+        ++req_done;
 
         if (worker->config->log_fd != -1)
         {

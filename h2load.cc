@@ -122,6 +122,7 @@ Stats::Stats(size_t req_todo, size_t nclients)
       status(),
       max_resp_time_ms(0),
       min_resp_time_ms(0xFFFFFFFFFFFFFFFE),
+      total_resp_time_ms(0),
       trans_max_resp_time_ms(0),
       trans_min_resp_time_ms(0xFFFFFFFFFFFFFFFE),
       transaction_done(0),
@@ -1453,6 +1454,7 @@ int main(int argc, char** argv)
             uint64_t min_resp_time_ms = 0xFFFFFFFFFFFFFFFE;
             uint64_t trans_max_resp_time_ms = 0;
             uint64_t trans_min_resp_time_ms = 0xFFFFFFFFFFFFFFFE;
+            uint64_t total_resp_time_ms = 0;
             for (auto& w : workers)
             {
                 auto& s = w->stats;
@@ -1467,6 +1469,7 @@ int main(int argc, char** argv)
                 trans_min_resp_time_ms = std::min(trans_min_resp_time_ms, s.trans_min_resp_time_ms.exchange(0xFFFFFFFFFFFFFFFE));
                 totalTrans_till_now += s.transaction_done;
                 totalTrans_success_till_now += s.transaction_successful;
+                total_resp_time_ms += s.total_resp_time_ms.exchange(0);
             }
             size_t delta_RPS = totalReq_till_now - total_req_till_last_interval;
             size_t delta_RPS_success = totalReq_success_till_now - totalReq_success_till_last_interval;
@@ -1486,6 +1489,7 @@ int main(int argc, char** argv)
                       << ", 5xx: " << delta_RPS_5xx
                       << ", max latency: " << max_resp_time_ms<<" ms"
                       << ", min latency: " << min_resp_time_ms<<" ms"
+                      << ", avg latency: " << total_resp_time_ms/delta_RPS<< " ms"
                       << ", successful/send: "
                       << (((double)delta_RPS_success / delta_RPS) * 100) << "%"
                       <<std::endl;
