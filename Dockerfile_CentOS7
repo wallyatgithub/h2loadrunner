@@ -1,6 +1,6 @@
 FROM amd64/centos:7
 RUN yum update -y
-RUN yum install openssl-devel libev-devel git make unzip wget -y
+RUN yum install openssl-devel libev-devel make unzip wget -y
 RUN yum install epel-release -y
 RUN yum install luajit-devel libnghttp2-devel rapidjson-devel cmake3 -y
 RUN yum install centos-release-scl -y
@@ -9,7 +9,11 @@ RUN wget https://github.com/wallyatgithub/h2loadrunner/archive/refs/heads/main.z
 RUN unzip main.zip
 RUN scl enable devtoolset-8 -- cmake3 -S h2loadrunner-main/third-party/c-ares -B h2loadrunner-main/third-party/c-ares
 RUN scl enable devtoolset-8 -- cmake3 --build h2loadrunner-main/third-party/c-ares
-RUN scl enable devtoolset-8 -- cd ../../
 RUN scl enable devtoolset-8 -- mkdir h2loadrunner-main/build
 RUN scl enable devtoolset-8 -- cmake3 -S h2loadrunner-main -B h2loadrunner-main/build
 RUN scl enable devtoolset-8 -- cmake3 --build h2loadrunner-main/build
+RUN yum remove git make unzip wget cmake3 devtoolset-8-gcc devtoolset-8-gcc-c++ centos-release-scl -y
+RUN cp h2loadrunner-main/build/h2loadrunner /usr/bin/
+RUN mkdir -p /usr/share/h2loadrunner/
+RUN cp h2loadrunner-main/config_schema.json /usr/share/h2loadrunner/
+
