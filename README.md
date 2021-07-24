@@ -137,9 +137,9 @@
     
     # wget https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Dockerfile_Ubuntu
     
-    # docker build ./ -f Dockerfile_Ubuntu -t h2load:ubuntu
+    # docker build ./ -f Dockerfile_Ubuntu -t h2loadrunner:ubuntu
     
-    Then use 'docker run -it h2load:ubuntu bash' to enter the container, h2loadrunner is located in /usr/bin
+    Then use 'docker run -it h2loadrunner:ubuntu bash' to enter the container, h2loadrunner is located in /usr/bin
 
     
     
