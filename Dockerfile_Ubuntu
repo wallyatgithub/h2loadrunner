@@ -1,6 +1,7 @@
 FROM ubuntu:latest
 RUN apt-get update && \
-    apt-get install --yes libnghttp2-dev openssl libssl-dev libev-dev liblua5.3-dev rapidjson-dev cmake build-essential libluajit-5.1-dev gcc g++ unzip && \
+    DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata && \
+    apt-get install --yes libnghttp2-dev openssl libssl-dev libev-dev liblua5.3-dev rapidjson-dev cmake build-essential libluajit-5.1-dev gcc g++ unzip wget && \
     wget https://github.com/wallyatgithub/h2loadrunner/archive/refs/heads/main.zip && \
     unzip main.zip && \
     cmake -S h2loadrunner-main/third-party/c-ares -B h2loadrunner-main/third-party/c-ares && \
@@ -14,4 +15,3 @@ RUN apt-get update && \
     mkdir -p /usr/share/h2loadrunner/ && \
     cp h2loadrunner-main/config_schema.json /usr/share/h2loadrunner/ && \
     rm -rf h2loadrunner-main main.zip
-    
