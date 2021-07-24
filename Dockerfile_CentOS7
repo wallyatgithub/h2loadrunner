@@ -13,6 +13,7 @@ RUN yum update -y && \
     scl enable devtoolset-8 -- cmake3 -S h2loadrunner-main -B h2loadrunner-main/build && \
     scl enable devtoolset-8 -- cmake3 --build h2loadrunner-main/build && \
     yum remove git make unzip wget cmake3 devtoolset-8-gcc devtoolset-8-gcc-c++ centos-release-scl -y && \
+    yum autoremove -y && \
     cp h2loadrunner-main/build/h2loadrunner /usr/bin/ && \
     mkdir -p /usr/share/h2loadrunner/ && \
     cp h2loadrunner-main/config_schema.json /usr/share/h2loadrunner/ && \
