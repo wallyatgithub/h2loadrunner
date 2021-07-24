@@ -122,6 +122,27 @@
     $cmake --build ./
     
     h2loadrunner would be generated
+    
+# How to build h2loadrunner docker image
+
+  https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Dockerfile_CentOS7 is the Dockerfile to build a CentOS7 based image with h2loadrunner installed in /usr/bin
+
+  https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Dockerfile_Ubuntu is the Dockerfile to build a latest Ubuntu based image with h2loadrunner installed in /usr/bin
+
+  For example, to build latest Ubuntu based image with h2loadrunner:
+  
+    # mkdir h2loadrunner
+    
+    # cd h2loadrunner
+    
+    # wget https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Dockerfile_Ubuntu
+    
+    # docker build ./ -f Dockerfile_Ubuntu -t h2load:ubuntu
+    
+    Then use 'docker run -it h2load:ubuntu bash' to enter the container, h2loadrunner is located in /usr/bin
+
+    
+    
 
 # Basic Usage
 
