@@ -1,0 +1,115 @@
+{
+  "$schema":"http://json-schema.org/draft-04/schema#",
+  "description":" h2server configuration",
+  "title":"h2server_configuration",
+  "type":"object",
+  "properties":{
+    "address":{
+      "description":"IP address",
+      "default": "0.0.0.0",
+      "type":"string"
+    },
+    "port":{
+      "description":"port, 80, 443 ,etc.",
+      "default": 80,
+      "type":"integer"
+    },
+    "threads":{
+      "description":"Number of threads. Recommendation: thead number matches number of cores",
+      "default": 1,
+      "type":"integer"
+    },
+    "private-key-file":{
+      "description":"path to private key file",
+      "type":"string"
+    },
+    "cert-file":{
+      "description":"path to private key file",
+      "type":"string"
+    },
+    "scenario":{
+      "description":"Array of request and response pairs",
+      "type":"array",
+      "minItems":1,
+      "items": {
+        "type": "object",
+        "properties":{
+          "Request":{
+            "description": "Request specifies the patterns that the incoming request should have; patterns includes a match of :path header, and a list of match of Json payload; the corresponding Response is returned only if all patterns match",
+            "type":"object",
+            "properties":{
+              "path":{
+                "description": "Match action to be executed against the received :path header",
+                "type": "object",
+                "properties":{
+                  "matchType":{
+                    "type":"string",
+                    "description": "Type of match action",
+                    "enum": ["EqualsTo", "StartsWith", "EndsWith", "Contains"]
+                  },
+                  "input":{
+                    "description": "Content used to execute the matchType above against the received path; i.e., received :path header should either equal to or start with or end with or contain the content specified in this field",
+                    "type":"string"
+                  }
+                }
+              },
+              "payload": {
+                "description": "Array of match actions to be executed against the received Json payload",
+                "type":"array",
+                "minItems":0,
+                "items": {
+                  "type": "object",
+                  "properties":{
+                    "matchType": {
+                      "type":"string",
+                      "description": "Type of match action",
+                      "enum": ["EqualsTo", "StartsWith", "EndsWith", "Contains"]
+                    },
+                    "JsonPointer": {
+                      "description": "A Json pointer to locate a value within the received Json payload",
+                      "type":"string"
+                    },
+                    "input": {
+                      "description": "Content used to execute the matchType above against the value specified by the Json pointer above; the value specified by the Json pointer above should either equal to or start with or end with or contain the content specified in this field",
+                      "type":"string"
+                    }
+                  }
+                }
+              }             
+            }
+          },
+          "Response":{
+            "description": "Response message to be returned in response to the request above",
+            "type":"object",
+            "properties":{
+              "status-code": {
+                "description": "status-code",
+                "default": 200,
+                "type": "integer"
+              },
+              "payload": {
+                "description": "payload",
+                "type": "string"
+              },
+              "additonalHeaders":{
+              "description": "additional headers to be returned. Valid format for each header: pair of strings with : in the middle; for example: Content-type: Application/json",
+              "type": "array",
+              "items": {
+                 "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "required":[
+           "Request",
+           "Response"
+        ]
+      }
+    }
+  },
+  "required":[
+    "scenario"
+  ]
+}
+
