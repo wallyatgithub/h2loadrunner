@@ -1489,7 +1489,7 @@ int main(int argc, char** argv)
                       << ", 5xx: " << delta_RPS_5xx
                       << ", max latency: " << max_resp_time_ms<<" ms"
                       << ", min latency: " << min_resp_time_ms<<" ms"
-                      << ", avg latency: " << total_resp_time_ms/delta_RPS<< " ms"
+                      << ", avg latency: " << (delta_RPS?total_resp_time_ms/delta_RPS:max_resp_time_ms)<< " ms"
                       << ", successful/send: "
                       << (delta_RPS?(((double)delta_RPS_success / delta_RPS) * 100):0) << "%"
                       <<std::endl;

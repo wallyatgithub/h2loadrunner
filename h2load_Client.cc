@@ -882,6 +882,11 @@ void Client::on_data_chunk(int32_t stream_id, const uint8_t* data, size_t len)
     if (request != requests_awaiting_response.end())
     {
         request->second.resp_payload.append((const char*)data, len);
+        if (config->verbose)
+        {
+            std::string str((const char*)data, len);
+            std::cout<<"received data: "<<str<<std::endl;
+        }
     }
 }
 RequestStat* Client::get_req_stat(int32_t stream_id)
