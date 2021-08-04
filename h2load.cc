@@ -1491,7 +1491,7 @@ int main(int argc, char** argv)
                       << ", min latency: " << min_resp_time_ms<<" ms"
                       << ", avg latency: " << total_resp_time_ms/delta_RPS<< " ms"
                       << ", successful/send: "
-                      << (((double)delta_RPS_success / delta_RPS) * 100) << "%"
+                      << (delta_RPS?(((double)delta_RPS_success / delta_RPS) * 100):0) << "%"
                       <<std::endl;
 /*
                       std::cout
@@ -1514,7 +1514,7 @@ int main(int argc, char** argv)
                           << ", total 4xx: " << total4xx_till_now
                           << ", total 5xx: " << total5xx_till_now
                           << ", ovewrall successful rate: "
-                          << (((double)totalReq_success_till_now / totalReq_till_now) * 100) << "%" << std::endl;
+                          << (totalReq_till_now?(((double)totalReq_success_till_now / totalReq_till_now) * 100):0) << "%" << std::endl;
             }
         }
     });
