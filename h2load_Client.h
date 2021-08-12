@@ -287,6 +287,7 @@ struct Client
                                          double init_duration, double repeat_duration,
                                          void (*callback)(struct ev_loop*, ev_timer*, int));
     bool is_leading_request(Request_Data& request);
+    void mark_response_success_or_failure(int32_t stream_id);
 
 };
 

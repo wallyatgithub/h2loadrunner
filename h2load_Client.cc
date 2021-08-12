@@ -652,15 +652,9 @@ void Client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
     }
 }
 
-void Client::on_status_code(int32_t stream_id, uint16_t status)
+void Client::mark_response_success_or_failure(int32_t stream_id)
 {
-
-    auto request_data = requests_awaiting_response.find(stream_id);
-    if (request_data != requests_awaiting_response.end())
-    {
-        request_data->second.status_code = status;
-    }
-
+    uint16_t status = 0;
     auto itr = streams.find(stream_id);
     if (itr == std::end(streams))
     {
@@ -674,27 +668,9 @@ void Client::on_status_code(int32_t stream_id, uint16_t status)
         return;
     }
 
-    stream.req_stat.status = status;
-    if (status >= 200 && status < 300)
-    {
-        ++worker->stats.status[2];
-        stream.status_success = 1;
-    }
-    else if (status < 400)
-    {
-        ++worker->stats.status[3];
-        stream.status_success = 1;
-    }
-    else if (status < 600)
-    {
-        ++worker->stats.status[status / 100];
-        stream.status_success = 0;
-    }
-    else
-    {
-        stream.status_success = 0;
-    }
+    status = stream.req_stat.status;
 
+    auto request_data = requests_awaiting_response.find(stream_id);
     if (request_data != requests_awaiting_response.end() &&
         request_data->second.expected_status_code)
     {
@@ -707,10 +683,51 @@ void Client::on_status_code(int32_t stream_id, uint16_t status)
             stream.status_success = 1;
         }
     }
+    else
+    {
+        if (status >= 200 && status < 300)
+        {
+            ++worker->stats.status[2];
+            stream.status_success = 1;
+        }
+        else if (status < 400)
+        {
+            ++worker->stats.status[3];
+            stream.status_success = 1;
+        }
+        else if (status < 600)
+        {
+            ++worker->stats.status[status / 100];
+            stream.status_success = 0;
+        }
+        else
+        {
+            stream.status_success = 0;
+        }
+    }
+}
+
+void Client::on_status_code(int32_t stream_id, uint16_t status)
+{
+
+    auto request_data = requests_awaiting_response.find(stream_id);
+    if (request_data != requests_awaiting_response.end())
+    {
+        request_data->second.status_code = status;
+    }
+
+    auto itr = streams.find(stream_id);
+    if (itr != std::end(streams))
+    {
+        auto& stream = (*itr).second;
+        stream.req_stat.status = status;
+    }
 }
 
 void Client::on_stream_close(int32_t stream_id, bool success, bool final)
 {
+    mark_response_success_or_failure(stream_id);
+
     if (worker->current_phase == Phase::MAIN_DURATION)
     {
         if (req_inflight > 0)
