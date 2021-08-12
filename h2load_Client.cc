@@ -648,39 +648,7 @@ void Client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
             }
         }
 
-        stream.req_stat.status = status;
-        if (status >= 200 && status < 300)
-        {
-            ++worker->stats.status[2];
-            stream.status_success = 1;
-        }
-        else if (status < 400)
-        {
-            ++worker->stats.status[3];
-            stream.status_success = 0;
-        }
-        else if (status < 600)
-        {
-            ++worker->stats.status[status / 100];
-            stream.status_success = 0;
-        }
-        else
-        {
-            stream.status_success = 0;
-        }
-
-        if (request != requests_awaiting_response.end() &&
-            request->second.expected_status_code > 0)
-        {
-            if (status != request->second.expected_status_code)
-            {
-                stream.status_success = 0;
-            }
-            else
-            {
-                stream.status_success = 1;
-            }
-        }
+        on_status_code(stream_id,status);
     }
 }
 
