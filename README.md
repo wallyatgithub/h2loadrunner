@@ -228,8 +228,9 @@
 
   There are a couple of online Json editors available, for example: 
 
-	https://json-editor.github.io/json-editor/
-	https://pmk65.github.io/jedemov2/dist/demo.html
+  https://json-editor.github.io/json-editor/
+	
+  https://pmk65.github.io/jedemov2/dist/demo.html
 
   Take https://json-editor.github.io/json-editor/ for example:
   
