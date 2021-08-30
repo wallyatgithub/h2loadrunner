@@ -206,17 +206,15 @@
   With this feature, h2loadrunner can support flexible scenario combinations, not limiting to typical CRUD (Create-Read-Update-Delete) scenario.
   
   Json schema: https://github.com/wallyatgithub/h2loadrunner/blob/main/config_schema.json
+   
+  It is recommended to use a GUI based Json editor to load the Json schema above to edit and then export the Json configuration data.
   
-  Example Json data: https://github.com/wallyatgithub/h2loadrunner/blob/main/example_config.json
-  
-  It is recommended to use a GUI Json editor to load the schema, and input data (Of course it can be done manually, but it is error-prone when dealing with scenario section)
-  
-  Example screenshot of GUI Json editor with https://pmk65.github.io/jedemov2/dist/demo.html:
+  Example screenshot of using Json editor at https://pmk65.github.io/jedemov2/dist/demo.html:
   
   ![Example of GUI configuration](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor.png)
   ![Example of GUI configuration of scenario](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor-scenario.png)
   
-  When finish editing, export Json data, and save to a file <JSON FILE>
+  When finish editing, export the output Json configuration data, and save to a file <JSON FILE>
   
   Then use h2loadrunner --config-file=<JSON FILE> to start the load run
   
@@ -226,27 +224,14 @@
 
     h2loadrunner --config-file=config.json -t 1 -c 3 --rps=1 -D 100  
   
-  Command line input (1 thread, 3 connections, rps 100, duration 100) coming after --config-file will override those in config.json.
-  
+  Command line input (1 thread, 3 connections, rps 100, duration 100) coming after --config-file will override those respective fields in config.json.
 
-  A handy Json editor (onde: https://github.com/exavolt/onde) is included this this repo under third-party/onde:
+  There are a couple of online Json editors available, for example: 
 
-  Open file third-party/onde/samples/app.html in a web browser (Firefox or Safari, may not work with Chrome locally due its strict cross-origin policy).
-  
-  Click the "Edit Schema" menu item.
-  
-  Paste the Json schema (content of config_schema.json) into the text box
-  
-  Push the "Update schema" button.
-  
-  Edit data
-  
-  Click "Export", and copy the generated Json data, and save it to a file JSON_FILE_NAME
-  
-  Use h2loadrunner --config-file=JSON_FILE_NAME to start the load run
-  
-  
-  There are other JSON editors available, for example: https://json-editor.github.io/json-editor/
+	https://json-editor.github.io/json-editor/
+	https://pmk65.github.io/jedemov2/dist/demo.html
+
+  Take https://json-editor.github.io/json-editor/ for example:
   
   Paste content of https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/config_schema.json to "Schema" field of the above link
   
@@ -257,9 +242,7 @@
   Save it to a file <JSON FILE>, then use h2loadrunner --config-file=<JSON FILE> to start the load run
   
   You can also paste stored JSON data back to the right side, and click "Update Form", to sychronize that in the left side form for further edit in GUI.
-  
-  Another online JSON editor: https://pmk65.github.io/jedemov2/dist/demo.html
-
+ 
 # Lua script support
 
   Like wrk/wrk2, h2loadrunner supports Lua script, capable of customizing every header and payload of the request to be sent.
