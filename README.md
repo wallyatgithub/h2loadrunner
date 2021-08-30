@@ -208,29 +208,12 @@
   Json schema: https://github.com/wallyatgithub/h2loadrunner/blob/main/config_schema.json
    
   It is recommended to use a GUI based Json editor to load the Json schema above to edit and then export the Json configuration data.
-  
-  Example screenshot of using Json editor at https://pmk65.github.io/jedemov2/dist/demo.html:
-  
-  ![Example of GUI configuration](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor.png)
-  ![Example of GUI configuration of scenario](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor-scenario.png)
-  
-  When finish editing, export the output Json configuration data, and save to a file <JSON FILE>
-  
-  Then use h2loadrunner --config-file=<JSON FILE> to start the load run
-  
-  When using Json configuration, if wanted, it is still possible to override parameters with command line interface.
-
-  For example, with this command line:
-
-    h2loadrunner --config-file=config.json -t 1 -c 3 --rps=1 -D 100  
-  
-  Command line input (1 thread, 3 connections, rps 100, duration 100) coming after --config-file will override those respective fields in config.json.
 
   There are a couple of online Json editors available, for example: 
 
-  https://json-editor.github.io/json-editor/
+    https://json-editor.github.io/json-editor/
 	
-  https://pmk65.github.io/jedemov2/dist/demo.html
+    https://pmk65.github.io/jedemov2/dist/demo.html
 
   Take https://json-editor.github.io/json-editor/ for example:
   
@@ -242,7 +225,22 @@
   
   Save it to a file <JSON FILE>, then use h2loadrunner --config-file=<JSON FILE> to start the load run
   
-  You can also paste stored JSON data back to the right side, and click "Update Form", to sychronize that in the left side form for further edit in GUI.
+  You can also paste stored JSON data back to the right side, and click "Update Form", to sychronize that in the left side form for further edit in GUI.  
+
+  Example screenshot of another Json editor at https://pmk65.github.io/jedemov2/dist/demo.html:
+  
+  ![Example of GUI configuration](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor.png)
+  ![Example of GUI configuration of scenario](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor-scenario.png)
+  
+  
+  When using Json configuration, if wanted, it is still possible to override parameters with command line interface.
+
+  For example, with this command line:
+
+    h2loadrunner --config-file=config.json -t 1 -c 3 --rps=1 -D 100  
+  
+  Command line input (1 thread, 3 connections, rps 100, duration 100) coming after --config-file will override those respective fields in config.json.
+
  
 # Lua script support
 
