@@ -42,6 +42,8 @@
   9. Support delay between requests of the same scenario, with the delay interval configurable.
 
   10. Support configurable status code to determine if a response is successful in statistics report
+  
+  11. mTLS support
 
 # How performant is h2loadrunner?
   For this test scenario, h2loadrunner will only need less than one core to reach 60K QPS/s:
@@ -203,7 +205,7 @@
 
   h2loadrunner supports JSON based configuration.
   
-  With this feature, h2loadrunner can support flexible scenario combinations, not limiting to typical CRUD (Create-Read-Update-Delete) scenario.
+  With this feature, h2loadrunner can support flexible scenario combinations, not limiting to typical CRUD (Create-Read-Update-Delete) scenario above.
   
   Json schema: https://github.com/wallyatgithub/h2loadrunner/blob/main/config_schema.json
    

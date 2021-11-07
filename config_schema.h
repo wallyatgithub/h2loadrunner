@@ -108,8 +108,9 @@ public:
     std::string client_cert;
     std::string private_key;
     uint32_t cert_verification_mode;
+    std::string max_tls_version;
 
-    Config_Schema():
+    explicit Config_Schema():
         schema("http"),
         host(""),
         port(80),
@@ -135,7 +136,8 @@ public:
         variable_range_start(0),
         variable_range_end(0),
         nreqs(0),
-        stream_timeout_in_ms(5000)
+        stream_timeout_in_ms(5000),
+        max_tls_version("TLSv1.3")
     {
     }
 
@@ -174,6 +176,7 @@ public:
         h->add_property("cert", &this->client_cert, staticjson::Flags::Optional);
         h->add_property("privateKey", &this->private_key, staticjson::Flags::Optional);
         h->add_property("certVerificationMode", &this->cert_verification_mode, staticjson::Flags::Optional);
+        h->add_property("max-tls-version", &this->max_tls_version, staticjson::Flags::Optional);
     }
 
 };

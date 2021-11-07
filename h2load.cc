@@ -1237,7 +1237,7 @@ int main(int argc, char** argv)
     }
 
     auto ssl_opts = (SSL_OP_ALL & ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS) |
-                    SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 |
+                    SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION |
                     SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION;
 
     SSL_CTX_set_options(ssl_ctx, ssl_opts);
@@ -1257,9 +1257,15 @@ int main(int argc, char** argv)
 
     set_cert_verification_mode(ssl_ctx, config.json_config_schema.cert_verification_mode);
 
+    auto max_tls_version = nghttp2::tls::NGHTTP2_TLS_MAX_VERSION;
+    if (config.json_config_schema.max_tls_version == "TLSv1.2")
+    {
+        max_tls_version = TLS1_2_VERSION;
+    }
+
     if (nghttp2::tls::ssl_ctx_set_proto_versions(
             ssl_ctx, nghttp2::tls::NGHTTP2_TLS_MIN_VERSION,
-            nghttp2::tls::NGHTTP2_TLS_MAX_VERSION) != 0)
+            max_tls_version) != 0)
     {
         std::cerr << "Could not set TLS versions" << std::endl;
         exit(EXIT_FAILURE);

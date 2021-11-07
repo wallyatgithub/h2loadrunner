@@ -106,6 +106,12 @@
       "default": 0,
       "type":"integer"
     },
+    "max-tls-version":{
+      "type":"string",
+      "description": "highest allowed TLS version",
+      "default": "TLSv1.3",
+      "enum": ["TLSv1.2", "TLSv1.3"]
+    },
     "no-tls-proto":{
       "description":"Specify ALPN identifier of the protocol to be used when accessing http URI without SSL/TLS. Available protocols: h2c and http/1.1",
       "type":"string",

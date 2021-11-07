@@ -39,6 +39,8 @@
   9. 支持在Request执行结束之后，延迟执行下一个Request，延迟时间可通过JSON配置
 
   10. 支持配置不同的status code，来判定统计结果中response是成功的还是失败的
+  
+  11. 支持mTLS
 
 
 # h2loadrunner性能如何?
