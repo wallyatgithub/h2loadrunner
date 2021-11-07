@@ -80,14 +80,31 @@
       "type":"integer"
     },
     "variable-range-slicing":{
-        "description": "true: Slice the variable range, each client get a sub range; e.g.: full range 1-1000, with 10 clients, each client gets a sub range of 100 (1-100, 101-200...); false: each client gets a full range",
-        "default": false,
-        "type":"boolean"
+      "description": "true: Slice the variable range, each client get a sub range; e.g.: full range 1-1000, with 10 clients, each client gets a sub range of 100 (1-100, 101-200...); false: each client gets a full range",
+      "default": false,
+      "type":"boolean"
     },
     "ciphers":{
       "description":"Set allowed cipher list. The format of the string is described in OpenSSL ciphers(1)",
       "type":"string",
       "default":"ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256"
+    },
+    "caCert":{
+      "description":"The path to a file whose content is the CA certificate in PEM format. This is used to verify the server certificate",
+      "type":"string"
+    },
+    "cert":{
+      "description":"The path to a file whose content is the certificate in PEM format. This is used in mTLS where server requires peer/client certificate",
+      "type":"string"
+    },
+    "privateKey":{
+      "description":"The full path to a file whose content is the private key in PEM format. This is used by mTLS where server requires peer certificate, thus the private key is also needed",
+      "type":"string"
+    },
+    "certVerificationMode":{
+      "description": "0: do not do certificate validate; 1: fail if peer certificate does not pass validation",
+      "default": 0,
+      "type":"integer"
     },
     "no-tls-proto":{
       "description":"Specify ALPN identifier of the protocol to be used when accessing http URI without SSL/TLS. Available protocols: h2c and http/1.1",

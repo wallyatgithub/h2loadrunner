@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <cctype>
 #include <string>
+#include <openssl/err.h>
+#include <openssl/ssl.h>
 
 extern "C" {
 #include <ares.h>
@@ -1152,5 +1154,26 @@ void adaptive_traffic_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
     {
         client->switch_mode(tps_to_set);
     }
+}
+
+std::string get_tls_error_string()
+{
+    unsigned long   error_code = 0;
+    char            error_code_string[2048];
+    const char*      file = 0, *data = 0;
+    int             line = 0, flags = 0;
+    std::string     error_string;
+    pthread_t       tid = pthread_self();
+
+    while ((error_code = ERR_get_error_line_data(&file, &line, &data, &flags)) != 0)
+    {
+        ERR_error_string_n(error_code, error_code_string,
+                           sizeof(error_code_string));
+        std::stringstream strm;
+        strm << "tid==" << tid << ":" << error_code_string << ":" << file << ":" << line << ":additional info...\"" << ((
+          flags & ERR_TXT_STRING) ? data : "") << "\"\n";
+        error_string += strm.str();
+    }
+    return error_string;
 }
 

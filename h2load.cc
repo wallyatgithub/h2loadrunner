@@ -401,6 +401,88 @@ Options:
 } // namespace
 
 
+void load_ca_cert(SSL_CTX* ctx, const std::string& pem_content)
+{
+    std::stringstream strm;
+    strm << "/tmp/cacert" << ::getpid() << ".pem";
+    std::string fileName = strm.str();
+    std::ofstream tmpFile;
+    tmpFile.open(fileName);
+    tmpFile << pem_content << std::flush;
+    tmpFile.close();
+    if (!SSL_CTX_load_verify_locations(ctx, fileName.c_str(), NULL))
+    {
+        std::cerr<<"SSL_CTX_load_verify_locations failed: "<<get_tls_error_string()<<std::endl;
+    }
+    std::remove(fileName.c_str());
+}
+
+void load_cert(SSL_CTX* ctx, const std::string& pem_content)
+{
+    std::stringstream strm;
+    strm << "/tmp/cert" << ::getpid() << ".pem";
+    std::string fileName = strm.str();
+    std::ofstream tmpFile;
+    tmpFile.open(fileName);
+    tmpFile << pem_content << std::flush;
+    tmpFile.close();
+    if (!SSL_CTX_use_certificate_chain_file(ctx, fileName.c_str()))
+    {
+        std::cerr<<"SSL_CTX_use_certificate_chain_file failed"<<get_tls_error_string()<<std::endl;
+    }
+    std::remove(fileName.c_str());
+}
+
+void load_private_key(SSL_CTX* ctx, const std::string& pem_content)
+{
+    std::stringstream strm;
+    strm << "/tmp/priKey" << ::getpid() << ".pem";
+    std::string fileName = strm.str();
+    std::ofstream tmpFile;
+    tmpFile.open(fileName);
+    tmpFile << pem_content << std::flush;
+    tmpFile.close();
+    if (!SSL_CTX_use_PrivateKey_file(ctx, fileName.c_str(), SSL_FILETYPE_PEM))
+    {
+        std::cerr<<"SSL_CTX_use_PrivateKey_file failed"<<get_tls_error_string()<<std::endl;
+    }
+    std::remove(fileName.c_str());
+}
+
+bool check_key_cert_consistency(SSL_CTX* ctx)
+{
+    if (SSL_CTX_check_private_key(ctx) != 1)
+    {
+        std::cerr<<"SSL_CTX_check_private_key failed"<<get_tls_error_string()<<std::endl;
+        return false;
+    }
+    return true;
+}
+
+void set_cert_verification_mode(SSL_CTX* ctx, uint32_t certificate_verification_mode)
+{
+    int mode = SSL_VERIFY_NONE;
+    switch (certificate_verification_mode)
+    {
+        case 0:
+        {
+            mode = SSL_VERIFY_NONE;
+            break;
+        }
+        case 1:
+        {
+            mode = SSL_VERIFY_PEER;
+            break;
+        }
+        default:
+        {
+            mode = SSL_VERIFY_NONE;
+        }
+    }
+    SSL_CTX_set_verify(ctx, mode, NULL);
+}
+
+
 int main(int argc, char** argv)
 {
     tls::libssl_init();
@@ -839,6 +921,19 @@ int main(int argc, char** argv)
                                       config.json_config_schema) << std::endl;
                         assert(config.json_config_schema.scenario[0].uri.typeOfAction == "input");
 
+                        auto load_file_content = [](std::string& source)
+                        {
+                            if (source.size())
+                            {
+                                std::ifstream f(source);
+                                if (f.good())
+                                {
+                                    std::string dest((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+                                    source = dest;
+                                }
+                            }
+                        };
+
                         for (auto& request : config.json_config_schema.scenario)
                         {
                             for (auto& header_with_value : request.additonalHeaders)
@@ -868,24 +963,8 @@ int main(int argc, char** argv)
                                 }
                                 request.headers_in_map[header_name] = header_value;
                             }
-                            if (request.payload.size())
-                            {
-                                std::ifstream f(request.payload);
-                                if (f.good())
-                                {
-                                    std::string payloadStr((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-                                    request.payload = payloadStr;
-                                }
-                            }
-                            if (request.luaScript.size())
-                            {
-                                std::ifstream f(request.luaScript);
-                                if (f.good())
-                                {
-                                    std::string luaScriptStr((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-                                    request.luaScript = luaScriptStr;
-                                }
-                            }
+                            load_file_content(request.payload);
+                            load_file_content(request.luaScript);
                             if (request.uri.typeOfAction == "input")
                             {
                                 http_parser_url u {};
@@ -908,6 +987,10 @@ int main(int argc, char** argv)
                                 }
                             }
                         }
+                        load_file_content(config.json_config_schema.ca_cert);
+                        load_file_content(config.json_config_schema.client_cert);
+                        load_file_content(config.json_config_schema.private_key);
+
                         populate_config_from_json(config);
                         logfile = config.json_config_schema.log_file;
                     }
@@ -1154,12 +1237,25 @@ int main(int argc, char** argv)
     }
 
     auto ssl_opts = (SSL_OP_ALL & ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS) |
-                    SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION |
+                    SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 |
                     SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION;
 
     SSL_CTX_set_options(ssl_ctx, ssl_opts);
     SSL_CTX_set_mode(ssl_ctx, SSL_MODE_AUTO_RETRY);
     SSL_CTX_set_mode(ssl_ctx, SSL_MODE_RELEASE_BUFFERS);
+
+    if (config.json_config_schema.client_cert.size() && config.json_config_schema.private_key.size())
+    {
+        load_cert(ssl_ctx, config.json_config_schema.client_cert);
+        load_private_key(ssl_ctx, config.json_config_schema.private_key);
+        check_key_cert_consistency(ssl_ctx);
+    }
+    if (config.json_config_schema.ca_cert.size())
+    {
+        load_ca_cert(ssl_ctx, config.json_config_schema.ca_cert);
+    }
+
+    set_cert_verification_mode(ssl_ctx, config.json_config_schema.cert_verification_mode);
 
     if (nghttp2::tls::ssl_ctx_set_proto_versions(
             ssl_ctx, nghttp2::tls::NGHTTP2_TLS_MIN_VERSION,

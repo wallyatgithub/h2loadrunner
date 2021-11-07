@@ -137,5 +137,7 @@ void normalize_request_templates(h2load::Config* config);
 
 void adaptive_traffic_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
+std::string get_tls_error_string();
+
 
 #endif

@@ -104,6 +104,10 @@ public:
     uint32_t stream_timeout_in_ms;
     std::vector<Request> scenario;
     bool variable_range_slicing;
+    std::string ca_cert;
+    std::string client_cert;
+    std::string private_key;
+    uint32_t cert_verification_mode;
 
     Config_Schema():
         schema("http"),
@@ -166,6 +170,10 @@ public:
         h->add_property("variable-range-end", &this->variable_range_end, staticjson::Flags::Optional);
         h->add_property("variable-range-slicing", &this->variable_range_slicing, staticjson::Flags::Optional);
         h->add_property("scenario", &this->scenario);
+        h->add_property("caCert", &this->ca_cert, staticjson::Flags::Optional);
+        h->add_property("cert", &this->client_cert, staticjson::Flags::Optional);
+        h->add_property("privateKey", &this->private_key, staticjson::Flags::Optional);
+        h->add_property("certVerificationMode", &this->cert_verification_mode, staticjson::Flags::Optional);
     }
 
 };

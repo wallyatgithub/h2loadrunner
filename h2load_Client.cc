@@ -1267,6 +1267,7 @@ int Client::tls_handshake()
                 ev_io_start(worker->loop, &wev);
                 return 0;
             default:
+                std::cerr<<get_tls_error_string()<<std::endl;
                 return -1;
         }
     }
