@@ -1,0 +1,96 @@
+{
+  "schema": "http",
+  "host": "192.168.1.124",
+  "port": 8080,
+  "threads": 10,
+  "clients": 10,
+  "duration": 2000,
+  "total-requests": 1,
+  "warm-up-time": 0,
+  "max-concurrent-streams": 32,
+  "request-per-second": 0,
+  "request-per-second-feed-file": "",
+  "rate": 0,
+  "rate-period": 1,
+  "stream-timeout": 5000,
+  "variable-name-in-path-and-data": "-user-name",
+  "variable-range-start": 1,
+  "variable-range-end": 100000000,
+  "variable-range-slicing": false,
+  "ciphers": "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256",
+  "caCert": "",
+  "cert": "",
+  "privateKey": "",
+  "certVerificationMode": 0,
+  "max-tls-version": "TLSv1.3",
+  "no-tls-proto": "h2c",
+  "connection-active-timeout": 0,
+  "connection-inactivity-timeout": 0,
+  "npn-list": "h2,h2-16,h2-14,http/1.1",
+  "header-table-size": 4096,
+  "encoder-header-table-size": 4096,
+  "log-file": "",
+  "window-bits": 30,
+  "connection-window-bits": 30,
+  "scenario": [
+    {
+      "uri": {
+        "typeOfAction": "input",
+        "input": "/udm-ee/subscribe/-user-name"
+      },
+      "clear-old-cookies": false,
+      "method": "POST",
+      "payload": "hello: -user-name, welcome.",
+      "additonalHeaders": [
+        "user-agent: h2load",
+        "another-user-agent: h2load",
+        "some-other-header: whatever"
+      ],
+      "luaScript": "function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send) return request_headers_to_send, request_payload_to_send end",
+      "expected-status-code": 201,
+      "delay-before-executing-next": 0
+    },
+    {
+      "uri": {
+        "typeOfAction": "fromResponseHeader",
+        "input": "location"
+      },
+      "clear-old-cookies": false,
+      "method": "PATCH",
+      "payload": "hello: -user-name, update.",
+      "additonalHeaders": [
+        "user-agent: h2load",
+        "another-user-agent: h2load",
+        "some-other-header: whatever"
+      ],
+      "luaScript": "function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send) request_headers_to_send[\"lua-version\"] = \"5.1\" request_headers_to_send[\"last-response-status-code\"] = response_header[\":status\"] request_headers_to_send[\"last-response-location-header\"] = response_header[\"location\"] return request_headers_to_send, request_payload_to_send end",
+      "expected-status-code": 204,
+      "delay-before-executing-next": 0
+    },
+    {
+      "uri": {
+        "typeOfAction": "sameWithLastOne",
+        "input": ""
+      },
+      "clear-old-cookies": false,
+      "method": "DELETE",
+      "payload": "hello: -user-name, delete.",
+      "additonalHeaders": [
+        "user-agent: h2load"
+      ],
+      "expected-status-code": 204,
+      "delay-before-executing-next": 0
+    },
+    {
+      "uri": {
+        "typeOfAction": "sameWithLastOne",
+        "input": ""
+      },
+      "clear-old-cookies": false,
+      "method": "GET",
+      "expected-status-code": 404,
+      "delay-before-executing-next": 0
+    }
+  ]
+}
+

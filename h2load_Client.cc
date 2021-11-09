@@ -1776,20 +1776,16 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
             lua_pushlstring(L, header.second.c_str(), header.second.size());
             lua_rawset(L, -3);
         }
-        static std::string method_name = ":method";
-        lua_pushlstring(L, method_name.c_str(), method_name.size());
+        lua_pushlstring(L, method_header.c_str(), method_header.size());
         lua_pushlstring(L, finished_request.method->c_str(), finished_request.method->size());
         lua_rawset(L, -3);
-        static std::string path_name = ":path";
-        lua_pushlstring(L, path_name.c_str(), path_name.size());
+        lua_pushlstring(L, path_header.c_str(), path_header.size());
         lua_pushlstring(L, finished_request.path->c_str(), finished_request.path->size());
         lua_rawset(L, -3);
-        static std::string schema_name = scheme_header;
-        lua_pushlstring(L, schema_name.c_str(), schema_name.size());
+        lua_pushlstring(L, scheme_header.c_str(), scheme_header.size());
         lua_pushlstring(L, finished_request.schema->c_str(), finished_request.schema->size());
         lua_rawset(L, -3);
-        static std::string authority_name = ":authority";
-        lua_pushlstring(L, authority_name.c_str(), authority_name.size());
+        lua_pushlstring(L, authority_header.c_str(), authority_header.size());
         lua_pushlstring(L, finished_request.authority->c_str(), finished_request.authority->size());
         lua_rawset(L, -3);
 
@@ -1803,16 +1799,16 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
             lua_pushlstring(L, header.second.c_str(), header.second.size());
             lua_rawset(L, -3);
         }
-        lua_pushlstring(L, method_name.c_str(), method_name.size());
+        lua_pushlstring(L, method_header.c_str(), method_header.size());
         lua_pushlstring(L, request_to_send.method->c_str(), request_to_send.method->size());
         lua_rawset(L, -3);
-        lua_pushlstring(L, path_name.c_str(), path_name.size());
+        lua_pushlstring(L, path_header.c_str(), path_header.size());
         lua_pushlstring(L, request_to_send.path->c_str(), request_to_send.path->size());
         lua_rawset(L, -3);
-        lua_pushlstring(L, schema_name.c_str(), schema_name.size());
+        lua_pushlstring(L, scheme_header.c_str(), scheme_header.size());
         lua_pushlstring(L, request_to_send.schema->c_str(), request_to_send.schema->size());
         lua_rawset(L, -3);
-        lua_pushlstring(L, authority_name.c_str(), authority_name.size());
+        lua_pushlstring(L, authority_header.c_str(), authority_header.size());
         lua_pushlstring(L, request_to_send.authority->c_str(), request_to_send.authority->size());
         lua_rawset(L, -3);
 
@@ -1853,15 +1849,15 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
                         /* removes 'value'; keeps 'key' for next iteration */
                         lua_pop(L, 1);
                     }
-                    request_to_send.stringCollection.emplace_back(headers[":method"]);
+                    request_to_send.stringCollection.emplace_back(headers[method_header]);
                     request_to_send.method = &(request_to_send.stringCollection.back());
-                    headers.erase(":method");
-                    request_to_send.stringCollection.emplace_back(headers[":path"]);
+                    headers.erase(method_header);
+                    request_to_send.stringCollection.emplace_back(headers[path_header]);
                     request_to_send.path = &(request_to_send.stringCollection.back());
-                    headers.erase(":path");
-                    request_to_send.stringCollection.emplace_back(headers[":authority"]);
+                    headers.erase(path_header);
+                    request_to_send.stringCollection.emplace_back(headers[authority_header]);
                     request_to_send.authority= &(request_to_send.stringCollection.back());
-                    headers.erase(":authority");
+                    headers.erase(authority_header);
                     request_to_send.stringCollection.emplace_back(headers[scheme_header]);
                     request_to_send.schema = &(request_to_send.stringCollection.back());
                     headers.erase(scheme_header);

@@ -65,7 +65,7 @@ struct Request_Data
         delay_before_executing_next = 0;
         next_request_idx = 0;
         transaction_stat = nullptr;
-        stringCollection.reserve(32);
+        stringCollection.reserve(11); // (path, authority, method, schema, payload) * 2
     };
 
     friend std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
