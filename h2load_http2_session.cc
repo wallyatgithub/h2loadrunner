@@ -195,7 +195,7 @@ ssize_t buffer_read_callback(nghttp2_session* session, int32_t stream_id,
     auto config = client->config;
     auto request = client->requests_awaiting_response.find(stream_id);
     assert(request != client->requests_awaiting_response.end());
-    std::string& stream_buffer = client->requests_awaiting_response[stream_id].req_payload;
+    std::string& stream_buffer = *(client->requests_awaiting_response[stream_id].req_payload);
 
     if (config->verbose)
     {
@@ -416,20 +416,33 @@ int Http2Session::_submit_request()
     std::vector<nghttp2_nv> http2_nvs;
     auto data = std::move(client_->get_request_to_submit());
 
-    http2_nvs.reserve(data.req_headers.size() + 4);
+    http2_nvs.reserve(data.req_headers->size() + data.shadow_req_headers.size() + 4);
 
     static std::string path_header_name = ":path";
-    http2_nvs.emplace_back(http2::make_nv(path_header_name, data.path, false));
+    http2_nvs.emplace_back(http2::make_nv(path_header_name, *data.path, false));
 
     static std::string scheme_header_name = ":scheme";
-    http2_nvs.emplace_back(http2::make_nv(scheme_header_name, data.schema, false));
+    http2_nvs.emplace_back(http2::make_nv(scheme_header_name, *data.schema, false));
     static std::string authority_header_name = ":authority";
-    http2_nvs.emplace_back(http2::make_nv(authority_header_name, data.authority, false));
+    http2_nvs.emplace_back(http2::make_nv(authority_header_name, *data.authority, false));
 
     static std::string method_header_name = ":method";
-    http2_nvs.emplace_back(http2::make_nv(method_header_name, data.method, false));
+    http2_nvs.emplace_back(http2::make_nv(method_header_name, *data.method, false));
 
-    for (auto& header : data.req_headers)
+    for (auto& header : *data.req_headers)
+    {
+        if (data.shadow_req_headers.count(header.first))
+        {
+            continue;
+        }
+        if (header.first == ":path" || header.first == ":scheme" || header.first == ":authority" || header.first == ":method")
+        {
+            continue;
+        }
+        http2_nvs.emplace_back(http2::make_nv(header.first, header.second, false));
+    }
+
+    for (auto& header : data.shadow_req_headers)
     {
         if (header.first == ":path" || header.first == ":scheme" || header.first == ":authority" || header.first == ":method")
         {
@@ -452,7 +465,7 @@ int Http2Session::_submit_request()
 
     int32_t stream_id =
         nghttp2_submit_request(session_, nullptr, http2_nvs.data(), http2_nvs.size(),
-                               data.req_payload.empty() ? nullptr : &prd, nullptr);
+                               data.req_payload->empty() ? nullptr : &prd, nullptr);
     if (stream_id < 0)
     {
         return -1;
@@ -460,7 +473,7 @@ int Http2Session::_submit_request()
 
     client_->on_request_start(stream_id);
     client_->curr_stream_id = stream_id;
-    client_->requests_awaiting_response[stream_id] = data;
+    client_->requests_awaiting_response.insert(std::make_pair(stream_id, std::move(data)));
     return 0;
 }
 

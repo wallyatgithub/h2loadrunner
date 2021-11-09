@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <deque>
 
+#include <list>
+
 #include <ev.h>
 
 extern "C" {
@@ -25,19 +27,22 @@ extern "C" {
 #include "h2load_Cookie.h"
 #include <ares.h>
 
+static std::string emptyString;
+
 
 namespace h2load
 {
 
 struct Request_Data
 {
-    std::string schema;
-    std::string authority;
-    std::string req_payload;
-    std::string path;
+    std::string* schema;
+    std::string* authority;
+    std::string* req_payload;
+    std::string* path;
     uint64_t user_id;
-    std::string method;
-    std::map<std::string, std::string, ci_less> req_headers;
+    std::string* method;
+    std::map<std::string, std::string, ci_less>* req_headers;
+    std::map<std::string, std::string, ci_less> shadow_req_headers;
     std::string resp_payload;
     std::map<std::string, std::string, ci_less> resp_headers;
     uint16_t status_code;
@@ -46,7 +51,13 @@ struct Request_Data
     std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
     size_t next_request_idx;
     std::shared_ptr<TransactionStat> transaction_stat;
-    explicit Request_Data()
+    std::vector<std::string> stringCollection;
+    explicit Request_Data():
+    schema(&emptyString),
+    authority(&emptyString),
+    req_payload(&emptyString),
+    path(&emptyString),
+    method(&emptyString)
     {
         user_id = 0;
         status_code = 0;
@@ -54,23 +65,28 @@ struct Request_Data
         delay_before_executing_next = 0;
         next_request_idx = 0;
         transaction_stat = nullptr;
+        stringCollection.reserve(32);
     };
 
     friend std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
     {
         o << "Request_Data: { "<<std::endl
-          << "schema:" << request_data.schema<<std::endl
-          << "authority:" << request_data.authority<<std::endl
-          << "req_payload:" << request_data.req_payload<<std::endl
-          << "path:" << request_data.path<<std::endl
+          << "schema:" << *request_data.schema<<std::endl
+          << "authority:" << *request_data.authority<<std::endl
+          << "req_payload:" << *request_data.req_payload<<std::endl
+          << "path:" << *request_data.path<<std::endl
           << "user_id:" << request_data.user_id<<std::endl
-          << "method:" << request_data.method<<std::endl
+          << "method:" << *request_data.method<<std::endl
           << "expected_status_code:" << request_data.expected_status_code<<std::endl
           << "delay_before_executing_next:" << request_data.delay_before_executing_next<<std::endl;
 
-        for (auto& it: request_data.req_headers)
+        for (auto& it: *(request_data.req_headers))
         {
-            o << "request header name: "<<it.first<<", header value: " <<it.second<<std::endl;
+            o << "request header name from template: "<<it.first<<", header value: " <<it.second<<std::endl;
+        }
+        for (auto& it: request_data.shadow_req_headers)
+        {
+            o << "updated request header name: "<<it.first<<", header value: " <<it.second<<std::endl;
         }
 
         o << "response status code:" << request_data.status_code<<std::endl;

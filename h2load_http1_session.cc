@@ -342,10 +342,25 @@ int Http1Session::_submit_request()
     auto data = std::move(client_->get_request_to_submit());
     auto config = client_->worker->config;
     std::string req;
-    req.append(data.method).append(" ").append(data.path).append(" HTTP/1.1\r\n");
-    req.append("Host: ").append(data.authority).append("\r\n");
+    req.append(*data.method).append(" ").append(*data.path).append(" HTTP/1.1\r\n");
+    req.append("Host: ").append(*data.authority).append("\r\n");
 
-    for (auto& header : data.req_headers)
+    for (auto& header : *data.req_headers)
+    {
+        if (data.shadow_req_headers.count(header.first))
+        {
+            continue;
+        }
+        if (header.first == ":path" || header.first == ":scheme" || header.first == ":authority" || header.first == ":method")
+        {
+            continue;
+        }
+        req.append(header.first);
+        req.append(": ");
+        req.append(header.second);
+        req.append("\r\n");
+    }
+    for (auto& header : data.shadow_req_headers)
     {
         if (header.first == ":path" || header.first == ":scheme" || header.first == ":authority" || header.first == ":method")
         {
@@ -356,6 +371,7 @@ int Http1Session::_submit_request()
         req.append(header.second);
         req.append("\r\n");
     }
+
     req += "\r\n";
 
     if (config->verbose)
@@ -372,7 +388,7 @@ int Http1Session::_submit_request()
 
     client_->requests_awaiting_response[stream_req_counter_] = data;
 
-    if (data.req_payload.empty())
+    if (data.req_payload->empty())
     {
         // increment for next request
         stream_req_counter_ += 2;
@@ -398,7 +414,7 @@ int Http1Session::_on_write()
     }
     auto request = client_->requests_awaiting_response.find(stream_req_counter_);
     assert(request != client_->requests_awaiting_response.end());
-    std::string& stream_buffer = client_->requests_awaiting_response[stream_req_counter_].req_payload;
+    std::string& stream_buffer = *(client_->requests_awaiting_response[stream_req_counter_].req_payload);
 
     if (!stream_buffer.empty())
     {

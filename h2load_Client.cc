@@ -1445,11 +1445,11 @@ void Client::replace_variable(std::string& input, const std::string& variable_na
 
 void Client::update_content_length(Request_Data& data)
 {
-    if (data.req_payload.size())
+    if (data.req_payload->size())
     {
         std::string content_length = "content-length";
-        data.req_headers.erase(content_length);
-        data.req_headers[content_length] = std::to_string(data.req_payload.size());
+        //data.req_headers.erase(content_length);
+        data.shadow_req_headers[content_length] = std::to_string(data.req_payload->size());
     }
 }
 
@@ -1458,7 +1458,7 @@ void Client::parse_and_save_cookies(Request_Data& finished_request)
     if (finished_request.resp_headers.find("Set-Cookie") != finished_request.resp_headers.end())
     {
         auto new_cookies = Cookie::parse_cookie_string(finished_request.resp_headers["Set-Cookie"],
-                                               finished_request.authority, finished_request.schema);
+                                               *finished_request.authority, *finished_request.schema);
         for (auto& cookie: new_cookies)
         {
             if (Cookie::is_cookie_acceptable(cookie))
@@ -1480,11 +1480,11 @@ void Client::produce_request_cookie_header(Request_Data& req_to_be_sent)
     {
         return;
     }
-    auto iter = req_to_be_sent.req_headers.find("Cookie");
+    auto iter = req_to_be_sent.req_headers->find("Cookie");
     std::set<std::string> cookies_from_config;
-    if (iter != req_to_be_sent.req_headers.end())
+    if (iter != req_to_be_sent.req_headers->end())
     {
-        auto cookie_vec = Cookie::parse_cookie_string(iter->second, req_to_be_sent.authority, req_to_be_sent.schema);
+        auto cookie_vec = Cookie::parse_cookie_string(iter->second, *req_to_be_sent.authority, *req_to_be_sent.schema);
         for (auto& cookie: cookie_vec)
         {
             cookies_from_config.insert(cookie.cookie_key);
@@ -1499,7 +1499,7 @@ void Client::produce_request_cookie_header(Request_Data& req_to_be_sent)
             // an overriding header from config carries the same cookie, config takes precedence
             continue;
         }
-        else if (!Cookie::is_cookie_allowed_to_be_sent(cookie.second, req_to_be_sent.schema, req_to_be_sent.authority, req_to_be_sent.path))
+        else if (!Cookie::is_cookie_allowed_to_be_sent(cookie.second, *req_to_be_sent.schema, *req_to_be_sent.authority, *req_to_be_sent.path))
         {
             // cookie not allowed to be sent for this request
             continue;
@@ -1512,13 +1512,14 @@ void Client::produce_request_cookie_header(Request_Data& req_to_be_sent)
     }
     if (!cookies_to_append.empty())
     {
-        if (iter != req_to_be_sent.req_headers.end() && !iter->second.empty())
+        if (iter != req_to_be_sent.req_headers->end() && !iter->second.empty())
         {
-            iter->second.append(cookie_delimeter).append(cookies_to_append);
+            req_to_be_sent.shadow_req_headers["Cookie"] = iter->second;
+            req_to_be_sent.shadow_req_headers["Cookie"].append(cookie_delimeter).append(cookies_to_append);
         }
         else
         {
-            req_to_be_sent.req_headers["Cookie"] = std::move(cookies_to_append);
+            req_to_be_sent.shadow_req_headers["Cookie"] = std::move(cookies_to_append);
         }
     }
 }
@@ -1531,13 +1532,14 @@ void Client::populate_request_from_config_template(Request_Data& new_request,
 
     auto& request_template = config->json_config_schema.scenario[index_in_config_template];
 
-    new_request.method = request_template.method;
-    new_request.schema = request_template.schema;
-    new_request.authority = request_template.authority;
-    new_request.req_payload = reassemble_str_with_variable(request_template.tokenized_payload,
-                                                           new_request.user_id,
-                                                           full_var_str_len);;
-    new_request.req_headers = request_template.headers_in_map;
+    new_request.method = &request_template.method;
+    new_request.schema = &request_template.schema;
+    new_request.authority = &request_template.authority;
+    new_request.stringCollection.emplace_back(reassemble_str_with_variable(request_template.tokenized_payload,
+                                              new_request.user_id,
+                                              full_var_str_len));
+    new_request.req_payload = &(new_request.stringCollection.back());
+    new_request.req_headers = &request_template.headers_in_map;
     new_request.expected_status_code = request_template.expected_status_code;
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
 }
@@ -1569,9 +1571,10 @@ Request_Data Client::prepare_first_request()
     populate_request_from_config_template(new_request, curr_index);
 
     auto& request_template = config->json_config_schema.scenario[curr_index];
-    new_request.path = reassemble_str_with_variable(request_template.tokenized_path,
-                                                    new_request.user_id,
-                                                    full_var_str_len);
+    new_request.stringCollection.emplace_back(reassemble_str_with_variable(request_template.tokenized_path,
+                                              new_request.user_id,
+                                              full_var_str_len));
+    new_request.path = &(new_request.stringCollection.back());
 
     if (config->json_config_schema.scenario[curr_index].luaScript.size())
     {
@@ -1645,15 +1648,19 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     if (request_template.uri.typeOfAction == "input")
     {
-         new_request.path = reassemble_str_with_variable(request_template.tokenized_path,
+         new_request.stringCollection.emplace_back(reassemble_str_with_variable(request_template.tokenized_path,
                                                          new_request.user_id,
-                                                         full_var_str_len);
+                                                         full_var_str_len));
+         new_request.path = &(new_request.stringCollection.back());
     }
     else if (request_template.uri.typeOfAction == "sameWithLastOne")
     {
-        new_request.path = finished_request.path;
-        new_request.schema = finished_request.schema;
-        new_request.authority= finished_request.authority;
+        new_request.stringCollection.emplace_back(*finished_request.path);
+        new_request.path = &(new_request.stringCollection.back());
+        new_request.stringCollection.emplace_back(*finished_request.schema);
+        new_request.schema = &(new_request.stringCollection.back());
+        new_request.stringCollection.emplace_back(*finished_request.authority);
+        new_request.authority = &(new_request.stringCollection.back());
     }
     else if (request_template.uri.typeOfAction == "fromResponseHeader")
     {
@@ -1668,17 +1675,20 @@ bool Client::prepare_next_request(Request_Data& finished_request)
             }
             else
             {
-                new_request.path = get_reqline(header->second.c_str(), u);
+                new_request.stringCollection.emplace_back(get_reqline(header->second.c_str(), u));
+                new_request.path = &(new_request.stringCollection.back());
                 if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
                 {
-                    new_request.schema = util::get_uri_field(header->second.c_str(), u, UF_SCHEMA).str();
-                    util::inp_strlower(new_request.schema);
-                    new_request.authority = util::get_uri_field(header->second.c_str(), u, UF_HOST).str();
-                    util::inp_strlower(new_request.authority);
+                    new_request.stringCollection.emplace_back(util::get_uri_field(header->second.c_str(), u, UF_SCHEMA).str());
+                    util::inp_strlower(new_request.stringCollection.back());
+                    new_request.schema = &(new_request.stringCollection.back());
+                    new_request.stringCollection.emplace_back(util::get_uri_field(header->second.c_str(), u, UF_HOST).str());
+                    util::inp_strlower(new_request.stringCollection.back());
                     if (util::has_uri_field(u, UF_PORT))
                     {
-                        new_request.authority.append(":").append(util::utos(u.port));
+                        new_request.stringCollection.back().append(":").append(util::utos(u.port));
                     }
+                    new_request.authority = &(new_request.stringCollection.back());
                 }
             }
         }
@@ -1768,45 +1778,45 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
         }
         static std::string method_name = ":method";
         lua_pushlstring(L, method_name.c_str(), method_name.size());
-        lua_pushlstring(L, finished_request.method.c_str(), finished_request.method.size());
+        lua_pushlstring(L, finished_request.method->c_str(), finished_request.method->size());
         lua_rawset(L, -3);
         static std::string path_name = ":path";
         lua_pushlstring(L, path_name.c_str(), path_name.size());
-        lua_pushlstring(L, finished_request.path.c_str(), finished_request.path.size());
+        lua_pushlstring(L, finished_request.path->c_str(), finished_request.path->size());
         lua_rawset(L, -3);
         static std::string schema_name = ":schema";
         lua_pushlstring(L, schema_name.c_str(), schema_name.size());
-        lua_pushlstring(L, finished_request.schema.c_str(), finished_request.schema.size());
+        lua_pushlstring(L, finished_request.schema->c_str(), finished_request.schema->size());
         lua_rawset(L, -3);
         static std::string authority_name = ":authority";
         lua_pushlstring(L, authority_name.c_str(), authority_name.size());
-        lua_pushlstring(L, finished_request.authority.c_str(), finished_request.authority.size());
+        lua_pushlstring(L, finished_request.authority->c_str(), finished_request.authority->size());
         lua_rawset(L, -3);
 
 
         lua_pushlstring(L, finished_request.resp_payload.c_str(), finished_request.resp_payload.size());
 
-        lua_createtable(L, 0, request_to_send.req_headers.size());
-        for (auto& header : request_to_send.req_headers)
+        lua_createtable(L, 0, request_to_send.req_headers->size());
+        for (auto& header : *(request_to_send.req_headers))
         {
             lua_pushlstring(L, header.first.c_str(), header.first.size());
             lua_pushlstring(L, header.second.c_str(), header.second.size());
             lua_rawset(L, -3);
         }
         lua_pushlstring(L, method_name.c_str(), method_name.size());
-        lua_pushlstring(L, request_to_send.method.c_str(), request_to_send.method.size());
+        lua_pushlstring(L, request_to_send.method->c_str(), request_to_send.method->size());
         lua_rawset(L, -3);
         lua_pushlstring(L, path_name.c_str(), path_name.size());
-        lua_pushlstring(L, request_to_send.path.c_str(), request_to_send.path.size());
+        lua_pushlstring(L, request_to_send.path->c_str(), request_to_send.path->size());
         lua_rawset(L, -3);
         lua_pushlstring(L, schema_name.c_str(), schema_name.size());
-        lua_pushlstring(L, request_to_send.schema.c_str(), request_to_send.schema.size());
+        lua_pushlstring(L, request_to_send.schema->c_str(), request_to_send.schema->size());
         lua_rawset(L, -3);
         lua_pushlstring(L, authority_name.c_str(), authority_name.size());
-        lua_pushlstring(L, request_to_send.authority.c_str(), request_to_send.authority.size());
+        lua_pushlstring(L, request_to_send.authority->c_str(), request_to_send.authority->size());
         lua_rawset(L, -3);
 
-        lua_pushlstring(L, request_to_send.req_payload.c_str(), request_to_send.req_payload.size());
+        lua_pushlstring(L, request_to_send.req_payload->c_str(), request_to_send.req_payload->size());
 
         lua_pcall(L, 4, 2, 0);
         int top = lua_gettop(L);
@@ -1818,7 +1828,8 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
                 {
                     size_t len;
                     const char* str = lua_tolstring(L, -1, &len);
-                    request_to_send.req_payload.assign(str, len);
+                    request_to_send.stringCollection.emplace_back(str, len);
+                    request_to_send.req_payload = &(request_to_send.stringCollection.back());
                     break;
                 }
                 case LUA_TTABLE:
@@ -1842,15 +1853,19 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
                         /* removes 'value'; keeps 'key' for next iteration */
                         lua_pop(L, 1);
                     }
-                    request_to_send.method = headers[":method"];
+                    request_to_send.stringCollection.emplace_back(headers[":method"]);
+                    request_to_send.method = &(request_to_send.stringCollection.back());
                     headers.erase(":method");
-                    request_to_send.path = headers[":path"];
+                    request_to_send.stringCollection.emplace_back(headers[":path"]);
+                    request_to_send.path = &(request_to_send.stringCollection.back());
                     headers.erase(":path");
-                    request_to_send.req_headers = headers;
-                    request_to_send.authority = headers[":authority"];
+                    request_to_send.stringCollection.emplace_back(headers[":authority"]);
+                    request_to_send.authority= &(request_to_send.stringCollection.back());
                     headers.erase(":authority");
-                    request_to_send.schema = headers[":schema"];
+                    request_to_send.stringCollection.emplace_back(headers[":schema"]);
+                    request_to_send.schema = &(request_to_send.stringCollection.back());
                     headers.erase(":schema");
+                    request_to_send.shadow_req_headers = std::move(headers);
                     break;
                 }
                 default:
@@ -1875,13 +1890,13 @@ Client* Client::find_or_create_dest_client(Request_Data& request_to_send)
 {
     if (!parent_client) // this is the first connection
     {
-        std::string dest = request_to_send.schema;
-        dest.append("://").append(request_to_send.authority);
+        std::string dest = *(request_to_send.schema);
+        dest.append("://").append(*request_to_send.authority);
         auto it = dest_client.find(dest);
         if (it == dest_client.end())
         {
             auto new_client = std::make_unique<Client>(this->id, this->worker, this->req_todo, this->config,
-                                                       this, request_to_send.schema, request_to_send.authority);
+                                                       this, *request_to_send.schema, *request_to_send.authority);
             dest_client[dest] = new_client.get();
             new_client->connect_to_host(new_client->schema, new_client->authority);
             new_client.release();
