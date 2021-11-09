@@ -418,16 +418,10 @@ int Http2Session::_submit_request()
 
     http2_nvs.reserve(data.req_headers->size() + data.shadow_req_headers.size() + 4);
 
-    static std::string path_header_name = ":path";
-    http2_nvs.emplace_back(http2::make_nv(path_header_name, *data.path, false));
-
-    static std::string scheme_header_name = ":scheme";
-    http2_nvs.emplace_back(http2::make_nv(scheme_header_name, *data.schema, false));
-    static std::string authority_header_name = ":authority";
-    http2_nvs.emplace_back(http2::make_nv(authority_header_name, *data.authority, false));
-
-    static std::string method_header_name = ":method";
-    http2_nvs.emplace_back(http2::make_nv(method_header_name, *data.method, false));
+    http2_nvs.emplace_back(http2::make_nv(path_header, *data.path, false));
+    http2_nvs.emplace_back(http2::make_nv(scheme_header, *data.schema, false));
+    http2_nvs.emplace_back(http2::make_nv(authority_header, *data.authority, false));
+    http2_nvs.emplace_back(http2::make_nv(method_header, *data.method, false));
 
     for (auto& header : *data.req_headers)
     {
@@ -435,7 +429,7 @@ int Http2Session::_submit_request()
         {
             continue;
         }
-        if (header.first == path_header_name || header.first == scheme_header_name || header.first == authority_header_name || header.first == method_header_name)
+        if (header.first == path_header || header.first == scheme_header || header.first == authority_header || header.first == method_header)
         {
             continue;
         }
@@ -444,7 +438,7 @@ int Http2Session::_submit_request()
 
     for (auto& header : data.shadow_req_headers)
     {
-      if (header.first == path_header_name || header.first == scheme_header_name || header.first == authority_header_name || header.first == method_header_name)
+        if (header.first == path_header || header.first == scheme_header || header.first == authority_header || header.first == method_header)
         {
             continue;
         }

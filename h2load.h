@@ -28,15 +28,22 @@
 #include "http2.h"
 #include "memchunk.h"
 #include "template.h"
-
+#include <string>
 
 using namespace nghttp2;
+
+const  std::string scheme_header = ":scheme";
+const  std::string path_header = ":path";
+const  std::string authority_header = ":authority";
+const  std::string method_header = ":method";
 
 namespace h2load
 {
 
 constexpr auto BACKOFF_WRITE_BUFFER_THRES = 16_k;
 constexpr int MAX_STREAM_TO_BE_EXHAUSTED = -2;
+
+
 
 enum ClientState { CLIENT_IDLE, CLIENT_CONNECTING, CLIENT_CONNECTED };
 

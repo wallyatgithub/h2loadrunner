@@ -351,7 +351,7 @@ int Http1Session::_submit_request()
         {
             continue;
         }
-        if (header.first == ":path" || header.first == ":scheme" || header.first == ":authority" || header.first == ":method")
+        if (header.first == path_header || header.first == scheme_header || header.first == authority_header || header.first == method_header)
         {
             continue;
         }
@@ -362,7 +362,7 @@ int Http1Session::_submit_request()
     }
     for (auto& header : data.shadow_req_headers)
     {
-        if (header.first == ":path" || header.first == ":scheme" || header.first == ":authority" || header.first == ":method")
+        if (header.first == path_header || header.first == scheme_header || header.first == authority_header || header.first == method_header)
         {
             continue;
         }

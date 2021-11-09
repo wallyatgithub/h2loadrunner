@@ -1784,7 +1784,7 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
         lua_pushlstring(L, path_name.c_str(), path_name.size());
         lua_pushlstring(L, finished_request.path->c_str(), finished_request.path->size());
         lua_rawset(L, -3);
-        static std::string schema_name = ":scheme";
+        static std::string schema_name = scheme_header;
         lua_pushlstring(L, schema_name.c_str(), schema_name.size());
         lua_pushlstring(L, finished_request.schema->c_str(), finished_request.schema->size());
         lua_rawset(L, -3);
@@ -1862,9 +1862,9 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
                     request_to_send.stringCollection.emplace_back(headers[":authority"]);
                     request_to_send.authority= &(request_to_send.stringCollection.back());
                     headers.erase(":authority");
-                    request_to_send.stringCollection.emplace_back(headers[":scheme"]);
+                    request_to_send.stringCollection.emplace_back(headers[scheme_header]);
                     request_to_send.schema = &(request_to_send.stringCollection.back());
-                    headers.erase(":scheme");
+                    headers.erase(scheme_header);
                     request_to_send.shadow_req_headers = std::move(headers);
                     break;
                 }

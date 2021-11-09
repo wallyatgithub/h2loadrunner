@@ -1296,17 +1296,17 @@ int main(int argc, char** argv)
 
     std::string user_agent = "h2load nghttp2/" NGHTTP2_VERSION;
     Headers shared_nva;
-    shared_nva.emplace_back(":scheme", config.scheme);
+    shared_nva.emplace_back(scheme_header, config.scheme);
     if (config.port != config.default_port)
     {
-        shared_nva.emplace_back(":authority",
+        shared_nva.emplace_back(authority_header,
                                 config.host + ":" + util::utos(config.port));
     }
     else
     {
-        shared_nva.emplace_back(":authority", config.host);
+        shared_nva.emplace_back(authority_header, config.host);
     }
-    shared_nva.emplace_back(":method", config.data_fd == -1 ? "GET" : "POST");
+    shared_nva.emplace_back(method_header, config.data_fd == -1 ? "GET" : "POST");
     shared_nva.emplace_back("user-agent", user_agent);
 
     // list header fields that can be overridden.
@@ -1321,7 +1321,7 @@ int main(int argc, char** argv)
             // override header
             for (auto& nv : shared_nva)
             {
-                if ((nv.name == ":authority" && kv.name == ":host") ||
+                if ((nv.name == authority_header && kv.name == ":host") ||
                     (nv.name == kv.name))
                 {
                     nv.value = kv.value;
@@ -1345,7 +1345,7 @@ int main(int argc, char** argv)
         std::find_if(std::begin(shared_nva), std::end(shared_nva),
                      [](const Header & nv)
     {
-        return nv.name == ":method";
+        return nv.name == method_header;
     });
     assert(method_it != std::end(shared_nva));
 
@@ -1361,7 +1361,7 @@ int main(int argc, char** argv)
         h1req += " HTTP/1.1\r\n";
         for (auto& nv : shared_nva)
         {
-            if (nv.name == ":authority")
+            if (nv.name == authority_header)
             {
                 h1req += "Host: ";
                 h1req += nv.value;
