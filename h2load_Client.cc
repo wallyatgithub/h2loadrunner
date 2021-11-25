@@ -86,6 +86,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
     ev_timer_init(&connection_timeout_watcher, client_connection_timeout_cb, 2., 0.);
     ev_timer_init(&release_ancestor_watcher, release_ancestor_cb, 5., 5.);
     ev_timer_init(&delayed_request_watcher, delayed_request_cb, 0.01, 0.01);
+    ev_timer_init(&retart_client_watcher, restart_client_w_cb, 0.0, 0.);
     stream_timeout_watcher.data = this;
     connection_timeout_watcher.data = this;
     release_ancestor_watcher.data = this;
@@ -384,7 +385,10 @@ void Client::disconnect()
     ev_timer_stop(worker->loop, &delayed_request_watcher);
     ev_timer_stop(worker->loop, &release_ancestor_watcher);
     ev_timer_stop(worker->loop, &retart_client_watcher);
-    ev_timer_stop(worker->loop, &adaptive_traffic_watcher);
+    if (CLIENT_CONNECTED == state)
+    {
+        ev_timer_stop(worker->loop, &adaptive_traffic_watcher);
+    }
     streams.clear();
     session.reset();
     wb.reset();
@@ -515,7 +519,6 @@ void Client::process_request_failure(int errCode)
     {
         std::cout << "stream exhausted on this client. Restart client:" << std::endl;
         retart_client_watcher.data = this;
-        ev_timer_init(&retart_client_watcher, restart_client_w_cb, 0.0, 0.);
         ev_timer_start(worker->loop, &retart_client_watcher);
         return;
     }
