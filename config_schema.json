@@ -16,6 +16,11 @@
       "description":"port, 80, 443 ,etc.",
       "type":"integer"
     },
+    "open-new-connection-based-on-authority-header":{
+      "description": "false: h2loadrunner will stick to the connections created with host fields above, and create no dynamic connections; true: request should be routed to the host strictly matching the authority header, so h2loadrunner will create dynamic connections when necessary based on per request configuration (either from input or from previous response header), and route the requests based on the request authority header",
+      "default": false,
+      "type":"boolean"
+    },
     "threads":{
       "description":"Number of threads. Each thread can serve multiple connections (clients). Recommendation: thead number matches number of cores",
       "default": 1,
@@ -162,7 +167,7 @@
       "type": "object",
         "properties":{
           "uri":{
-            "description": "This could be a full URI with schema, authority, path, etc., or, it can be path only, in this case, the global schema, host, port fields would be used to construct the full URI",
+            "description": "This could be a full URI with schema, authority, path, etc., or, it can be path only, in the latter case, the global schema, host, port fields would be used to construct the full URI",
             "type":"object",
             "properties":{
               "typeOfAction": {

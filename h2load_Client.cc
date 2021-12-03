@@ -23,7 +23,7 @@ namespace h2load
 
 
 Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
-             Client* initiating_client, const std::string& dest_schema,
+             Client* parent, const std::string& dest_schema,
              const std::string& dest_authority)
     : wb(&worker->mcpool),
       cstat {},
@@ -49,7 +49,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         rps_req_inflight(0),
         curr_stream_id(0),
         curr_req_variable_value(0),
-        parent_client(initiating_client),
+        parent_client(parent),
         schema(dest_schema),
         authority(dest_authority),
         totalTrans_till_last_check(0),
@@ -86,7 +86,8 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
     ev_timer_init(&connection_timeout_watcher, client_connection_timeout_cb, 2., 0.);
     ev_timer_init(&release_ancestor_watcher, release_ancestor_cb, 5., 5.);
     ev_timer_init(&delayed_request_watcher, delayed_request_cb, 0.01, 0.01);
-    ev_timer_init(&retart_client_watcher, restart_client_w_cb, 0.0, 0.);
+    ev_timer_init(&restart_client_watcher, restart_client_w_cb, 0.0, 0.);
+    init_watcher(adaptive_traffic_watcher, 1.0, 1.0, adaptive_traffic_timeout_cb);
     stream_timeout_watcher.data = this;
     connection_timeout_watcher.data = this;
     release_ancestor_watcher.data = this;
@@ -129,7 +130,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
             authority = conf->host;
         }
     }
-    if (!initiating_client)
+    if (!parent)
     {
         std::string dest = schema;
         dest.append("://").append(authority);
@@ -375,26 +376,39 @@ void Client::disconnect()
     std::cout<<"===============disconnected from "<<authority<<"==============="<<std::endl;
 
     record_client_end_time();
-
-    ev_timer_stop(worker->loop, &conn_inactivity_watcher);
-    ev_timer_stop(worker->loop, &conn_active_watcher);
-    ev_timer_stop(worker->loop, &rps_watcher);
-    ev_timer_stop(worker->loop, &request_timeout_watcher);
-    ev_timer_stop(worker->loop, &stream_timeout_watcher);
-    ev_timer_stop(worker->loop, &connection_timeout_watcher);
-    ev_timer_stop(worker->loop, &delayed_request_watcher);
-    ev_timer_stop(worker->loop, &release_ancestor_watcher);
-    ev_timer_stop(worker->loop, &retart_client_watcher);
-    if (CLIENT_CONNECTED == state)
+    auto stop_timer_watcher = [&](ev_timer* watcher)
     {
-        ev_timer_stop(worker->loop, &adaptive_traffic_watcher);
-    }
+        if (ev_is_active(watcher))
+        {
+            ev_timer_stop(worker->loop, watcher);
+        }
+    };
+
+    auto stop_io_watcher = [&](ev_io* watcher)
+    {
+        if (ev_is_active(watcher))
+        {
+            ev_io_stop(worker->loop, watcher);
+        }
+    };
+
+    stop_timer_watcher(&conn_inactivity_watcher);
+    stop_timer_watcher(&conn_active_watcher);
+    stop_timer_watcher(&rps_watcher);
+    stop_timer_watcher(&request_timeout_watcher);
+    stop_timer_watcher(&stream_timeout_watcher);
+    stop_timer_watcher(&connection_timeout_watcher);
+    stop_timer_watcher(&delayed_request_watcher);
+    stop_timer_watcher(&release_ancestor_watcher);
+    stop_timer_watcher(&restart_client_watcher);
+    stop_timer_watcher(&adaptive_traffic_watcher);
+
     streams.clear();
     session.reset();
     wb.reset();
     state = CLIENT_IDLE;
-    ev_io_stop(worker->loop, &wev);
-    ev_io_stop(worker->loop, &rev);
+    stop_io_watcher(&wev);
+    stop_io_watcher(&rev);
     for (auto& it: ares_io_watchers)
     {
         ev_io_stop(worker->loop, &it.second);
@@ -420,13 +434,31 @@ void Client::disconnect()
     final = false;
 }
 
+uint64_t Client::get_total_pending_streams()
+{
+    if (parent_client)
+    {
+        return parent_client->get_total_pending_streams();
+    }
+    else
+    {
+        auto pendingStreams = streams.size();
+        for (auto& client: dest_client)
+        {
+            pendingStreams += client.second->streams.size();
+        }
+        return pendingStreams;
+    }
+}
+
 int Client::submit_request()
 {
-    if (!any_request_to_submit())
+
+    if (session->max_concurrent_streams() <= get_total_pending_streams())
     {
         return 0;
     }
-    if (session->max_concurrent_streams() <= streams.size())
+    if (!any_request_to_submit())
     {
         return 0;
     }
@@ -518,8 +550,8 @@ void Client::process_request_failure(int errCode)
     if (MAX_STREAM_TO_BE_EXHAUSTED == errCode)
     {
         std::cout << "stream exhausted on this client. Restart client:" << std::endl;
-        retart_client_watcher.data = this;
-        ev_timer_start(worker->loop, &retart_client_watcher);
+        restart_client_watcher.data = this;
+        ev_timer_start(worker->loop, &restart_client_watcher);
         return;
     }
     std::cout << "Process Request Failure:" << worker->stats.req_failed
@@ -816,19 +848,27 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
 
     worker->report_progress();
 
-    auto request = requests_awaiting_response.find(stream_id);
-    if (request != requests_awaiting_response.end())
+    auto status_successful = (streams[stream_id].status_success == 1);
+    streams.erase(stream_id);
+
+    auto totalPendingStreams = get_total_pending_streams();
+
+    auto finished_request = requests_awaiting_response.find(stream_id);
+    if (finished_request != requests_awaiting_response.end())
     {
-        if (is_leading_request(request->second))
+        if (is_leading_request(finished_request->second))
         {
             cstat.leading_req_done++;
         }
-        request->second.transaction_stat->successful = (streams[stream_id].status_success == 1);
-        prepare_next_request(request->second);
-        requests_awaiting_response.erase(request);
+        finished_request->second.transaction_stat->successful = status_successful;
+        if (!prepare_next_request(finished_request->second) && parent_client)
+        {
+            auto new_request = prepare_first_request();
+            enqueue_request(finished_request->second, std::move(new_request));
+        }
+        requests_awaiting_response.erase(finished_request);
     }
 
-    streams.erase(stream_id);
 
     if (req_left == 0 && req_inflight == 0)
     {
@@ -847,9 +887,12 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
         }
         else if (!rps_mode())
         {
-            if (submit_request() != 0)
+            if (get_total_pending_streams() == totalPendingStreams && totalPendingStreams > 0)
             {
-                process_request_failure();
+                if (submit_request() != 0)
+                {
+                    process_request_failure();
+                }
             }
         }
         else if (rps_req_pending)
@@ -1051,7 +1094,7 @@ int Client::connection_made()
     }
     else
     {
-        init_and_start_watcher(adaptive_traffic_watcher, 1.0, 1.0, adaptive_traffic_timeout_cb);
+        //start_watcher(adaptive_traffic_watcher, 1.0, 1.0, adaptive_traffic_timeout_cb);
     }
 
     stream_timeout_watcher.repeat = 0.01;
@@ -1887,6 +1930,10 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
 
 Client* Client::find_or_create_dest_client(Request_Data& request_to_send)
 {
+    if (!config->json_config_schema.open_new_connection_based_on_authority_header)
+    {
+        return this;
+    }
     if (!parent_client) // this is the first connection
     {
         std::string dest = *(request_to_send.schema);
@@ -2141,18 +2188,26 @@ void Client::switch_mode(double new_rps)
     }
 }
 
-void Client::init_and_start_watcher(ev_timer& watch,
-                                          double init_duration, double repeat_duration,
-                                          void (*callback)(struct ev_loop*, ev_timer*, int))
+void Client::init_watcher(ev_timer& watch,
+                               double init_duration, double repeat_duration,
+                               void (*callback)(struct ev_loop*, ev_timer*, int))
 {
+    watch.data = this;
     ev_timer_init(&watch, callback, init_duration, repeat_duration);
+}
+
+
+void Client::start_watcher(ev_timer& watch,
+                                double init_duration, double repeat_duration,
+                                void (*callback)(struct ev_loop*, ev_timer*, int))
+{
     watch.data = this;
     ev_timer_again(worker->loop, &watch);
 }
 
 bool Client::is_leading_request(Request_Data& request)
 {
-    if (config->json_config_schema.scenario.size() == 1 && request.next_request_idx == 0)
+    if (config->json_config_schema.scenario.size() == 1)
     {
         return true;
     }

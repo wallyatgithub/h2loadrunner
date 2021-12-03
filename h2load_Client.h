@@ -169,7 +169,7 @@ struct Client
     size_t rps_req_inflight;
     int32_t curr_stream_id;
     std::unique_ptr<Client> ancestor_to_release;
-    ev_timer retart_client_watcher;
+    ev_timer restart_client_watcher;
     Config* config;
     uint64_t curr_req_variable_value;
     std::deque<Request_Data> requests_to_submit;
@@ -196,8 +196,8 @@ struct Client
     enum { ERR_CONNECT_FAIL = -100 };
 
     Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
-             Client* initiating_client=nullptr, const std::string& dest_schema="",
-             const std::string& dest_authority="");
+             Client* parent = nullptr, const std::string& dest_schema = "",
+             const std::string& dest_authority = "");
     ~Client();
     template<class T>
     int make_socket(T* addr);
@@ -299,11 +299,16 @@ struct Client
     double adjust_traffic_needed();
     void switch_to_non_rps_mode();
     void switch_mode(double new_rps);
-    void init_and_start_watcher(ev_timer& watch,
-                                         double init_duration, double repeat_duration,
-                                         void (*callback)(struct ev_loop*, ev_timer*, int));
+    void init_watcher(ev_timer& watch,
+                           double init_duration, double repeat_duration,
+                           void (*callback)(struct ev_loop*, ev_timer*, int));
+    void start_watcher(ev_timer& watch,
+                            double init_duration, double repeat_duration,
+                            void (*callback)(struct ev_loop*, ev_timer*, int));
+
     bool is_leading_request(Request_Data& request);
     void mark_response_success_or_failure(int32_t stream_id);
+    uint64_t get_total_pending_streams();
 
 };
 
@@ -327,8 +332,7 @@ public:
   {
       if (client &&
           !client->rps_mode() &&
-          client->state == CLIENT_CONNECTED &&
-          client->session->max_concurrent_streams() > client->streams.size())
+          client->state == CLIENT_CONNECTED)
       {
           client->submit_request();
           client->signal_write();

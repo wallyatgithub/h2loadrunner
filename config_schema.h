@@ -109,6 +109,7 @@ public:
     std::string private_key;
     uint32_t cert_verification_mode;
     std::string max_tls_version;
+    bool open_new_connection_based_on_authority_header;
 
     explicit Config_Schema():
         schema("http"),
@@ -137,7 +138,8 @@ public:
         variable_range_end(0),
         nreqs(0),
         stream_timeout_in_ms(5000),
-        max_tls_version("TLSv1.3")
+        max_tls_version("TLSv1.3"),
+        open_new_connection_based_on_authority_header(false)
     {
     }
 
@@ -146,6 +148,7 @@ public:
         h->add_property("schema", &this->schema);
         h->add_property("host", &this->host);
         h->add_property("port", &this->port, staticjson::Flags::Optional);
+        h->add_property("open_new_connection_based_on_authority_header", &this->open_new_connection_based_on_authority_header, staticjson::Flags::Optional);
         h->add_property("threads", &this->threads, staticjson::Flags::Optional);
         h->add_property("clients", &this->clients, staticjson::Flags::Optional);
         h->add_property("max-concurrent-streams", &this->max_concurrent_streams, staticjson::Flags::Optional);

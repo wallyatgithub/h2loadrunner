@@ -1044,7 +1044,7 @@ std::string reassemble_str_with_variable(const std::vector<std::string>& tokeniz
 void restart_client_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
-    ev_timer_stop(client->worker->loop, &client->retart_client_watcher);
+    ev_timer_stop(client->worker->loop, &client->restart_client_watcher);
     std::cout << "Restart client:" << std::endl;
 
     auto new_client = std::make_unique<Client>(client->id, client->worker, client->req_todo, client->config);
