@@ -495,12 +495,7 @@ int Client::submit_request()
 
         if (retCode != 0)
         {
-            // TODO: refector this
-            if (destination_client != this)
-            {
-                destination_client->process_request_failure(retCode);
-                retCode = 0;
-            }
+            destination_client->process_request_failure(retCode);
             return retCode;
         }
 
@@ -924,18 +919,13 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
         }
         else if (!rps_mode())
         {
-          if (submit_request() != 0)
-          {
-              process_request_failure();
-          }
+          submit_request();
         }
         else if (rps_req_pending)
         {
-            --rps_req_pending;
-            auto retCode = submit_request();
-            if (retCode != 0)
+            if (submit_request() == 0)
             {
-                process_request_failure(retCode);
+                --rps_req_pending;
             }
         }
     }
@@ -1129,7 +1119,10 @@ int Client::connection_made()
             requests_to_submit.pop_back();
             if (!rps_mode())
             {
-                parent_client->submit_request();
+                if (parent_client->submit_request() != 0)
+                {
+                    break;
+                }
             }
         }
         return 0;
@@ -1155,11 +1148,7 @@ int Client::connection_made()
 
         ++rps_req_inflight;
 
-        auto retCode = submit_request();
-        if (retCode != 0)
-        {
-            process_request_failure(retCode);
-        }
+        submit_request();
     }
     else if (!config->timing_script)
     {
@@ -1171,7 +1160,6 @@ int Client::connection_made()
         {
             if (submit_request() != 0)
             {
-                process_request_failure();
                 break;
             }
         }
@@ -1185,7 +1173,6 @@ int Client::connection_made()
         {
             if (submit_request() != 0)
             {
-                process_request_failure();
                 break;
             }
             duration = config->timings[reqidx];
@@ -2204,7 +2191,6 @@ void Client::switch_to_non_rps_mode()
     {
         if (submit_request() != 0)
         {
-            process_request_failure();
             break;
         }
         write_socket = true;

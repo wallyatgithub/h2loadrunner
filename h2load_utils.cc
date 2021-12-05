@@ -318,17 +318,15 @@ void rps_cb(struct ev_loop* loop, ev_timer* w, int revents)
            : std::min(nreq, client->req_left);
     nreq = std::min(nreq, client->rps_req_pending);
 
-    client->rps_req_inflight += nreq;
-    client->rps_req_pending -= nreq;
-
     for (; nreq > 0; --nreq)
     {
         auto retCode = client->submit_request();
         if (retCode != 0)
         {
-            client->process_request_failure(retCode);
             break;
         }
+        client->rps_req_inflight++;
+        client->rps_req_pending--;
     }
     client->signal_write();
 }
@@ -423,7 +421,6 @@ void client_request_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
     if (client->submit_request() != 0)
     {
         ev_timer_stop(client->worker->loop, w);
-        client->process_request_failure();
         return;
     }
     client->signal_write();
@@ -441,7 +438,6 @@ void client_request_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
         if (client->submit_request() != 0)
         {
             ev_timer_stop(client->worker->loop, w);
-            client->process_request_failure();
             return;
         }
         client->signal_write();
