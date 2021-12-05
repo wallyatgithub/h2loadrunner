@@ -1137,13 +1137,14 @@ void normalize_request_templates(h2load::Config* config)
         }
     }
 
+/*
     // hacking config->host and port, to make sure the 1st client is always handing the first request
     if (config->json_config_schema.scenario.size())
     {
         auto& req = config->json_config_schema.scenario[0];
         parse_base_uri(StringRef(req.uri.input), *config);
     }
-
+*/
 }
 
 void adaptive_traffic_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)

@@ -96,13 +96,13 @@ struct Stats
     // The number of requests issued so far
     size_t req_started;
     // The number of requests finished
-    std::atomic<size_t> req_done;
+    size_t req_done;
     // The number of requests completed successful, but not necessarily
     // means successful HTTP status code.
     size_t req_success;
     // The number of requests marked as success.  HTTP status code is
     // also considered as success. This is subset of req_done.
-    std::atomic<size_t> req_status_success;
+    size_t req_status_success;
     // The number of requests failed. This is subset of req_done.
     size_t req_failed;
     // The number of requests failed due to network errors. This is

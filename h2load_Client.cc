@@ -436,7 +436,7 @@ void Client::disconnect()
 
 uint64_t Client::get_total_pending_streams()
 {
-    if (parent_client)
+    if (parent_client != nullptr)
     {
         return parent_client->get_total_pending_streams();
     }
@@ -451,41 +451,85 @@ uint64_t Client::get_total_pending_streams()
     }
 }
 
+bool Client::is_controller_client()
+{
+    return (parent_client == nullptr);
+}
+
+Client* Client::get_controller_client()
+{
+    return parent_client;
+}
+
 int Client::submit_request()
 {
+    if (!is_controller_client())
+    {
+        return parent_client->submit_request();
+    }
 
     if (session->max_concurrent_streams() <= get_total_pending_streams())
     {
         return 0;
     }
-    if (!any_request_to_submit())
+
+    if (requests_to_submit.empty())
     {
-        return 0;
+        requests_to_submit.push_back(std::move(prepare_first_request()));
     }
 
-    auto retCode = session->submit_request();
-    if (retCode != 0)
+    Client* destination_client = this;
+    if (config->json_config_schema.open_new_connection_based_on_authority_header)
     {
-        return retCode;
+        destination_client = find_or_create_dest_client(requests_to_submit.front());
+        if (destination_client != this)
+        {
+            destination_client->requests_to_submit.push_back(std::move(requests_to_submit.front()));
+            requests_to_submit.pop_front();
+        }
     }
 
-    if (worker->current_phase != Phase::MAIN_DURATION)
+    if (destination_client->state == CLIENT_CONNECTED)
     {
-        return 0;
-    }
+        auto retCode = destination_client->session->submit_request();
 
-    ++worker->stats.req_started;
-    ++req_started;
-    ++req_inflight;
-    if (!worker->config->is_timing_based_mode())
-    {
-        --req_left;
-    }
-    // if an active timeout is set and this is the last request to be submitted
-    // on this connection, start the active timeout.
-    if (worker->config->conn_active_timeout > 0. && req_left == 0)
-    {
-        ev_timer_start(worker->loop, &conn_active_watcher);
+        if (retCode != 0)
+        {
+            // TODO: refector this
+            if (destination_client != this)
+            {
+                destination_client->process_request_failure(retCode);
+                retCode = 0;
+            }
+            return retCode;
+        }
+
+        destination_client->signal_write();
+
+        if (worker->current_phase != Phase::MAIN_DURATION)
+        {
+            return 0;
+        }
+        if (is_controller_client())
+        {
+            ++worker->stats.req_started;
+            ++req_started;
+            ++req_inflight;
+            if (!worker->config->is_timing_based_mode())
+            {
+                --req_left;
+            }
+        }
+        // if an active timeout is set and this is the last request to be submitted
+        // on this connection, start the active timeout.
+        if (worker->config->conn_active_timeout > 0. && req_left == 0 && is_controller_client())
+        {
+            ev_timer_start(worker->loop, &conn_active_watcher);
+            for (auto& client: dest_client)
+            {
+               ev_timer_start(worker->loop, &client.second->conn_active_watcher);
+            }
+        }
     }
 
     return 0;
@@ -649,6 +693,7 @@ void Client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
         header_name.assign((const char*)name, namelen);
         std::string header_value;
         header_value.assign((const char*)value, valuelen);
+        header_value.erase(0, header_value.find_first_not_of(' '));
         auto it = request->second.resp_headers.find(header_name);
         if (it != request->second.resp_headers.end())
         {
@@ -848,11 +893,6 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
 
     worker->report_progress();
 
-    auto status_successful = (streams[stream_id].status_success == 1);
-    streams.erase(stream_id);
-
-    auto totalPendingStreams = get_total_pending_streams();
-
     auto finished_request = requests_awaiting_response.find(stream_id);
     if (finished_request != requests_awaiting_response.end())
     {
@@ -860,15 +900,12 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
         {
             cstat.leading_req_done++;
         }
-        finished_request->second.transaction_stat->successful = status_successful;
-        if (!prepare_next_request(finished_request->second) && parent_client)
-        {
-            auto new_request = prepare_first_request();
-            enqueue_request(finished_request->second, std::move(new_request));
-        }
+        finished_request->second.transaction_stat->successful = (streams[stream_id].status_success == 1);
+        prepare_next_request(finished_request->second);
         requests_awaiting_response.erase(finished_request);
     }
 
+    streams.erase(stream_id);
 
     if (req_left == 0 && req_inflight == 0)
     {
@@ -887,13 +924,10 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
         }
         else if (!rps_mode())
         {
-            if (get_total_pending_streams() == totalPendingStreams && totalPendingStreams > 0)
-            {
-                if (submit_request() != 0)
-                {
-                    process_request_failure();
-                }
-            }
+          if (submit_request() != 0)
+          {
+              process_request_failure();
+          }
         }
         else if (rps_req_pending)
         {
@@ -1086,9 +1120,24 @@ int Client::connection_made()
 
     record_connect_time();
 
+    if (parent_client != nullptr)
+    {
+        while (requests_to_submit.size())
+        {
+            // re-push to parent for to be scheduled immediately
+            parent_client->requests_to_submit.push_front(std::move(requests_to_submit.back()));
+            requests_to_submit.pop_back();
+            if (!rps_mode())
+            {
+                parent_client->submit_request();
+            }
+        }
+        return 0;
+    }
+
     if (rps_mode())
     {
-        rps_watcher.repeat = std::max(0.01, 1. / rps);
+        rps_watcher.repeat = std::max(0.1, 1. / rps);
         ev_timer_again(worker->loop, &rps_watcher);
         rps_duration_started = ev_now(worker->loop);
     }
@@ -1581,10 +1630,10 @@ void Client::populate_request_from_config_template(Request_Data& new_request,
     new_request.method = &request_template.method;
     new_request.schema = &request_template.schema;
     new_request.authority = &request_template.authority;
-    new_request.stringCollection.emplace_back(reassemble_str_with_variable(request_template.tokenized_payload,
+    new_request.string_collection.emplace_back(reassemble_str_with_variable(request_template.tokenized_payload,
                                               new_request.user_id,
                                               full_var_str_len));
-    new_request.req_payload = &(new_request.stringCollection.back());
+    new_request.req_payload = &(new_request.string_collection.back());
     new_request.req_headers = &request_template.headers_in_map;
     new_request.expected_status_code = request_template.expected_status_code;
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
@@ -1617,10 +1666,10 @@ Request_Data Client::prepare_first_request()
     populate_request_from_config_template(new_request, curr_index);
 
     auto& request_template = config->json_config_schema.scenario[curr_index];
-    new_request.stringCollection.emplace_back(reassemble_str_with_variable(request_template.tokenized_path,
+    new_request.string_collection.emplace_back(reassemble_str_with_variable(request_template.tokenized_path,
                                               new_request.user_id,
                                               full_var_str_len));
-    new_request.path = &(new_request.stringCollection.back());
+    new_request.path = &(new_request.string_collection.back());
 
     if (config->json_config_schema.scenario[curr_index].luaScript.size())
     {
@@ -1673,7 +1722,7 @@ bool Client::prepare_next_request(Request_Data& finished_request)
             worker->stats.trans_min_resp_time_ms = std::min(worker->stats.trans_min_resp_time_ms.load(),
                                                             (uint64_t)trans_duration.count());
         }
-        if (parent_client)
+        if (parent_client != nullptr)
         {
             parent_client->cstat.trans_done++;
         }
@@ -1694,19 +1743,19 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     if (request_template.uri.typeOfAction == "input")
     {
-         new_request.stringCollection.emplace_back(reassemble_str_with_variable(request_template.tokenized_path,
+         new_request.string_collection.emplace_back(reassemble_str_with_variable(request_template.tokenized_path,
                                                          new_request.user_id,
                                                          full_var_str_len));
-         new_request.path = &(new_request.stringCollection.back());
+         new_request.path = &(new_request.string_collection.back());
     }
     else if (request_template.uri.typeOfAction == "sameWithLastOne")
     {
-        new_request.stringCollection.emplace_back(*finished_request.path);
-        new_request.path = &(new_request.stringCollection.back());
-        new_request.stringCollection.emplace_back(*finished_request.schema);
-        new_request.schema = &(new_request.stringCollection.back());
-        new_request.stringCollection.emplace_back(*finished_request.authority);
-        new_request.authority = &(new_request.stringCollection.back());
+        new_request.string_collection.emplace_back(*finished_request.path);
+        new_request.path = &(new_request.string_collection.back());
+        new_request.string_collection.emplace_back(*finished_request.schema);
+        new_request.schema = &(new_request.string_collection.back());
+        new_request.string_collection.emplace_back(*finished_request.authority);
+        new_request.authority = &(new_request.string_collection.back());
     }
     else if (request_template.uri.typeOfAction == "fromResponseHeader")
     {
@@ -1721,20 +1770,27 @@ bool Client::prepare_next_request(Request_Data& finished_request)
             }
             else
             {
-                new_request.stringCollection.emplace_back(get_reqline(header->second.c_str(), u));
-                new_request.path = &(new_request.stringCollection.back());
+                new_request.string_collection.emplace_back(get_reqline(header->second.c_str(), u));
+                new_request.path = &(new_request.string_collection.back());
                 if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
                 {
-                    new_request.stringCollection.emplace_back(util::get_uri_field(header->second.c_str(), u, UF_SCHEMA).str());
-                    util::inp_strlower(new_request.stringCollection.back());
-                    new_request.schema = &(new_request.stringCollection.back());
-                    new_request.stringCollection.emplace_back(util::get_uri_field(header->second.c_str(), u, UF_HOST).str());
-                    util::inp_strlower(new_request.stringCollection.back());
+                    new_request.string_collection.emplace_back(util::get_uri_field(header->second.c_str(), u, UF_SCHEMA).str());
+                    util::inp_strlower(new_request.string_collection.back());
+                    new_request.schema = &(new_request.string_collection.back());
+                    new_request.string_collection.emplace_back(util::get_uri_field(header->second.c_str(), u, UF_HOST).str());
+                    util::inp_strlower(new_request.string_collection.back());
                     if (util::has_uri_field(u, UF_PORT))
                     {
-                        new_request.stringCollection.back().append(":").append(util::utos(u.port));
+                        new_request.string_collection.back().append(":").append(util::utos(u.port));
                     }
-                    new_request.authority = &(new_request.stringCollection.back());
+                    new_request.authority = &(new_request.string_collection.back());
+                }
+                else
+                {
+                  new_request.string_collection.emplace_back(*finished_request.schema);
+                  new_request.schema = &(new_request.string_collection.back());
+                  new_request.string_collection.emplace_back(*finished_request.authority);
+                  new_request.authority = &(new_request.string_collection.back());
                 }
             }
         }
@@ -1781,7 +1837,7 @@ std::map<std::string, Client*>::const_iterator Client::get_client_serving_first_
     std::string key = config->json_config_schema.scenario[0].schema;
     key.append("://");
     key.append(config->json_config_schema.scenario[0].authority);
-    if (parent_client)
+    if (parent_client != nullptr)
     {
         return parent_client->dest_client.find(key);
     }
@@ -1793,18 +1849,17 @@ std::map<std::string, Client*>::const_iterator Client::get_client_serving_first_
 
 void Client::enqueue_request(Request_Data& finished_request, Request_Data&& new_request)
 {
-    Client* next_client_to_run = find_or_create_dest_client(new_request);
+    auto client = this->parent_client ? this->parent_client : this;
     if (!finished_request.delay_before_executing_next)
     {
-        next_client_to_run->requests_to_submit.emplace_back(std::move(new_request));
-        Submit_Requet_Wrapper auto_submitter(this, next_client_to_run);
+        client->requests_to_submit.push_back(std::move(new_request));
     }
     else
     {
         const std::chrono::milliseconds delay_duration(finished_request.delay_before_executing_next);
         std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
         std::chrono::steady_clock::time_point timeout_timepoint = curr_time_point + delay_duration;
-        next_client_to_run->delayed_requests_to_submit.insert(std::make_pair(timeout_timepoint, std::move(new_request)));
+        client->delayed_requests_to_submit.insert(std::make_pair(timeout_timepoint, std::move(new_request)));
     }
 }
 
@@ -1870,8 +1925,8 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
                 {
                     size_t len;
                     const char* str = lua_tolstring(L, -1, &len);
-                    request_to_send.stringCollection.emplace_back(str, len);
-                    request_to_send.req_payload = &(request_to_send.stringCollection.back());
+                    request_to_send.string_collection.emplace_back(str, len);
+                    request_to_send.req_payload = &(request_to_send.string_collection.back());
                     break;
                 }
                 case LUA_TTABLE:
@@ -1895,17 +1950,17 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
                         /* removes 'value'; keeps 'key' for next iteration */
                         lua_pop(L, 1);
                     }
-                    request_to_send.stringCollection.emplace_back(headers[method_header]);
-                    request_to_send.method = &(request_to_send.stringCollection.back());
+                    request_to_send.string_collection.emplace_back(headers[method_header]);
+                    request_to_send.method = &(request_to_send.string_collection.back());
                     headers.erase(method_header);
-                    request_to_send.stringCollection.emplace_back(headers[path_header]);
-                    request_to_send.path = &(request_to_send.stringCollection.back());
+                    request_to_send.string_collection.emplace_back(headers[path_header]);
+                    request_to_send.path = &(request_to_send.string_collection.back());
                     headers.erase(path_header);
-                    request_to_send.stringCollection.emplace_back(headers[authority_header]);
-                    request_to_send.authority= &(request_to_send.stringCollection.back());
+                    request_to_send.string_collection.emplace_back(headers[authority_header]);
+                    request_to_send.authority= &(request_to_send.string_collection.back());
                     headers.erase(authority_header);
-                    request_to_send.stringCollection.emplace_back(headers[scheme_header]);
-                    request_to_send.schema = &(request_to_send.stringCollection.back());
+                    request_to_send.string_collection.emplace_back(headers[scheme_header]);
+                    request_to_send.schema = &(request_to_send.string_collection.back());
                     headers.erase(scheme_header);
                     request_to_send.shadow_req_headers = std::move(headers);
                     break;
@@ -1932,9 +1987,9 @@ Client* Client::find_or_create_dest_client(Request_Data& request_to_send)
 {
     if (!config->json_config_schema.open_new_connection_based_on_authority_header)
     {
-        return this;
+        return this->parent_client ? this->parent_client : this;
     }
-    if (!parent_client) // this is the first connection
+    if (is_controller_client()) // this is the first connection
     {
         std::string dest = *(request_to_send.schema);
         dest.append("://").append(*request_to_send.authority);
@@ -1995,7 +2050,7 @@ int Client::connect_to_host(const std::string& schema, const std::string& author
 
 bool Client::any_request_to_submit()
 {
-    if (!parent_client)
+    if (parent_client == nullptr)
     {
         // no parent_client, means "this" is the parent, i.e., the bootstraper
         // the bootstraper always has request to submit,
@@ -2031,7 +2086,7 @@ void Client::substitute_ancestor(Client* ancestor)
     curr_req_variable_value = ancestor->curr_req_variable_value;
     ancestor_to_release.reset(ancestor);
 
-    if (parent_client)
+    if (parent_client != nullptr)
     {
         dest_client.swap(ancestor->dest_client);
 

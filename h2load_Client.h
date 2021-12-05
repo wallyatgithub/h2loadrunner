@@ -51,7 +51,7 @@ struct Request_Data
     std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
     size_t next_request_idx;
     std::shared_ptr<TransactionStat> transaction_stat;
-    std::vector<std::string> stringCollection;
+    std::vector<std::string> string_collection;
     explicit Request_Data():
     schema(&emptyString),
     authority(&emptyString),
@@ -65,7 +65,7 @@ struct Request_Data
         delay_before_executing_next = 0;
         next_request_idx = 0;
         transaction_stat = nullptr;
-        stringCollection.reserve(11); // (path, authority, method, schema, payload) * 2
+        string_collection.reserve(12); // (path, authority, method, schema, payload, xx) * 2
     };
 
     friend std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
@@ -309,6 +309,9 @@ struct Client
     bool is_leading_request(Request_Data& request);
     void mark_response_success_or_failure(int32_t stream_id);
     uint64_t get_total_pending_streams();
+
+    bool is_controller_client();
+    Client* get_controller_client();
 
 };
 

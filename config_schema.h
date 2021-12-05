@@ -148,7 +148,7 @@ public:
         h->add_property("schema", &this->schema);
         h->add_property("host", &this->host);
         h->add_property("port", &this->port, staticjson::Flags::Optional);
-        h->add_property("open_new_connection_based_on_authority_header", &this->open_new_connection_based_on_authority_header, staticjson::Flags::Optional);
+        h->add_property("open-new-connection-based-on-authority-header", &this->open_new_connection_based_on_authority_header, staticjson::Flags::Optional);
         h->add_property("threads", &this->threads, staticjson::Flags::Optional);
         h->add_property("clients", &this->clients, staticjson::Flags::Optional);
         h->add_property("max-concurrent-streams", &this->max_concurrent_streams, staticjson::Flags::Optional);
