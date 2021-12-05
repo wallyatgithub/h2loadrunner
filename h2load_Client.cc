@@ -134,7 +134,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
     {
         std::string dest = schema;
         dest.append("://").append(authority);
-        dest_client[dest] = this;
+        dest_clients[dest] = this;
     }
 
     timestamp_of_last_rps_check = std::chrono::steady_clock::now();
@@ -158,17 +158,24 @@ Client::~Client()
     }
     lua_states.clear();
 
+    std::string dest = schema;
+    dest.append("://").append(authority);
+    if (parent_client && parent_client->dest_clients.count(dest) && parent_client->dest_clients[dest] == this)
+    {
+        parent_client->dest_clients.erase(dest);
+    }
+
 /*
  * client is deleted in writecb/readcb
 
-    for (auto& client: dest_client)
+    for (auto& client: dest_clients)
     {
         if (client.second != this)
         {
             delete client.second;
         }
     }
-    dest_client.clear();
+    dest_clients.clear();
 */
     ares_freeaddrinfo(ares_addr);
 }
@@ -443,7 +450,7 @@ uint64_t Client::get_total_pending_streams()
     else
     {
         auto pendingStreams = streams.size();
-        for (auto& client: dest_client)
+        for (auto& client: dest_clients)
         {
             pendingStreams += client.second->streams.size();
         }
@@ -520,7 +527,7 @@ int Client::submit_request()
         if (worker->config->conn_active_timeout > 0. && req_left == 0 && is_controller_client())
         {
             ev_timer_start(worker->loop, &conn_active_watcher);
-            for (auto& client: dest_client)
+            for (auto& client: dest_clients)
             {
                ev_timer_start(worker->loop, &client.second->conn_active_watcher);
             }
@@ -1826,11 +1833,11 @@ std::map<std::string, Client*>::const_iterator Client::get_client_serving_first_
     key.append(config->json_config_schema.scenario[0].authority);
     if (parent_client != nullptr)
     {
-        return parent_client->dest_client.find(key);
+        return parent_client->dest_clients.find(key);
     }
     else
     {
-        return this->dest_client.find(key);
+        return this->dest_clients.find(key);
     }
 }
 
@@ -1980,16 +1987,16 @@ Client* Client::find_or_create_dest_client(Request_Data& request_to_send)
     {
         std::string dest = *(request_to_send.schema);
         dest.append("://").append(*request_to_send.authority);
-        auto it = dest_client.find(dest);
-        if (it == dest_client.end())
+        auto it = dest_clients.find(dest);
+        if (it == dest_clients.end())
         {
             auto new_client = std::make_unique<Client>(this->id, this->worker, this->req_todo, this->config,
                                                        this, *request_to_send.schema, *request_to_send.authority);
-            dest_client[dest] = new_client.get();
+            dest_clients[dest] = new_client.get();
             new_client->connect_to_host(new_client->schema, new_client->authority);
             new_client.release();
         }
-        return dest_client[dest];
+        return dest_clients[dest];
     }
     else
     {
@@ -2052,13 +2059,52 @@ bool Client::any_request_to_submit()
 
 void Client::terminate_sub_clients()
 {
-    for (auto& sub_client: dest_client)
+    for (auto& sub_client: dest_clients)
     {
         if (sub_client.second != this && sub_client.second->session)
         {
             sub_client.second->terminate_session();
         }
     }
+}
+
+void Client::transfer_controllership()
+{
+    if (dest_clients.empty() || !is_controller_client())
+    {
+        return;
+    }
+    Client* new_controller = dest_clients.begin()->second;
+    for (auto& client: dest_clients)
+    {
+        if (client.second == new_controller)
+        {
+            client.second->parent_client = nullptr;
+            client.second->dest_clients = dest_clients;
+        }
+        else
+        {
+            client.second->parent_client = new_controller;
+        }
+    }
+    parent_client = new_controller;
+    dest_clients.clear();
+
+    new_controller->req_done = req_done;
+    new_controller->req_inflight = req_inflight;
+    new_controller->req_left = req_left;
+    new_controller->req_todo = req_todo;
+    new_controller->req_started = req_started;
+    new_controller->curr_req_variable_value = curr_req_variable_value;
+    new_controller->req_variable_value_start = req_variable_value_start;
+    new_controller->req_variable_value_end = req_variable_value_end;
+    if (rps_mode())
+    {
+        new_controller->rps_watcher.repeat = std::max(0.1, 1. / rps);
+        ev_timer_again(worker->loop, &new_controller->rps_watcher);
+        new_controller->rps_duration_started = ev_now(worker->loop);
+    }
+
 }
 
 void Client::substitute_ancestor(Client* ancestor)
@@ -2071,18 +2117,20 @@ void Client::substitute_ancestor(Client* ancestor)
     req_todo = ancestor->req_todo;
     req_left = ancestor->req_left;
     curr_req_variable_value = ancestor->curr_req_variable_value;
+    req_variable_value_start = ancestor->req_variable_value_start;
+    req_variable_value_end = ancestor->req_variable_value_end;
     ancestor_to_release.reset(ancestor);
 
     if (parent_client != nullptr)
     {
-        dest_client.swap(ancestor->dest_client);
+        dest_clients.swap(ancestor->dest_clients);
 
         std::string dest = schema;
         dest.append("://").append(authority);
 
-        if (parent_client->dest_client[dest] == ancestor)
+        if (parent_client->dest_clients[dest] == ancestor)
         {
-            parent_client->dest_client[dest] = this;
+            parent_client->dest_clients[dest] = this;
         }
         else
         {
@@ -2099,7 +2147,7 @@ void Client::substitute_ancestor(Client* ancestor)
                 break;
             }
         }
-        for (auto& it: dest_client)
+        for (auto& it: dest_clients)
         {
             it.second->parent_client = this;
         }

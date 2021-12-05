@@ -176,7 +176,7 @@ struct Client
     std::multimap<std::chrono::steady_clock::time_point, Request_Data> delayed_requests_to_submit;
     std::map<int32_t, Request_Data> requests_awaiting_response;
     std::vector<lua_State*> lua_states;
-    std::map<std::string, Client*> dest_client;
+    std::map<std::string, Client*> dest_clients;
     Client* parent_client;
     std::string schema;
     std::string authority;
@@ -312,6 +312,7 @@ struct Client
 
     bool is_controller_client();
     Client* get_controller_client();
+    void transfer_controllership();
 
 };
 

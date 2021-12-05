@@ -172,6 +172,7 @@ void readcb(struct ev_loop* loop, ev_io* w, int revents)
         {
             return;
         }
+        client->transfer_controllership();
         client->worker->free_client(client);
         delete client;
         return;
