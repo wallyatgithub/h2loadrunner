@@ -110,6 +110,7 @@ public:
     uint32_t cert_verification_mode;
     std::string max_tls_version;
     bool open_new_connection_based_on_authority_header;
+    bool connection_retry_on_disconnect;
 
     explicit Config_Schema():
         schema("http"),
@@ -139,7 +140,8 @@ public:
         nreqs(0),
         stream_timeout_in_ms(5000),
         max_tls_version("TLSv1.3"),
-        open_new_connection_based_on_authority_header(false)
+        open_new_connection_based_on_authority_header(false),
+        connection_retry_on_disconnect(false)
     {
     }
 
@@ -180,6 +182,7 @@ public:
         h->add_property("privateKey", &this->private_key, staticjson::Flags::Optional);
         h->add_property("certVerificationMode", &this->cert_verification_mode, staticjson::Flags::Optional);
         h->add_property("max-tls-version", &this->max_tls_version, staticjson::Flags::Optional);
+        h->add_property("connection-retry", &this->connection_retry_on_disconnect, staticjson::Flags::Optional);
     }
 
 };

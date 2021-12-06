@@ -419,7 +419,10 @@ void Client::disconnect()
     stop_io_watcher(&rev);
     for (auto& it: ares_io_watchers)
     {
-        ev_io_stop(worker->loop, &it.second);
+        if (ev_is_active(&it.second))
+        {
+            ev_io_stop(worker->loop, &it.second);
+        }
     }
     if (ssl)
     {

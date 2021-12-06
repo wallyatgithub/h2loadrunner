@@ -341,10 +341,9 @@ void stream_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 
 void client_connection_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
-    // TODO: call disconnect, and more?
     auto client = static_cast<Client*>(w->data);
-    client->disconnect();
-    ev_break (EV_A_ EVBREAK_ALL);
+    client->fail();
+    //ev_break (EV_A_ EVBREAK_ALL);
 }
 
 void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents)
