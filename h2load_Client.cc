@@ -381,6 +381,7 @@ void Client::fail()
 void Client::disconnect()
 {
     std::cout<<"===============disconnected from "<<authority<<"==============="<<std::endl;
+    transfer_controllership();
 
     record_client_end_time();
     auto stop_timer_watcher = [&](ev_timer* watcher)
@@ -588,10 +589,7 @@ void Client::process_request_failure(int errCode)
 
     if (streams.size() == 0)
     {
-        if (MAX_STREAM_TO_BE_EXHAUSTED != errCode)
-        {
-            terminate_session();
-        }
+        terminate_session();
     }
     if (MAX_STREAM_TO_BE_EXHAUSTED == errCode)
     {
@@ -2074,15 +2072,24 @@ void Client::transfer_controllership()
     {
         return;
     }
-    Client* new_controller = dest_clients.begin()->second;
+    Client* new_controller = nullptr;
     for (auto& client: dest_clients)
     {
-        if (client.second == new_controller)
+        if (client.second != this)
         {
-            client.second->parent_client = nullptr;
-            client.second->dest_clients = dest_clients;
+            new_controller = client.second;
+            new_controller->parent_client = nullptr;
+            new_controller->dest_clients = dest_clients;
         }
-        else
+    }
+    if (new_controller == nullptr)
+    {
+        return;
+    }
+
+    for (auto& client: dest_clients)
+    {
+        if (client.second != new_controller)
         {
             client.second->parent_client = new_controller;
         }

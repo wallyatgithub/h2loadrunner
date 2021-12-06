@@ -172,7 +172,6 @@ void readcb(struct ev_loop* loop, ev_io* w, int revents)
         {
             return;
         }
-        client->transfer_controllership();
         client->worker->free_client(client);
         delete client;
         return;
@@ -368,7 +367,7 @@ void release_ancestor_cb(struct ev_loop* loop, ev_timer* w, int revents)
     auto client = static_cast<Client*>(w->data);
     if (client->ancestor_to_release.get() && client->ancestor_to_release->streams.size() == 0)
     {
-        client->ancestor_to_release->terminate_session();
+        //client->ancestor_to_release->terminate_session();
         client->ancestor_to_release->disconnect();
         client->ancestor_to_release.reset();
         ev_timer_stop(client->worker->loop, w);
