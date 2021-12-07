@@ -303,13 +303,6 @@ struct Client
     double adjust_traffic_needed();
     void switch_to_non_rps_mode();
     void switch_mode(double new_rps);
-    void init_watcher(ev_timer& watch,
-                           double init_duration, double repeat_duration,
-                           void (*callback)(struct ev_loop*, ev_timer*, int));
-    void start_watcher(ev_timer& watch,
-                            double init_duration, double repeat_duration,
-                            void (*callback)(struct ev_loop*, ev_timer*, int));
-
     bool is_leading_request(Request_Data& request);
     void mark_response_success_or_failure(int32_t stream_id);
     uint64_t get_total_pending_streams();
@@ -319,6 +312,8 @@ struct Client
     void transfer_controllership();
 
     bool reconnect_to_alt_addr();
+
+    void init_timer_watchers();
 
 };
 

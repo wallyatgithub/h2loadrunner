@@ -69,30 +69,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
     wev.data = this;
     rev.data = this;
 
-    ev_timer_init(&conn_inactivity_watcher, conn_activity_timeout_cb, 0.,
-                  worker->config->conn_inactivity_timeout);
-    conn_inactivity_watcher.data = this;
-
-    ev_timer_init(&conn_active_watcher, conn_activity_timeout_cb,
-                  worker->config->conn_active_timeout, 0.);
-    conn_active_watcher.data = this;
-
-    ev_timer_init(&request_timeout_watcher, client_request_timeout_cb, 0., 0.);
-    request_timeout_watcher.data = this;
-
-    ev_timer_init(&rps_watcher, rps_cb, 0., 0.);
-    rps_watcher.data = this;
-
-    ev_timer_init(&stream_timeout_watcher, stream_timeout_cb, 0., 0.01);
-    ev_timer_init(&connection_timeout_watcher, client_connection_timeout_cb, 2., 0.);
-    ev_timer_init(&release_ancestor_watcher, release_ancestor_cb, 5., 5.);
-    ev_timer_init(&delayed_request_watcher, delayed_request_cb, 0.01, 0.01);
-    ev_timer_init(&restart_client_watcher, restart_client_w_cb, 0.0, 0.);
-    init_watcher(adaptive_traffic_watcher, 1.0, 1.0, adaptive_traffic_timeout_cb);
-    stream_timeout_watcher.data = this;
-    connection_timeout_watcher.data = this;
-    release_ancestor_watcher.data = this;
-    delayed_request_watcher.data = this;
+    init_timer_watchers();
 
     for (auto& request : conf->json_config_schema.scenario)
     {
@@ -173,6 +150,44 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         }
     }
     
+}
+
+void Client::init_timer_watchers()
+{
+    ev_timer_init(&conn_inactivity_watcher, conn_activity_timeout_cb, 0.,
+                  worker->config->conn_inactivity_timeout);
+    conn_inactivity_watcher.data = this;
+
+    ev_timer_init(&conn_active_watcher, conn_activity_timeout_cb,
+                  worker->config->conn_active_timeout, 0.);
+    conn_active_watcher.data = this;
+
+    ev_timer_init(&request_timeout_watcher, client_request_timeout_cb, 0., 0.);
+    request_timeout_watcher.data = this;
+
+    ev_timer_init(&rps_watcher, rps_cb, 0., 0.);
+    rps_watcher.data = this;
+
+    ev_timer_init(&stream_timeout_watcher, stream_timeout_cb, 0., 0.01);
+    stream_timeout_watcher.data = this;
+
+    ev_timer_init(&connection_timeout_watcher, client_connection_timeout_cb, 2., 0.);
+    connection_timeout_watcher.data = this;
+
+    ev_timer_init(&release_ancestor_watcher, release_ancestor_cb, 5., 0.);
+    release_ancestor_watcher.data = this;
+
+    ev_timer_init(&delayed_request_watcher, delayed_request_cb, 0.01, 0.01);
+    delayed_request_watcher.data = this;
+
+    ev_timer_init(&restart_client_watcher, restart_client_w_cb, 0., 0.);
+    restart_client_watcher.data = this;
+
+    ev_timer_init(&adaptive_traffic_watcher, adaptive_traffic_timeout_cb, 1.0, 1.0);
+    adaptive_traffic_watcher.data = this;
+
+    ev_timer_init(&delayed_reconnect_watcher, delayed_reconnect_cb, 1.0, 0.0);
+    delayed_reconnect_watcher.data = this;
 }
 
 Client::~Client()
@@ -605,13 +620,18 @@ void Client::process_abandoned_streams()
         return;
     }
 
-    auto req_abandoned = req_inflight + req_left;
+    auto req_abandoned = req_inflight;
+
+    if (!config->json_config_schema.connection_retry_on_disconnect)
+    {
+        req_abandoned += req_left;
+        req_left = 0;
+    }
 
     worker->stats.req_failed += req_abandoned;
     worker->stats.req_error += req_abandoned;
 
     req_inflight = 0;
-    req_left = 0;
 }
 
 void Client::process_request_failure(int errCode)
@@ -1182,7 +1202,7 @@ int Client::connection_made()
     }
     else
     {
-        //start_watcher(adaptive_traffic_watcher, 1.0, 1.0, adaptive_traffic_timeout_cb);
+        //start_watcher(adaptive_traffic_watcher, adaptive_traffic_timeout_cb);
     }
 
     stream_timeout_watcher.repeat = 0.01;
@@ -2046,6 +2066,10 @@ Client* Client::find_or_create_dest_client(Request_Data& request_to_send)
 int Client::resolve_fqdn_and_connect(const std::string& schema, const std::string& authority)
 {
     state = CLIENT_CONNECTING;
+    ares_freeaddrinfo(ares_addr);
+    ares_addr = nullptr;
+    next_addr = nullptr;
+    current_addr = nullptr;
     std::string port;
     auto vec = tokenize_string(authority, ":");
     if (vec.size() == 1)
@@ -2334,23 +2358,6 @@ void Client::switch_mode(double new_rps)
     }
 }
 
-void Client::init_watcher(ev_timer& watch,
-                               double init_duration, double repeat_duration,
-                               void (*callback)(struct ev_loop*, ev_timer*, int))
-{
-    watch.data = this;
-    ev_timer_init(&watch, callback, init_duration, repeat_duration);
-}
-
-
-void Client::start_watcher(ev_timer& watch,
-                                double init_duration, double repeat_duration,
-                                void (*callback)(struct ev_loop*, ev_timer*, int))
-{
-    watch.data = this;
-    ev_timer_again(worker->loop, &watch);
-}
-
 bool Client::is_leading_request(Request_Data& request)
 {
     if (config->json_config_schema.scenario.size() == 1)
@@ -2371,6 +2378,8 @@ bool Client::reconnect_to_alt_addr()
     {
         return false;
     }
+    init_timer_watchers();
+
     if (candidate_addresses.size())
     {
         used_addresses.push_back(std::move(authority));
@@ -2381,8 +2390,7 @@ bool Client::reconnect_to_alt_addr()
     }
     else if (used_addresses.size())
     {
-        init_watcher(delayed_reconnect_watcher, 1.0, 0.0 ,delayed_reconnect_cb);
-        start_watcher(delayed_reconnect_watcher, 1.0, 0.0 ,delayed_reconnect_cb);
+        ev_timer_start(worker->loop, &delayed_reconnect_watcher);
         return true;
     }
     return false;

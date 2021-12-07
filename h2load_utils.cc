@@ -348,12 +348,12 @@ void stream_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
     auto client = static_cast<Client*>(w->data);
     auto& session = client->session;
     client->reset_timeout_requests();
-
 }
 
 void client_connection_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
+    ev_timer_stop(loop, w);
     client->fail();
     client->reconnect_to_alt_addr();
     //ev_break (EV_A_ EVBREAK_ALL);
@@ -377,6 +377,7 @@ void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents)
 void release_ancestor_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
+    ev_timer_stop(loop, w);
     if (client->ancestor_to_release.get() && client->ancestor_to_release->streams.size() == 0)
     {
         client->ancestor_to_release->terminate_session();
@@ -1052,7 +1053,7 @@ std::string reassemble_str_with_variable(const std::vector<std::string>& tokeniz
 void restart_client_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
-    ev_timer_stop(client->worker->loop, &client->restart_client_watcher);
+    ev_timer_stop(loop, w);
     std::cout << "Restart client:" << std::endl;
 
     auto new_client = std::make_unique<Client>(client->id, client->worker, client->req_todo, client->config);
@@ -1189,6 +1190,7 @@ std::string get_tls_error_string()
 void delayed_reconnect_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
+    ev_timer_stop(loop, w);
     if (client->used_addresses.size())
     {
         client->used_addresses.push_back(std::move(client->authority));
