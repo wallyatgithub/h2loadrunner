@@ -14,10 +14,38 @@
     },
     "port":{
       "description":"port, 80, 443 ,etc.",
+      "default": 80,
       "type":"integer"
+    },
+    "load-share-hosts": {
+      "description": "A list of hosts with optional ports, which together with host in host/port field above would be used as a load share group, for h2loadrunner to send requests to.",
+      "type":"array",
+      "minItems":0,
+      "items": {
+        "type": "object",
+        "properties":{
+          "host":{
+            "description":"host part, for example: 192.168.1.1, or, www.h2loadrunner.com",
+            "type":"string"
+          },
+          "port":{
+            "description":"port, 80, 443 ,etc.",
+            "default": 80,
+            "type":"integer"
+          }
+        },
+        "required":[
+           "host"
+        ]
+      }
     },
     "open-new-connection-based-on-authority-header":{
       "description": "false: h2loadrunner will stick to the connections created with host fields above, and create no dynamic connections; true: request should be routed to the host strictly matching the authority header, so h2loadrunner will create dynamic connections when necessary based on per request configuration (either from input or from previous response header), and route the requests based on the request authority header",
+      "default": false,
+      "type":"boolean"
+    },
+    "connection-retry":{
+      "description": "false: upon disconnection from peer, h2loadrunner will not try open new connection; true: h2loadrunner will try to open new connections, either to another host in the load share group above, or to the same host if no other host is available",
       "default": false,
       "type":"boolean"
     },

@@ -192,6 +192,10 @@ struct Client
     std::chrono::time_point<std::chrono::steady_clock> timestamp_of_last_rps_check;
     double rps;
     ev_timer adaptive_traffic_watcher;
+    std::deque<std::string> candidate_addresses;
+    std::deque<std::string> used_addresses;
+    ev_timer delayed_reconnect_watcher;
+    static std::atomic<uint32_t> client_unique_id;
 
     enum { ERR_CONNECT_FAIL = -100 };
 
@@ -313,6 +317,8 @@ struct Client
     bool is_controller_client();
     Client* get_controller_client();
     void transfer_controllership();
+
+    bool reconnect_to_alt_addr();
 
 };
 

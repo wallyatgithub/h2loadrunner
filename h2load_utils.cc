@@ -142,6 +142,10 @@ void writecb(struct ev_loop* loop, ev_io* w, int revents)
     if (rv == Client::ERR_CONNECT_FAIL)
     {
         client->disconnect();
+        if (client->reconnect_to_alt_addr())
+        {
+            return;
+        }
         // Try next address
         client->current_addr = nullptr;
         rv = client->connect();
@@ -157,6 +161,10 @@ void writecb(struct ev_loop* loop, ev_io* w, int revents)
     if (rv != 0)
     {
         client->fail();
+        if (client->reconnect_to_alt_addr())
+        {
+            return;
+        }
         client->worker->free_client(client);
         delete client;
     }
@@ -169,6 +177,10 @@ void readcb(struct ev_loop* loop, ev_io* w, int revents)
     if (client->do_read() != 0)
     {
         if (client->try_again_or_fail() == 0)
+        {
+            return;
+        }
+        if (client->reconnect_to_alt_addr())
         {
             return;
         }
@@ -343,6 +355,7 @@ void client_connection_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents
 {
     auto client = static_cast<Client*>(w->data);
     client->fail();
+    client->reconnect_to_alt_addr();
     //ev_break (EV_A_ EVBREAK_ALL);
 }
 
@@ -366,7 +379,7 @@ void release_ancestor_cb(struct ev_loop* loop, ev_timer* w, int revents)
     auto client = static_cast<Client*>(w->data);
     if (client->ancestor_to_release.get() && client->ancestor_to_release->streams.size() == 0)
     {
-        //client->ancestor_to_release->terminate_session();
+        client->ancestor_to_release->terminate_session();
         client->ancestor_to_release->disconnect();
         client->ancestor_to_release.reset();
         ev_timer_stop(client->worker->loop, w);
@@ -1058,7 +1071,6 @@ void restart_client_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
 
 void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ares_addrinfo* res) 
 {
-
   Client* client = static_cast<Client*>(arg);
 
   if (status == ARES_SUCCESS)
@@ -1171,5 +1183,18 @@ std::string get_tls_error_string()
         error_string += strm.str();
     }
     return error_string;
+}
+
+
+void delayed_reconnect_cb(struct ev_loop* loop, ev_timer* w, int revents)
+{
+    auto client = static_cast<Client*>(w->data);
+    if (client->used_addresses.size())
+    {
+        client->used_addresses.push_back(std::move(client->authority));
+        client->authority = std::move(client->used_addresses.front());
+        client->used_addresses.pop_front();
+        client->resolve_fqdn_and_connect(client->schema, client->authority);
+    }
 }
 

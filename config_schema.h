@@ -71,6 +71,18 @@ public:
     }
 };
 
+class Load_Share_Host
+{
+public:
+    std::string host;
+    uint32_t port;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("host", &this->host);
+        h->add_property("port", &this->port, staticjson::Flags::Optional);
+    }
+};
+
 class Config_Schema
 {
 public:
@@ -111,6 +123,7 @@ public:
     std::string max_tls_version;
     bool open_new_connection_based_on_authority_header;
     bool connection_retry_on_disconnect;
+    std::vector<Load_Share_Host> load_share_hosts;
 
     explicit Config_Schema():
         schema("http"),
@@ -183,6 +196,7 @@ public:
         h->add_property("certVerificationMode", &this->cert_verification_mode, staticjson::Flags::Optional);
         h->add_property("max-tls-version", &this->max_tls_version, staticjson::Flags::Optional);
         h->add_property("connection-retry", &this->connection_retry_on_disconnect, staticjson::Flags::Optional);
+        h->add_property("load-share-hosts", &this->load_share_hosts, staticjson::Flags::Optional);
     }
 
 };

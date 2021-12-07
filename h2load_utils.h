@@ -139,5 +139,6 @@ void adaptive_traffic_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 
 std::string get_tls_error_string();
 
+void delayed_reconnect_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
 #endif

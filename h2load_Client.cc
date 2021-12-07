@@ -21,12 +21,13 @@ namespace h2load
 {
 
 
+std::atomic<uint32_t> Client::client_unique_id(0);
 
 Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
              Client* parent, const std::string& dest_schema,
              const std::string& dest_authority)
-    : wb(&worker->mcpool),
-      cstat {},
+       :wb(&worker->mcpool),
+        cstat {},
         worker(worker),
         config(conf),
         ssl(nullptr),
@@ -139,6 +140,39 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
 
     timestamp_of_last_rps_check = std::chrono::steady_clock::now();
     timestamp_of_last_tps_check = timestamp_of_last_rps_check;
+
+    if (!parent && conf->json_config_schema.load_share_hosts.size())
+    {
+        auto init_hosts = [this, conf]()
+        {
+            std::vector<std::string> hosts;
+            for (auto& host: conf->json_config_schema.load_share_hosts)
+            {
+                hosts.push_back(host.host);
+                if (host.port)
+                {
+                    hosts.back().append(":").append(std::to_string(host.port));
+                }
+            }
+            if (std::find(std::begin(hosts), std::end(hosts), authority) == std::end(hosts))
+            {
+                hosts.push_back(authority);
+            }
+            return hosts;
+        };
+        static std::vector<std::string> hosts = init_hosts();
+        auto myId = client_unique_id++;
+        auto startIndex = myId % hosts.size();
+        authority = hosts[startIndex];
+        ares_addr = nullptr;
+        next_addr = nullptr;
+        current_addr = nullptr;
+        for (auto count = 1; count < hosts.size(); count++)
+        {
+            candidate_addresses.push_back(hosts[(++startIndex)%hosts.size()]);
+        }
+    }
+    
 }
 
 Client::~Client()
@@ -298,6 +332,10 @@ int Client::connect()
     {
       rv = make_socket(ares_addr->nodes);
     }
+    else
+    {
+        return resolve_fqdn_and_connect(schema, authority);
+    }
 
     if (fd == -1)
     {
@@ -384,45 +422,43 @@ void Client::disconnect()
     transfer_controllership();
 
     record_client_end_time();
-    auto stop_timer_watcher = [&](ev_timer* watcher)
+    auto stop_timer_watcher = [this](ev_timer& watcher)
     {
-        if (ev_is_active(watcher))
+        if (ev_is_active(&watcher))
         {
-            ev_timer_stop(worker->loop, watcher);
+            ev_timer_stop(worker->loop, &watcher);
         }
     };
 
-    auto stop_io_watcher = [&](ev_io* watcher)
+    auto stop_io_watcher = [this](ev_io& watcher)
     {
-        if (ev_is_active(watcher))
+        if (ev_is_active(&watcher))
         {
-            ev_io_stop(worker->loop, watcher);
+            ev_io_stop(worker->loop, &watcher);
         }
     };
 
-    stop_timer_watcher(&conn_inactivity_watcher);
-    stop_timer_watcher(&conn_active_watcher);
-    stop_timer_watcher(&rps_watcher);
-    stop_timer_watcher(&request_timeout_watcher);
-    stop_timer_watcher(&stream_timeout_watcher);
-    stop_timer_watcher(&connection_timeout_watcher);
-    stop_timer_watcher(&delayed_request_watcher);
-    stop_timer_watcher(&release_ancestor_watcher);
-    stop_timer_watcher(&restart_client_watcher);
-    stop_timer_watcher(&adaptive_traffic_watcher);
+    stop_timer_watcher(conn_inactivity_watcher);
+    stop_timer_watcher(conn_active_watcher);
+    stop_timer_watcher(rps_watcher);
+    stop_timer_watcher(request_timeout_watcher);
+    stop_timer_watcher(stream_timeout_watcher);
+    stop_timer_watcher(connection_timeout_watcher);
+    stop_timer_watcher(delayed_request_watcher);
+    stop_timer_watcher(release_ancestor_watcher);
+    stop_timer_watcher(restart_client_watcher);
+    stop_timer_watcher(adaptive_traffic_watcher);
+    stop_timer_watcher(delayed_reconnect_watcher);
 
     streams.clear();
     session.reset();
     wb.reset();
     state = CLIENT_IDLE;
-    stop_io_watcher(&wev);
-    stop_io_watcher(&rev);
+    stop_io_watcher(wev);
+    stop_io_watcher(rev);
     for (auto& it: ares_io_watchers)
     {
-        if (ev_is_active(&it.second))
-        {
-            ev_io_stop(worker->loop, &it.second);
-        }
+        stop_io_watcher(it.second);
     }
     if (ssl)
     {
@@ -590,10 +626,6 @@ void Client::process_request_failure(int errCode)
 
     req_left = 0;
 
-    if (streams.size() == 0)
-    {
-        terminate_session();
-    }
     if (MAX_STREAM_TO_BE_EXHAUSTED == errCode)
     {
         std::cout << "stream exhausted on this client. Restart client:" << std::endl;
@@ -601,6 +633,12 @@ void Client::process_request_failure(int errCode)
         ev_timer_start(worker->loop, &restart_client_watcher);
         return;
     }
+
+    if (streams.size() == 0)
+    {
+        terminate_session();
+    }
+
     std::cout << "Process Request Failure:" << worker->stats.req_failed
               << ", errorCode: " << errCode
               << std::endl;
@@ -2090,6 +2128,15 @@ void Client::transfer_controllership()
         return;
     }
 
+    for (size_t index = 0; index < worker->clients.size(); index++)
+    {
+        if (worker->clients[index] == this)
+        {
+            worker->clients[index] = new_controller;
+            break;
+        }
+    }
+
     for (auto& client: dest_clients)
     {
         if (client.second != new_controller)
@@ -2312,6 +2359,30 @@ bool Client::is_leading_request(Request_Data& request)
     }
     else if (request.next_request_idx == 1)
     {
+        return true;
+    }
+    return false;
+}
+
+
+bool Client::reconnect_to_alt_addr()
+{
+    if (!config->json_config_schema.connection_retry_on_disconnect)
+    {
+        return false;
+    }
+    if (candidate_addresses.size())
+    {
+        used_addresses.push_back(std::move(authority));
+        authority = std::move(candidate_addresses.front());
+        candidate_addresses.pop_front();
+        resolve_fqdn_and_connect(schema, authority);
+        return true;
+    }
+    else if (used_addresses.size())
+    {
+        init_watcher(delayed_reconnect_watcher, 1.0, 0.0 ,delayed_reconnect_cb);
+        start_watcher(delayed_reconnect_watcher, 1.0, 0.0 ,delayed_reconnect_cb);
         return true;
     }
     return false;

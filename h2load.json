@@ -1,6 +1,6 @@
 {
   "schema": "http",
-  "host": "127.0.0.1",
+  "host": "172.25.234.12",
   "port": 8080,
   "threads": 10,
   "clients": 10,
