@@ -1144,15 +1144,6 @@ void normalize_request_templates(h2load::Config* config)
             request.uri.input = request.schema + "://" + request.authority + request.path;
         }
     }
-
-/*
-    // hacking config->host and port, to make sure the 1st client is always handing the first request
-    if (config->json_config_schema.scenario.size())
-    {
-        auto& req = config->json_config_schema.scenario[0];
-        parse_base_uri(StringRef(req.uri.input), *config);
-    }
-*/
 }
 
 void adaptive_traffic_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
@@ -1193,7 +1184,6 @@ void delayed_reconnect_cb(struct ev_loop* loop, ev_timer* w, int revents)
     ev_timer_stop(loop, w);
     if (client->used_addresses.size())
     {
-        client->used_addresses.push_back(std::move(client->authority));
         client->authority = std::move(client->used_addresses.front());
         client->used_addresses.pop_front();
         client->resolve_fqdn_and_connect(client->schema, client->authority);

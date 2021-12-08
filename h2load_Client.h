@@ -180,6 +180,7 @@ struct Client
     Client* parent_client;
     std::string schema;
     std::string authority;
+    std::string preferred_authority;
     ares_channel channel;
     std::map<int, ev_io> ares_io_watchers;
     ev_timer release_ancestor_watcher;

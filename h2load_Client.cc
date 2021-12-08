@@ -141,10 +141,11 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         auto myId = client_unique_id++;
         auto startIndex = myId % hosts.size();
         authority = hosts[startIndex];
+        preferred_authority = authority;
         ares_addr = nullptr;
         next_addr = nullptr;
         current_addr = nullptr;
-        for (auto count = 1; count < hosts.size(); count++)
+        for (auto count = 0; count < hosts.size() - 1; count++)
         {
             candidate_addresses.push_back(hosts[(++startIndex)%hosts.size()]);
         }
@@ -644,14 +645,17 @@ void Client::process_request_failure(int errCode)
     worker->stats.req_failed += req_left;
     worker->stats.req_error += req_left;
 
-    req_left = 0;
-
     if (MAX_STREAM_TO_BE_EXHAUSTED == errCode)
     {
         std::cout << "stream exhausted on this client. Restart client:" << std::endl;
         restart_client_watcher.data = this;
         ev_timer_start(worker->loop, &restart_client_watcher);
         return;
+    }
+
+    if (!config->json_config_schema.connection_retry_on_disconnect)
+    {
+        req_left = 0;
     }
 
     if (streams.size() == 0)
@@ -2181,7 +2185,7 @@ void Client::transfer_controllership()
     new_controller->req_variable_value_end = req_variable_value_end;
     if (rps_mode())
     {
-        new_controller->rps_watcher.repeat = std::max(0.1, 1. / rps);
+        new_controller->rps_watcher.repeat = std::max(0.01, 1. / rps);
         ev_timer_again(worker->loop, &new_controller->rps_watcher);
         new_controller->rps_duration_started = ev_now(worker->loop);
     }
@@ -2378,11 +2382,26 @@ bool Client::reconnect_to_alt_addr()
     {
         return false;
     }
+    if (worker->current_phase == Phase::DURATION_OVER)
+    {
+        return false;
+    }
+
+    if (req_left <= 0)
+    {
+        return false;
+    }
     init_timer_watchers();
 
-    if (candidate_addresses.size())
+    if (authority != preferred_authority)
     {
         used_addresses.push_back(std::move(authority));
+        authority = preferred_authority;
+        resolve_fqdn_and_connect(schema, authority);
+        return true;
+    }
+    else if (candidate_addresses.size())
+    {
         authority = std::move(candidate_addresses.front());
         candidate_addresses.pop_front();
         resolve_fqdn_and_connect(schema, authority);
