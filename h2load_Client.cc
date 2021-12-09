@@ -2151,6 +2151,12 @@ void Client::transfer_controllership()
     {
         return;
     }
+
+    if (config->json_config_schema.connection_retry_on_disconnect && !is_test_finished())
+    {
+        return;
+    }
+
     Client* new_controller = nullptr;
     for (auto& client: dest_clients)
     {
