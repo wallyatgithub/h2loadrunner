@@ -43,6 +43,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         req_done(0),
         id(id),
         fd(-1),
+        probe_skt_fd(-1),
         new_connection_requested(false),
         final(false),
         rps_duration_started(0),
@@ -68,6 +69,10 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
 
     wev.data = this;
     rev.data = this;
+
+    ev_io_init(&probe_wev, probe_writecb, 0, EV_WRITE);
+
+    probe_wev.data = this;
 
     init_timer_watchers();
 
@@ -118,7 +123,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
     timestamp_of_last_rps_check = std::chrono::steady_clock::now();
     timestamp_of_last_tps_check = timestamp_of_last_rps_check;
 
-    if (!parent && conf->json_config_schema.load_share_hosts.size())
+    if (!parent)
     {
         auto init_hosts = [this, conf]()
         {
@@ -187,8 +192,12 @@ void Client::init_timer_watchers()
     ev_timer_init(&adaptive_traffic_watcher, adaptive_traffic_timeout_cb, 1.0, 1.0);
     adaptive_traffic_watcher.data = this;
 
-    ev_timer_init(&delayed_reconnect_watcher, delayed_reconnect_cb, 1.0, 0.0);
+    ev_timer_init(&delayed_reconnect_watcher, reconnect_to_used_host_cb, 1.0, 0.0);
     delayed_reconnect_watcher.data = this;
+
+    ev_timer_init(&connect_to_preferred_host_watcher, connect_to_prefered_host_cb, 1.0, 1.0);
+    connect_to_preferred_host_watcher.data = this;
+
 }
 
 Client::~Client()
@@ -434,7 +443,7 @@ void Client::fail()
 
 void Client::disconnect()
 {
-    std::cout<<"===============disconnected from "<<authority<<"==============="<<std::endl;
+    std::cerr<<"===============disconnected from "<<authority<<"==============="<<std::endl;
     transfer_controllership();
 
     record_client_end_time();
@@ -465,6 +474,7 @@ void Client::disconnect()
     stop_timer_watcher(restart_client_watcher);
     stop_timer_watcher(adaptive_traffic_watcher);
     stop_timer_watcher(delayed_reconnect_watcher);
+    stop_timer_watcher(connect_to_preferred_host_watcher);
 
     streams.clear();
     session.reset();
@@ -1264,6 +1274,11 @@ int Client::connection_made()
     }
     signal_write();
 
+    if (authority != preferred_authority && config->json_config_schema.connect_back_to_preferred_host)
+    {
+        ev_timer_start(worker->loop, &connect_to_preferred_host_watcher);
+    }
+
     return 0;
 }
 
@@ -1370,7 +1385,7 @@ int Client::write_clear()
 
 int Client::connected()
 {
-    std::cout<<"===============connected to "<<authority<<"==============="<<std::endl;
+    std::cerr<<"===============connected to "<<authority<<"==============="<<std::endl;
 
     if (!util::check_socket_connected(fd))
     {
@@ -2067,13 +2082,8 @@ Client* Client::find_or_create_dest_client(Request_Data& request_to_send)
     }
 }
 
-int Client::resolve_fqdn_and_connect(const std::string& schema, const std::string& authority)
+int Client::resolve_fqdn_and_connect(const std::string& schema, const std::string& authority, ares_addrinfo_callback callback)
 {
-    state = CLIENT_CONNECTING;
-    ares_freeaddrinfo(ares_addr);
-    ares_addr = nullptr;
-    next_addr = nullptr;
-    current_addr = nullptr;
     std::string port;
     auto vec = tokenize_string(authority, ":");
     if (vec.size() == 1)
@@ -2096,7 +2106,7 @@ int Client::resolve_fqdn_and_connect(const std::string& schema, const std::strin
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = 0;
     hints.ai_flags = AI_ADDRCONFIG;
-    ares_getaddrinfo(channel, vec[0].c_str(), port.c_str(), &hints, ares_addrinfo_query_callback, this);
+    ares_getaddrinfo(channel, vec[0].c_str(), port.c_str(), &hints, callback, this);
     return 0;
 }
 
@@ -2199,6 +2209,7 @@ void Client::substitute_ancestor(Client* ancestor)
     parent_client = ancestor->parent_client;
     schema = ancestor->schema;
     authority = ancestor->authority;
+    preferred_authority= ancestor->preferred_authority;
     req_todo = ancestor->req_todo;
     req_left = ancestor->req_left;
     curr_req_variable_value = ancestor->curr_req_variable_value;
@@ -2382,21 +2393,24 @@ bool Client::reconnect_to_alt_addr()
     {
         return false;
     }
-    if (worker->current_phase == Phase::DURATION_OVER)
+
+    if (CLIENT_CONNECTED == state)
     {
         return false;
     }
 
-    if (req_left <= 0)
+    if (is_test_finished())
     {
         return false;
     }
+
     init_timer_watchers();
 
     if (authority != preferred_authority)
     {
         used_addresses.push_back(std::move(authority));
         authority = preferred_authority;
+        std::cerr<<"switch back to preferred host: "<<authority<<std::endl;
         resolve_fqdn_and_connect(schema, authority);
         return true;
     }
@@ -2404,10 +2418,11 @@ bool Client::reconnect_to_alt_addr()
     {
         authority = std::move(candidate_addresses.front());
         candidate_addresses.pop_front();
+        std::cerr<<"switch to candidate host: "<<authority<<std::endl;
         resolve_fqdn_and_connect(schema, authority);
         return true;
     }
-    else if (used_addresses.size())
+    else
     {
         ev_timer_start(worker->loop, &delayed_reconnect_watcher);
         return true;
@@ -2415,6 +2430,52 @@ bool Client::reconnect_to_alt_addr()
     return false;
 }
 
+
+
+bool Client::is_test_finished()
+{
+    if (0 == req_left || worker->current_phase == Phase::DURATION_OVER)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
+bool Client::probe(ares_addrinfo* ares_addr)
+{
+    if (probe_skt_fd != -1)
+    {
+        if (ev_is_active(&probe_wev))
+        {
+            ev_io_stop(worker->loop, &probe_wev);
+        }
+        close(probe_skt_fd);
+        probe_skt_fd = -1;
+    }
+    if (ares_addr)
+    {
+        auto& addr = ares_addr->nodes;
+        probe_skt_fd = util::create_nonblock_socket(addr->ai_family);
+        if (probe_skt_fd != -1)
+        {
+          auto rv = ::connect(probe_skt_fd, addr->ai_addr, addr->ai_addrlen);
+          if (rv != 0 && errno != EINPROGRESS)
+          {
+              close(probe_skt_fd);
+              probe_skt_fd = -1;
+          }
+          else
+          {
+            ev_io_set(&probe_wev, probe_skt_fd, EV_WRITE);
+            ev_io_start(worker->loop, &probe_wev);
+            return true;
+          }
+        }
+    }
+    return false;
+}
 
+}

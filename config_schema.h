@@ -124,6 +124,7 @@ public:
     bool open_new_connection_based_on_authority_header;
     bool connection_retry_on_disconnect;
     std::vector<Load_Share_Host> load_share_hosts;
+    bool connect_back_to_preferred_host;
 
     explicit Config_Schema():
         schema("http"),
@@ -154,7 +155,8 @@ public:
         stream_timeout_in_ms(5000),
         max_tls_version("TLSv1.3"),
         open_new_connection_based_on_authority_header(false),
-        connection_retry_on_disconnect(false)
+        connection_retry_on_disconnect(false),
+        connect_back_to_preferred_host(false)
     {
     }
 
@@ -197,6 +199,7 @@ public:
         h->add_property("max-tls-version", &this->max_tls_version, staticjson::Flags::Optional);
         h->add_property("connection-retry", &this->connection_retry_on_disconnect, staticjson::Flags::Optional);
         h->add_property("load-share-hosts", &this->load_share_hosts, staticjson::Flags::Optional);
+        h->add_property("switch-back-after-connection-retry", &this->connect_back_to_preferred_host, staticjson::Flags::Optional);
     }
 
 };

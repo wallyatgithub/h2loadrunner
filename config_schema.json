@@ -18,7 +18,7 @@
       "type":"integer"
     },
     "load-share-hosts": {
-      "description": "A list of hosts with optional ports, which together with host in host/port field above would be used as a load share group, for h2loadrunner to send requests to.",
+      "description": "A list of hosts with optional ports, which together with host in host/port field above would be used as a load share group; h2loadrunner will distribute the connections evenly to each host of the group, so the test traffic is also evenly distributed to each host.",
       "type":"array",
       "minItems":0,
       "items": {
@@ -45,7 +45,12 @@
       "type":"boolean"
     },
     "connection-retry":{
-      "description": "false: upon disconnection from peer, h2loadrunner will not try open new connection; true: h2loadrunner will try to open new connections, either to another host in the load share group above, or to the same host if no other host is available",
+      "description": "false: upon disconnect from host, h2loadrunner will not try open new connection; true: h2loadrunner will try to open new connections upon host disconnect, either to another host in the load share group above, or to the same host if no other host is available; note: after reconnection is made due to peer disconnect, load balance is no longer guaranteed, see next field for more information",
+      "default": false,
+      "type":"boolean"
+    },
+    "switch-back-after-connection-retry":{
+      "description": "when connection-retry occurs due to host disconnect, load balance may be broken as mentioned above; this field provide an option to recover; true: h2loadrunner will monitor the host disconnected, and when it is up again (tcp connect is successful), h2loadrunner will re-establish connection to it to reach load balance; false: h2loadrunner will not monitor the host disconnected, and leave the load unbalanced; note: it is not always positive to have this set to true, as it may cause connection to flip-flop when the host itself is unstable",
       "default": false,
       "type":"boolean"
     },

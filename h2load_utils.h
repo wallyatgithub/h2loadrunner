@@ -16,8 +16,8 @@ extern "C" {
 
 #include "h2load.h"
 #include "h2load_Config.h"
-#include "h2load_Client.h"
 #include "h2load_Worker.h"
+#include "h2load_Cookie.h"
 
 #include "h2load_http1_session.h"
 #include "h2load_http2_session.h"
@@ -139,6 +139,12 @@ void adaptive_traffic_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 
 std::string get_tls_error_string();
 
-void delayed_reconnect_cb(struct ev_loop* loop, ev_timer* w, int revents);
+void reconnect_to_used_host_cb(struct ev_loop* loop, ev_timer* w, int revents);
+
+void ares_addrinfo_query_callback_for_probe(void* arg, int status, int timeouts, struct ares_addrinfo* res);
+
+void connect_to_prefered_host_cb(struct ev_loop* loop, ev_timer* w, int revents);
+
+void probe_writecb(struct ev_loop* loop, ev_io* w, int revents);
 
 #endif

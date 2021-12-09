@@ -1528,7 +1528,8 @@ int main(int argc, char** argv)
         std::async(std::launch::async, [&workers, &workers_stopped]()
     {
         static uint32_t counter = 0;
-        size_t totalReq_till_now = 0;
+        size_t totalReq_sent_till_now = 0;
+        size_t totalResp_received_till_now = 0;
         size_t totalReq_success_till_now = 0;
         size_t total3xx_till_now = 0;
         size_t total4xx_till_now = 0;
@@ -1537,7 +1538,8 @@ int main(int argc, char** argv)
         size_t totalTrans_success_till_now = 0;
         while (!workers_stopped)
         {
-            size_t total_req_till_last_interval = totalReq_till_now;
+            size_t totalReq_sent_till_last_interval = totalReq_sent_till_now;
+            size_t total_resp_received_till_last_interval = totalResp_received_till_now;
             size_t totalReq_success_till_last_interval = totalReq_success_till_now;
             size_t total3xx_till_last_interval = total3xx_till_now;
             size_t total4xx_till_last_interval = total4xx_till_now;
@@ -1545,7 +1547,8 @@ int main(int argc, char** argv)
             size_t totalTrans_till_last_interval = totalTrans_till_now;
             size_t totalTrans_success_till_last_interval = totalTrans_success_till_now;
             std::this_thread::sleep_for(std::chrono::seconds(1));
-            totalReq_till_now = 0;
+            totalReq_sent_till_now = 0;
+            totalResp_received_till_now = 0;
             totalReq_success_till_now = 0;
             total3xx_till_now = 0;
             total4xx_till_now = 0;
@@ -1560,7 +1563,8 @@ int main(int argc, char** argv)
             for (auto& w : workers)
             {
                 auto& s = w->stats;
-                totalReq_till_now += s.req_done;
+                totalReq_sent_till_now += s.req_started;
+                totalResp_received_till_now += s.req_done;
                 totalReq_success_till_now += s.req_status_success;
                 total3xx_till_now += s.status[3];
                 total4xx_till_now += s.status[4];
@@ -1573,7 +1577,8 @@ int main(int argc, char** argv)
                 totalTrans_success_till_now += s.transaction_successful;
                 total_resp_time_ms += s.total_resp_time_ms.exchange(0);
             }
-            size_t delta_RPS = totalReq_till_now - total_req_till_last_interval;
+            size_t delta_RPS_sent = totalReq_sent_till_now - totalReq_sent_till_last_interval;
+            size_t delta_RPS_received = totalResp_received_till_now - total_resp_received_till_last_interval;
             size_t delta_RPS_success = totalReq_success_till_now - totalReq_success_till_last_interval;
             size_t delta_RPS_3xx = total3xx_till_now - total3xx_till_last_interval;
             size_t delta_RPS_4xx = total4xx_till_now - total4xx_till_last_interval;
@@ -1584,16 +1589,19 @@ int main(int argc, char** argv)
             auto now_c = std::chrono::system_clock::to_time_t(now);
             std::cout<<std::endl;
             std::cout << std::put_time(std::localtime(&now_c), "%c")<<std::endl
-                      << "send: " << delta_RPS
+                      << "sent: " << delta_RPS_sent
+                      << ", received: " << delta_RPS_received
                       << ", successful: " << delta_RPS_success
                       << ", 3xx: " << delta_RPS_3xx
                       << ", 4xx: " << delta_RPS_4xx
                       << ", 5xx: " << delta_RPS_5xx
                       << ", max latency: " << max_resp_time_ms<<" ms"
                       << ", min latency: " << min_resp_time_ms<<" ms"
-                      << ", avg latency: " << (delta_RPS?total_resp_time_ms/delta_RPS:max_resp_time_ms)<< " ms"
-                      << ", successful/send: "
-                      << (delta_RPS?(((double)delta_RPS_success / delta_RPS) * 100):0) << "%"
+                      << ", avg latency: " << (delta_RPS_received?total_resp_time_ms/delta_RPS_received:max_resp_time_ms)<< " ms"
+                      << ", received/sent: "
+                      << (delta_RPS_sent?(((double)delta_RPS_received / delta_RPS_sent) * 100):0) << "%"
+                      << ", successful/received: "
+                      << (delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0) << "%"
                       <<std::endl;
 /*
                       std::cout
@@ -1603,20 +1611,22 @@ int main(int argc, char** argv)
                       << ", min duration: " << min_resp_time_ms<<" ms"
                       << ", successful/send: "
                       << (((double)delta_trans_success / delta_trans) * 100) << "%" << std::endl;
+
 */
+
             counter++;
 
             if (counter == 30)
             {
                 counter = 0;
                 std::cout << std::put_time(std::localtime(&now_c), "%c")
-                          << ", total requests sent: " << totalReq_till_now
+                          << ", total requests sent: " << totalResp_received_till_now
                           << ", total successful responses: " << totalReq_success_till_now
                           << ", total 3xx: " << total3xx_till_now
                           << ", total 4xx: " << total4xx_till_now
                           << ", total 5xx: " << total5xx_till_now
                           << ", ovewrall successful rate: "
-                          << (totalReq_till_now?(((double)totalReq_success_till_now / totalReq_till_now) * 100):0) << "%" << std::endl;
+                          << (totalResp_received_till_now?(((double)totalReq_success_till_now / totalResp_received_till_now) * 100):0) << "%" << std::endl;
             }
         }
     });

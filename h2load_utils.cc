@@ -17,6 +17,8 @@ extern "C" {
 
 
 #include "h2load_utils.h"
+#include "h2load_Client.h"
+
 
 using namespace h2load;
 
@@ -368,7 +370,6 @@ void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents)
     while (it != barrier)
     {
         client->requests_to_submit.emplace_back(std::move(it->second));
-        h2load::Submit_Requet_Wrapper auto_submitter(nullptr, client);
         it = client->delayed_requests_to_submit.erase(it);
     }
 }
@@ -1076,11 +1077,16 @@ void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ar
 
   if (status == ARES_SUCCESS)
   {
-      ares_freeaddrinfo(client->ares_addr);
-      client->ares_addr = res;
+      if (client->ares_addr)
+      {
+          ares_freeaddrinfo(client->ares_addr);
+      }
       client->next_addr = nullptr;
       client->current_addr = nullptr;
+      client->ares_addr = res;
       client->connect();
+      ares_freeaddrinfo(client->ares_addr);
+      client->ares_addr = nullptr;
   }
   else
   {
@@ -1178,15 +1184,71 @@ std::string get_tls_error_string()
 }
 
 
-void delayed_reconnect_cb(struct ev_loop* loop, ev_timer* w, int revents)
+void reconnect_to_used_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
     ev_timer_stop(loop, w);
+    if (CLIENT_CONNECTED == client->state)
+    {
+        return;
+    }
     if (client->used_addresses.size())
     {
         client->authority = std::move(client->used_addresses.front());
         client->used_addresses.pop_front();
+        std::cerr<<"switch to used host: "<<client->authority<<std::endl;
         client->resolve_fqdn_and_connect(client->schema, client->authority);
+    }
+    else
+    {
+        std::cerr<<"retry current host: "<<client->authority<<std::endl;
+        client->resolve_fqdn_and_connect(client->schema, client->authority);
+    }
+}
+
+void ares_addrinfo_query_callback_for_probe(void* arg, int status, int timeouts, struct ares_addrinfo* res)
+{
+  Client* client = static_cast<Client*>(arg);
+  if (status == ARES_SUCCESS)
+  {
+      client->probe(res);
+      ares_freeaddrinfo(res);
+  }
+}
+
+void connect_to_prefered_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
+{
+    auto client = static_cast<Client*>(w->data);
+    if (CLIENT_CONNECTED != client->state)
+    {
+        ev_timer_stop(loop, w); // reconnect will connect to preferred host first
+    }
+    else if (client->authority == client->preferred_authority && CLIENT_CONNECTED == client->state)
+    {
+        ev_timer_stop(loop, w); // already to preferred host, either attempt in progress, or connected
+    }
+    else // connected, but not to preferred host, so check if preferred host is up for connection
+    {
+        client->resolve_fqdn_and_connect(client->schema, client->preferred_authority,
+                                         ares_addrinfo_query_callback_for_probe);
+    }
+}
+
+void probe_writecb(struct ev_loop* loop, ev_io* w, int revents)
+{
+    auto client = static_cast<Client*>(w->data);
+    ev_io_stop(loop, w);
+    if (util::check_socket_connected(client->probe_skt_fd))
+    {
+        std::cerr<<"preferred host is up: "<<client->preferred_authority<<std::endl;
+        if (client->authority != client->preferred_authority && client->state == CLIENT_CONNECTED)
+        {
+            std::cerr<<"switch back to preferred host: "<<client->preferred_authority<<std::endl;
+            client->disconnect();
+            client->init_timer_watchers();
+            client->authority = client->preferred_authority;
+            client->resolve_fqdn_and_connect(client->schema, client->authority);
+        }
     }
 }
 

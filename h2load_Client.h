@@ -25,10 +25,9 @@ extern "C" {
 #include "h2load_session.h"
 #include "h2load_stats.h"
 #include "h2load_Cookie.h"
-#include <ares.h>
+#include "h2load_utils.h"
 
 static std::string emptyString;
-
 
 namespace h2load
 {
@@ -197,6 +196,9 @@ struct Client
     std::deque<std::string> used_addresses;
     ev_timer delayed_reconnect_watcher;
     static std::atomic<uint32_t> client_unique_id;
+    ev_timer connect_to_preferred_host_watcher;
+    ev_io probe_wev;
+    int probe_skt_fd;
 
     enum { ERR_CONNECT_FAIL = -100 };
 
@@ -284,7 +286,8 @@ struct Client
 
     Client* find_or_create_dest_client(Request_Data& request_to_send);
 
-    int resolve_fqdn_and_connect(const std::string& schema, const std::string& authority);
+    int resolve_fqdn_and_connect(const std::string& schema, const std::string& authority,
+                                           ares_addrinfo_callback callback = ares_addrinfo_query_callback);
     int connect_to_host(const std::string& schema, const std::string& authority);
 
     bool any_request_to_submit();
@@ -315,6 +318,10 @@ struct Client
     bool reconnect_to_alt_addr();
 
     void init_timer_watchers();
+
+    bool is_test_finished();
+
+    bool probe(ares_addrinfo* ares_addr);
 
 };
 
