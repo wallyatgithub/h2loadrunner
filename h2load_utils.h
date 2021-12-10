@@ -51,7 +51,7 @@ void warmup_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
 void rps_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
-void restart_client_w_cb(struct ev_loop* loop, ev_timer* w, int revents);
+void ping_w_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
 void stream_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
@@ -128,8 +128,6 @@ void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ar
 void ares_socket_state_cb(void *data, int s, int read, int write);
 
 void ares_io_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
-
-void release_ancestor_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
 void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents);
 

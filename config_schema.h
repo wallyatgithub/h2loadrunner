@@ -125,6 +125,7 @@ public:
     bool connection_retry_on_disconnect;
     std::vector<Load_Share_Host> load_share_hosts;
     bool connect_back_to_preferred_host;
+    uint32_t interval_to_send_ping;
 
     explicit Config_Schema():
         schema("http"),
@@ -156,7 +157,8 @@ public:
         max_tls_version("TLSv1.3"),
         open_new_connection_based_on_authority_header(false),
         connection_retry_on_disconnect(false),
-        connect_back_to_preferred_host(false)
+        connect_back_to_preferred_host(false),
+        interval_to_send_ping(0)
     {
     }
 
@@ -200,6 +202,7 @@ public:
         h->add_property("connection-retry", &this->connection_retry_on_disconnect, staticjson::Flags::Optional);
         h->add_property("load-share-hosts", &this->load_share_hosts, staticjson::Flags::Optional);
         h->add_property("switch-back-after-connection-retry", &this->connect_back_to_preferred_host, staticjson::Flags::Optional);
+        h->add_property("interval-between-ping-frames", &this->interval_to_send_ping, staticjson::Flags::Optional);
     }
 
 };

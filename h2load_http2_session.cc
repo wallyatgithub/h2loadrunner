@@ -471,4 +471,9 @@ int Http2Session::_submit_request()
     return 0;
 }
 
+void Http2Session::submit_ping()
+{
+    nghttp2_submit_ping(session_, NGHTTP2_FLAG_NONE, NULL);
+}
+
 } // namespace h2load

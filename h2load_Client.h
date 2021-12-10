@@ -167,8 +167,7 @@ struct Client
     // and it is only used if --rps is given.
     size_t rps_req_inflight;
     int32_t curr_stream_id;
-    std::unique_ptr<Client> ancestor_to_release;
-    ev_timer restart_client_watcher;
+    ev_timer send_ping_watcher;
     Config* config;
     uint64_t curr_req_variable_value;
     std::deque<Request_Data> requests_to_submit;
@@ -182,7 +181,6 @@ struct Client
     std::string preferred_authority;
     ares_channel channel;
     std::map<int, ev_io> ares_io_watchers;
-    ev_timer release_ancestor_watcher;
     ev_timer delayed_request_watcher;
     uint64_t req_variable_value_start;
     uint64_t req_variable_value_end;
@@ -329,6 +327,8 @@ struct Client
     void update_this_in_dest_client_map();
 
     bool should_reconnect_on_disconnect();
+
+    void submit_ping();
 
 };
 

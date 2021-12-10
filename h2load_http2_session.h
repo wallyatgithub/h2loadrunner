@@ -46,6 +46,7 @@ public:
     virtual void terminate();
     virtual size_t max_concurrent_streams();
     virtual void submit_rst_stream(int32_t stream_id);
+    virtual void submit_ping();
 
 private:
     Client* client_;

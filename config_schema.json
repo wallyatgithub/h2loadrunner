@@ -163,6 +163,11 @@
       "description":"Specifies the amount of time that h2loadrunner is willing to wait to see activity on a given connection. It must be a positive integer, specifying the amount of time to wait. When no timeout value is set (either active or inactive), the tool will keep a connection open indefinitely, waiting for a response.",
       "type":"integer"
     },
+    "interval-between-ping-frames":{
+      "description":"h2loadrunner can send ping frame to peer host to prevent the connection going idle, as a long idle connection might be taken down; this field specifies the max interval (in seconds) between 2 ping frames; if the connection comes out of idle state in less than this interval, next ping frame will not be sent; 0: h2loadrunner will not send ping frames even the connection is idle for long; note: this field is not applicable for http1.x connections",
+      "default": 0,
+      "type":"integer"
+    },
     "npn-list":{
       "description":"Comma delimited list of ALPN protocol identifier sorted in the order of preference. That means most desirable protocol comes first. This is used in both ALPN and NPN. The parameter must be delimited by a single comma only and any white spaces are treated as a part of protocol string.",
       "type":"string",

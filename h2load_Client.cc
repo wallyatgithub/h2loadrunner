@@ -174,14 +174,11 @@ void Client::init_timer_watchers()
     ev_timer_init(&connection_timeout_watcher, client_connection_timeout_cb, 2., 0.);
     connection_timeout_watcher.data = this;
 
-    ev_timer_init(&release_ancestor_watcher, release_ancestor_cb, 5., 0.);
-    release_ancestor_watcher.data = this;
-
     ev_timer_init(&delayed_request_watcher, delayed_request_cb, 0.01, 0.01);
     delayed_request_watcher.data = this;
 
-    ev_timer_init(&restart_client_watcher, restart_client_w_cb, 0., 0.);
-    restart_client_watcher.data = this;
+    ev_timer_init(&send_ping_watcher, ping_w_cb, 0., config->json_config_schema.interval_to_send_ping);
+    send_ping_watcher.data = this;
 
     ev_timer_init(&adaptive_traffic_watcher, adaptive_traffic_timeout_cb, 1.0, 1.0);
     adaptive_traffic_watcher.data = this;
@@ -368,11 +365,6 @@ int Client::connect()
     writefn = &Client::connected;
     state = CLIENT_CONNECTING;
     ev_timer_start(worker->loop, &connection_timeout_watcher);
-    if (ancestor_to_release.get())
-    {
-        ev_timer_start(worker->loop, &release_ancestor_watcher);
-    }
-
 
     ev_io_set(&rev, fd, EV_READ);
     ev_io_set(&wev, fd, EV_WRITE);
@@ -399,6 +391,10 @@ void Client::restart_timeout()
     if (worker->config->conn_inactivity_timeout > 0.)
     {
         ev_timer_again(worker->loop, &conn_inactivity_watcher);
+    }
+    if (config->json_config_schema.interval_to_send_ping > 0.)
+    {
+        ev_timer_again(worker->loop, &send_ping_watcher);
     }
 }
 
@@ -476,8 +472,7 @@ void Client::disconnect()
     stop_timer_watcher(stream_timeout_watcher);
     stop_timer_watcher(connection_timeout_watcher);
     stop_timer_watcher(delayed_request_watcher);
-    stop_timer_watcher(release_ancestor_watcher);
-    stop_timer_watcher(restart_client_watcher);
+    stop_timer_watcher(send_ping_watcher);
     stop_timer_watcher(adaptive_traffic_watcher);
     stop_timer_watcher(delayed_reconnect_watcher);
     stop_timer_watcher(connect_to_preferred_host_watcher);
@@ -670,10 +665,6 @@ void Client::process_request_failure(int errCode)
     if (MAX_STREAM_TO_BE_EXHAUSTED == errCode)
     {
         std::cerr << "stream exhausted on this client. Restart client:" << std::endl;
-        /*
-        restart_client_watcher.data = this;
-        ev_timer_start(worker->loop, &restart_client_watcher);
-        */
         write_clear_callback = [this]()
         {
             disconnect();
@@ -2243,54 +2234,6 @@ void Client::transfer_controllership()
 
 }
 
-void Client::substitute_ancestor(Client* ancestor)
-{
-    worker = ancestor->worker;
-    requests_to_submit.swap(ancestor->requests_to_submit);
-    parent_client = ancestor->parent_client;
-    schema = ancestor->schema;
-    authority = ancestor->authority;
-    preferred_authority= ancestor->preferred_authority;
-    req_todo = ancestor->req_todo;
-    req_left = ancestor->req_left;
-    curr_req_variable_value = ancestor->curr_req_variable_value;
-    req_variable_value_start = ancestor->req_variable_value_start;
-    req_variable_value_end = ancestor->req_variable_value_end;
-    ancestor_to_release.reset(ancestor);
-
-    if (parent_client != nullptr)
-    {
-        dest_clients.swap(ancestor->dest_clients);
-
-        std::string dest = schema;
-        dest.append("://").append(authority);
-
-        if (parent_client->dest_clients[dest] == ancestor)
-        {
-            parent_client->dest_clients[dest] = this;
-        }
-        else
-        {
-            abort(); // this should not happen, abort for debug purpose
-        }
-    }
-    else
-    {
-        for (size_t index = 0; index < worker->clients.size(); index++)
-        {
-            if (worker->clients[index] == ancestor)
-            {
-                worker->clients[index] = this;
-                break;
-            }
-        }
-        for (auto& it: dest_clients)
-        {
-            it.second->parent_client = this;
-        }
-    }
-}
-
 double Client::calc_tps()
 {
     if (parent_client != nullptr)
@@ -2541,6 +2484,12 @@ bool Client::should_reconnect_on_disconnect()
         }
     }
     return false;
+}
+
+void Client::submit_ping()
+{
+    session->submit_ping();
+    signal_write();
 }
 
 }

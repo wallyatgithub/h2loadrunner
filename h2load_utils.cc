@@ -344,7 +344,7 @@ void rps_cb(struct ev_loop* loop, ev_timer* w, int revents)
         client->rps_req_inflight++;
         client->rps_req_pending--;
     }
-    client->signal_write();
+    // client->signal_write(); // submit_request already calls signal_write()
 }
 
 void stream_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
@@ -375,25 +375,6 @@ void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents)
         it = client->delayed_requests_to_submit.erase(it);
     }
 }
-
-
-void release_ancestor_cb(struct ev_loop* loop, ev_timer* w, int revents)
-{
-    auto client = static_cast<Client*>(w->data);
-    ev_timer_stop(loop, w);
-    if (client->ancestor_to_release.get() && client->ancestor_to_release->streams.size() == 0)
-    {
-        client->ancestor_to_release->terminate_session();
-        client->ancestor_to_release->disconnect();
-        client->ancestor_to_release.reset();
-        ev_timer_stop(client->worker->loop, w);
-    }
-    else if (!client->ancestor_to_release.get())
-    {
-        ev_timer_stop(client->worker->loop, w);
-    }
-}
-
 
 // Called when an a connection has been inactive for a set period of time
 // or a fixed amount of time after all requests have been made on a
@@ -1053,24 +1034,10 @@ std::string reassemble_str_with_variable(const std::vector<std::string>& tokeniz
     return retStr;
 }
 
-void restart_client_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
+void ping_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
-    ev_timer_stop(loop, w);
-    std::cout << "Restart client:" << std::endl;
-
-    auto new_client = std::make_unique<Client>(client->id, client->worker, client->req_todo, client->config);
-
-    if (new_client->connect_to_host(client->schema, client->authority) != 0)
-    {
-        std::cerr << "client could not connect to host" << std::endl;
-        new_client->fail();
-    }
-    else
-    {
-        new_client->substitute_ancestor(client);
-        new_client.release();
-    }
+    client->submit_ping();
 }
 
 void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ares_addrinfo* res) 
