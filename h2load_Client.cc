@@ -1795,6 +1795,9 @@ Request_Data Client::get_request_to_submit()
     }
     else
     {
+        std::cerr<<"this is not expected; contact support to report this error"<<std::endl;
+        printBacktrace();
+        abort(); // this should never happen
         return prepare_first_request();
     }
 }
@@ -1928,21 +1931,6 @@ bool Client::prepare_next_request(Request_Data& finished_request)
     enqueue_request(finished_request, std::move(new_request));
 
     return true;
-}
-
-std::map<std::string, Client*>::const_iterator Client::get_client_serving_first_request()
-{
-    std::string key = config->json_config_schema.scenario[0].schema;
-    key.append("://");
-    key.append(config->json_config_schema.scenario[0].authority);
-    if (parent_client != nullptr)
-    {
-        return parent_client->dest_clients.find(key);
-    }
-    else
-    {
-        return this->dest_clients.find(key);
-    }
 }
 
 void Client::enqueue_request(Request_Data& finished_request, Request_Data&& new_request)
@@ -2143,21 +2131,6 @@ int Client::connect_to_host(const std::string& schema, const std::string& author
         std::cout<<"===============connecting to "<<schema<<"://"<<authority<<"==============="<<std::endl;
     }
     return resolve_fqdn_and_connect(schema, authority);
-}
-
-bool Client::any_request_to_submit()
-{
-    if (parent_client == nullptr)
-    {
-        // no parent_client, means "this" is the parent, i.e., the bootstraper
-        // the bootstraper always has request to submit,
-        // if none from queue, create from template
-        return true;
-    }
-    else
-    {
-        return (!requests_to_submit.empty());
-    }
 }
 
 void Client::terminate_sub_clients()

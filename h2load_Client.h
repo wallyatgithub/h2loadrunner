@@ -289,15 +289,9 @@ struct Client
                                            ares_addrinfo_callback callback = ares_addrinfo_query_callback);
     int connect_to_host(const std::string& schema, const std::string& authority);
 
-    bool any_request_to_submit();
-
     void terminate_sub_clients();
 
-    void substitute_ancestor(Client* ancestor);
-
     void enqueue_request(Request_Data& finished_request, Request_Data&& new_request);
-
-    std::map<std::string, Client*>::const_iterator get_client_serving_first_request();
 
     double calc_tps();
     double calc_rps();
