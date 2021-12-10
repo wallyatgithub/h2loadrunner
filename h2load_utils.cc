@@ -1,5 +1,7 @@
 #include <algorithm>
 #include <cctype>
+#include <execinfo.h>
+
 #include <string>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -1211,7 +1213,7 @@ void ares_addrinfo_query_callback_for_probe(void* arg, int status, int timeouts,
   Client* client = static_cast<Client*>(arg);
   if (status == ARES_SUCCESS)
   {
-      client->probe(res);
+      client->probe_address(res);
       ares_freeaddrinfo(res);
   }
 }
@@ -1245,10 +1247,20 @@ void probe_writecb(struct ev_loop* loop, ev_io* w, int revents)
         {
             std::cerr<<"switch back to preferred host: "<<client->preferred_authority<<std::endl;
             client->disconnect();
-            client->init_timer_watchers();
             client->authority = client->preferred_authority;
             client->resolve_fqdn_and_connect(client->schema, client->authority);
         }
     }
+}
+
+void printBacktrace()
+{
+    void *buffer[64];
+    int num = backtrace((void**) &buffer, 64);
+    char **addresses = backtrace_symbols(buffer, num);
+    for( int i = 0 ; i < num ; ++i ) {
+        fprintf(stderr, "[%2d]: %s\n", i, addresses[i]);
+    }
+    free(addresses);
 }
 

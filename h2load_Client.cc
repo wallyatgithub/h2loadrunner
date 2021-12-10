@@ -113,12 +113,6 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
             authority = conf->host;
         }
     }
-    if (!parent)
-    {
-        std::string dest = schema;
-        dest.append("://").append(authority);
-        dest_clients[dest] = this;
-    }
 
     timestamp_of_last_rps_check = std::chrono::steady_clock::now();
     timestamp_of_last_tps_check = timestamp_of_last_rps_check;
@@ -155,7 +149,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
             candidate_addresses.push_back(hosts[(++startIndex)%hosts.size()]);
         }
     }
-    
+    update_this_in_dest_client_map();
 }
 
 void Client::init_timer_watchers()
@@ -300,6 +294,10 @@ int Client::make_socket(T* addr)
 
 int Client::connect()
 {
+    if (is_test_finished())
+    {
+        return -1;
+    }
     int rv;
 
     if (!worker->config->is_timing_based_mode() ||
@@ -386,6 +384,11 @@ int Client::connect()
 
 void Client::timeout()
 {
+    if (should_reconnect_on_disconnect())
+    {
+        // it will need to reconnect anyway, why bother to disconnect
+        return;
+    }
     process_timedout_streams();
 
     disconnect();
@@ -443,8 +446,11 @@ void Client::fail()
 
 void Client::disconnect()
 {
-    std::cerr<<"===============disconnected from "<<authority<<"==============="<<std::endl;
-    transfer_controllership();
+    if (CLIENT_CONNECTED == state)
+    {
+        std::cerr<<"===============disconnected from "<<authority<<"==============="<<std::endl;
+    }
+    //transfer_controllership();
 
     record_client_end_time();
     auto stop_timer_watcher = [this](ev_timer& watcher)
@@ -505,6 +511,13 @@ void Client::disconnect()
     }
 
     final = false;
+    /* prepare for possible re-connect */
+    curr_stream_id = 0;
+    init_timer_watchers();
+    if (write_clear_callback)
+    {
+        auto func = std::move(write_clear_callback);
+    }
 }
 
 uint64_t Client::get_total_pending_streams()
@@ -592,8 +605,7 @@ int Client::submit_request()
         // on this connection, start the active timeout.
         if (worker->config->conn_active_timeout > 0. && req_left == 0 && is_controller_client())
         {
-            ev_timer_start(worker->loop, &conn_active_watcher);
-            for (auto& client: dest_clients)
+            for (auto& client: dest_clients) // "this" is also in dest_clients
             {
                ev_timer_start(worker->loop, &client.second->conn_active_watcher);
             }
@@ -633,7 +645,7 @@ void Client::process_abandoned_streams()
 
     auto req_abandoned = req_inflight;
 
-    if (!config->json_config_schema.connection_retry_on_disconnect)
+    if (!should_reconnect_on_disconnect())
     {
         req_abandoned += req_left;
         req_left = 0;
@@ -657,13 +669,22 @@ void Client::process_request_failure(int errCode)
 
     if (MAX_STREAM_TO_BE_EXHAUSTED == errCode)
     {
-        std::cout << "stream exhausted on this client. Restart client:" << std::endl;
+        std::cerr << "stream exhausted on this client. Restart client:" << std::endl;
+        /*
         restart_client_watcher.data = this;
         ev_timer_start(worker->loop, &restart_client_watcher);
+        */
+        write_clear_callback = [this]()
+        {
+            disconnect();
+            resolve_fqdn_and_connect(schema, authority);
+        };
+        writefn = &Client::write_clear_with_callback;
+        terminate_session();
         return;
     }
 
-    if (!config->json_config_schema.connection_retry_on_disconnect)
+    if (!should_reconnect_on_disconnect())
     {
         req_left = 0;
     }
@@ -1190,6 +1211,8 @@ int Client::connection_made()
 
     record_connect_time();
 
+    update_this_in_dest_client_map();
+
     if (parent_client != nullptr)
     {
         while (requests_to_submit.size())
@@ -1343,6 +1366,18 @@ int Client::read_clear()
     return 0;
 }
 
+int Client::write_clear_with_callback()
+{
+    writefn = &Client::write_clear;
+    auto func = std::move(write_clear_callback);
+    auto retCode = do_write();
+    if (retCode == 0 && func)
+    {
+        func();
+    }
+    return retCode;
+}
+
 int Client::write_clear()
 {
     std::array<struct iovec, 2> iov;
@@ -1385,13 +1420,13 @@ int Client::write_clear()
 
 int Client::connected()
 {
-    std::cerr<<"===============connected to "<<authority<<"==============="<<std::endl;
-
     if (!util::check_socket_connected(fd))
     {
         std::cout<<"check_socket_connected failed"<<std::endl;
         return ERR_CONNECT_FAIL;
     }
+    std::cerr<<"===============connected to "<<authority<<"==============="<<std::endl;
+
     ev_io_start(worker->loop, &rev);
     ev_io_stop(worker->loop, &wev);
     ev_timer_stop(worker->loop, &connection_timeout_watcher);
@@ -2152,7 +2187,7 @@ void Client::transfer_controllership()
         return;
     }
 
-    if (config->json_config_schema.connection_retry_on_disconnect && !is_test_finished())
+    if (should_reconnect_on_disconnect())
     {
         return;
     }
@@ -2395,42 +2430,30 @@ bool Client::is_leading_request(Request_Data& request)
 
 bool Client::reconnect_to_alt_addr()
 {
-    if (!config->json_config_schema.connection_retry_on_disconnect)
-    {
-        return false;
-    }
-
     if (CLIENT_CONNECTED == state)
     {
         return false;
     }
-
-    if (is_test_finished())
+    if (should_reconnect_on_disconnect())
     {
-        return false;
-    }
-
-    init_timer_watchers();
-
-    if (authority != preferred_authority)
-    {
-        used_addresses.push_back(std::move(authority));
-        authority = preferred_authority;
-        std::cerr<<"switch back to preferred host: "<<authority<<std::endl;
-        resolve_fqdn_and_connect(schema, authority);
-        return true;
-    }
-    else if (candidate_addresses.size())
-    {
-        authority = std::move(candidate_addresses.front());
-        candidate_addresses.pop_front();
-        std::cerr<<"switch to candidate host: "<<authority<<std::endl;
-        resolve_fqdn_and_connect(schema, authority);
-        return true;
-    }
-    else
-    {
-        ev_timer_start(worker->loop, &delayed_reconnect_watcher);
+        if (authority != preferred_authority)
+        {
+            used_addresses.push_back(std::move(authority));
+            authority = preferred_authority;
+            std::cerr<<"switch back to preferred host: "<<authority<<std::endl;
+            resolve_fqdn_and_connect(schema, authority);
+        }
+        else if (candidate_addresses.size())
+        {
+            authority = std::move(candidate_addresses.front());
+            candidate_addresses.pop_front();
+            std::cerr<<"switch to candidate host: "<<authority<<std::endl;
+            resolve_fqdn_and_connect(schema, authority);
+        }
+        else
+        {
+            ev_timer_start(worker->loop, &delayed_reconnect_watcher);
+        }
         return true;
     }
     return false;
@@ -2450,7 +2473,7 @@ bool Client::is_test_finished()
     }
 }
 
-bool Client::probe(ares_addrinfo* ares_addr)
+bool Client::probe_address(ares_addrinfo* ares_addr)
 {
     if (probe_skt_fd != -1)
     {
@@ -2479,6 +2502,42 @@ bool Client::probe(ares_addrinfo* ares_addr)
             ev_io_start(worker->loop, &probe_wev);
             return true;
           }
+        }
+    }
+    return false;
+}
+
+void Client::update_this_in_dest_client_map()
+{
+    auto& clients = parent_client ? parent_client->dest_clients : dest_clients;
+    for( auto it = clients.begin(); it != clients.end(); )
+    {
+      if(it->second == this)
+      {
+          clients.erase(it);
+          break;
+      }
+      else
+      {
+          ++it;
+      }
+    }
+    std::string dest = schema;
+    dest.append("://").append(authority);
+    clients[dest] = this;
+}
+
+bool Client::should_reconnect_on_disconnect()
+{
+    if (!is_test_finished())
+    {
+        if (is_controller_client() && (dest_clients.size() > 1))
+        {
+            return true;
+        }
+        if (config->json_config_schema.connection_retry_on_disconnect)
+        {
+            return true;
         }
     }
     return false;

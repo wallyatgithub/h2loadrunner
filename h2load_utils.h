@@ -147,4 +147,6 @@ void connect_to_prefered_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
 
 void probe_writecb(struct ev_loop* loop, ev_io* w, int revents);
 
+void printBacktrace();
+
 #endif

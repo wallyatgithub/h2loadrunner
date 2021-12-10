@@ -1587,8 +1587,10 @@ int main(int argc, char** argv)
             size_t delta_trans_success = totalTrans_success_till_now - totalTrans_success_till_last_interval;
             auto now = std::chrono::system_clock::now();
             auto now_c = std::chrono::system_clock::to_time_t(now);
+/*
             std::cout<<std::endl;
-            std::cout << std::put_time(std::localtime(&now_c), "%c")<<std::endl
+            std::cout << std::put_time(std::localtime(&now_c), "%c")<<std::endl;
+
                       << "sent: " << delta_RPS_sent
                       << ", received: " << delta_RPS_received
                       << ", successful: " << delta_RPS_success
@@ -1603,6 +1605,18 @@ int main(int argc, char** argv)
                       << ", successful/received: "
                       << (delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0) << "%"
                       <<std::endl;
+*/
+            std::cout << "time total-sent total-recv total-success recv/sent(total) success/recv(total) sent/s received/s success/s recv/sent(per sec) success/recv(per sec) 3xx/s 4xx/s 5xx/s max-latency(ms) min-latency avg-latency"<<std::endl;
+            std::cout << std::put_time(std::localtime(&now_c), "%c")
+                      << ", " << totalReq_sent_till_now << ", " << totalResp_received_till_now << ", " << totalReq_success_till_now
+                      << ", " << (totalReq_sent_till_now?(((double)totalResp_received_till_now / totalReq_sent_till_now) * 100):0) << "%"
+                      << ", " << (totalResp_received_till_now?(((double)totalReq_success_till_now / totalResp_received_till_now) * 100):0) << "%"
+                      << ", " << delta_RPS_sent << ", " << delta_RPS_received << ", " << delta_RPS_success
+                      << ", " << (delta_RPS_sent?(((double)delta_RPS_received / delta_RPS_sent) * 100):0) << "%"
+                      << ", " << (delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0) << "%"
+                      << ", " << delta_RPS_3xx  << ", " << delta_RPS_4xx << ", " << delta_RPS_5xx << ", "
+                      << max_resp_time_ms << ", " << min_resp_time_ms << ", " << (delta_RPS_received?total_resp_time_ms/delta_RPS_received:max_resp_time_ms)
+                      << std::endl;
 /*
                       std::cout
                       << "scenario initiated: " << delta_trans
@@ -1613,7 +1627,7 @@ int main(int argc, char** argv)
                       << (((double)delta_trans_success / delta_trans) * 100) << "%" << std::endl;
 
 */
-
+/*
             counter++;
 
             if (counter == 30)
@@ -1628,6 +1642,7 @@ int main(int argc, char** argv)
                           << ", ovewrall successful rate: "
                           << (totalResp_received_till_now?(((double)totalReq_success_till_now / totalResp_received_till_now) * 100):0) << "%" << std::endl;
             }
+*/
         }
     });
 

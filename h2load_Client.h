@@ -199,6 +199,7 @@ struct Client
     ev_timer connect_to_preferred_host_watcher;
     ev_io probe_wev;
     int probe_skt_fd;
+    std::function<void()> write_clear_callback;
 
     enum { ERR_CONNECT_FAIL = -100 };
 
@@ -321,7 +322,13 @@ struct Client
 
     bool is_test_finished();
 
-    bool probe(ares_addrinfo* ares_addr);
+    bool probe_address(ares_addrinfo* ares_addr);
+
+    int write_clear_with_callback();
+
+    void update_this_in_dest_client_map();
+
+    bool should_reconnect_on_disconnect();
 
 };
 
