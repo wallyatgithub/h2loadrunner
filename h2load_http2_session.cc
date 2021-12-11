@@ -415,6 +415,10 @@ int Http2Session::_submit_request()
 
     std::vector<nghttp2_nv> http2_nvs;
     auto data = std::move(client_->get_request_to_submit());
+    if (data.is_empty())
+    {
+        return -1;
+    }
 
     http2_nvs.reserve(data.req_headers->size() + data.shadow_req_headers.size() + 4);
 

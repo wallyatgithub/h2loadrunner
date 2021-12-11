@@ -340,6 +340,10 @@ int Http1Session::on_write()
 int Http1Session::_submit_request()
 {
     auto data = std::move(client_->get_request_to_submit());
+    if (data.is_empty())
+    {
+        return -1;
+    }
     auto config = client_->worker->config;
     std::string req;
     req.append(*data.method).append(" ").append(*data.path).append(" HTTP/1.1\r\n");

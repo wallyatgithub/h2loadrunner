@@ -554,7 +554,7 @@ int Client::submit_request()
         return 0;
     }
 
-    if (requests_to_submit.empty())
+    if (requests_to_submit.empty() && (config->json_config_schema.scenario.size()))
     {
         requests_to_submit.push_back(std::move(prepare_first_request()));
     }
@@ -1747,6 +1747,10 @@ Request_Data Client::prepare_first_request()
     static thread_local Request_Data dummy_data;
 
     Request_Data new_request;
+    if (!config->json_config_schema.scenario.size())
+    {
+        return new_request;
+    }
     size_t curr_index = 0;
     new_request.next_request_idx = ((curr_index + 1) % config->json_config_schema.scenario.size());
 

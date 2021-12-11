@@ -105,6 +105,15 @@ struct Request_Data
         return o;
     };
 
+    bool is_empty()
+    {
+        if (schema == &emptyString && authority == &emptyString && method == &emptyString)
+        {
+            return true;
+        }
+        return false;
+    };
+
 };
 
 struct Client
