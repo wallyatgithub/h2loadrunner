@@ -57,6 +57,7 @@
 #include <future>
 #include <random>
 #include <vector>
+#include <sstream>
 
 
 #include <openssl/err.h>
@@ -70,6 +71,7 @@ extern "C" {
 #include "memchunk.h"
 #include "template.h"
 #include "url-parser/url_parser.h"
+#include <nghttp2/asio_http2_server.h>
 
 #include "h2load_http1_session.h"
 #include "h2load_http2_session.h"
@@ -1522,10 +1524,11 @@ int main(int argc, char** argv)
 
     auto start = std::chrono::steady_clock::now();
     std::atomic<bool> workers_stopped;
-    workers_stopped = false;
+    workers_stopped = (config.nreqs == 1);
 
+    std::stringstream DatStream;
     std::future<void> fu_tps =
-        std::async(std::launch::async, [&workers, &workers_stopped, start]()
+        std::async(std::launch::async, [&workers, &workers_stopped, &DatStream, start]()
     {
         static uint32_t counter = 0;
         size_t totalReq_sent_till_now = 0;
@@ -1592,27 +1595,10 @@ int main(int argc, char** argv)
             auto period_duration = std::chrono::duration_cast<std::chrono::milliseconds>(period_end - period_start).count();;
             period_start = period_end;
 
-/*
-            std::cout<<std::endl;
-            std::cout << std::put_time(std::localtime(&now_c), "%c")<<std::endl;
-
-                      << "sent: " << delta_RPS_sent
-                      << ", received: " << delta_RPS_received
-                      << ", successful: " << delta_RPS_success
-                      << ", 3xx: " << delta_RPS_3xx
-                      << ", 4xx: " << delta_RPS_4xx
-                      << ", 5xx: " << delta_RPS_5xx
-                      << ", max latency: " << max_resp_time_ms<<" ms"
-                      << ", min latency: " << min_resp_time_ms<<" ms"
-                      << ", avg latency: " << (delta_RPS_received?total_resp_time_ms/delta_RPS_received:max_resp_time_ms)<< " ms"
-                      << ", received/sent: "
-                      << (delta_RPS_sent?(((double)delta_RPS_received / delta_RPS_sent) * 100):0) << "%"
-                      << ", successful/received: "
-                      << (delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0) << "%"
-                      <<std::endl;
-*/
-            std::cout << "time total-sent total-recv total-success recv/sent(total) success/recv(total) sent/s received/s success/s recv/sent(per sec) success/recv(per sec) 3xx/s 4xx/s 5xx/s max-latency(ms) min-latency avg-latency"<<std::endl;
-            std::cout << std::put_time(std::localtime(&now_c), "%c")
+            std::stringstream colStream;
+            DatStream.str("");
+            colStream << "time total-sent total-recv total-success recv/sent(total) success/recv(total) sent/s received/s success/s recv/sent(per sec) success/recv(per sec) 3xx/s 4xx/s 5xx/s max-latency(ms) min-latency avg-latency";
+            DatStream << std::put_time(std::localtime(&now_c), "%c")
                       << ", " << totalReq_sent_till_now << ", " << totalResp_received_till_now << ", " << totalReq_success_till_now
                       << ", " << (totalReq_sent_till_now?(((double)totalResp_received_till_now / totalReq_sent_till_now) * 100):0) << "%"
                       << ", " << (totalResp_received_till_now?(((double)totalReq_success_till_now / totalResp_received_till_now) * 100):0) << "%"
@@ -1622,34 +1608,9 @@ int main(int argc, char** argv)
                       << ", " << (delta_RPS_sent?(((double)delta_RPS_received / delta_RPS_sent) * 100):0) << "%"
                       << ", " << (delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0) << "%"
                       << ", " << delta_RPS_3xx  << ", " << delta_RPS_4xx << ", " << delta_RPS_5xx << ", "
-                      << max_resp_time_ms << ", " << min_resp_time_ms << ", " << (delta_RPS_received?total_resp_time_ms/delta_RPS_received:max_resp_time_ms)
-                      << std::endl;
-/*
-                      std::cout
-                      << "scenario initiated: " << delta_trans
-                      << ", successful: " << delta_trans_success
-                      << ", max duration: " << max_resp_time_ms<<" ms"
-                      << ", min duration: " << min_resp_time_ms<<" ms"
-                      << ", successful/send: "
-                      << (((double)delta_trans_success / delta_trans) * 100) << "%" << std::endl;
-
-*/
-/*
-            counter++;
-
-            if (counter == 30)
-            {
-                counter = 0;
-                std::cout << std::put_time(std::localtime(&now_c), "%c")
-                          << ", total requests sent: " << totalResp_received_till_now
-                          << ", total successful responses: " << totalReq_success_till_now
-                          << ", total 3xx: " << total3xx_till_now
-                          << ", total 4xx: " << total4xx_till_now
-                          << ", total 5xx: " << total5xx_till_now
-                          << ", ovewrall successful rate: "
-                          << (totalResp_received_till_now?(((double)totalReq_success_till_now / totalResp_received_till_now) * 100):0) << "%" << std::endl;
-            }
-*/
+                      << max_resp_time_ms << ", " << min_resp_time_ms << ", " << (delta_RPS_received?total_resp_time_ms/delta_RPS_received:max_resp_time_ms);
+                      std::cout<<colStream.str()<<std::endl;
+                      std::cout<<DatStream.str()<<std::endl;
         }
     });
 
@@ -1685,6 +1646,29 @@ int main(int argc, char** argv)
         }
     });
 
+    auto serverFunc = [&DatStream]()
+    {
+        nghttp2::asio_http2::server::http2 server;
+        boost::system::error_code ec;
+        server.num_threads(1);
+        server.handle("/stat", [&](const nghttp2::asio_http2::server::request &req, const nghttp2::asio_http2::server::response &res)
+        {
+            nghttp2::asio_http2::header_map headers;
+            nghttp2::asio_http2::header_value hdr_val;
+            hdr_val.sensitive = false;
+            std::string payload = DatStream.str();
+            hdr_val.value = std::to_string(payload.size());
+            headers.insert(std::make_pair("Content-Length", hdr_val));
+            res.write_head(200, headers);
+            res.end(payload);
+        });
+        if (server.listen_and_serve(ec, std::string("0.0.0.0"), std::to_string(8088)))
+        {
+            std::cerr << "error: " << ec.message() << std::endl;
+        }
+    };
+    std::thread serverThread(serverFunc);
+    serverThread.detach();
 
     for (auto& fut : futures)
     {

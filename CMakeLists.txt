@@ -79,6 +79,20 @@ set(H2LOAD_SOURCES
   tls.cc
   h2load_http2_session.cc
   h2load_http1_session.cc
+  asio_common.cc
+  asio_io_service_pool.cc
+  asio_server_http2.cc
+  asio_server_http2_impl.cc
+  asio_server.cc
+  asio_server_http2_handler.cc
+  asio_server_request.cc
+  asio_server_request_impl.cc
+  asio_server_response.cc
+  asio_server_response_impl.cc
+  asio_server_stream.cc
+  asio_server_serve_mux.cc
+  asio_server_request_handler.cc
+  asio_server_tls_context.cc
 )
 
 add_executable(h2loadrunner ${H2LOAD_SOURCES} $<TARGET_OBJECTS:llhttp>
