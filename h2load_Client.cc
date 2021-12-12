@@ -1224,7 +1224,7 @@ int Client::connection_made()
 
     if (rps_mode())
     {
-        rps_watcher.repeat = std::max(0.1, 1. / rps);
+        rps_watcher.repeat = std::max(0.01, 1. / rps);
         ev_timer_again(worker->loop, &rps_watcher);
         rps_duration_started = ev_now(worker->loop);
     }

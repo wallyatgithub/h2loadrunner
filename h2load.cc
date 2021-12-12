@@ -1525,7 +1525,7 @@ int main(int argc, char** argv)
     workers_stopped = false;
 
     std::future<void> fu_tps =
-        std::async(std::launch::async, [&workers, &workers_stopped]()
+        std::async(std::launch::async, [&workers, &workers_stopped, start]()
     {
         static uint32_t counter = 0;
         size_t totalReq_sent_till_now = 0;
@@ -1536,6 +1536,7 @@ int main(int argc, char** argv)
         size_t total5xx_till_now = 0;
         size_t totalTrans_till_now = 0;
         size_t totalTrans_success_till_now = 0;
+        auto period_start = start;
         while (!workers_stopped)
         {
             size_t totalReq_sent_till_last_interval = totalReq_sent_till_now;
@@ -1546,7 +1547,7 @@ int main(int argc, char** argv)
             size_t total5xx_till_last_interval = total5xx_till_now;
             size_t totalTrans_till_last_interval = totalTrans_till_now;
             size_t totalTrans_success_till_last_interval = totalTrans_success_till_now;
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             totalReq_sent_till_now = 0;
             totalResp_received_till_now = 0;
             totalReq_success_till_now = 0;
@@ -1587,6 +1588,10 @@ int main(int argc, char** argv)
             size_t delta_trans_success = totalTrans_success_till_now - totalTrans_success_till_last_interval;
             auto now = std::chrono::system_clock::now();
             auto now_c = std::chrono::system_clock::to_time_t(now);
+            auto period_end = std::chrono::steady_clock::now();
+            auto period_duration = std::chrono::duration_cast<std::chrono::milliseconds>(period_end - period_start).count();;
+            period_start = period_end;
+
 /*
             std::cout<<std::endl;
             std::cout << std::put_time(std::localtime(&now_c), "%c")<<std::endl;
@@ -1611,7 +1616,9 @@ int main(int argc, char** argv)
                       << ", " << totalReq_sent_till_now << ", " << totalResp_received_till_now << ", " << totalReq_success_till_now
                       << ", " << (totalReq_sent_till_now?(((double)totalResp_received_till_now / totalReq_sent_till_now) * 100):0) << "%"
                       << ", " << (totalResp_received_till_now?(((double)totalReq_success_till_now / totalResp_received_till_now) * 100):0) << "%"
-                      << ", " << delta_RPS_sent << ", " << delta_RPS_received << ", " << delta_RPS_success
+                      << ", " << round((double)(1000*delta_RPS_sent)/period_duration)
+                      << ", " << round((double)(1000*delta_RPS_received)/period_duration)
+                      << ", " << round((double)(1000*delta_RPS_success)/period_duration)
                       << ", " << (delta_RPS_sent?(((double)delta_RPS_received / delta_RPS_sent) * 100):0) << "%"
                       << ", " << (delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0) << "%"
                       << ", " << delta_RPS_3xx  << ", " << delta_RPS_4xx << ", " << delta_RPS_5xx << ", "
