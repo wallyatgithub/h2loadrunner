@@ -390,7 +390,7 @@ int Http1Session::_submit_request()
     client_->record_request_time(req_stat);
     client_->wb.append(req);
 
-    client_->requests_awaiting_response[stream_req_counter_] = data;
+    client_->requests_awaiting_response[stream_req_counter_] = std::move(data);
 
     if (data.req_payload->empty())
     {

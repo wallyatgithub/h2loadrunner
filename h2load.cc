@@ -1527,8 +1527,7 @@ int main(int argc, char** argv)
     workers_stopped = (config.nreqs == 1);
 
     std::stringstream DatStream;
-    std::future<void> fu_tps =
-        std::async(std::launch::async, [&workers, &workers_stopped, &DatStream, start]()
+    auto statFunc = [&workers, &workers_stopped, &DatStream, start]()
     {
         static uint32_t counter = 0;
         size_t totalReq_sent_till_now = 0;
@@ -1612,10 +1611,12 @@ int main(int argc, char** argv)
                       std::cout<<colStream.str()<<std::endl;
                       std::cout<<DatStream.str()<<std::endl;
         }
-    });
+    };
 
-    std::future<void> fu_update_rps =
-        std::async(std::launch::async, [&workers_stopped]()
+    std::thread statThread(statFunc);
+    statThread.detach();
+
+    auto rpsMonitorFunc = [&workers_stopped]()
     {
         while (!config.rps_file.empty() && !workers_stopped)
         {
@@ -1644,7 +1645,10 @@ int main(int argc, char** argv)
                 }
             }
         }
-    });
+    };
+
+    std::thread monThread(rpsMonitorFunc);
+    monThread.detach();
 
     auto serverFunc = [&DatStream]()
     {
@@ -1662,6 +1666,29 @@ int main(int argc, char** argv)
             res.write_head(200, headers);
             res.end(payload);
         });
+        server.handle("/rps", [&](const nghttp2::asio_http2::server::request &req, const nghttp2::asio_http2::server::response &res)
+        {
+            std::string path = req.uri().raw_query;
+            std::cout<<path<<std::endl;
+            std::string replyMsg;
+            /*
+            std::vector<std::string> tokens = tokenize_string(path);
+            std::string rps = path.substr(path.find("?"));
+            try
+            {
+                config.rps = std::stod(rps);
+                replyMsg = "rps update to: ";
+                replyMsg.append(std::to_string(config.rps));
+            }
+            catch (...)
+            {
+                replyMsg = "unable to update rps";
+            }
+            */
+            nghttp2::asio_http2::header_map headers;
+            res.write_head(200, headers);
+            res.end(std::string(path));
+        });
         if (server.listen_and_serve(ec, std::string("0.0.0.0"), std::to_string(8088)))
         {
             std::cerr << "error: " << ec.message() << std::endl;
@@ -1675,8 +1702,6 @@ int main(int argc, char** argv)
         fut.get();
     }
     workers_stopped = true;
-    fu_tps.get();
-    fu_update_rps.get();
 
 #else  // NOTHREADS
     auto rate = config.rate;
