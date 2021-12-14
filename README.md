@@ -16,7 +16,7 @@
   
   2. Stream timeout handling.
   
-  3. Transaction support with specific resource header tracking(e.g. location header in 5G SBA).
+  3. Transaction support with specific resource header tracking.
   
      Other types of resource tracking are to be added in the future, like, XPath for XML message body, Json pointer for Json message body, etc.
 
@@ -30,64 +30,18 @@
   6. Both command line interface and JSON based configuration.
      With JSON configuration, user can build the test scenario with a GUI editor.
      
-  7. Dynamic report of the test, dynamic change of the QPS/RPS.
-     h2loadrunner prints the test statistics every second; it also supports dynamic change of QPS/RPS.
+  7. Dynamic report of the test, dynamic change of the RPS.
+     h2loadrunner prints the test statistics every second; it also supports dynamic change of RPS.
      
-  8. Support connections to multiple hosts
-
-     H2loadrunner supports different hosts for different requests; when a new host is identified, h2loadrunner will initiate async DNS resolution and connect to the host dynamically
-
-     Dynamic connections are re-used among different requests with same authority (host) header.
+  8. Async dynamic connection establishment.
 
   9. Support delay between requests of the same scenario, with the delay interval configurable.
 
   10. Support configurable status code to determine if a response is successful in statistics report
   
   11. mTLS support
-
-# How performant is h2loadrunner?
-  For this test scenario, h2loadrunner will only need less than one core to reach 60K QPS/s:
   
-    POST with dynamic path generation and dynamic message body of 300 bytes 
-    Upon POST response, extract the resource created by POST from response header, and send PATCH with dynamic message body of 300 bytes for resource update
-    Upon PATCH response, send DELETE to delete resource.
-
-  CPU usage @ 60K QPS/s:
-  
-    2756 root      20   0  366240  39668   7340 S  87.5   0.5   0:02.56 h2loadrunner
-    2756 root      20   0  366240  40988   7340 S  96.0   0.5   0:03.04 h2loadrunner
-    2756 root      20   0  366240  42044   7340 S  96.1   0.5   0:03.53 h2loadrunner
-    2756 root      20   0  366240  43364   7340 S  96.0   0.5   0:04.01 h2loadrunner
-    2756 root      20   0  366240  44684   7340 S  96.1   0.5   0:04.50 h2loadrunner
-    2756 root      20   0  366240  45740   7340 S  94.0   0.6   0:04.97 h2loadrunner
-
-  CPU usage @ 120K QPS/s, basically is double that of 60K QPS/s, without noticable overhead or bottleneck：
-  
-    2749 root      20   0  404640 102876   7460 S 198.0   1.3   0:23.21 h2loadrunner
-    2749 root      20   0  404640 102876   7460 S 190.2   1.3   0:24.18 h2loadrunner
-    2749 root      20   0  404640 102876   7460 S 198.0   1.3   0:25.17 h2loadrunner
-    2749 root      20   0  404640 102876   7460 S 190.2   1.3   0:26.14 h2loadrunner
-    2749 root      20   0  404640 102876   7460 S 198.0   1.3   0:27.13 h2loadrunner
-    2749 root      20   0  404640 102876   7460 S 190.2   1.3   0:28.10 h2loadrunner
-    2749 root      20   0  404640 102876   7460 S 196.0   1.3   0:29.08 h2loadrunner
- 
-  So, the output of h2loadrunner can grow linearly on multi-core machines.
-  
-  Need to mention that, to stress h2loadrunner, the mock server intentionally maks some requests fail, by not sending back the response (3%), or sending back failure response.
-  
-  Meaning, in this test, h2loadrunner needs to take care of a small portion (3%) of stream timeout case during the load test runnning.
-  
-  Result shows, h2loadrunner handles this situation without any problem:
-  
-    Sat Jun 19 12:44:11 2021, send: 121083, successful: 109202, 3xx: 0, 4xx: 8427, 5xx: 0, max resp time (us): 2031516, min resp time (us): 1204, successful/send: 90.1877%
-    Sat Jun 19 12:44:12 2021, send: 120320, successful: 108389, 3xx: 0, 4xx: 8489, 5xx: 0, max resp time (us): 2035583, min resp time (us): 1104, successful/send: 90.0839%
-    Sat Jun 19 12:44:13 2021, send: 120016, successful: 108134, 3xx: 0, 4xx: 8374, 5xx: 0, max resp time (us): 2022545, min resp time (us): 908, successful/send: 90.0997%
-    Sat Jun 19 12:44:14 2021, send: 120069, successful: 108211, 3xx: 0, 4xx: 8347, 5xx: 0, max resp time (us): 2018241, min resp time (us): 1080, successful/send: 90.124%
-    Sat Jun 19 12:44:15 2021, send: 120119, successful: 108290, 3xx: 0, 4xx: 8325, 5xx: 0, max resp time (us): 2017653, min resp time (us): 1012, successful/send: 90.1523%
-    Sat Jun 19 12:44:16 2021, send: 119963, successful: 108078, 3xx: 0, 4xx: 8455, 5xx: 0, max resp time (us): 2023169, min resp time (us): 1097, successful/send: 90.0928%
-    Sat Jun 19 12:44:17 2021, send: 119884, successful: 107971, 3xx: 0, 4xx: 8450, 5xx: 0, max resp time (us): 2022223, min resp time (us): 733, successful/send: 90.0629%
-    Sat Jun 19 12:44:18 2021, send: 120210, successful: 108380, 3xx: 0, 4xx: 8349, 5xx: 0, max resp time (us): 2021652, min resp time (us): 870, successful/send: 90.1589%
-
+  13. Parallel connections to multiple hosts in a load share pool, with connection failover and failback.
 
 # How to build
 
@@ -143,69 +97,12 @@
     
     Then use 'docker run -it h2loadrunner:ubuntu bash' to enter the container, h2loadrunner is located in /usr/bin
 
-    
-    
 
-# Basic Usage
+# Usage
 
-	h2loadrunner http://192.168.1.125:8080/nudm-ee/v2/imsi-2621012-USER_ID/sdm-subscriptions/  -t 5 -c 100 -D 10 -m 512 --rps=100 --crud-update-method=PATCH --crud-delete-method=DELETE --crud-create-method=POST --crud-request-variable-name="-USER_ID" --crud-request-variable-value-start=1 --crud-request-variable-value-end=1000000000 --crud-resource-header="location" --stream-timeout-interval-ms=2000 -m 512 --crud-create-data-file=datafile.json --crud-update-data-file=updatedatafile.json
+  h2loadrunner supports JSON based configuration input, and this is the recommended way.
   
-  This runs a benchmark test for 10 seconds, using 5 threads, and keeping 100 HTTP2 connections open, with each connection @ 100 RPS/QPS, so total QPS/RPS = 100 * 100 = 10K RPS/s in this test.
-  
-  This test is done on a range of users, with user ID dynamically replaced and range specified in command line.
-  
-  This test also automatically tracks the response message for a specific header, and the subsequent request is built with the returned URI in this specific header.
-  
-  Output:
-  
-    finished in 11.03s, 9711.00 req/s, 772.10KB/s
-    requests: 99420 total, 99999 started, 99420 done, 90115 succeeded, 9305 failed, 2310 errored, 2312 timeout
-    status codes: 90115 2xx, 0 3xx, 6995 4xx, 0 5xx
-    traffic: 7.54MB (7906295) total, 4.32MB (4529697) headers (space savings 57.56%), 1.54MB (1619718) data
-                         min         max         mean         sd        +/- sd
-    time for request:      158us     17.80ms       946us       481us    81.73%
-    time for connect:      160us     15.78ms      3.94ms      2.56ms    70.00%
-    time to 1st byte:    15.39ms     28.06ms     20.01ms      3.30ms    68.00%
-    req/s           :      96.04       98.38       97.08        0.50    67.00%
-
-  Here is what is going on with the above command:
-
-  First, "POST" (--crud-create-method) request is sent to the URI (http://192.168.1.125:8080/nudm-ee/v2/imsi-2621012-USER_ID/sdm-subscriptions/) with "-USER_ID" replaced by an actual user ID whose range starts from 1 (--crud-request-variable-value-start) to 1000000000 (--crud-request-variable-value-end), with payload content specified in file datafile.json (--crud-create-data-file)
-
-  Example content of datafile.json:
-      
-    {"callbackReference":"http://10.10.177.251:32050/nhss-ee/v1/msisdn-491971103488-USER_ID/ee-subscriptions","monitoringConfiguration":{"120984":{"eventType":"UE_REACHABILITY_FOR_SMS","immediateFlag":false,"referenceId":120984}},"reportingOptions":{"maxNumOfReports":0}}
-
-  The "POST" response is monitored for the header named "location" (--crud-resource-header), whose value is a URI, which is the resource (5G EE-subscription) created by "POST".
-
-  Next, "PATCH" (--crud-update-method) is sent to the URI above to update the resource created, with payload specified in updatedatafile.json (--crud-update-data-file), to modify the resource created.
-
-  At last, "DELETE" (--crud-delete-method) is sent to delete the created resource, which is actually an unsubscription here in this 5G EE-subscription case.
-
-  other parameters:
-
-    --stream-timeout-interval-ms:
-    
-    how long would h2loadrunner wait for a response to come; when this is exceeded, RST_STREAM is sent to release the resource
-    
-    --rps: desired request per second per connection
-    
-    -t: number of thread
-    
-    -c: number of client, which is typically the number of connections
-    
-    -D: how long the test should run
-    
-    -m: max concurrent streams per connection, this is a key feature of HTTP2.
-    
-    For other possible parameters (derived from h2load), type h2loadrunner --help
-
-
-# JSON configuration support and GUI interface for configuration
-
-  h2loadrunner supports JSON based configuration.
-  
-  With this feature, h2loadrunner can support flexible scenario combinations, not limiting to typical CRUD (Create-Read-Update-Delete) scenario above.
+  With this feature, h2loadrunner can support flexible scenario combinations.
   
   Json schema: https://github.com/wallyatgithub/h2loadrunner/blob/main/config_schema.json
    
@@ -219,10 +116,33 @@
 
   Take https://json-editor.github.io/json-editor/ for example:
   
-  Paste content of https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/config_schema.json to "Schema" field of the above link
+  Paste raw content of https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/config_schema.json to "Schema" field of the above link
   
-  Then click "Update Schema", a form named h2loadrunner_configuration is available on top for Edit
+  Then click "Update Schema", a form named h2loadrunner_configuration is available on top 
   
+  Check the help text associated with each field, to know what to fill/choose for each field.
+
+  Special notes:
+  
+  H2loadrunner Json schema has a section called "scenario", and "scenario" is a list of requests, that h2loadrunner will execute sequentially.
+  
+  Note: Sequential execution is valid for requests within one "scenario"; h2loadrunner will keep track of the request and response of each request, and the next request can be started only if the response of the prior request is received. 
+  
+  Although request within the "scenario" are executed sequentially, yet h2loadrunner can run many "scenario" in parallel.
+
+  For example, h2loadrunner can start 1000 "scenario" on 100 connections (concurrent streams, -m option) in parallel, each "scenario" has a list of requests representing a user's activities in sequence.
+  
+  The 1000 "scenario" are executed in parallel, while within each "scenario", the requests are executed sequentially. 
+  
+  As said before, "scenario" is a list of requests, while each request has several basic fields, like path, method, payload, and additonalHeaders, and also a field called "luaScript" (see below).
+  
+  path, method, payload, and additonalHeaders, as the names suggest, are the path header, method header, message body, and other additional headers (such as user-agent) to build the request.
+  
+  In which the path field is a compound structure, which aims to provide some quick and handy options for quick definition of some typical test scenario. 
+  
+  For example, the user can specify in the path field to copy the path from the request prior to this one (sameWithLastOne), or to extract the path value from some specific header of the response responding to the request prior to this one (extractFromLastResponseHeader). Of course, direct input of the path is also supported.
+
+
   After finishing editing, click "Update Form" to get the JSON data at the right side.
   
   Save it to a file <JSON FILE>, then use h2loadrunner --config-file=<JSON FILE> to start the load run
@@ -235,7 +155,7 @@
   ![Example of GUI configuration of scenario](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor-scenario.png)
   
   
-  When using Json configuration, if wanted, it is still possible to override parameters with command line interface.
+  If wanted, it is still possible to override parameters with command line interface after the Json configuration file is provided.
 
   For example, with this command line:
 
@@ -245,30 +165,10 @@
 
  
 # Lua script support
-
-  Like wrk/wrk2, h2loadrunner supports Lua script, capable of customizing every header and payload of the request to be sent.
-
-  To explain how it works, let's first introduce the schema defining how h2loadrunner will run the test.
- 
-  h2loadrunner Json schema has a section called "scenario", and "scenario" is a list of requests h2loadrunner will execute sequentially.
-  
-  Note: Sequential execution is for requests within one "scenario"; h2loadrunner will keep track of the request and response of each request, and the next request can be started only if the response of the prior request is received. 
-  
-  Each "scenario" is executed sequentially, while h2loadrunner can run many "scenario" in parallel.
-
-  For example, h2loadrunner can start 1000 "scenario" on 100 connections (concurrent streams, -m option) in parallel, each "scenario" represents a user's activities in sequence.
-  
-  The 1000 "scenario" are executed in parallel, while within each "scenario", the user activity is executed sequentially. 
-  
-  As said before, "scenario" is a list of requests, while each request has several basic fields, like path, method, payload, and additonalHeaders, and also a field called "luaScript".
-  
-  path, method, payload, and additonalHeaders, as the names suggest, are the path header, method header, message body, and other additional headers (such as user-agent) to build the request.
-  
-  In which the path field is a compound structure, which aims to provide some quick and handy options for quick definition of some typical test scenario. 
-  
-  For example, the user can specify in the path field to copy the path from the request prior to this one (sameWithLastOne), or to extract the path value from some specific header of the response responding to the request prior to this one (extractFromLastResponseHeader). Of course, direct input of the path is also supported.
   
   Now comes the "luaScript" field:
+
+  Like wrk/wrk2, h2loadrunner supports Lua script, capable of customizing every header and payload of the request to be sent.
   
   The "luaScript" field is associated with each request within the "scenario" section. The Lua script will be executed by h2loadrunner for the request, as long as the request has a valid snippet of script (see next for format and naming convention of the snippet of script).
 

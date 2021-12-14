@@ -9,7 +9,7 @@
       "type":"string"
     },
     "host":{
-      "description":"host part, for example: 192.168.1.1, or, www.h2loadrunner.com",
+      "description":"host to be tested with load, for example: 192.168.1.1, or, www.h2loadrunner.com",
       "type":"string"
     },
     "port":{
