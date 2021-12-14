@@ -24,7 +24,7 @@ jobs:
     - name: Install dependencies on ubuntu
       run: |
         sudo apt-get update
-        sudo apt-get install --yes libnghttp2-dev openssl libssl-dev libev-dev liblua5.3-dev rapidjson-dev cmake build-essential libluajit-5.1-dev gcc g++
+        sudo apt-get install --yes libnghttp2-dev openssl libssl-dev libev-dev liblua5.3-dev rapidjson-dev cmake build-essential libboost-all-dev libluajit-5.1-dev gcc g++
         cmake --version
         gcc --version
 

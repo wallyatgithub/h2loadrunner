@@ -1,6 +1,6 @@
 FROM amd64/centos:7
 RUN yum update -y && \
-    yum install openssl-devel libev-devel make unzip wget -y && \
+    yum install openssl-devel libev-devel make unzip wget boost-devel boost-static -y && \
     yum install epel-release -y && \
     yum install luajit-devel libnghttp2-devel rapidjson-devel cmake3 -y && \
     yum install centos-release-scl -y && \
@@ -12,7 +12,7 @@ RUN yum update -y && \
     scl enable devtoolset-8 -- mkdir h2loadrunner-main/build && \
     scl enable devtoolset-8 -- cmake3 -S h2loadrunner-main -B h2loadrunner-main/build && \
     scl enable devtoolset-8 -- cmake3 --build h2loadrunner-main/build && \
-    yum remove git make unzip wget cmake3 devtoolset-8-gcc devtoolset-8-gcc-c++ centos-release-scl -y && \
+    yum remove git make unzip wget cmake3 boost-devel boost-static devtoolset-8-gcc devtoolset-8-gcc-c++ centos-release-scl -y && \
     cp h2loadrunner-main/build/h2loadrunner /usr/bin/ && \
     mkdir -p /usr/share/h2loadrunner/ && \
     cp h2loadrunner-main/config_schema.json /usr/share/h2loadrunner/ && \

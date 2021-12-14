@@ -5,10 +5,12 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
+set(Boost_USE_STATIC_LIBS ON)
 
 add_subdirectory(third-party)
 
 find_package(OpenSSL 1.0.1)
+find_package(Boost 1.53.0 REQUIRED system thread)
 find_package(Libev 4.11)
 find_package(LuaJIT)
 
@@ -45,6 +47,7 @@ include_directories(
   "${LUA_INCLUDE_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares"
+  "${Boost_INCLUDE_DIRS}"
 )
 
 
@@ -59,6 +62,7 @@ link_libraries(
   ${OPENSSL_LIBRARIES}
   pthread
   ${LUA_LIBRARIES}
+  ${Boost_LIBRARIES}
 )
 
 set (CMAKE_INCLUDE_CURRENT_DIR ON)
