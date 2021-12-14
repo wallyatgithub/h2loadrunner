@@ -1666,30 +1666,37 @@ int main(int argc, char** argv)
             res.write_head(200, headers);
             res.end(payload);
         });
-        server.handle("/rps", [&](const nghttp2::asio_http2::server::request &req, const nghttp2::asio_http2::server::response &res)
+        server.handle("/config", [&](const nghttp2::asio_http2::server::request &req, const nghttp2::asio_http2::server::response &res)
         {
-            std::string path = req.uri().raw_query;
-            std::cout<<path<<std::endl;
+            std::string raw_query = req.uri().raw_query;
             std::string replyMsg;
-            /*
-            std::vector<std::string> tokens = tokenize_string(path);
-            std::string rps = path.substr(path.find("?"));
-            try
+
+            std::vector<std::string> tokens = tokenize_string(raw_query, "&");
+            auto rps_it = std::find_if(tokens.begin(), tokens.end(), [](std::string e) {return (e.find("rps") != std::string::npos);});
+            if (rps_it != tokens.end())
             {
-                config.rps = std::stod(rps);
-                replyMsg = "rps update to: ";
-                replyMsg.append(std::to_string(config.rps));
+                std::vector<std::string> rps_token = tokenize_string(*rps_it, "=");
+                if (rps_token.size() == 2)
+                {
+                    std::string rps = rps_token[1];
+                    try
+                    {
+                        config.rps = std::stod(rps);
+                        replyMsg = "rps update to: ";
+                        replyMsg.append(std::to_string(config.rps));
+                    }
+                    catch (...)
+                    {
+                        replyMsg = "unable to update rps";
+                    }
+                }
             }
-            catch (...)
-            {
-                replyMsg = "unable to update rps";
-            }
-            */
+
             nghttp2::asio_http2::header_map headers;
             res.write_head(200, headers);
-            res.end(std::string(path));
+            res.end(std::string(replyMsg));
         });
-        if (server.listen_and_serve(ec, std::string("0.0.0.0"), std::to_string(8088)))
+        if (server.listen_and_serve(ec, std::string("0.0.0.0"), std::to_string(8089)))
         {
             std::cerr << "error: " << ec.message() << std::endl;
         }
