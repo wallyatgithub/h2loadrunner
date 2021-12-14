@@ -66,6 +66,7 @@
     },
     "duration":{
       "description":"Specifies the duration (in second) for timing-based benchmarking. The duration field and the rate field are mutually exclusive.",
+      "default": 60,
       "type":"integer"
     },
     "total-requests":{
@@ -79,7 +80,7 @@
     },
     "max-concurrent-streams":{
       "description":"max-concurrent-streams for each connection, ignored for http 1.x test",
-      "default": 1,
+      "default": 32,
       "type":"integer"
     },
     "request-per-second":{
@@ -140,7 +141,7 @@
       "type":"string"
     },
     "certVerificationMode":{
-      "description": "0: do not do certificate validate; 1: fail if peer certificate does not pass validation",
+      "description": "0: do not do certificate validation; 1: fail if peer certificate does not pass validation",
       "default": 0,
       "type":"integer"
     },

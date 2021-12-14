@@ -122,6 +122,8 @@
   
   Check the help text associated with each field, to know what to fill/choose for each field.
 
+  Leave the field with the default value if you are not sure what to fill/choose.
+
   Special notes:
   
   H2loadrunner Json schema has a section called "scenario", and "scenario" is a list of requests, that h2loadrunner will execute sequentially.
