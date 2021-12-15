@@ -58,6 +58,8 @@
 #include <random>
 #include <vector>
 #include <sstream>
+#include <stdlib.h>
+#include <algorithm>
 
 
 #include <openssl/err.h>
@@ -343,38 +345,6 @@ Options:
               in <URI>.
   --rps=<N>   Specify request  per second for each  client.  --rps and
               --timing-script-file are mutually exclusive.
-  --crud-request-variable-name=<VARIABLE-NAME>
-              Specify the name of the variable to be  replaced in  the
-              request-URI and the data file. When h2load runs, it will
-              start  from  request-variable-value-start  to  request-\
-              variable-value-end, every  time a value is  picked up to
-              replace  the  VARIABLE-NAME  in request-URI and the data
-              file.  This is  repeated  until  the  load test is done.
-              This feature is  useful for the case  where a user ID is
-              part of the URI and data, e.g., CURD based on user ID.
-  --crud-request-variable-value-start=<start-value>
-              An integer to specify the start of the range.
-  --crud-request-variable-value-end=<end-value>
-              An integer to specify the end of the range.
-  --crud-request-variable-range-slicing
-              Slice the  variable range,  each  client get a sub range
-              Otherwise, each client runs with full variable range
-  --crud-create-method=<METHOD>
-              HTTP METHOD for Create operationto override the  default
-              method (GET/POST)
-  --crud-read-method=<METHOD>
-              HTTP METHOD for CRUD Read operation
-  --crud-update-method=<METHOD>
-              HTTP METHOD for CRUD Update operation
-  --crud-delete-method=<METHOD>
-              HTTP METHOD for CRUD Delete operation
-  --crud-resource-header-name=<header name>
-              name of the  header  which contains the resource created
-  --crud-create-data-file=<file name>
-              name of the data file for  Create operation. If present,
-              this overrides the file name provided in 'data' option
-  --crud-update-data-file=<file name>
-              name of the data file for Update operation.
   --stream-timeout-interval-ms=<timeout value in ms>
               request time out  value.  After  timeout,  RST_STREAM is
               sent by h2load. Default 5000.
@@ -919,8 +889,6 @@ int main(int argc, char** argv)
                         }
                         util::inp_strlower(config.json_config_schema.host);
                         util::inp_strlower(config.json_config_schema.schema);
-                        std::cout << "Use configuration from JSON:" << std::endl << staticjson::to_pretty_json_string(
-                                      config.json_config_schema) << std::endl;
                         assert(config.json_config_schema.scenario[0].uri.typeOfAction == "input");
 
                         auto load_file_content = [](std::string& source)
@@ -1432,7 +1400,7 @@ int main(int argc, char** argv)
 
     normalize_request_templates(&config);
 
-    std::cout << "Scenario to run:" << std::endl << staticjson::to_pretty_json_string(config.json_config_schema)
+    std::cout << "Configuration dump:" << std::endl << staticjson::to_pretty_json_string(config.json_config_schema)
               <<std::endl;
 
     tokenize_path_and_payload_for_fast_var_replace(config);
@@ -1650,7 +1618,14 @@ int main(int argc, char** argv)
     std::thread monThread(rpsMonitorFunc);
     monThread.detach();
 
-    auto serverFunc = [&DatStream]()
+    uint32_t serverPort = 8080;
+    std::random_device                  rand_dev;
+    std::mt19937                        generator(rand_dev());
+    std::uniform_int_distribution<uint64_t>  distr(0, 10000);
+    serverPort += distr(generator);
+
+    std::cerr << "server listening at port: " << serverPort << std::endl;
+    auto serverFunc = [&DatStream, serverPort]()
     {
         nghttp2::asio_http2::server::http2 server;
         boost::system::error_code ec;
@@ -1696,9 +1671,9 @@ int main(int argc, char** argv)
             res.write_head(200, headers);
             res.end(std::string(replyMsg));
         });
-        if (server.listen_and_serve(ec, std::string("0.0.0.0"), std::to_string(8089)))
+        if (server.listen_and_serve(ec, std::string("0.0.0.0"), std::to_string(serverPort)))
         {
-            std::cerr << "error: " << ec.message() << std::endl;
+            std::cerr << "http2 server start error: " << ec.message() << std::endl;
         }
     };
     std::thread serverThread(serverFunc);
