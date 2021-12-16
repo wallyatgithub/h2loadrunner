@@ -62,7 +62,7 @@
       "type":"integer"
     },
     "clients":{
-      "description":"Total number of concurrent clients(connections) to be established to host(s) under test; different connections are running in parallel mode even they are handled by same thread (see threads field). If working together with rate field, this field specifies the total number of connections to be made. This field must have value no less than threads field.",
+      "description":"Total number of concurrent clients(connections) to be established to host(s) under test; different connections are running in parallel mode even they are handled by same thread (see threads field). If working together with rate field, this field specifies the total number of connections to be made. This field must have a value no less than threads field.",
       "default": 1,
       "type":"integer"
     },
