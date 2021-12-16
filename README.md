@@ -53,6 +53,7 @@
     libev-dev
     libluajit-5.1-dev
     rapidjson-dev
+    libboost-all-dev
     c-ares (included in third-party/c-ares, as the c-ares devel package of linux distro is too old)
 
   Use cmake to build
