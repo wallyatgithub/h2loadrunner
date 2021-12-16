@@ -57,12 +57,12 @@
       "type":"boolean"
     },
     "threads":{
-      "description":"Number of threads. Each thread can serve multiple connections (clients). Recommendation: thead number matches number of cores",
+      "description":"Number of threads. Each thread can run multiple connections (see clients field). Recommendation: thead number matches number of cores",
       "default": 1,
       "type":"integer"
     },
     "clients":{
-      "description":"Total number of concurrent clients(connections). If working together with rate field, this field specifies the total number of connections to be made. This field must have value no less than threads field.",
+      "description":"Total number of concurrent clients(connections) to be established to host(s) under test; different connections are running in parallel mode even they are handled by same thread (see threads field). If working together with rate field, this field specifies the total number of connections to be made. This field must have value no less than threads field.",
       "default": 1,
       "type":"integer"
     },
@@ -81,16 +81,16 @@
       "type":"integer"
     },
     "max-concurrent-streams":{
-      "description":"max-concurrent-streams for each connection, ignored for http 1.x test",
+      "description":"each http2 connection can have multiple concurrent streams running in parallel, this field specifies the max concurrent streams for each connection; this field is ignored for http 1.x test",
       "default": 32,
       "type":"integer"
     },
     "request-per-second":{
-      "description":"Specifies request per second for each client(connection). If no value is given in this field, it will try to send as many as possible requests for each client(connection)",
+      "description":"Specifies request per second for each client(connection), so the total number of requests per second would be request-per-second * clients. If no value is given in this field, it will try to send as many as possible requests for each client(connection)",
       "type":"number"
     },
     "request-per-second-feed-file":{
-      "description":"If given, h2loadrunner will monitor this file; if the file is changed, h2loadrunner will read the first line, and try to interpret it as a number, and if successful, request-per-second is updated with the number dynamically",
+      "description":"If given, h2loadrunner will monitor this file; if the file is changed, h2loadrunner will read the first line, and try to interpret it as a number as described in request-per-second field, and if successful, request-per-second is updated with the number dynamically",
       "type":"string"
     },
     "rate":{
