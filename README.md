@@ -133,7 +133,7 @@
   
   Although request within the "scenario" are executed sequentially, yet h2loadrunner can run many "scenario" in parallel.
 
-  For example, h2loadrunner can start 1000 "scenario" on 100 connections (concurrent streams, -m option) in parallel, each "scenario" has a list of requests representing a user's activities in sequence.
+  For example, h2loadrunner can start 1000 parallel "scenario" on 100 connections (with concurrent streams), each "scenario" has a list of requests representing a user's activities in sequence.
   
   The 1000 "scenario" are executed in parallel, while within each "scenario", the requests are executed sequentially. 
   
