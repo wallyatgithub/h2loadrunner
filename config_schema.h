@@ -71,6 +71,36 @@ public:
     }
 };
 
+class Scenario
+{
+public:
+    std::string name;
+    uint32_t weight;
+    std::string variable_name_in_path_and_data;
+    uint64_t variable_range_start;
+    uint64_t variable_range_end;
+    bool variable_range_slicing;
+    std::vector<Request> requests;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("name", &this->name);
+        h->add_property("weight", &this->weight, staticjson::Flags::Optional);
+        h->add_property("variable-name-in-path-and-data", &this->variable_name_in_path_and_data, staticjson::Flags::Optional);
+        h->add_property("variable-range-start", &this->variable_range_start, staticjson::Flags::Optional);
+        h->add_property("variable-range-end", &this->variable_range_end, staticjson::Flags::Optional);
+        h->add_property("variable-range-slicing", &this->variable_range_slicing, staticjson::Flags::Optional);
+        h->add_property("Requests", &this->requests);
+    }
+    explicit Scenario():
+        variable_name_in_path_and_data(""),
+        variable_range_start(0),
+        variable_range_end(0),
+        variable_range_slicing(false),
+        weight(100)
+    {
+    }
+};
+
 class Load_Share_Host
 {
 public:
@@ -109,13 +139,12 @@ public:
     std::string log_file;
     double request_per_second;
     std::string rps_file;
-    std::string variable_name_in_path_and_data;
-    uint64_t variable_range_start;
-    uint64_t variable_range_end;
+//    std::string variable_name_in_path_and_data;
+//    uint64_t variable_range_start;
+//    uint64_t variable_range_end;
     uint64_t nreqs;
     uint32_t stream_timeout_in_ms;
-    std::vector<Request> scenario;
-    bool variable_range_slicing;
+//    bool variable_range_slicing;
     std::string ca_cert;
     std::string client_cert;
     std::string private_key;
@@ -126,6 +155,7 @@ public:
     std::vector<Load_Share_Host> load_share_hosts;
     bool connect_back_to_preferred_host;
     uint32_t interval_to_send_ping;
+    std::vector<Scenario> scenarios;
 
     explicit Config_Schema():
         schema("http"),
@@ -149,9 +179,10 @@ public:
         encoder_header_table_size(4096),
         log_file(""),
         request_per_second(0),
-        variable_name_in_path_and_data(""),
-        variable_range_start(0),
-        variable_range_end(0),
+//        variable_name_in_path_and_data(""),
+//        variable_range_start(0),
+//        variable_range_end(0),
+//        variable_range_slicing(false),
         nreqs(0),
         stream_timeout_in_ms(5000),
         max_tls_version("TLSv1.3"),
@@ -189,11 +220,11 @@ public:
         h->add_property("log-file", &this->log_file, staticjson::Flags::Optional);
         h->add_property("request-per-second", &this->request_per_second, staticjson::Flags::Optional);
         h->add_property("request-per-second-feed-file", &this->rps_file, staticjson::Flags::Optional);
-        h->add_property("variable-name-in-path-and-data", &this->variable_name_in_path_and_data, staticjson::Flags::Optional);
-        h->add_property("variable-range-start", &this->variable_range_start, staticjson::Flags::Optional);
-        h->add_property("variable-range-end", &this->variable_range_end, staticjson::Flags::Optional);
-        h->add_property("variable-range-slicing", &this->variable_range_slicing, staticjson::Flags::Optional);
-        h->add_property("scenario", &this->scenario);
+//        h->add_property("variable-name-in-path-and-data", &this->variable_name_in_path_and_data, staticjson::Flags::Optional);
+//        h->add_property("variable-range-start", &this->variable_range_start, staticjson::Flags::Optional);
+//        h->add_property("variable-range-end", &this->variable_range_end, staticjson::Flags::Optional);
+//        h->add_property("variable-range-slicing", &this->variable_range_slicing, staticjson::Flags::Optional);
+        h->add_property("Scenarios", &this->scenarios);
         h->add_property("caCert", &this->ca_cert, staticjson::Flags::Optional);
         h->add_property("cert", &this->client_cert, staticjson::Flags::Optional);
         h->add_property("privateKey", &this->private_key, staticjson::Flags::Optional);

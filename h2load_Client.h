@@ -49,6 +49,7 @@ struct Request_Data
     uint32_t delay_before_executing_next;
     std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
     size_t next_request_idx;
+    size_t scenario_index;
     std::shared_ptr<TransactionStat> transaction_stat;
     std::vector<std::string> string_collection;
     explicit Request_Data():
@@ -64,6 +65,7 @@ struct Request_Data
         delay_before_executing_next = 0;
         next_request_idx = 0;
         transaction_stat = nullptr;
+        scenario_index = 0;
         string_collection.reserve(12); // (path, authority, method, schema, payload, xx) * 2
     };
 
@@ -114,6 +116,19 @@ struct Request_Data
         return false;
     };
 
+};
+
+struct Runtime_Scenario_Data
+{
+    uint64_t req_variable_value_start;
+    uint64_t req_variable_value_end;
+    uint64_t curr_req_variable_value;
+    explicit Runtime_Scenario_Data():
+      req_variable_value_start(0),
+      req_variable_value_end(0),
+      curr_req_variable_value(0)
+      {
+      };
 };
 
 struct Client
@@ -178,11 +193,10 @@ struct Client
     int32_t curr_stream_id;
     ev_timer send_ping_watcher;
     Config* config;
-    uint64_t curr_req_variable_value;
     std::deque<Request_Data> requests_to_submit;
     std::multimap<std::chrono::steady_clock::time_point, Request_Data> delayed_requests_to_submit;
     std::map<int32_t, Request_Data> requests_awaiting_response;
-    std::vector<lua_State*> lua_states;
+    std::vector<std::vector<lua_State*>> lua_states;
     std::map<std::string, Client*> dest_clients;
     Client* parent_client;
     std::string schema;
@@ -191,8 +205,6 @@ struct Client
     ares_channel channel;
     std::map<int, ev_io> ares_io_watchers;
     ev_timer delayed_request_watcher;
-    uint64_t req_variable_value_start;
-    uint64_t req_variable_value_end;
     size_t totalTrans_till_last_check = 0;
     std::chrono::time_point<std::chrono::steady_clock> timestamp_of_last_tps_check;
     size_t total_leading_Req_till_last_check = 0;
@@ -207,6 +219,7 @@ struct Client
     ev_io probe_wev;
     int probe_skt_fd;
     std::function<void()> write_clear_callback;
+    std::vector<Runtime_Scenario_Data> runtime_scenario_data;
 
     enum { ERR_CONNECT_FAIL = -100 };
 
@@ -283,13 +296,13 @@ struct Client
     Request_Data get_request_to_submit();
     Request_Data prepare_first_request();
     bool prepare_next_request(Request_Data& data);
-    void replace_variable(std::string& input, const std::string& variable_name, uint64_t variable_value);
     void update_content_length(Request_Data& data);
     bool update_request_with_lua(lua_State* L, const Request_Data& finished_request, Request_Data& request_to_send);
     void produce_request_cookie_header(Request_Data& req_to_be_sent);
     void parse_and_save_cookies(Request_Data& finished_request);
     void move_cookies_to_new_request(Request_Data& finished_request, Request_Data& new_request);
     void populate_request_from_config_template(Request_Data& new_request,
+                                                              size_t scenario_index,
                                                               size_t index_in_config_template);
 
     Client* find_or_create_dest_client(Request_Data& request_to_send);
@@ -315,7 +328,6 @@ struct Client
 
     bool is_controller_client();
     Client* get_controller_client();
-    void transfer_controllership();
 
     bool reconnect_to_alt_addr();
 
@@ -332,6 +344,9 @@ struct Client
     bool should_reconnect_on_disconnect();
 
     void submit_ping();
+    std::vector<size_t> init_var_str_len(Config* config);
+    size_t get_index_of_next_scenario_to_run();
+    void update_scenario_based_stats(size_t scenario_index, bool success, bool status_success, uint64_t resp_time_ms);
 
 };
 

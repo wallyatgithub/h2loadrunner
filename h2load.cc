@@ -506,6 +506,7 @@ int main(int argc, char** argv)
             {"log-file", required_argument, &flag, 10},
             {"connect-to", required_argument, &flag, 11},
             {"rps", required_argument, &flag, 12},
+            /*
             {"crud-create-method", required_argument, &flag, 13},
             {"crud-read-method", required_argument, &flag, 14},
             {"crud-update-method", required_argument, &flag, 15},
@@ -516,10 +517,11 @@ int main(int argc, char** argv)
             {"crud-request-variable-name", required_argument, &flag, 20},
             {"crud-request-variable-value-start", required_argument, &flag, 21},
             {"crud-request-variable-value-end", required_argument, &flag, 22},
+            */
             {"stream-timeout-interval-ms", required_argument, &flag, 23},
             {"rps-input-file", required_argument, &flag, 24},
             {"config-file", required_argument, &flag, 25},
-            {"crud-request-variable-range-slicing", no_argument, &flag, 26},
+            //{"crud-request-variable-range-slicing", no_argument, &flag, 26},
             {nullptr, 0, nullptr, 0}
         };
         int option_index = 0;
@@ -808,6 +810,7 @@ int main(int argc, char** argv)
                         config.rps = v;
                         break;
                     }
+                    /*
                     case 13:
                     {
                         // create-method
@@ -865,6 +868,7 @@ int main(int argc, char** argv)
                         config.req_variable_end = strtoul(optarg, nullptr, 10);
                     }
                     break;
+                    */
                     case 23:
                     {
                         config.stream_timeout_in_ms = (uint16_t)strtoul(optarg, nullptr, 10);
@@ -889,7 +893,6 @@ int main(int argc, char** argv)
                         }
                         util::inp_strlower(config.json_config_schema.host);
                         util::inp_strlower(config.json_config_schema.schema);
-                        assert(config.json_config_schema.scenario[0].uri.typeOfAction == "input");
 
                         auto load_file_content = [](std::string& source)
                         {
@@ -903,56 +906,58 @@ int main(int argc, char** argv)
                                 }
                             }
                         };
-
-                        for (auto& request : config.json_config_schema.scenario)
+                        for (auto& scenario: config.json_config_schema.scenarios)
                         {
-                            for (auto& header_with_value : request.additonalHeaders)
+                            for (auto& request : scenario.requests)
                             {
-                                size_t t = header_with_value.find(":", 1);
-                                if ((t == std::string::npos) ||
-                                    (header_with_value[0] == ':' && 1 == t))
+                                for (auto& header_with_value : request.additonalHeaders)
                                 {
-                                    std::cerr << "invalid header, no name: " << header_with_value << std::endl;
-                                    continue;
-                                }
-                                std::string header_name = header_with_value.substr(0, t);
-                                std::string header_value = header_with_value.substr(t + 1);
-                                /*
-                                header_value.erase(header_value.begin(), std::find_if(header_value.begin(), header_value.end(),
-                                                                                      [](unsigned char ch)
-                                {
-                                    return !std::isspace(ch);
-                                }));
-                                */
-
-                                if (header_value.empty())
-                                {
-                                    std::cerr << "invalid header - no value: " << header_with_value
-                                              << std::endl;
-                                    continue;
-                                }
-                                request.headers_in_map[header_name] = header_value;
-                            }
-                            load_file_content(request.payload);
-                            load_file_content(request.luaScript);
-                            if (request.uri.typeOfAction == "input")
-                            {
-                                http_parser_url u {};
-                                if (http_parser_parse_url(request.uri.input.c_str(), request.uri.input.size(), 0, &u) != 0)
-                                {
-                                    std::cerr << "invalid URI given: " << request.uri.input << std::endl;
-                                    exit(EXIT_FAILURE);
-                                }
-                                request.path = get_reqline(request.uri.input.c_str(), u);
-                                if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
-                                {
-                                    request.schema = util::get_uri_field(request.uri.input.c_str(), u, UF_SCHEMA).str();
-                                    util::inp_strlower(request.schema);
-                                    request.authority = util::get_uri_field(request.uri.input.c_str(), u, UF_HOST).str();
-                                    util::inp_strlower(request.authority);
-                                    if (util::has_uri_field(u, UF_PORT))
+                                    size_t t = header_with_value.find(":", 1);
+                                    if ((t == std::string::npos) ||
+                                        (header_with_value[0] == ':' && 1 == t))
                                     {
-                                        request.authority.append(":").append(util::utos(u.port));
+                                        std::cerr << "invalid header, no name: " << header_with_value << std::endl;
+                                        continue;
+                                    }
+                                    std::string header_name = header_with_value.substr(0, t);
+                                    std::string header_value = header_with_value.substr(t + 1);
+                                    /*
+                                    header_value.erase(header_value.begin(), std::find_if(header_value.begin(), header_value.end(),
+                                                                                          [](unsigned char ch)
+                                    {
+                                        return !std::isspace(ch);
+                                    }));
+                                    */
+
+                                    if (header_value.empty())
+                                    {
+                                        std::cerr << "invalid header - no value: " << header_with_value
+                                                  << std::endl;
+                                        continue;
+                                    }
+                                    request.headers_in_map[header_name] = header_value;
+                                }
+                                load_file_content(request.payload);
+                                load_file_content(request.luaScript);
+                                if (request.uri.typeOfAction == "input")
+                                {
+                                    http_parser_url u {};
+                                    if (http_parser_parse_url(request.uri.input.c_str(), request.uri.input.size(), 0, &u) != 0)
+                                    {
+                                        std::cerr << "invalid URI given: " << request.uri.input << std::endl;
+                                        exit(EXIT_FAILURE);
+                                    }
+                                    request.path = get_reqline(request.uri.input.c_str(), u);
+                                    if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
+                                    {
+                                        request.schema = util::get_uri_field(request.uri.input.c_str(), u, UF_SCHEMA).str();
+                                        util::inp_strlower(request.schema);
+                                        request.authority = util::get_uri_field(request.uri.input.c_str(), u, UF_HOST).str();
+                                        util::inp_strlower(request.authority);
+                                        if (util::has_uri_field(u, UF_PORT))
+                                        {
+                                            request.authority.append(":").append(util::utos(u.port));
+                                        }
                                     }
                                 }
                             }
@@ -965,11 +970,13 @@ int main(int argc, char** argv)
                         logfile = config.json_config_schema.log_file;
                     }
                     break;
+                    /*
                     case 26:
                     {
                         config.variable_range_slicing = true;
                     }
                     break;
+                    */
                 }
                 break;
             default:
@@ -1388,12 +1395,7 @@ int main(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
 
-    if (!config.json_config_schema.scenario.size())
-    {
-        convert_CRUD_operation_to_Json_scenarios(config);
-    }
-
-    if (config.json_config_schema.scenario.size() && config.custom_headers.size())
+    if (config.json_config_schema.scenarios.size() && config.custom_headers.size())
     {
         insert_customized_headers_to_Json_scenarios(config);
     }
@@ -1494,10 +1496,10 @@ int main(int argc, char** argv)
     std::atomic<bool> workers_stopped;
     workers_stopped = (config.nreqs == 1);
 
+    bool should_run_stats = ((workers_stopped == false) && (config.json_config_schema.scenarios.size() > 0));
     std::stringstream DatStream;
-    auto statFunc = [&workers, &workers_stopped, &DatStream, start]()
+    auto statFunc = [&workers, &should_run_stats, &DatStream, start]()
     {
-        static uint32_t counter = 0;
         size_t totalReq_sent_till_now = 0;
         size_t totalResp_received_till_now = 0;
         size_t totalReq_success_till_now = 0;
@@ -1506,17 +1508,37 @@ int main(int argc, char** argv)
         size_t total5xx_till_now = 0;
         size_t totalTrans_till_now = 0;
         size_t totalTrans_success_till_now = 0;
+
+        std::vector<size_t> scenario_req_sent_till_now(config.json_config_schema.scenarios.size(), 0);
+        std::vector<size_t> scenario_resp_received_till_now(config.json_config_schema.scenarios.size(), 0);
+        std::vector<size_t> scenario_req_success_till_now(config.json_config_schema.scenarios.size(), 0);
+        std::vector<size_t> scenario_3xx_till_now(config.json_config_schema.scenarios.size(), 0);
+        std::vector<size_t> scenario_4xx_till_now(config.json_config_schema.scenarios.size(), 0);
+        std::vector<size_t> scenario_5xx_till_now(config.json_config_schema.scenarios.size(), 0);
+        std::vector<size_t> scenario_trans_till_now(config.json_config_schema.scenarios.size(), 0);
+        std::vector<size_t> scenario_trans_success_till_now(config.json_config_schema.scenarios.size(), 0);
+
         auto period_start = start;
-        while (!workers_stopped)
+        while (should_run_stats)
         {
-            size_t totalReq_sent_till_last_interval = totalReq_sent_till_now;
-            size_t total_resp_received_till_last_interval = totalResp_received_till_now;
-            size_t totalReq_success_till_last_interval = totalReq_success_till_now;
-            size_t total3xx_till_last_interval = total3xx_till_now;
-            size_t total4xx_till_last_interval = total4xx_till_now;
-            size_t total5xx_till_last_interval = total5xx_till_now;
-            size_t totalTrans_till_last_interval = totalTrans_till_now;
-            size_t totalTrans_success_till_last_interval = totalTrans_success_till_now;
+            auto totalReq_sent_till_last_interval = totalReq_sent_till_now;
+            auto total_resp_received_till_last_interval = totalResp_received_till_now;
+            auto totalReq_success_till_last_interval = totalReq_success_till_now;
+            auto total3xx_till_last_interval = total3xx_till_now;
+            auto total4xx_till_last_interval = total4xx_till_now;
+            auto total5xx_till_last_interval = total5xx_till_now;
+            auto totalTrans_till_last_interval = totalTrans_till_now;
+            auto totalTrans_success_till_last_interval = totalTrans_success_till_now;
+
+            auto scenario_req_sent_till_last_interval = scenario_req_sent_till_now;
+            auto scenario_resp_received_till_last_interval = scenario_resp_received_till_now;
+            auto scenario_req_success_till_last_interval = scenario_req_success_till_now;
+            auto scenario_3xx_till_last_interval = scenario_3xx_till_now;
+            auto scenario_4xx_till_last_interval = scenario_4xx_till_now;
+            auto scenario_5xx_till_last_interval = scenario_5xx_till_now;
+            auto scenario_trans_till_last_interval = scenario_trans_till_now;
+            auto scenario_trans_success_till_last_interval = scenario_trans_success_till_now;
+
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             totalReq_sent_till_now = 0;
             totalResp_received_till_now = 0;
@@ -1564,8 +1586,9 @@ int main(int argc, char** argv)
 
             std::stringstream colStream;
             DatStream.str("");
-            colStream << "time total-sent total-recv total-success recv/sent(total) success/recv(total) sent/s received/s success/s recv/sent(per sec) success/recv(per sec) 3xx/s 4xx/s 5xx/s max-latency(ms) min-latency avg-latency";
+            colStream << "time scope total-sent total-recv total-success recv/sent(total) success/recv(total) sent/s received/s success/s recv/sent(per sec) success/recv(per sec) 3xx/s 4xx/s 5xx/s max-latency(ms) min-latency avg-latency";
             DatStream << std::put_time(std::localtime(&now_c), "%c")
+                      << ", " << "global"
                       << ", " << totalReq_sent_till_now << ", " << totalResp_received_till_now << ", " << totalReq_success_till_now
                       << ", " << (totalReq_sent_till_now?(((double)totalResp_received_till_now / totalReq_sent_till_now) * 100):0) << "%"
                       << ", " << (totalResp_received_till_now?(((double)totalReq_success_till_now / totalResp_received_till_now) * 100):0) << "%"
@@ -1578,9 +1601,67 @@ int main(int argc, char** argv)
                       << max_resp_time_ms << ", " << min_resp_time_ms << ", " << (delta_RPS_received?total_resp_time_ms/delta_RPS_received:max_resp_time_ms);
                       std::cout<<colStream.str()<<std::endl;
                       std::cout<<DatStream.str()<<std::endl;
+
+            for (size_t index = 0; config.json_config_schema.scenarios.size(); index++)
+            {
+                scenario_req_sent_till_now[index] = 0;
+                scenario_resp_received_till_now[index] = 0;
+                scenario_req_success_till_now[index] = 0;
+                scenario_3xx_till_now[index] = 0;
+                scenario_4xx_till_now[index] = 0;
+                scenario_5xx_till_now[index] = 0;
+                scenario_trans_till_now[index] = 0;
+                scenario_trans_success_till_now[index] = 0;
+                uint64_t max_resp_time_ms = 0;
+                uint64_t min_resp_time_ms = 0xFFFFFFFFFFFFFFFE;
+                uint64_t trans_max_resp_time_ms = 0;
+                uint64_t trans_min_resp_time_ms = 0xFFFFFFFFFFFFFFFE;
+                uint64_t total_resp_time_ms = 0;
+                for (auto& w : workers)
+                {
+                    auto& s = *(w->scenario_stats[index]);
+                    scenario_req_sent_till_now[index] += s.req_started;
+                    scenario_resp_received_till_now[index] += s.req_done;
+                    scenario_req_success_till_now[index] += s.req_status_success;
+                    scenario_3xx_till_now[index] += s.status[3];
+                    scenario_4xx_till_now[index] += s.status[4];
+                    scenario_5xx_till_now[index] += s.status[5];
+                    scenario_trans_till_now[index] += s.transaction_done;
+                    scenario_trans_success_till_now[index] += s.transaction_successful;
+                    max_resp_time_ms = std::max(max_resp_time_ms, s.max_resp_time_ms.exchange(0));
+                    min_resp_time_ms = std::min(min_resp_time_ms, s.min_resp_time_ms.exchange(0xFFFFFFFFFFFFFFFE));
+                    trans_max_resp_time_ms = std::max(trans_max_resp_time_ms, s.trans_max_resp_time_ms.exchange(0));
+                    trans_min_resp_time_ms = std::min(trans_min_resp_time_ms, s.trans_min_resp_time_ms.exchange(0xFFFFFFFFFFFFFFFE));
+                    total_resp_time_ms += s.total_resp_time_ms.exchange(0);
+                }
+                size_t delta_RPS_sent = scenario_req_sent_till_now[index] - scenario_req_sent_till_last_interval[index];
+                size_t delta_RPS_received = scenario_resp_received_till_now[index] - scenario_resp_received_till_last_interval[index];
+                size_t delta_RPS_success = scenario_req_success_till_now[index] - scenario_req_success_till_last_interval[index];
+                size_t delta_RPS_3xx = scenario_3xx_till_now[index] - scenario_3xx_till_last_interval[index];
+                size_t delta_RPS_4xx = scenario_4xx_till_now[index] - scenario_4xx_till_last_interval[index];
+                size_t delta_RPS_5xx = scenario_5xx_till_now[index] - scenario_5xx_till_last_interval[index];
+                size_t delta_trans = scenario_trans_till_now[index] - scenario_trans_till_last_interval[index];
+                size_t delta_trans_success = scenario_trans_success_till_now[index] - scenario_trans_success_till_last_interval[index];
+
+                std::stringstream ScenarioDatStream;
+                ScenarioDatStream
+                          << std::put_time(std::localtime(&now_c), "%c")
+                          << ", " << "scenario-"<<config.json_config_schema.scenarios[index].name
+                          << ", " << totalReq_sent_till_now << ", " << totalResp_received_till_now << ", " << totalReq_success_till_now
+                          << ", " << (totalReq_sent_till_now?(((double)totalResp_received_till_now / totalReq_sent_till_now) * 100):0) << "%"
+                          << ", " << (totalResp_received_till_now?(((double)totalReq_success_till_now / totalResp_received_till_now) * 100):0) << "%"
+                          << ", " << round((double)(1000*delta_RPS_sent)/period_duration)
+                          << ", " << round((double)(1000*delta_RPS_received)/period_duration)
+                          << ", " << round((double)(1000*delta_RPS_success)/period_duration)
+                          << ", " << (delta_RPS_sent?(((double)delta_RPS_received / delta_RPS_sent) * 100):0) << "%"
+                          << ", " << (delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0) << "%"
+                          << ", " << delta_RPS_3xx  << ", " << delta_RPS_4xx << ", " << delta_RPS_5xx << ", "
+                          << max_resp_time_ms << ", " << min_resp_time_ms << ", " << (delta_RPS_received?total_resp_time_ms/delta_RPS_received:max_resp_time_ms);
+                          std::cout<<colStream.str()<<std::endl;
+                          std::cout<<DatStream.str()<<std::endl;
+            }
         }
     };
-
     std::thread statThread(statFunc);
     statThread.detach();
 
@@ -1614,7 +1695,6 @@ int main(int argc, char** argv)
             }
         }
     };
-
     std::thread monThread(rpsMonitorFunc);
     monThread.detach();
 
@@ -1623,7 +1703,6 @@ int main(int argc, char** argv)
     std::mt19937                        generator(rand_dev());
     std::uniform_int_distribution<uint64_t>  distr(0, 10000);
     serverPort += distr(generator);
-
     std::cerr << "server listening at port: " << serverPort << std::endl;
     auto serverFunc = [&DatStream, serverPort]()
     {

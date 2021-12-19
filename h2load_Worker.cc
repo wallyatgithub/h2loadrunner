@@ -75,6 +75,11 @@ Worker::Worker(uint32_t id, SSL_CTX* ssl_ctx, size_t req_todo, size_t nclients,
     {
         current_phase = Phase::MAIN_DURATION;
     }
+    for (size_t scenario_index = 0; scenario_index < config->json_config_schema.scenarios.size(); scenario_index++)
+    {
+        auto stat = std::make_unique<Stats>(req_todo, nclients);
+        scenario_stats.emplace_back(std::move(stat));
+    }
 }
 
 Worker::~Worker()
