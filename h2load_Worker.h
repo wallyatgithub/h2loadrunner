@@ -8,6 +8,7 @@
 
 #include "memchunk.h"
 #include "h2load_stats.h"
+#include "memory"
 
 
 namespace h2load
@@ -19,6 +20,7 @@ struct Worker
 {
     MemchunkPool mcpool;
     Stats stats;
+    std::vector<std::unique_ptr<Stats>> scenario_stats;
     Sampling request_times_smp;
     Sampling client_smp;
     struct ev_loop* loop;

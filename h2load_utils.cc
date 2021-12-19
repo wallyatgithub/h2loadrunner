@@ -853,9 +853,9 @@ void populate_config_from_json(h2load::Config& config)
     config.window_bits = config.json_config_schema.window_bits;
     config.connection_window_bits = config.json_config_schema.connection_window_bits;
     config.warm_up_time = config.json_config_schema.warm_up_time;
-    config.variable_range_slicing = config.json_config_schema.variable_range_slicing;
-    config.req_variable_start = config.json_config_schema.variable_range_start;
-    config.req_variable_end = config.json_config_schema.variable_range_end;
+//    config.variable_range_slicing = config.json_config_schema.variable_range_slicing;
+//    config.req_variable_start = config.json_config_schema.variable_range_start;
+//    config.req_variable_end = config.json_config_schema.variable_range_end;
     //close(config.log_fd);
     //config.log_fd = open(config.json_config_schema.log_file.c_str(), O_WRONLY | O_CREAT | O_APPEND,
     //                     S_IRUSR | S_IWUSR | S_IRGRP);
@@ -867,111 +867,12 @@ void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
     {
         //std::string header_name = header.name;
         //util::inp_strlower(header_name);
-        for (auto& request : config.json_config_schema.scenario)
+        for (auto& scenario: config.json_config_schema.scenarios)
         {
-            request.headers_in_map[header.name] = header.value;
-            request.additonalHeaders.emplace_back(header.name + ":" + header.value);
-        }
-    }
-}
-
-void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config)
-{
-    if (config.json_config_schema.scenario.empty() &&
-        (config.crud_create_method.size() ||
-         config.crud_read_method.size() ||
-         config.crud_update_method.size() ||
-         config.crud_delete_method.size())
-       )
-    {
-        config.json_config_schema.variable_name_in_path_and_data = config.req_variable_name;
-        config.json_config_schema.variable_range_start = config.req_variable_start;
-        config.json_config_schema.variable_range_end = config.req_variable_end;
-        for (auto& uri : config.reqlines)
-        {
+            for (auto& request : scenario.requests)
             {
-                Request request;
-                request.method = config.crud_create_method;
-                request.uri.typeOfAction = "input";
-                request.path = uri;
-                if (config.crud_create_data_file_name.size())
-                {
-                    std::ifstream buffer(config.crud_create_data_file_name);
-                    if (!buffer.good())
-                    {
-                        std::cerr << config.crud_create_data_file_name << " does not exist" << std::endl;
-                        exit(EXIT_FAILURE);
-                    }
-                    std::string payloadStr((std::istreambuf_iterator<char>(buffer)), std::istreambuf_iterator<char>());
-                    request.payload = payloadStr;
-                }
-                config.json_config_schema.scenario.push_back(request);
-            }
-
-            bool header_tracked = false;
-            if (config.crud_read_method.size())
-            {
-                Request request;
-                request.clear_old_cookies = false;
-                request.method = config.crud_read_method;
-                if (header_tracked || config.crud_resource_header_name.empty())
-                {
-                    request.uri.typeOfAction = "sameWithLastOne";
-                }
-                else
-                {
-                    request.uri.typeOfAction = "fromResponseHeader";
-                    request.uri.input = config.crud_resource_header_name;
-                }
-                header_tracked = true;
-                config.json_config_schema.scenario.push_back(request);
-            }
-
-            if (config.crud_update_method.size())
-            {
-                Request request;
-                request.clear_old_cookies = false;
-                request.method = config.crud_update_method;
-                if (header_tracked || config.crud_resource_header_name.empty())
-                {
-                    request.uri.typeOfAction = "sameWithLastOne";
-                }
-                else
-                {
-                    request.uri.typeOfAction = "fromResponseHeader";
-                    request.uri.input = config.crud_resource_header_name;
-                }
-                header_tracked = true;
-                if (config.crud_update_data_file_name.size())
-                {
-                    std::ifstream buffer(config.crud_update_data_file_name);
-                    if (!buffer.good())
-                    {
-                        std::cerr << config.crud_update_data_file_name << " does not exist" << std::endl;
-                        exit(EXIT_FAILURE);
-                    }
-                    std::string payloadStr((std::istreambuf_iterator<char>(buffer)), std::istreambuf_iterator<char>());
-                    request.payload = payloadStr;
-                }
-                config.json_config_schema.scenario.push_back(request);
-            }
-
-            if (config.crud_delete_method.size())
-            {
-                Request request;
-                request.clear_old_cookies = false;
-                request.method = config.crud_delete_method;
-                if (header_tracked || config.crud_resource_header_name.empty())
-                {
-                    request.uri.typeOfAction = "sameWithLastOne";
-                }
-                else
-                {
-                    request.uri.typeOfAction = "fromResponseHeader";
-                    request.uri.input = config.crud_resource_header_name;
-                }
-                header_tracked = true;
-                config.json_config_schema.scenario.push_back(request);
+                request.headers_in_map[header.name] = header.value;
+                request.additonalHeaders.emplace_back(header.name + ":" + header.value);
             }
         }
     }
@@ -1001,10 +902,14 @@ std::vector<std::string> tokenize_string(const std::string& source, const std::s
 
 void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config)
 {
-  for (auto& request : config.json_config_schema.scenario)
+  for (auto& scenario : config.json_config_schema.scenarios)
   {
-      request.tokenized_path = tokenize_string(request.path, config.json_config_schema.variable_name_in_path_and_data);
-      request.tokenized_payload = tokenize_string(request.payload, config.json_config_schema.variable_name_in_path_and_data);
+      assert(scenario.requests.size());
+      for (auto& request : scenario.requests)
+      {
+          request.tokenized_path = tokenize_string(request.path, scenario.variable_name_in_path_and_data);
+          request.tokenized_payload = tokenize_string(request.payload, scenario.variable_name_in_path_and_data);
+      }
   }
 }
 
@@ -1096,27 +1001,37 @@ void ares_socket_state_cb(void *data, int s, int read, int write)
 
 void normalize_request_templates(h2load::Config* config)
 {
-    for (auto& request : config->json_config_schema.scenario)
+    for (auto& scenario : config->json_config_schema.scenarios)
     {
-        if (request.schema.empty())
+        for (auto& request : scenario.requests)
         {
-            request.schema = config->scheme;
-        }
-        if (request.authority.empty())
-        {
-            if (config->port != config->default_port)
+            if (request.uri.typeOfAction != "input")
             {
-                request.authority = config->host + ":" + util::utos(config->port);
+                continue;
             }
-            else
+            bool uri_updated = false;
+            if (request.schema.empty())
             {
-                request.authority = config->host;
+                request.schema = config->scheme;
+                uri_updated = true;
             }
-        }
-        if (request.uri.typeOfAction == "input")
-        {
-            // for output to user to let user know the actual scenario to execute
-            request.uri.input = request.schema + "://" + request.authority + request.path;
+            if (request.authority.empty())
+            {
+                if (config->port != config->default_port)
+                {
+                    request.authority = config->host + ":" + util::utos(config->port);
+                }
+                else
+                {
+                    request.authority = config->host;
+                }
+                uri_updated = true;
+            }
+            if (uri_updated)
+            {
+                // for output to user to let user know the actual scenario to execute
+                request.uri.input = request.schema + "://" + request.authority + request.path;
+            }
         }
     }
 }
@@ -1229,5 +1144,41 @@ void printBacktrace()
         fprintf(stderr, "[%2d]: %s\n", i, addresses[i]);
     }
     free(addresses);
+}
+
+uint64_t find_common_multiple(std::vector<size_t> input)
+{
+    std::set<size_t> unique_values;
+
+    for (auto val: input)
+    {
+        unique_values.insert(val);
+    }
+
+    std::set<size_t> final_set;
+
+    for (auto iter = unique_values.rbegin(); iter!= unique_values.rend(); iter++)
+    {
+        auto val = *iter;
+        auto find_multiple = [val](size_t val_in_set)
+        {
+            if ((val_in_set/val >= 1) && (val_in_set%val == 0))
+            {
+                return true;
+            }
+            return false;
+        };
+        if (std::find_if(final_set.begin(), final_set.end(), find_multiple) == final_set.end())
+        {
+            final_set.insert(val);
+        }
+    }
+
+    uint64_t retVal = 1;
+    for (auto val: final_set)
+    {
+        retVal *= val;
+    }
+    return retVal;
 }
 

@@ -314,7 +314,7 @@ int Http2Session::submit_request()
     }
 
     auto config = client_->worker->config;
-    if (config->json_config_schema.scenario.size())
+    if (config->json_config_schema.scenarios.size())
     {
         return _submit_request();
     }

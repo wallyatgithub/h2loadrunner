@@ -108,8 +108,6 @@ int client_select_next_proto_cb(SSL* ssl, unsigned char** out,
 
 void populate_config_from_json(h2load::Config& config);
 
-void convert_CRUD_operation_to_Json_scenarios(h2load::Config& config);
-
 void insert_customized_headers_to_Json_scenarios(h2load::Config& config);
 
 void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config);
@@ -146,5 +144,8 @@ void connect_to_prefered_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
 void probe_writecb(struct ev_loop* loop, ev_io* w, int revents);
 
 void printBacktrace();
+
+uint64_t find_common_multiple(std::vector<size_t> input);
+
 
 #endif

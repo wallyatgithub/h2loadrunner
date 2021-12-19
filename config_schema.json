@@ -3,272 +3,360 @@
   "description":" h2loadrunner configuration",
   "title":"h2loadrunner_configuration",
   "type":"object",
-  "properties":{
-    "schema":{
+  "properties":
+  {
+    "schema":
+    {
       "description":"http or https",
       "type":"string",
       "default": "http",
       "enum": ["http", "https"]
     },
-    "host":{
+    "host":
+    {
       "description":"host to be tested with load, for example: 192.168.1.1, or, www.h2loadrunner.com",
       "type":"string"
     },
-    "port":{
+    "port":
+    {
       "description":"port, 80, 443 ,etc.",
       "default": 80,
       "type":"integer"
     },
-    "load-share-hosts": {
+    "load-share-hosts":
+    {
       "description": "A list of hosts with optional ports, which together with host in host/port field above would be used as a load share group; h2loadrunner will distribute the connections evenly to each host of the group, so the test traffic is also evenly distributed to each host.",
       "type":"array",
       "minItems":0,
-      "items": {
+      "items":
+      {
         "type": "object",
-        "properties":{
-          "host":{
+        "properties":
+        {
+          "host":
+          {
             "description":"host part, for example: 192.168.1.1, or, www.h2loadrunner.com",
             "type":"string"
           },
-          "port":{
+          "port":
+          {
             "description":"port, 80, 443 ,etc.",
             "default": 80,
             "type":"integer"
           }
         },
-        "required":[
+        "required":
+        [
            "host"
         ]
       }
     },
-    "open-new-connection-based-on-authority-header":{
+    "open-new-connection-based-on-authority-header":
+    {
       "description": "false: h2loadrunner will stick to the connections created with host fields above, and create no dynamic connections; true: request should be routed to the host strictly matching the authority header, so h2loadrunner will create dynamic connections when necessary based on per request configuration (either from input or from previous response header), and route the requests based on the request authority header",
       "default": false,
       "type":"boolean"
     },
-    "connection-retry":{
+    "connection-retry":
+    {
       "description": "false: upon disconnect from host, h2loadrunner will not try open new connection; true: h2loadrunner will try to open new connections upon host disconnect, either to another host in the load share group above, or to the same host if no other host is available; note: after reconnection is made due to peer disconnect, load balance is no longer guaranteed, see next field for more information",
       "default": false,
       "type":"boolean"
     },
-    "switch-back-after-connection-retry":{
+    "switch-back-after-connection-retry":
+    {
       "description": "when connection-retry occurs due to host disconnect, load balance may be broken as mentioned above; this field provide an option to recover; true: h2loadrunner will monitor the host disconnected, and when it is up again (tcp connect is successful), h2loadrunner will re-establish connection to it to reach load balance; false: h2loadrunner will not monitor the host disconnected, and leave the load unbalanced; note: it is not always positive to have this set to true, as it may cause connection to flip-flop when the host itself is unstable",
       "default": false,
       "type":"boolean"
     },
-    "threads":{
+    "threads":
+    {
       "description":"Number of threads. Each thread can run multiple connections (see clients field). Recommendation: thead number matches number of cores",
       "default": 1,
       "type":"integer"
     },
-    "clients":{
+    "clients":
+    {
       "description":"Total number of concurrent clients(connections) to be established to host(s) under test; different connections are running in parallel mode even they are handled by same thread (see threads field). If working together with rate field, this field specifies the total number of connections to be made. This field must have a value no less than threads field.",
       "default": 1,
       "type":"integer"
     },
-    "duration":{
+    "duration":
+    {
       "description":"Specifies the duration (in second) for timing-based benchmarking. The duration field and the rate field are mutually exclusive.",
       "default": 60,
       "type":"integer"
     },
-    "total-requests":{
+    "total-requests":
+    {
       "description":"Number of requests across all clients. This field is ignored if duration field has a positive value, and this field must have a positive value if duration field is blank",
       "default": 1,
       "type":"integer"
     },
-    "warm-up-time":{
+    "warm-up-time":
+    {
       "description":"Specifies the time period (in second) before starting the actual measurements, in case of timing-based benchmarking. Needs non-zero value in duration field for warm-up-time field to work.",
       "type":"integer"
     },
-    "max-concurrent-streams":{
+    "max-concurrent-streams":
+    {
       "description":"each http2 connection can have multiple concurrent streams running in parallel, this field specifies the max concurrent streams for each connection; this field is ignored for http 1.x test",
       "default": 32,
       "type":"integer"
     },
-    "request-per-second":{
+    "request-per-second":
+    {
       "description":"Specifies request per second for each client(connection), so the total number of requests per second would be request-per-second * clients. If no value is given in this field, it will try to send as many as possible requests for each client(connection)",
       "type":"number"
     },
-    "request-per-second-feed-file":{
+    "request-per-second-feed-file":
+    {
       "description":"If given, h2loadrunner will monitor this file; if the file is changed, h2loadrunner will read the first line, and try to interpret it as a number as described in request-per-second field, and if successful, request-per-second is updated with the number dynamically",
       "type":"string"
     },
-    "rate":{
+    "rate":
+    {
       "description":"Specifies a fixed rate at which connections are created. It must be a positive integer, representing the number of connections to be made per rate-period. The maximum number of connections to be made is given in clients field. This rate will be distributed among threads as evenly as possible. For example, with thread=2 and rate=4, each thread gets 2 connections per rate-period, until total number of connections specified in clients field is reached.  When the rate is 0, the program will run as it normally does, creating connections at whatever variable rate it wants. The duration field and the rate field are mutually exclusive.",
       "default": 0,
       "type":"integer"
     },
-    "rate-period":{
+    "rate-period":
+    {
       "description":"Specifies the time period between connection creating connections. The period must be a positive number, representing the length of the period in time. This option is ignored if the rate option is not used.",
       "default": 1,
       "type":"integer"
     },
-    "stream-timeout":{
+    "stream-timeout":
+    {
       "description":"Specifies the maximum time (ms) that h2loadrunner would wait for response before resetting a stream. This field is not applicable for http 1.x test",
       "default": 5000,
       "type":"integer"
     },
-    "variable-name-in-path-and-data":{
-      "description":"Specified the variable name in uri path and payload, which is to be replaced with an actual value between variable-range-start and variable-range-end.",
-      "type":"string"
-    },
-    "variable-range-start":{
-      "description":"Specify variable range start.",
-      "type":"integer"
-    },
-    "variable-range-end":{
-      "description":"Specify variable range end.",
-      "type":"integer"
-    },
-    "variable-range-slicing":{
-      "description": "true: Slice the variable range, each client get a sub range; e.g.: full range 1-1000, with 10 clients, each client gets a sub range of 100 (1-100, 101-200...); false: each client gets a full range",
-      "default": false,
-      "type":"boolean"
-    },
-    "ciphers":{
+    "ciphers":
+    {
       "description":"Set allowed cipher list. The format of the string is described in OpenSSL ciphers(1)",
       "type":"string",
       "default":"ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256"
     },
-    "caCert":{
+    "caCert":
+    {
       "description":"The path to a file whose content is the CA certificate in PEM format. This is used to verify the server certificate",
       "type":"string"
     },
-    "cert":{
+    "cert":
+    {
       "description":"The path to a file whose content is the certificate in PEM format. This is used in mTLS where server requires peer/client certificate",
       "type":"string"
     },
-    "privateKey":{
+    "privateKey":
+    {
       "description":"The full path to a file whose content is the private key in PEM format. This is used by mTLS where server requires peer certificate, thus the private key is also needed",
       "type":"string"
     },
-    "certVerificationMode":{
+    "certVerificationMode":
+    {
       "description": "0: do not do certificate validation; 1: fail if peer certificate does not pass validation",
       "default": 0,
       "type":"integer"
     },
-    "max-tls-version":{
+    "max-tls-version":
+    {
       "type":"string",
       "description": "highest allowed TLS version",
       "default": "TLSv1.3",
       "enum": ["TLSv1.2", "TLSv1.3"]
     },
-    "no-tls-proto":{
+    "no-tls-proto":
+    {
       "description":"Specify ALPN identifier of the protocol to be used when accessing http URI without SSL/TLS. Available protocols: h2c and http/1.1",
       "type":"string",
       "default":"h2c"
     },
-    "connection-active-timeout":{
+    "connection-active-timeout":
+    {
       "description":"Specifies the maximum time (ms) that h2loadrunner is willing to keep a connection open, regardless of the activity on said connection. It must be a positive integer, specifying the amount of time to wait. When no timeout value is set (either active or inactive), the tool will keep a connection open indefinitely, waiting for a response.",
       "type":"integer"
     },
-    "connection-inactivity-timeout":{
+    "connection-inactivity-timeout":
+    {
       "description":"Specifies the amount of time that h2loadrunner is willing to wait to see activity on a given connection. It must be a positive integer, specifying the amount of time to wait. When no timeout value is set (either active or inactive), the tool will keep a connection open indefinitely, waiting for a response.",
       "type":"integer"
     },
-    "interval-between-ping-frames":{
+    "interval-between-ping-frames":
+    {
       "description":"h2loadrunner can send ping frame to peer host to prevent the connection going idle, as a long idle connection might be taken down; this field specifies the max interval (in seconds) between 2 ping frames; if the connection comes out of idle state in less than this interval, next ping frame will not be sent; 0: h2loadrunner will not send ping frames even the connection is idle for long; note: this field is not applicable for http1.x connections",
       "default": 0,
       "type":"integer"
     },
-    "npn-list":{
+    "npn-list":
+    {
       "description":"Comma delimited list of ALPN protocol identifier sorted in the order of preference. That means most desirable protocol comes first. This is used in both ALPN and NPN. The parameter must be delimited by a single comma only and any white spaces are treated as a part of protocol string.",
       "type":"string",
       "default":"h2,h2-16,h2-14,http/1.1"
     },
-    "header-table-size":{
+    "header-table-size":
+    {
       "description":"Specify decoder header table size.",
       "default": 4096,
       "type":"integer"
     },
-    "encoder-header-table-size":{
+    "encoder-header-table-size":
+    {
       "description":"Specify encoder header table size. The decoder (server) specifies the maximum dynamic table size it accepts. Then the negotiated dynamic table size is the minimum of this option value and the value which server specified.",
       "default": 4096,
       "type":"integer"
     },
-    "log-file":{
+    "log-file":
+    {
       "description":"Write per-request information to a file with name specified here",
       "type":"string"
     },
-    "window-bits":{
-      "description":"Sets the stream level initial window size to (2**<N>)-1",
+    "window-bits":
+    {
+      "description":"Sets the stream level initial window size to (2^<window-bits>)-1",
       "default": 30,
       "type":"integer"
     },
-    "connection-window-bits":{
-      "description":"Sets the connection level initial window size to (2**<N>)-1",
+    "connection-window-bits":
+    {
+      "description":"Sets the connection level initial window size to (2^<connection-window-bits>)-1",
       "default": 30,
       "type":"integer"
     },
-    "scenario":{
-      "description":"Array of requests, each request has URI, method, optional payload, optional addtional headers, and optionally an lua script for advanced users to customize the request",
+    "Scenarios":
+    {
+      "description":"Array of scenarios, each scenario has a name, a weight, and a list of requests to be executed",
       "type":"array",
       "minItems":1,
-      "items": {
-      "type": "object",
-        "properties":{
-          "uri":{
-            "description": "This could be a full URI with schema, authority, path, etc., or, it can be path only, in the latter case, the global schema, host, port fields would be used to construct the full URI",
-            "type":"object",
-            "properties":{
-              "typeOfAction": {
-                "type":"string",
-                "description": "Specifies how to generate the URI. input: direct input in input field followed next; sameWithLastOne: same URI with last request; fromResponseHeader: extract the URI for this request from a specific header (name specified in input field) of last response; fromLuaScript: provide URI by lua script (see field luaScript); fromXpath: Search XML body of last response for the XPATH value given in input field (to be implemented); fromJsonPointer: Search Json body of last response body for the Json pointer value given in input field (to be implemented)",
-                "enum": ["input", "sameWithLastOne", "fromResponseHeader", "fromLuaScript", "fromXPath", "fromJsonPointer"]
-              },
-              "input": {
-                "description": "input needed to execute the typeOfAction above",
-                "type":"string"
-              }
-            }
+      "items":
+      {
+        "description":"A scenario is a list of requests to be executed sequentially for each user; different users of the same scenario can be executed in parallel however, even in the same connection.",
+        "type":"object",
+        "properties":
+        {
+          "name":
+          {
+            "description":"name of the scenario, use for statistics output",
+            "type":"string"
           },
-          "clear-old-cookies":{
-            "description": "clear cookies before executing this request: cookies received prior to this request, will be cleared, and will not be included in Cookie header of this request and after; Cookies header (if any) in additonalHeaders below for this request, will still be sent (but will not be passed on to next request)",
+          "weight":
+          {
+            "description":"weight of this scenario among all scenarios; the chance for this scenario to be schedule to run is: weight / total weight of all scenarios",
+            "type":"integer"
+          },
+          "variable-name-in-path-and-data":
+          {
+            "description":"Specified the variable name in uri path and payload, which is to be replaced with an actual value between variable-range-start and variable-range-end.",
+            "type":"string"
+          },
+          "variable-range-start":
+          {
+            "description":"Specify variable range start.",
+            "type":"integer"
+          },
+          "variable-range-end":
+          {
+            "description":"Specify variable range end.",
+            "type":"integer"
+          },
+          "variable-range-slicing":
+          {
+            "description": "true: Slice the variable range, each client get a sub range; e.g.: full range 1-1000, with 10 clients, each client gets a sub range of 100 (1-100, 101-200...); false: each client gets a full range",
             "default": false,
             "type":"boolean"
           },
-          "method":{
-            "description": "method of the HTTP(2) request",
-            "default": "GET",
-            "type":"string"
-          },
-          "payload":{
-            "description": "http message content, or a filename containing the actual content",
-            "type":"string"
-          },
-          "additonalHeaders":{
-          "description": "additional headers to include in this request. Valid format for each header: pair of strings with : in the middle; for example, user-agent: h2loadrunner",
-          "type": "array",
-          "items": {
-             "type": "string"
+          "Requests":
+          {
+            "description":"Array of requests, each request has URI, method, optional payload, optional addtional headers, and optionally an lua script for advanced users to customize the request",
+            "type":"array",
+            "minItems":1,
+            "items":
+            {
+            "type": "object",
+              "properties":
+              {
+                "uri":
+                {
+                  "description": "This could be a full URI with schema, authority, path, etc., or, it can be path only, in the latter case, the global schema, host, port fields would be used to construct the full URI",
+                  "type":"object",
+                  "properties":
+                  {
+                    "typeOfAction":
+                    {
+                      "type":"string",
+                      "description": "Specifies how to generate the URI. input: direct input in input field followed next; sameWithLastOne: same URI with last request; fromResponseHeader: extract the URI for this request from a specific header (name specified in input field) of last response; fromLuaScript: provide URI by lua script (see field luaScript); fromXpath: Search XML body of last response for the XPATH value given in input field (to be implemented); fromJsonPointer: Search Json body of last response body for the Json pointer value given in input field (to be implemented)",
+                      "enum": ["input", "sameWithLastOne", "fromResponseHeader", "fromLuaScript", "fromXPath", "fromJsonPointer"]
+                    },
+                    "input":
+                    {
+                      "description": "input needed to execute the typeOfAction above",
+                      "type":"string"
+                    }
+                  }
+                },
+                "clear-old-cookies":
+                {
+                  "description": "clear cookies before executing this request: cookies received prior to this request, will be cleared, and will not be included in Cookie header of this request and after; Cookies header (if any) in additonalHeaders below for this request, will still be sent (but will not be passed on to next request)",
+                  "default": false,
+                  "type":"boolean"
+                },
+                "method":
+                {
+                  "description": "method of the HTTP(2) request",
+                  "default": "GET",
+                  "type":"string"
+                },
+                "payload":
+                {
+                  "description": "http message content, or a filename containing the actual content",
+                  "type":"string"
+                },
+                "additonalHeaders":
+                {
+                  "description": "additional headers to include in this request. Valid format for each header: pair of strings with : in the middle; for example, user-agent: h2loadrunner",
+                  "type": "array",
+                  "items":
+                  {
+                    "type": "string"
+                  }
+                },
+                "luaScript":
+                {
+                  "type":"string",
+                  "description": "lua script (or a filename containing the actual script) with a function named make_request, handling 4 arguments: response_headers, response_payload, request_headers_to_send, request_payload_to_send; returning request_headers_to_send and request_payload_to_send. h2loadrunner passes the response headers and payload of last request within this scenarios sequence, and the request headers (path, method, additional headers) and payload specified here, to this lua function, which can update the request headers and request payload, and h2loadrunner will use the updated headers and payload for the request. Example script: function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send) return request_headers_to_send, request_payload_to_send end"
+                },
+                "expected-status-code":
+                {
+                  "description":"the expected http status code for this request; if the returned status code matches the one specified here, this request is considered successful in statistics report; if nothing or 0 is specified here, 2xx status codes (i.e., 200, 201, 204, etc.) are all considered successful",
+                  "default": 0,
+                  "type":"integer"
+                },
+                "delay-before-executing-next":
+                {
+                  "description":"miliseconds to delay before executing the next request within the same scenario; granularity: 10ms, i.e., setting 115ms delay would cause an actual delay of 120ms",
+                  "default": 0,
+                  "type":"integer"
+                }
+              },
+              "required":[
+                 "uri",
+                 "method"
+              ]
             }
           },
-          "luaScript": {
-            "type":"string",
-            "description": "lua script (or a filename containing the actual script) with a function named make_request, handling 4 arguments: response_headers, response_payload, request_headers_to_send, request_payload_to_send; returning request_headers_to_send and request_payload_to_send. h2loadrunner passes the response headers and payload of last request within this scenarios sequence, and the request headers (path, method, additional headers) and payload specified here, to this lua function, which can update the request headers and request payload, and h2loadrunner will use the updated headers and payload for the request. Example script: function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send) return request_headers_to_send, request_payload_to_send end"
-          },
-          "expected-status-code": {
-            "description":"the expected http status code for this request; if the returned status code matches the one specified here, this request is considered successful in statistics report; if nothing or 0 is specified here, 2xx status codes (i.e., 200, 201, 204, etc.) are all considered successful",
-            "default": 0,
-            "type":"integer"
-          },
-          "delay-before-executing-next": {
-            "description":"miliseconds to delay before executing the next request within the same scenario; granularity: 10ms, i.e., setting 115ms delay would cause an actual delay of 120ms",
-            "default": 0,
-            "type":"integer"
-          }
-        },
-        "required":[
-           "uri",
-           "method"
-        ]
+          "required":[
+             "name",
+             "Requests"
+          ]
+        }
       }
     }
   },
-  "required":[
+  "required":
+  [
     "schema",
     "host",
-    "scenario"
+    "Scenarios"
   ]
 }
 
