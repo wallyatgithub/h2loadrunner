@@ -213,13 +213,13 @@
     },
     "window-bits":
     {
-      "description":"Sets the stream level initial window size to (2^<window-bits>)-1",
+      "description":"Sets the stream level initial window size to (2^window-bits)-1",
       "default": 30,
       "type":"integer"
     },
     "connection-window-bits":
     {
-      "description":"Sets the connection level initial window size to (2^<connection-window-bits>)-1",
+      "description":"Sets the connection level initial window size to (2^connection-window-bits)-1",
       "default": 30,
       "type":"integer"
     },
@@ -242,6 +242,7 @@
           "weight":
           {
             "description":"weight of this scenario among all scenarios; the chance for this scenario to be schedule to run is: weight / total weight of all scenarios",
+            "default": 100,
             "type":"integer"
           },
           "variable-name-in-path-and-data":
@@ -343,12 +344,12 @@
                  "method"
               ]
             }
-          },
-          "required":[
-             "name",
-             "Requests"
-          ]
-        }
+          }
+        },
+        "required":[
+           "name",
+           "Requests"
+        ]
       }
     }
   },
@@ -359,4 +360,3 @@
     "Scenarios"
   ]
 }
-
