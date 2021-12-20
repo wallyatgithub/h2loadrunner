@@ -3,6 +3,10 @@
 #include <iostream>
 #include <atomic>
 #include <set>
+#include <thread>
+#include <vector>
+#include <sstream>
+#include <stdlib.h>
 
 #include <ev.h>
 #include <openssl/ssl.h>
@@ -18,6 +22,7 @@ extern "C" {
 #include "h2load_Config.h"
 #include "h2load_Worker.h"
 #include "h2load_Cookie.h"
+#include "h2load_stats.h"
 
 #include "h2load_http1_session.h"
 #include "h2load_http2_session.h"
@@ -146,6 +151,11 @@ void probe_writecb(struct ev_loop* loop, ev_io* w, int revents);
 void printBacktrace();
 
 uint64_t find_common_multiple(std::vector<size_t> input);
+
+std::vector<h2load::SDStat>
+process_traffic_mix_request_stats(const std::vector<std::unique_ptr<h2load::Worker>>& workers);
+
+void output_realtime_stats(h2load::Config& config, std::vector<std::unique_ptr<h2load::Worker>>& workers, std::atomic<bool>& workers_stopped, std::stringstream& DatStream);
 
 
 #endif
