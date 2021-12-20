@@ -1967,6 +1967,7 @@ bool Client::prepare_next_request(Request_Data& finished_request)
     }
 
     Request_Data new_request;
+    new_request.scenario_index = scenario_index;
     new_request.transaction_stat = finished_request.transaction_stat;
     new_request.next_request_idx = ((curr_index + 1) % scenario.requests.size());
 
