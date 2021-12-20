@@ -85,10 +85,10 @@ public:
     {
         h->add_property("name", &this->name);
         h->add_property("weight", &this->weight, staticjson::Flags::Optional);
-        h->add_property("variable-name-in-path-and-data", &this->variable_name_in_path_and_data, staticjson::Flags::Optional);
-        h->add_property("variable-range-start", &this->variable_range_start, staticjson::Flags::Optional);
-        h->add_property("variable-range-end", &this->variable_range_end, staticjson::Flags::Optional);
-        h->add_property("variable-range-slicing", &this->variable_range_slicing, staticjson::Flags::Optional);
+        h->add_property("user-id-variable-in-path-and-data", &this->variable_name_in_path_and_data, staticjson::Flags::Optional);
+        h->add_property("user-id-range-start", &this->variable_range_start, staticjson::Flags::Optional);
+        h->add_property("user-id-range-end", &this->variable_range_end, staticjson::Flags::Optional);
+        h->add_property("user-id-range-slicing", &this->variable_range_slicing, staticjson::Flags::Optional);
         h->add_property("Requests", &this->requests);
     }
     explicit Scenario():

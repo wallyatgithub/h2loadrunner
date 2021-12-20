@@ -1,6 +1,6 @@
 {
   "schema": "http",
-  "host": "172.29.22.171",
+  "host": "192.168.1.107",
   "port": 8080,
   "load-share-hosts": [],
   "open-new-connection-based-on-authority-header": false,
@@ -37,10 +37,10 @@
     {
       "name": "subscribe-update-delete-get",
       "weight": 100,
-      "variable-name-in-path-and-data": "-user-name",
-      "variable-range-start": 0,
-      "variable-range-end": 100000000,
-      "variable-range-slicing": true,
+      "user-id-variable-in-path-and-data": "-user-name",
+      "user-id-range-start": 0,
+      "user-id-range-end": 100000000,
+      "user-id-range-slicing": true,
       "Requests": [
         {
           "uri": {
@@ -108,10 +108,10 @@
     {
       "name": "subscribe-delete-get",
       "weight": 100,
-      "variable-name-in-path-and-data": "-user-name",
-      "variable-range-start": 0,
-      "variable-range-end": 100000000,
-      "variable-range-slicing": true,
+      "user-id-variable-in-path-and-data": "-user-name",
+      "user-id-range-start": 0,
+      "user-id-range-end": 100000000,
+      "user-id-range-slicing": true,
       "Requests": [
         {
           "uri": {
