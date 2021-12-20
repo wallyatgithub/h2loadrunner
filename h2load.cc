@@ -133,7 +133,7 @@ Stats::Stats(size_t req_todo, size_t nclients)
       transaction_successful(0)
       {}
 
-Stream::Stream() : req_stat {}, status_success(-1) {}
+Stream::Stream(size_t traffic_mix_id) : req_stat(traffic_mix_id), status_success(-1) {}
 
 namespace
 {
