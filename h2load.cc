@@ -1494,11 +1494,10 @@ int main(int argc, char** argv)
 
     auto start = std::chrono::steady_clock::now();
     std::atomic<bool> workers_stopped;
-    workers_stopped = (config.nreqs == 1);
+    workers_stopped = false;
 
-    bool should_run_stats = ((workers_stopped == false) && (config.json_config_schema.scenarios.size() > 0));
     std::stringstream DatStream;
-    auto statFunc = [&workers, &should_run_stats, &DatStream, start]()
+    auto statFunc = [&workers, &workers_stopped, &DatStream]()
     {
         size_t totalReq_sent_till_now = 0;
         size_t totalResp_received_till_now = 0;
@@ -1518,8 +1517,8 @@ int main(int argc, char** argv)
         std::vector<size_t> scenario_trans_till_now(config.json_config_schema.scenarios.size(), 0);
         std::vector<size_t> scenario_trans_success_till_now(config.json_config_schema.scenarios.size(), 0);
 
-        auto period_start = start;
-        while (should_run_stats)
+        auto period_start = std::chrono::steady_clock::now();
+        while (!workers_stopped)
         {
             auto totalReq_sent_till_last_interval = totalReq_sent_till_now;
             auto total_resp_received_till_last_interval = totalResp_received_till_now;
@@ -1588,7 +1587,7 @@ int main(int argc, char** argv)
             DatStream.str("");
             colStream << "time scope total-sent total-recv total-success recv/sent(total) success/recv(total) sent/s received/s success/s recv/sent(per sec) success/recv(per sec) 3xx/s 4xx/s 5xx/s max-latency(ms) min-latency avg-latency";
             DatStream << std::put_time(std::localtime(&now_c), "%c")
-                      << ", " << "global"
+                      << ", " << "All Scenarios"
                       << ", " << totalReq_sent_till_now << ", " << totalResp_received_till_now << ", " << totalReq_success_till_now
                       << ", " << (totalReq_sent_till_now?(((double)totalResp_received_till_now / totalReq_sent_till_now) * 100):0) << "%"
                       << ", " << (totalResp_received_till_now?(((double)totalReq_success_till_now / totalResp_received_till_now) * 100):0) << "%"
@@ -1600,9 +1599,9 @@ int main(int argc, char** argv)
                       << ", " << delta_RPS_3xx  << ", " << delta_RPS_4xx << ", " << delta_RPS_5xx << ", "
                       << max_resp_time_ms << ", " << min_resp_time_ms << ", " << (delta_RPS_received?total_resp_time_ms/delta_RPS_received:max_resp_time_ms);
                       std::cout<<colStream.str()<<std::endl;
-                      std::cout<<DatStream.str()<<std::endl;
+            std::cout<<DatStream.str()<<std::endl;
 
-            for (size_t index = 0; config.json_config_schema.scenarios.size(); index++)
+            for (size_t index = 0; index < config.json_config_schema.scenarios.size(); index++)
             {
                 scenario_req_sent_till_now[index] = 0;
                 scenario_resp_received_till_now[index] = 0;
@@ -1647,9 +1646,11 @@ int main(int argc, char** argv)
                 ScenarioDatStream
                           << std::put_time(std::localtime(&now_c), "%c")
                           << ", " << "scenario-"<<config.json_config_schema.scenarios[index].name
-                          << ", " << totalReq_sent_till_now << ", " << totalResp_received_till_now << ", " << totalReq_success_till_now
-                          << ", " << (totalReq_sent_till_now?(((double)totalResp_received_till_now / totalReq_sent_till_now) * 100):0) << "%"
-                          << ", " << (totalResp_received_till_now?(((double)totalReq_success_till_now / totalResp_received_till_now) * 100):0) << "%"
+                          << ", " << scenario_req_sent_till_now[index]
+                          << ", " << scenario_resp_received_till_now[index]
+                          << ", " << scenario_req_success_till_now[index]
+                          << ", " << (scenario_req_sent_till_now[index]?(((double)scenario_resp_received_till_now[index] / scenario_req_sent_till_now[index]) * 100):0) << "%"
+                          << ", " << (scenario_resp_received_till_now[index]?(((double)scenario_req_success_till_now[index] / scenario_resp_received_till_now[index]) * 100):0) << "%"
                           << ", " << round((double)(1000*delta_RPS_sent)/period_duration)
                           << ", " << round((double)(1000*delta_RPS_received)/period_duration)
                           << ", " << round((double)(1000*delta_RPS_success)/period_duration)
@@ -1657,13 +1658,15 @@ int main(int argc, char** argv)
                           << ", " << (delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0) << "%"
                           << ", " << delta_RPS_3xx  << ", " << delta_RPS_4xx << ", " << delta_RPS_5xx << ", "
                           << max_resp_time_ms << ", " << min_resp_time_ms << ", " << (delta_RPS_received?total_resp_time_ms/delta_RPS_received:max_resp_time_ms);
-                          std::cout<<colStream.str()<<std::endl;
-                          std::cout<<DatStream.str()<<std::endl;
+                std::cout<<ScenarioDatStream.str()<<std::endl;
             }
         }
     };
-    std::thread statThread(statFunc);
-    statThread.detach();
+    if (config.json_config_schema.scenarios.size() > 0)
+    {
+        std::thread statThread(statFunc);
+        statThread.detach();
+    }
 
     auto rpsMonitorFunc = [&workers_stopped]()
     {
@@ -1887,6 +1890,49 @@ time for request: )"
               << std::setw(10) << ts.rps.max << "  " << std::setw(10)
               << ts.rps.mean << "  " << std::setw(10) << ts.rps.sd << std::setw(9)
               << util::dtos(ts.rps.within_sd) << "%" << std::endl;
+
+    if (config.json_config_schema.scenarios.size())
+    {
+        std::stringstream colStream;
+        colStream << "scenario-name traffic-percentage total-req-sent total-resp-recv total-resp-success total-3xx-resp total-4xx-resp total-5xx-resp";
+        std::cout<<colStream.str()<<std::endl;
+
+        for (size_t index = 0; index < config.json_config_schema.scenarios.size(); index++)
+        {
+            size_t req_sent = 0;
+            size_t resp_received = 0;
+            size_t resp_success = 0;
+            size_t resp_3xx = 0;
+            size_t resp_4xx = 0;
+            size_t resp_5xx = 0;
+            size_t trans = 0;
+            size_t trans_success = 0;
+            for (auto& w : workers)
+            {
+                auto& s = *(w->scenario_stats[index]);
+                req_sent += s.req_started;
+                resp_received += s.req_done;
+                resp_success += s.req_status_success;
+                resp_3xx += s.status[3];
+                resp_4xx += s.status[4];
+                resp_5xx += s.status[5];
+                trans += s.transaction_done;
+                trans_success += s.transaction_successful;
+            }
+
+            std::stringstream dataStream;
+            dataStream << config.json_config_schema.scenarios[index].name
+                       << ", " <<(stats.req_done ? (double)(resp_received*100)/stats.req_done : 0) <<"%"
+                       << ", " <<req_sent
+                       << ", " <<resp_received
+                       << ", " <<resp_success
+                       << ", " <<resp_3xx
+                       << ", " <<resp_4xx
+                       << ", " <<resp_5xx;
+            std::cout<<dataStream.str()<<std::endl;
+        }
+    }
+
 
     SSL_CTX_free(ssl_ctx);
 

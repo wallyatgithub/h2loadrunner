@@ -101,13 +101,47 @@
 
 # Usage
 
-  h2loadrunner supports JSON based configuration input, and this is the recommended way.
+  h2loadrunner uses JSON based configuration.
   
   With this feature, h2loadrunner can support flexible scenario combinations.
   
-  Json schema: https://github.com/wallyatgithub/h2loadrunner/blob/main/config_schema.json
+  h2loadrunner Json schema: https://github.com/wallyatgithub/h2loadrunner/blob/main/config_schema.json
    
-  It is recommended to use a GUI based Json editor to load the Json schema above to edit and then export the Json configuration data.
+  It has a section called "scenarios", which is an arrary of "scenario".
+
+  Each scenario is associated with a name, a weight, and a list of requests.
+  
+  The name of the scenario is used in statistics output;
+  
+  The weight determines the ratio of the traffic from this scenario to all traffic. For example:
+    
+    If there are 2 scenarios, the first scenario has weight = 400, and 4 requests; the other scenario has weight = 100, and 8 requests.
+    
+    Then h2loadrunner will schedule the 2 scenario to make sure:
+    
+    80% of the requests (400/(400+100)) in the traffic mix, are the 4 requests of the first scenario;
+    
+    20% of the requests (100/(400+100)) in the traffic mix, are the 8 requests of the second scenario.
+  
+  Different scenarios will run in parallel.
+  
+  Same scenario of different users (see variable-name-in-path-and-data field, each instance of the varible in range represents a user), will also run in parallel.
+  
+  Each scenario has a list of requests; requests of the same scenario for the same user will be executed sequentially.
+
+  For example, h2loadrunner can start 1000 parallel "scenario" on 100 connections (with concurrent streams), each "scenario" has a list of requests representing a user's activities in sequence.
+  
+  The 1000 "scenario" are executed in parallel, while within each "scenario", the requests are executed sequentially. 
+  
+  Each request has several basic fields, like path, method, payload, and additonalHeaders, and also a field called "luaScript" (see below).
+  
+  path, method, payload, and additonalHeaders, as the names suggest, are the path header, method header, message body, and other additional headers (such as user-agent) to build the request.
+  
+  In which the path field is a compound structure, which aims to provide some quick and handy options for quick definition of some typical test scenario. 
+  
+  For example, the user can specify in the path field to copy the path from the request prior to this one (sameWithLastOne), or to extract the path value from some specific header of the response responding to the request prior to this one (extractFromLastResponseHeader). Of course, direct input of the path is also supported.
+  
+  To generate configuration file from the Json schema above, it is recommended to use a GUI based Json editor.
 
   There are a couple of online Json editors available, for example: 
 
@@ -115,42 +149,19 @@
 	
     https://pmk65.github.io/jedemov2/dist/demo.html
 
-  Take https://json-editor.github.io/json-editor/ for example:
+  Take https://pmk65.github.io/jedemov2/dist/demo.html for example:
   
-  Paste raw content of https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/config_schema.json to "Schema" field of the above link
+  Paste raw content of https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/config_schema.json to edit box of "Schema" tab of the above link
   
-  Then click "Update Schema", a form named h2loadrunner_configuration is available on top 
+  Then click "Generate Form" button, a form named h2loadrunner_configuration is available in top left "Form" tab
   
   Check the help text associated with each field, to know what to fill/choose for each field.
 
   Leave the field with the default value if you are not sure what to fill/choose.
 
-  Special notes:
+  After finishing editing the form, click "Output" tab, to get the JSON data from the edit box.
   
-  H2loadrunner Json schema has a section called "scenario", and "scenario" is a list of requests, that h2loadrunner will execute sequentially.
-  
-  Note: Sequential execution is valid for requests within one "scenario"; h2loadrunner will keep track of the request and response of each request, and the next request can be started only if the response of the prior request is received. 
-  
-  Although request within the "scenario" are executed sequentially, yet h2loadrunner can run many "scenario" in parallel.
-
-  For example, h2loadrunner can start 1000 parallel "scenario" on 100 connections (with concurrent streams), each "scenario" has a list of requests representing a user's activities in sequence.
-  
-  The 1000 "scenario" are executed in parallel, while within each "scenario", the requests are executed sequentially. 
-  
-  As said before, "scenario" is a list of requests, while each request has several basic fields, like path, method, payload, and additonalHeaders, and also a field called "luaScript" (see below).
-  
-  path, method, payload, and additonalHeaders, as the names suggest, are the path header, method header, message body, and other additional headers (such as user-agent) to build the request.
-  
-  In which the path field is a compound structure, which aims to provide some quick and handy options for quick definition of some typical test scenario. 
-  
-  For example, the user can specify in the path field to copy the path from the request prior to this one (sameWithLastOne), or to extract the path value from some specific header of the response responding to the request prior to this one (extractFromLastResponseHeader). Of course, direct input of the path is also supported.
-
-
-  After finishing editing, click "Update Form" to get the JSON data at the right side.
-  
-  Save it to a file <JSON FILE>, then use h2loadrunner --config-file=<JSON FILE> to start the load run
-  
-  You can also paste stored JSON data back to the right side, and click "Update Form", to sychronize that in the left side form for further edit in GUI.  
+  Copy the content of the edit box and save it to a file <JSON FILE>, then use h2loadrunner --config-file=<JSON FILE> to start the load run
 
   Example screenshot of another Json editor at https://pmk65.github.io/jedemov2/dist/demo.html:
   
@@ -158,7 +169,7 @@
   ![Example of GUI configuration of scenario](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor-scenario.png)
   
   
-  If wanted, it is still possible to override parameters with command line interface after the Json configuration file is provided.
+  If wanted, it is possible to override some parameters with command line interface after the Json configuration file is provided.
 
   For example, with this command line:
 
@@ -173,7 +184,7 @@
 
   Like wrk/wrk2, h2loadrunner supports Lua script, capable of customizing every header and payload of the request to be sent.
   
-  The "luaScript" field is associated with each request within the "scenario" section. The Lua script will be executed by h2loadrunner for the request, as long as the request has a valid snippet of script (see next for format and naming convention of the snippet of script).
+  The "luaScript" field is associated with each request within the "scenarios" section. The Lua script will be executed by h2loadrunner for the request, as long as the request has a valid snippet of script (see next for format and naming convention of the snippet of script).
 
   "luaScript" field can be filled with a snippet of needed lua script directly, or with the path/name of a file, which has the script.
 
