@@ -245,24 +245,24 @@
             "default": 100,
             "type":"integer"
           },
-          "variable-name-in-path-and-data":
+          "user-id-variable-in-path-and-data":
           {
-            "description":"Specified the variable name in uri path and payload, which is to be replaced with an actual value between variable-range-start and variable-range-end.",
+            "description":"Specified the variable name in uri path and payload, which is considered as a user-id, and is to be replaced with an actual value between user-id-range-start and user-id-range-end.",
             "type":"string"
           },
-          "variable-range-start":
+          "user-id-range-start":
           {
             "description":"Specify variable range start.",
             "type":"integer"
           },
-          "variable-range-end":
+          "user-id-range-end":
           {
             "description":"Specify variable range end.",
             "type":"integer"
           },
-          "variable-range-slicing":
+          "user-id-range-slicing":
           {
-            "description": "true: Slice the variable range, each client get a sub range; e.g.: full range 1-1000, with 10 clients, each client gets a sub range of 100 (1-100, 101-200...); false: each client gets a full range",
+            "description": "true: Slice the user-id range, each client get a sub range; e.g.: full range 1-1000, with 10 clients, each client gets a sub range of 100 (1-100, 101-200...); false: each client gets a full range",
             "default": false,
             "type":"boolean"
           },
