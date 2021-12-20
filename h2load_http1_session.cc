@@ -383,14 +383,14 @@ int Http1Session::_submit_request()
         std::cout<<"sending headers:"<<req<<std::endl;
     }
 
+    client_->requests_awaiting_response[stream_req_counter_] = std::move(data);
+
     client_->on_request_start(stream_req_counter_);
 
     auto req_stat = client_->get_req_stat(stream_req_counter_);
 
     client_->record_request_time(req_stat);
     client_->wb.append(req);
-
-    client_->requests_awaiting_response[stream_req_counter_] = std::move(data);
 
     if (data.req_payload->empty())
     {

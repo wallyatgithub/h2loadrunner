@@ -24,6 +24,11 @@ struct RequestStat
     // true if stream was successfully closed.  This means stream was
     // not reset, but it does not mean HTTP level error (e.g., 404).
     bool completed;
+    size_t traffic_mix_index;
+
+    explicit RequestStat(size_t traffic_mix_id):
+      traffic_mix_index(traffic_mix_id)
+    {};
 };
 
 struct TransactionStat
@@ -142,7 +147,7 @@ struct Stream
 {
     RequestStat req_stat;
     int status_success;
-    Stream();
+    Stream(size_t traffic_mix_id);
 };
 
 

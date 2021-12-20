@@ -736,7 +736,21 @@ void Client::terminate_session()
 
 void Client::on_request_start(int32_t stream_id)
 {
-    streams[stream_id] = Stream();
+    size_t traffic_mix_id = 0;
+    if (worker->scenario_stats.size() > 0)
+    {
+        auto request_data = requests_awaiting_response.find(stream_id);
+        if (request_data != requests_awaiting_response.end())
+        {
+            traffic_mix_id = request_data->second.scenario_index;
+        }
+    }
+
+    if (streams.count(stream_id))
+    {
+        streams.erase(stream_id);
+    }
+    streams.insert(std::make_pair(stream_id, Stream(traffic_mix_id)));
     auto curr_timepoint = std::chrono::steady_clock::now();
     stream_timestamp.insert(std::make_pair(curr_timepoint, stream_id));
 }
@@ -980,7 +994,7 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
             ++worker->stats.req_success;
             ++cstat.req_success;
 
-            if (streams[stream_id].status_success == 1)
+            if (streams.count(stream_id) && streams.at(stream_id).status_success == 1)
             {
                 ++worker->stats.req_status_success;
             }
@@ -1010,13 +1024,14 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
 
         if (finished_request != requests_awaiting_response.end())
         {
+            bool status_success = (streams.count(stream_id) && streams.at(stream_id).status_success == 1) ? true : false;
             update_scenario_based_stats(finished_request->second.scenario_index, success,
-                                        streams[stream_id].status_success, resp_time_ms.count());
+                                        status_success, resp_time_ms.count());
             if (is_leading_request(finished_request->second))
             {
                 cstat.leading_req_done++;
             }
-            finished_request->second.transaction_stat->successful = (streams[stream_id].status_success == 1);
+            finished_request->second.transaction_stat->successful = status_success;
         }
 
         if (worker->config->log_fd != -1)

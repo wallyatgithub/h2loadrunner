@@ -469,9 +469,9 @@ int Http2Session::_submit_request()
         return -1;
     }
 
-    client_->on_request_start(stream_id);
     client_->curr_stream_id = stream_id;
     client_->requests_awaiting_response.insert(std::make_pair(stream_id, std::move(data)));
+    client_->on_request_start(stream_id);
     return 0;
 }
 
