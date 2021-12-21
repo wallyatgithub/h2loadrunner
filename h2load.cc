@@ -1687,8 +1687,8 @@ int main(int argc, char** argv)
 finished in )"
               << util::format_duration(duration) << ", " << rps << " req/s, "
               << util::utos_funit(bps) << R"(B/s
-requests: )" << stats.req_todo
-              << " total, " << stats.req_started << " started, " << stats.req_done
+requests: )" /*<< stats.req_todo
+              << " total, " */<< stats.req_started << " started, " << stats.req_done
               << " done, " << stats.req_status_success << " succeeded, "
               << stats.req_failed << " failed, " << stats.req_error
               << " errored, " << stats.req_timedout << R"( timeout
