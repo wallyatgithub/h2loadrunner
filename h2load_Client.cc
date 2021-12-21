@@ -53,8 +53,6 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         parent_client(parent),
         schema(dest_schema),
         authority(dest_authority),
-        totalTrans_till_last_check(0),
-        total_leading_Req_till_last_check(0),
         rps(conf->rps)
 {
     if (req_todo == 0)   // this means infinite number of requests are to be made
@@ -119,9 +117,6 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         }
     }
 
-    timestamp_of_last_rps_check = std::chrono::steady_clock::now();
-    timestamp_of_last_tps_check = timestamp_of_last_rps_check;
-
     if (!parent)
     {
         auto init_hosts = [this, conf]()
@@ -185,9 +180,6 @@ void Client::init_timer_watchers()
     ev_timer_init(&send_ping_watcher, ping_w_cb, 0., config->json_config_schema.interval_to_send_ping);
     send_ping_watcher.data = this;
 
-    ev_timer_init(&adaptive_traffic_watcher, adaptive_traffic_timeout_cb, 1.0, 1.0);
-    adaptive_traffic_watcher.data = this;
-
     ev_timer_init(&delayed_reconnect_watcher, reconnect_to_used_host_cb, 1.0, 0.0);
     delayed_reconnect_watcher.data = this;
 
@@ -223,18 +215,6 @@ Client::~Client()
         parent_client->dest_clients.erase(dest);
     }
 
-/*
- * client is deleted in writecb/readcb
-
-    for (auto& client: dest_clients)
-    {
-        if (client.second != this)
-        {
-            delete client.second;
-        }
-    }
-    dest_clients.clear();
-*/
     ares_freeaddrinfo(ares_addr);
 }
 
@@ -480,7 +460,6 @@ void Client::disconnect()
     stop_timer_watcher(connection_timeout_watcher);
     stop_timer_watcher(delayed_request_watcher);
     stop_timer_watcher(send_ping_watcher);
-    stop_timer_watcher(adaptive_traffic_watcher);
     stop_timer_watcher(delayed_reconnect_watcher);
     stop_timer_watcher(connect_to_preferred_host_watcher);
 
@@ -580,9 +559,11 @@ int Client::submit_request()
     if (destination_client->state == CLIENT_CONNECTED)
     {
         size_t scenario_index = 0;
+        size_t request_index = 0;
         if (config->json_config_schema.scenarios.size() && destination_client->requests_to_submit.size())
         {
             scenario_index = destination_client->requests_to_submit.front().scenario_index;
+            request_index = destination_client->requests_to_submit.front().curr_request_idx;
         }
         auto retCode = destination_client->session->submit_request();
 
@@ -607,9 +588,10 @@ int Client::submit_request()
             {
                 --req_left;
             }
-            if (scenario_index < worker->scenario_stats.size())
+            if (scenario_index < worker->scenario_stats.size()&&
+                request_index < worker->scenario_stats[scenario_index].size())
             {
-                ++worker->scenario_stats[scenario_index]->req_started;
+                ++worker->scenario_stats[scenario_index][request_index]->req_started;
             }
         }
         // if an active timeout is set and this is the last request to be submitted
@@ -736,13 +718,15 @@ void Client::terminate_session()
 
 void Client::on_request_start(int32_t stream_id)
 {
-    size_t traffic_mix_id = 0;
+    size_t scenario_index = 0;
+    size_t request_index = 0;
     if (worker->scenario_stats.size() > 0)
     {
         auto request_data = requests_awaiting_response.find(stream_id);
         if (request_data != requests_awaiting_response.end())
         {
-            traffic_mix_id = request_data->second.scenario_index;
+            scenario_index = request_data->second.scenario_index;
+            request_index = request_data->second.curr_request_idx;
         }
     }
 
@@ -750,7 +734,7 @@ void Client::on_request_start(int32_t stream_id)
     {
         streams.erase(stream_id);
     }
-    streams.insert(std::make_pair(stream_id, Stream(traffic_mix_id)));
+    streams.insert(std::make_pair(stream_id, Stream(scenario_index, request_index)));
     auto curr_timepoint = std::chrono::steady_clock::now();
     stream_timestamp.insert(std::make_pair(curr_timepoint, stream_id));
 }
@@ -868,10 +852,12 @@ void Client::mark_response_success_or_failure(int32_t stream_id)
     status = stream.req_stat.status;
 
     size_t scenario_index = 0;
+    size_t request_index = 0;
     auto request_data = requests_awaiting_response.find(stream_id);
     if (request_data != requests_awaiting_response.end())
     {
         scenario_index = request_data->second.scenario_index;
+        request_index = request_data->second.curr_request_idx;
     }
     if (request_data != requests_awaiting_response.end() &&
         request_data->second.expected_status_code)
@@ -887,9 +873,10 @@ void Client::mark_response_success_or_failure(int32_t stream_id)
     }
     else
     {
-        if (worker->scenario_stats.size())
+        if (scenario_index < worker->scenario_stats.size() &&
+            request_index < worker->scenario_stats[scenario_index].size())
         {
-            auto& stats = worker->scenario_stats[scenario_index];
+            auto& stats = worker->scenario_stats[scenario_index][request_index];
             if (status < 600)
             {
                 ++stats->status[status / 100];
@@ -935,13 +922,13 @@ void Client::on_status_code(int32_t stream_id, uint16_t status)
     }
 }
 
-void Client::update_scenario_based_stats(size_t scenario_index, bool success, bool status_success, uint64_t resp_time_ms)
+void Client::update_scenario_based_stats(size_t scenario_index, size_t request_index, bool success, bool status_success)
 {
     if (worker->scenario_stats.size() == 0)
     {
         return;
     }
-    auto& stats = worker->scenario_stats[scenario_index];
+    auto& stats = worker->scenario_stats[scenario_index][request_index];
     ++stats->req_done;
     if (success)
     {
@@ -960,9 +947,18 @@ void Client::update_scenario_based_stats(size_t scenario_index, bool success, bo
         ++stats->req_failed;
         ++stats->req_error;
     }
+    /*
+
+    auto resp_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            req_stat->stream_close_time - req_stat->request_time).count();
+    worker->stats.max_resp_time_ms = std::max(worker->stats.max_resp_time_ms.load(), resp_time_ms);
+    worker->stats.min_resp_time_ms = std::min(worker->stats.min_resp_time_ms.load(), resp_time_ms);
+    worker->stats.total_resp_time_ms += resp_time_ms;
+
     stats->max_resp_time_ms = std::max(stats->max_resp_time_ms.load(), resp_time_ms);
     stats->min_resp_time_ms = std::min(stats->min_resp_time_ms.load(), resp_time_ms);
     stats->total_resp_time_ms += resp_time_ms;
+    */
 }
 
 void Client::on_stream_close(int32_t stream_id, bool success, bool final)
@@ -1013,11 +1009,6 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
             ++worker->stats.req_failed;
             ++worker->stats.req_error;
         }
-        auto resp_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                req_stat->stream_close_time - req_stat->request_time);
-        worker->stats.max_resp_time_ms = std::max(worker->stats.max_resp_time_ms.load(), (uint64_t)resp_time_ms.count());
-        worker->stats.min_resp_time_ms = std::min(worker->stats.min_resp_time_ms.load(), (uint64_t)resp_time_ms.count());
-        worker->stats.total_resp_time_ms += resp_time_ms.count();
 
         ++worker->stats.req_done;
         ++req_done;
@@ -1025,13 +1016,9 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
         if (finished_request != requests_awaiting_response.end())
         {
             bool status_success = (streams.count(stream_id) && streams.at(stream_id).status_success == 1) ? true : false;
-            update_scenario_based_stats(finished_request->second.scenario_index, success,
-                                        status_success, resp_time_ms.count());
-            if (is_leading_request(finished_request->second))
-            {
-                cstat.leading_req_done++;
-            }
-            finished_request->second.transaction_stat->successful = status_success;
+            update_scenario_based_stats(finished_request->second.scenario_index,
+                                        finished_request->second.curr_request_idx,
+                                        success, status_success);
         }
 
         if (worker->config->log_fd != -1)
@@ -1885,7 +1872,7 @@ Request_Data Client::prepare_first_request()
     new_request.scenario_index = scenario_index;
 
     size_t curr_index = 0;
-    new_request.next_request_idx = ((curr_index + 1) % scenario.requests.size());
+    new_request.curr_request_idx = curr_index;
 
     new_request.user_id = controller->runtime_scenario_data[scenario_index].curr_req_variable_value;
     if (controller->runtime_scenario_data[scenario_index].req_variable_value_end)
@@ -1915,8 +1902,6 @@ Request_Data Client::prepare_first_request()
         }
     }
     update_content_length(new_request);
-    new_request.transaction_stat = std::make_shared<TransactionStat>();
-    worker->stats.transaction_done++;
 
     return new_request;
 }
@@ -1943,48 +1928,19 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 {
     static thread_local auto str_len_vec = init_var_str_len(config);
 
-    size_t curr_index = finished_request.next_request_idx;
     size_t scenario_index = finished_request.scenario_index;
-
     Scenario& scenario = config->json_config_schema.scenarios[scenario_index];
 
+    size_t curr_index = ((finished_request.curr_request_idx+ 1) % scenario.requests.size());
     if (curr_index == 0)
     {
-        if (finished_request.transaction_stat->successful)
-        {
-            worker->stats.transaction_successful++;
-            auto end_time = std::chrono::steady_clock::now();
-            auto trans_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                  end_time - finished_request.transaction_stat->start_time);
-
-            worker->stats.trans_max_resp_time_ms = std::max(worker->stats.trans_max_resp_time_ms.load(),
-                                                            (uint64_t)trans_duration.count());
-            worker->stats.trans_min_resp_time_ms = std::min(worker->stats.trans_min_resp_time_ms.load(),
-                                                            (uint64_t)trans_duration.count());
-
-            worker->scenario_stats[finished_request.scenario_index]->trans_max_resp_time_ms =
-                                                    std::max(worker->scenario_stats[finished_request.scenario_index]->trans_max_resp_time_ms.load(),
-                                                    (uint64_t)trans_duration.count());
-            worker->scenario_stats[finished_request.scenario_index]->trans_min_resp_time_ms =
-                                                    std::min(worker->scenario_stats[finished_request.scenario_index]->trans_min_resp_time_ms.load(),
-                                                    (uint64_t)trans_duration.count());
-
-        }
-        if (parent_client != nullptr)
-        {
-            parent_client->cstat.trans_done++;
-        }
-        else
-        {
-            cstat.trans_done++;
-        }
         return false;
     }
 
+
     Request_Data new_request;
     new_request.scenario_index = scenario_index;
-    new_request.transaction_stat = finished_request.transaction_stat;
-    new_request.next_request_idx = ((curr_index + 1) % scenario.requests.size());
+    new_request.curr_request_idx = curr_index;
 
     auto& request_template = scenario.requests[curr_index];
     new_request.user_id = finished_request.user_id;
@@ -2292,143 +2248,6 @@ void Client::terminate_sub_clients()
     }
 }
 
-double Client::calc_tps()
-{
-    if (parent_client != nullptr)
-    {
-        // sub client does not have control over transaction
-        return calc_rps();
-    }
-
-    size_t totalTrans = cstat.trans_done;
-    auto curr_timestamp = std::chrono::steady_clock::now();
-
-    auto delta_trans = totalTrans - totalTrans_till_last_check;
-    totalTrans_till_last_check = totalTrans;
-
-    auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(curr_timestamp - timestamp_of_last_tps_check);
-    timestamp_of_last_tps_check = curr_timestamp;
-
-    return delta_ms.count()>0 ? (double)((1000*delta_trans)/delta_ms.count()) : 0;
-}
-
-double Client::calc_rps()
-{
-    size_t totalReq = cstat.leading_req_done;
-    auto curr_timestamp = std::chrono::steady_clock::now();
-
-    auto delta_reqs = totalReq - total_leading_Req_till_last_check;
-    total_leading_Req_till_last_check = totalReq;
-
-    auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(curr_timestamp - timestamp_of_last_rps_check);
-    timestamp_of_last_rps_check = curr_timestamp;
-
-    return delta_ms.count()>0 ? (double)((1000*delta_reqs)/delta_ms.count()) : 0;
-}
-
-double Client::adjust_traffic_needed()
-{
-    const uint32_t gap_in_second = 5;
-    double no_adjust = 0.0;
-
-    if (config->rps_enabled())
-    {
-        // respect user configured rps, even it is too large
-        // in this case, user will observe lower rps reported than configured
-        return no_adjust;
-    }
-    if (parent_client != nullptr)
-    {
-        return no_adjust;
-    }
-
-    auto tps = calc_tps();
-    auto rps = calc_rps();
-
-    if ((rps > tps) && (tps>0.0) && ((total_leading_Req_till_last_check - totalTrans_till_last_check)/tps >= gap_in_second))
-    {
-        std::cout<<"adjust traffic needed for this connection, client id: "<<id
-                 <<", schema: "<<schema<<", authority: "<<authority
-                 <<", total Reqquest done: "<<total_leading_Req_till_last_check
-                 <<", total transaction done: "<<totalTrans_till_last_check
-                 <<", actual transaction per second:"<<tps
-                 <<std::endl;
-        return tps;
-    }
-    return no_adjust;
-}
-
-bool Client::rps_mode()
-{
-    return (rps > 0.0);
-}
-
-void Client::switch_to_non_rps_mode()
-{
-    ev_timer_stop(worker->loop, &rps_watcher);
-    rps = 0.0;
-
-    auto nreq = config->is_timing_based_mode()
-                ? std::max(req_left, (session->max_concurrent_streams() - streams.size()))
-                : std::min(req_left, (session->max_concurrent_streams() - streams.size()));
-
-    bool write_socket = false;
-    for (; nreq > 0; --nreq)
-    {
-        if (submit_request() != 0)
-        {
-            break;
-        }
-        write_socket = true;
-    }
-    if (write_socket)
-    {
-        signal_write();
-    }
-}
-void Client::switch_mode(double new_rps)
-{
-    bool old_rps_mode = rps_mode();
-    rps = new_rps;
-    bool new_rps_mode = rps_mode();
-
-    if (!old_rps_mode && new_rps_mode)
-    {
-        std::cout<<"switching controller connection to rps mode to lower the traffic"
-                 <<", rps: "<<rps
-                 <<std::endl;
-        rps_watcher.repeat = std::max(0.01, 1. / rps);
-        ev_timer_again(worker->loop, &rps_watcher);
-        rps_duration_started = ev_now(worker->loop);
-    }
-    else if (old_rps_mode && !new_rps_mode)
-    {
-        switch_to_non_rps_mode();
-    }
-    else if (old_rps_mode && new_rps_mode)
-    {
-        ev_timer_again(worker->loop, &rps_watcher);
-    }
-    else
-    {
-        switch_to_non_rps_mode();
-    }
-}
-
-bool Client::is_leading_request(Request_Data& request)
-{
-    if (config->json_config_schema.scenarios[request.scenario_index].requests.size() == 1)
-    {
-        return true;
-    }
-    else if (request.next_request_idx == 1)
-    {
-        return true;
-    }
-    return false;
-}
-
-
 bool Client::reconnect_to_alt_addr()
 {
     if (CLIENT_CONNECTED == state)
@@ -2548,6 +2367,11 @@ void Client::submit_ping()
 {
     session->submit_ping();
     signal_write();
+}
+
+bool Client::rps_mode()
+{
+    return (rps > 0.0);
 }
 
 }

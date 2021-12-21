@@ -136,8 +136,6 @@ void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
 void normalize_request_templates(h2load::Config* config);
 
-void adaptive_traffic_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
-
 std::string get_tls_error_string();
 
 void reconnect_to_used_host_cb(struct ev_loop* loop, ev_timer* w, int revents);
@@ -152,10 +150,12 @@ void printBacktrace();
 
 uint64_t find_common_multiple(std::vector<size_t> input);
 
-std::vector<h2load::SDStat>
-process_traffic_mix_request_stats(const std::vector<std::unique_ptr<h2load::Worker>>& workers);
+std::vector<std::vector<h2load::SDStat>>
+produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>>& workers);
 
 void output_realtime_stats(h2load::Config& config, std::vector<std::unique_ptr<h2load::Worker>>& workers, std::atomic<bool>& workers_stopped, std::stringstream& DatStream);
 
+template<typename T>
+std::string to_string_with_precision_2(const T a_value);
 
 #endif

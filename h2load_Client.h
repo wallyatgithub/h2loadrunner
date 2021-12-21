@@ -48,9 +48,8 @@ struct Request_Data
     uint16_t expected_status_code;
     uint32_t delay_before_executing_next;
     std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
-    size_t next_request_idx;
+    size_t curr_request_idx;
     size_t scenario_index;
-    std::shared_ptr<TransactionStat> transaction_stat;
     std::vector<std::string> string_collection;
     explicit Request_Data():
     schema(&emptyString),
@@ -63,8 +62,7 @@ struct Request_Data
         status_code = 0;
         expected_status_code = 0;
         delay_before_executing_next = 0;
-        next_request_idx = 0;
-        transaction_stat = nullptr;
+        curr_request_idx = 0;
         scenario_index = 0;
         string_collection.reserve(12); // (path, authority, method, schema, payload, xx) * 2
     };
@@ -96,7 +94,7 @@ struct Request_Data
         {
             o << "response header name: "<<it.first<<", header value: " <<it.second<<std::endl;
         }
-        o << "next request index: "<<request_data.next_request_idx<<std::endl;
+        o << "current request index: "<<request_data.curr_request_idx<<std::endl;
 
         for (auto& it: request_data.saved_cookies)
         {
@@ -205,12 +203,7 @@ struct Client
     ares_channel channel;
     std::map<int, ev_io> ares_io_watchers;
     ev_timer delayed_request_watcher;
-    size_t totalTrans_till_last_check = 0;
-    std::chrono::time_point<std::chrono::steady_clock> timestamp_of_last_tps_check;
-    size_t total_leading_Req_till_last_check = 0;
-    std::chrono::time_point<std::chrono::steady_clock> timestamp_of_last_rps_check;
     double rps;
-    ev_timer adaptive_traffic_watcher;
     std::deque<std::string> candidate_addresses;
     std::deque<std::string> used_addresses;
     ev_timer delayed_reconnect_watcher;
@@ -315,14 +308,6 @@ struct Client
 
     void enqueue_request(Request_Data& finished_request, Request_Data&& new_request);
 
-    double calc_tps();
-    double calc_rps();
-
-    bool rps_mode();
-    double adjust_traffic_needed();
-    void switch_to_non_rps_mode();
-    void switch_mode(double new_rps);
-    bool is_leading_request(Request_Data& request);
     void mark_response_success_or_failure(int32_t stream_id);
     uint64_t get_total_pending_streams();
 
@@ -346,8 +331,8 @@ struct Client
     void submit_ping();
     std::vector<size_t> init_var_str_len(Config* config);
     size_t get_index_of_next_scenario_to_run();
-    void update_scenario_based_stats(size_t scenario_index, bool success, bool status_success, uint64_t resp_time_ms);
-
+    void update_scenario_based_stats(size_t scenario_index, size_t request_index, bool success, bool status_success);
+    bool rps_mode();
 };
 
 class Submit_Requet_Wrapper

@@ -108,6 +108,8 @@ Config config;
 namespace
 {
 constexpr size_t MAX_SAMPLES = 1000000;
+constexpr size_t MAX_SAMPLES_PER_THREAD = 10240;
+
 } // namespace
 
 Stats::Stats(size_t req_todo, size_t nclients)
@@ -123,17 +125,10 @@ Stats::Stats(size_t req_todo, size_t nclients)
       bytes_head(0),
       bytes_head_decomp(0),
       bytes_body(0),
-      status(),
-      max_resp_time_ms(0),
-      min_resp_time_ms(0xFFFFFFFFFFFFFFFE),
-      total_resp_time_ms(0),
-      trans_max_resp_time_ms(0),
-      trans_min_resp_time_ms(0xFFFFFFFFFFFFFFFE),
-      transaction_done(0),
-      transaction_successful(0)
+      status()
       {}
 
-Stream::Stream(size_t traffic_mix_id) : req_stat(traffic_mix_id), status_success(-1) {}
+Stream::Stream(size_t scenario_id, size_t request_id) : req_stat(scenario_id, request_id), status_success(-1) {}
 
 namespace
 {
@@ -1431,7 +1426,7 @@ int main(int argc, char** argv)
     ssize_t rate_per_thread_rem = config.rate % config.nthreads;
 
     size_t max_samples_per_thread =
-        std::max(static_cast<size_t>(256), MAX_SAMPLES / config.nthreads);
+        std::max(static_cast<size_t>(MAX_SAMPLES_PER_THREAD), MAX_SAMPLES / config.nthreads);
 
     std::mutex mu;
     std::condition_variable cv;
@@ -1733,49 +1728,49 @@ time for request: )"
     if (config.json_config_schema.scenarios.size())
     {
         std::stringstream colStream;
-        colStream << "scenario-name traffic-percentage total-req-sent total-resp-recv total-resp-success total-3xx-resp total-4xx-resp total-5xx-resp latency-min latency-max latency-mean latency-sd within-sd";
+        colStream << "scenario, request-index, traffic-percentage, total-req-sent, total-resp-recv, total-resp-success, total-3xx-resp, total-4xx-resp, total-5xx-resp, latency-min(ms), latency-max, latency-mean, latency-sd, +/-sd";
         std::cout<<colStream.str()<<std::endl;
-        auto latency_stats = process_traffic_mix_request_stats(workers);
+        auto latency_stats = produce_requests_latency_stats(workers);
 
-        for (size_t index = 0; index < config.json_config_schema.scenarios.size(); index++)
+        for (size_t scenario_index = 0; scenario_index < config.json_config_schema.scenarios.size(); scenario_index++)
         {
-            size_t req_sent = 0;
-            size_t resp_received = 0;
-            size_t resp_success = 0;
-            size_t resp_3xx = 0;
-            size_t resp_4xx = 0;
-            size_t resp_5xx = 0;
-            size_t trans = 0;
-            size_t trans_success = 0;
-            for (auto& w : workers)
+            for (size_t request_index = 0; request_index < config.json_config_schema.scenarios[scenario_index].requests.size(); request_index++)
             {
-                auto& s = *(w->scenario_stats[index]);
-                req_sent += s.req_started;
-                resp_received += s.req_done;
-                resp_success += s.req_status_success;
-                resp_3xx += s.status[3];
-                resp_4xx += s.status[4];
-                resp_5xx += s.status[5];
-                trans += s.transaction_done;
-                trans_success += s.transaction_successful;
-            }
+                size_t req_sent = 0;
+                size_t resp_received = 0;
+                size_t resp_success = 0;
+                size_t resp_3xx = 0;
+                size_t resp_4xx = 0;
+                size_t resp_5xx = 0;
+                for (auto& w : workers)
+                {
+                    auto& s = *(w->scenario_stats[scenario_index][request_index]);
+                    req_sent += s.req_started;
+                    resp_received += s.req_done;
+                    resp_success += s.req_status_success;
+                    resp_3xx += s.status[3];
+                    resp_4xx += s.status[4];
+                    resp_5xx += s.status[5];
+                }
 
-            std::stringstream dataStream;
-            dataStream << config.json_config_schema.scenarios[index].name
-                       << ", " <<(stats.req_done ? (double)(resp_received*100)/stats.req_done : 0) <<"%"
-                       << ", " <<req_sent
-                       << ", " <<resp_received
-                       << ", " <<resp_success
-                       << ", " <<resp_3xx
-                       << ", " <<resp_4xx
-                       << ", " <<resp_5xx
-                       << ", " <<util::format_duration(latency_stats[index].min)
-                       << ", " <<util::format_duration(latency_stats[index].max)
-                       << ", " <<util::format_duration(latency_stats[index].mean)
-                       << ", " <<util::format_duration(latency_stats[index].sd)
-                       << ", " <<util::dtos(latency_stats[index].within_sd)
-                       ;
-            std::cout<<dataStream.str()<<std::endl;
+                std::stringstream dataStream;
+                dataStream << std::left << std::setw(25) << config.json_config_schema.scenarios[scenario_index].name
+                           << ", " <<std::left << std::setw(3) << request_index
+                           << ", " <<std::left << std::setw(11) <<std::to_string(stats.req_done ? (double)(resp_received*100)/stats.req_done : 0).append("%")
+                           << ", " <<req_sent
+                           << ", " <<resp_received
+                           << ", " <<resp_success
+                           << ", " <<resp_3xx
+                           << ", " <<resp_4xx
+                           << ", " <<resp_5xx
+                           << ", " <<std::left << std::setw(5)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].min)
+                           << ", " <<std::left << std::setw(5)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].max)
+                           << ", " <<std::left << std::setw(5)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].mean)
+                           << ", " <<std::left << std::setw(5)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].sd)
+                           << ", " <<std::left << std::setw(7)<<to_string_with_precision_2(latency_stats[scenario_index][request_index].within_sd).append("%");
+                           ;
+                std::cout<<dataStream.str()<<std::endl;
+            }
         }
     }
 

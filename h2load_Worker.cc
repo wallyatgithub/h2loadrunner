@@ -77,8 +77,13 @@ Worker::Worker(uint32_t id, SSL_CTX* ssl_ctx, size_t req_todo, size_t nclients,
     }
     for (size_t scenario_index = 0; scenario_index < config->json_config_schema.scenarios.size(); scenario_index++)
     {
-        auto stat = std::make_unique<Stats>(req_todo, nclients);
-        scenario_stats.emplace_back(std::move(stat));
+        std::vector<std::unique_ptr<Stats>> requests_stats;
+        for (size_t request_index = 0; request_index < config->json_config_schema.scenarios[scenario_index].requests.size(); request_index++)
+        {
+            auto stat = std::make_unique<Stats>(req_todo, nclients);
+            requests_stats.emplace_back(std::move(stat));
+        }
+        scenario_stats.push_back(std::move(requests_stats));
     }
 }
 

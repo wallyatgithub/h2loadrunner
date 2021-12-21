@@ -31,11 +31,12 @@
   "header-table-size": 4096,
   "encoder-header-table-size": 4096,
   "log-file": "",
+  "statistics-interval": 2,
   "window-bits": 30,
   "connection-window-bits": 30,
   "Scenarios": [
     {
-      "name": "subscribe-update-delete-get",
+      "name": "subs-update-delete-get",
       "weight": 100,
       "user-id-variable-in-path-and-data": "-user-name",
       "user-id-range-start": 0,

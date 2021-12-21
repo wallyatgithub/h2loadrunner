@@ -208,8 +208,14 @@
     },
     "log-file":
     {
-      "description":"Write per-request information to a file with name specified here",
+      "description":"Write per-request information to a file with name specified here; note: this is not the file to print statistics",
       "type":"string"
+    },
+    "statistics-interval":
+    {
+      "description":"This field specifies a repeated timer in seconds; h2loadrunner will print the statistics to stdout in Comma-separated values (CSV) format upon each timer expiry; please redirect stdout to a CSV file if statistics file is needed for further analysis",
+      "default": 5,
+      "type":"integer"
     },
     "window-bits":
     {
@@ -236,8 +242,9 @@
         {
           "name":
           {
-            "description":"name of the scenario, use for statistics output",
-            "type":"string"
+            "description":"name of the scenario, use for statistics output, max length: 24",
+            "type":"string",
+            "maxLength": 24
           },
           "weight":
           {

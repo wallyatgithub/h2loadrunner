@@ -20,7 +20,7 @@ struct Worker
 {
     MemchunkPool mcpool;
     Stats stats;
-    std::vector<std::unique_ptr<Stats>> scenario_stats;
+    std::vector<std::vector<std::unique_ptr<Stats>>> scenario_stats;
     Sampling request_times_smp;
     Sampling client_smp;
     struct ev_loop* loop;
