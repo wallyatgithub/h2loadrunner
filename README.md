@@ -125,7 +125,7 @@
   
   Different scenarios will run in parallel.
   
-  Same scenario of different users (see user-id-variable-in-path-and-data field, each instance of the varible in range represents a user), will also run in parallel.
+  Same scenario of different users (see user-id-variable-in-path-and-data field, each instance of the variable in range represents a user), will also run in parallel.
   
   Each scenario has a list of requests; requests of the same scenario for the same user will be executed sequentially.
 
