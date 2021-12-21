@@ -6,7 +6,7 @@ function cleanup {
 trap cleanup EXIT
 ./maock maock.json &>/dev/null &
 
-result=$(./h2loadrunner --config-file=h2load.json -t 1 -c 10 -D 10|grep "requests:")
+result=$(./h2loadrunner --config-file=h2load.json -t 1 -c 10 -D 10  2>&1|grep "requests:")
 
 requests=$(echo $result|cut -d "," -f 1|cut -d ":" -f 2|cut -d " " -f 2)
 

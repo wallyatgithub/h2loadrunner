@@ -199,7 +199,7 @@ void Worker::report_progress()
         return;
     }
 
-    std::cout << "progress: " << stats.req_done * 100 / stats.req_todo << "% done"
+    std::cerr << "progress: " << stats.req_done * 100 / stats.req_todo << "% done"
               << std::endl;
 }
 
@@ -210,7 +210,7 @@ void Worker::report_rate_progress()
         return;
     }
 
-    std::cout << "progress: " << nconns_made * 100 / nclients
+    std::cerr << "progress: " << nconns_made * 100 / nclients
               << "% of clients started" << std::endl;
 }
 

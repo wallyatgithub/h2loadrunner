@@ -295,7 +295,7 @@ int Client::connect()
     else if (worker->current_phase == Phase::INITIAL_IDLE)
     {
         worker->current_phase = Phase::WARM_UP;
-        std::cout << "Warm-up started for thread #" << worker->id << "."
+        std::cerr << "Warm-up started for thread #" << worker->id << "."
                   << std::endl;
         ev_timer_start(worker->loop, &worker->warmup_watcher);
     }
@@ -683,7 +683,7 @@ void Client::process_request_failure(int errCode)
         terminate_session();
     }
 
-    std::cout << "Process Request Failure:" << worker->stats.req_failed
+    std::cerr << "Process Request Failure:" << worker->stats.req_failed
               << ", errorCode: " << errCode
               << std::endl;
 }
@@ -694,7 +694,7 @@ void Client::report_tls_info()
     {
         worker->tls_info_report_done = true;
         auto cipher = SSL_get_current_cipher(ssl);
-        std::cout << "TLS Protocol: " << tls::get_tls_protocol(ssl) << "\n"
+        std::cerr << "TLS Protocol: " << tls::get_tls_protocol(ssl) << "\n"
                   << "Cipher: " << SSL_CIPHER_get_name(cipher) << std::endl;
         print_server_tmp_key(ssl);
     }
@@ -705,7 +705,7 @@ void Client::report_app_info()
     if (worker->id == 0 && !worker->app_info_report_done)
     {
         worker->app_info_report_done = true;
-        std::cout << "Application protocol: " << selected_proto << std::endl;
+        std::cerr << "Application protocol: " << selected_proto << std::endl;
     }
 }
 
@@ -1152,14 +1152,14 @@ int Client::connection_made()
         }
         else
         {
-            std::cout << "No protocol negotiated. Fallback behaviour may be activated"
+            std::cerr << "No protocol negotiated. Fallback behaviour may be activated"
                       << std::endl;
 
             for (const auto& proto : config->npn_list)
             {
                 if (util::streq(NGHTTP2_H1_1_ALPN, StringRef {proto}))
                 {
-                    std::cout
+                    std::cerr
                             << "Server does not support NPN/ALPN. Falling back to HTTP/1.1."
                             << std::endl;
                     session = std::make_unique<Http1Session>(this);
@@ -1176,12 +1176,12 @@ int Client::connection_made()
 
         if (!session)
         {
-            std::cout
+            std::cerr
                     << "No supported protocol was negotiated. Supported protocols were:"
                     << std::endl;
             for (const auto& proto : config->npn_list)
             {
-                std::cout << proto.substr(1) << std::endl;
+                std::cerr << proto.substr(1) << std::endl;
             }
             disconnect();
             return -1;
@@ -1256,7 +1256,7 @@ int Client::connection_made()
                 scenario_data.req_variable_value_start = this_client_token_value_start;
                 scenario_data.curr_req_variable_value = scenario_data.req_variable_value_start;
                 scenario_data.req_variable_value_end = this_client_token_value_start + tokens_per_client - 1;
-                std::cout<<"worker Id:"<<this_work_id
+                std::cerr<<"worker Id:"<<this_work_id
                          <<", client Id:"<<this_client_id
                          <<", scenario index: " << index
                          <<", variable id start:"<<scenario_data.req_variable_value_start
@@ -1494,7 +1494,7 @@ int Client::connected()
 {
     if (!util::check_socket_connected(fd))
     {
-        std::cout<<"check_socket_connected failed"<<std::endl;
+        std::cerr<<"check_socket_connected failed"<<std::endl;
         return ERR_CONNECT_FAIL;
     }
     std::cerr<<"===============connected to "<<authority<<"==============="<<std::endl;
@@ -1880,7 +1880,7 @@ Request_Data Client::prepare_first_request()
         controller->runtime_scenario_data[scenario_index].curr_req_variable_value++;
         if (controller->runtime_scenario_data[scenario_index].curr_req_variable_value > controller->runtime_scenario_data[scenario_index].req_variable_value_end)
         {
-            std::cout<<"user id (variable_value) wrapped, start over from range start"<<", scenario index: "<<scenario_index<<std::endl;
+            std::cerr<<"user id (variable_value) wrapped, start over from range start"<<", scenario index: "<<scenario_index<<std::endl;
             controller->runtime_scenario_data[scenario_index].curr_req_variable_value = controller->runtime_scenario_data[scenario_index].req_variable_value_start;
         }
     }
@@ -2232,7 +2232,7 @@ int Client::connect_to_host(const std::string& schema, const std::string& author
 {
     //if (config->verbose)
     {
-        std::cout<<"===============connecting to "<<schema<<"://"<<authority<<"==============="<<std::endl;
+        std::cerr<<"===============connecting to "<<schema<<"://"<<authority<<"==============="<<std::endl;
     }
     return resolve_fqdn_and_connect(schema, authority);
 }

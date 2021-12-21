@@ -456,7 +456,7 @@ int main(int argc, char** argv)
     auto status = ares_library_init(ARES_LIB_INIT_ALL);
     if (status != ARES_SUCCESS)
     {
-        std::cout<<"ares_library_init failed"<<std::endl;
+        std::cerr<<"ares_library_init failed"<<std::endl;
         exit(EXIT_FAILURE);
         return 1;
     }
@@ -708,7 +708,7 @@ int main(int argc, char** argv)
                 config.verbose = true;
                 break;
             case 'h':
-                print_help(std::cout);
+                print_help(std::cerr);
                 exit(EXIT_SUCCESS);
             case '?':
                 util::show_candidates(argv[optind - 1], long_options);
@@ -718,7 +718,7 @@ int main(int argc, char** argv)
                 {
                     case 1:
                         // version option
-                        print_version(std::cout);
+                        print_version(std::cerr);
                         exit(EXIT_SUCCESS);
                     case 2:
                         // ciphers option
@@ -883,7 +883,7 @@ int main(int argc, char** argv)
                         staticjson::ParseStatus result;
                         if (!staticjson::from_json_string(jsonStr.c_str(), &config.json_config_schema, &result))
                         {
-                            std::cout << "error reading config file:" << result.description() << std::endl;
+                            std::cerr << "error reading config file:" << result.description() << std::endl;
                             exit(EXIT_FAILURE);
                         }
                         util::inp_strlower(config.json_config_schema.host);
@@ -1397,14 +1397,14 @@ int main(int argc, char** argv)
 
     normalize_request_templates(&config);
 
-    std::cout << "Configuration dump:" << std::endl << staticjson::to_pretty_json_string(config.json_config_schema)
+    std::cerr << "Configuration dump:" << std::endl << staticjson::to_pretty_json_string(config.json_config_schema)
               <<std::endl;
 
     tokenize_path_and_payload_for_fast_var_replace(config);
 
     resolve_host(config);
 
-    std::cout << "starting benchmark..." << std::endl;
+    std::cerr << "starting benchmark..." << std::endl;
 
     std::vector<std::unique_ptr<Worker>> workers;
     workers.reserve(config.nthreads);
@@ -1683,7 +1683,7 @@ int main(int argc, char** argv)
             1. - static_cast<double>(stats.bytes_head) / stats.bytes_head_decomp;
     }
 
-    std::cout << std::fixed << std::setprecision(2) << R"(
+    std::cerr << std::fixed << std::setprecision(2) << R"(
 finished in )"
               << util::format_duration(duration) << ", " << rps << " req/s, "
               << util::utos_funit(bps) << R"(B/s
@@ -1729,7 +1729,7 @@ time for request: )"
     {
         std::stringstream colStream;
         colStream << "scenario, request-index, traffic-percentage, total-req-sent, total-resp-recv, total-resp-success, total-3xx-resp, total-4xx-resp, total-5xx-resp, latency-min(ms), latency-max, latency-mean, latency-sd, +/-sd";
-        std::cout<<colStream.str()<<std::endl;
+        std::cerr<<colStream.str()<<std::endl;
         auto latency_stats = produce_requests_latency_stats(workers);
 
         for (size_t scenario_index = 0; scenario_index < config.json_config_schema.scenarios.size(); scenario_index++)
@@ -1769,7 +1769,7 @@ time for request: )"
                            << ", " <<std::left << std::setw(5)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].sd)
                            << ", " <<std::left << std::setw(7)<<to_string_with_precision_2(latency_stats[scenario_index][request_index].within_sd).append("%");
                            ;
-                std::cout<<dataStream.str()<<std::endl;
+                std::cerr<<dataStream.str()<<std::endl;
             }
         }
     }

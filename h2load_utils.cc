@@ -38,7 +38,7 @@ std::unique_ptr<h2load::Worker> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
 
     if (config.is_timing_based_mode())
     {
-        std::cout << "spawning thread #" << id << ": " << nclients
+        std::cerr << "spawning thread #" << id << ": " << nclients
                   << " total client(s). Timing-based test with "
                   << config.warm_up_time << "s of warm-up time and "
                   << config.duration << "s of main duration for measurements."
@@ -46,7 +46,7 @@ std::unique_ptr<h2load::Worker> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
     }
     else
     {
-        std::cout << "spawning thread #" << id << ": " << nclients
+        std::cerr << "spawning thread #" << id << ": " << nclients
                   << " total client(s). " << rate_report.str() << nreqs
                   << " total requests" << std::endl;
     }
@@ -248,7 +248,7 @@ void rate_period_timeout_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
         // To check whether all created clients are pushed correctly
         if (worker->nclients != worker->clients.size())
         {
-            std::cout << "client not started successfully, exit" << worker->id << std::endl;
+            std::cerr << "client not started successfully, exit" << worker->id << std::endl;
             exit(EXIT_FAILURE);
         }
     }
@@ -261,10 +261,10 @@ void duration_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 
     worker->current_phase = Phase::DURATION_OVER;
 
-    std::cout << "Main benchmark duration is over for thread #" << worker->id
+    std::cerr << "Main benchmark duration is over for thread #" << worker->id
               << ". Stopping all clients." << std::endl;
     worker->stop_all_clients();
-    std::cout << "Stopped all clients for thread #" << worker->id << std::endl;
+    std::cerr << "Stopped all clients for thread #" << worker->id << std::endl;
     //ev_break (EV_A_ EVBREAK_ALL);
 }
 
@@ -273,9 +273,9 @@ void warmup_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto worker = static_cast<Worker*>(w->data);
 
-    std::cout << "Warm-up phase is over for thread #" << worker->id << "."
+    std::cerr << "Warm-up phase is over for thread #" << worker->id << "."
               << std::endl;
-    std::cout << "Main benchmark duration is started for thread #" << worker->id
+    std::cerr << "Main benchmark duration is started for thread #" << worker->id
               << "." << std::endl;
     assert(worker->stats.req_started == 0);
     assert(worker->stats.req_done == 0);
@@ -493,16 +493,16 @@ void print_server_tmp_key(SSL* ssl)
 
     auto key_del = defer(EVP_PKEY_free, key);
 
-    std::cout << "Server Temp Key: ";
+    std::cerr << "Server Temp Key: ";
 
     auto pkey_id = EVP_PKEY_id(key);
     switch (pkey_id)
     {
         case EVP_PKEY_RSA:
-            std::cout << "RSA " << EVP_PKEY_bits(key) << " bits" << std::endl;
+            std::cerr << "RSA " << EVP_PKEY_bits(key) << " bits" << std::endl;
             break;
         case EVP_PKEY_DH:
-            std::cout << "DH " << EVP_PKEY_bits(key) << " bits" << std::endl;
+            std::cerr << "DH " << EVP_PKEY_bits(key) << " bits" << std::endl;
             break;
         case EVP_PKEY_EC:
         {
@@ -515,12 +515,12 @@ void print_server_tmp_key(SSL* ssl)
                 cname = OBJ_nid2sn(nid);
             }
 
-            std::cout << "ECDH " << cname << " " << EVP_PKEY_bits(key) << " bits"
+            std::cerr << "ECDH " << cname << " " << EVP_PKEY_bits(key) << " bits"
                       << std::endl;
             break;
         }
         default:
-            std::cout << OBJ_nid2sn(pkey_id) << " " << EVP_PKEY_bits(key) << " bits"
+            std::cerr << OBJ_nid2sn(pkey_id) << " " << EVP_PKEY_bits(key) << " bits"
                       << std::endl;
             break;
     }
