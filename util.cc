@@ -1176,6 +1176,12 @@ std::string format_duration(double t) {
   return dtos(t) + unit;
 }
 
+std::string format_duration_to_mili_second(double t) {
+  uint64_t ms = static_cast<uint64_t>(t * 1000);
+  return std::to_string(ms);
+}
+
+
 std::string dtos(double n) {
   auto m = llround(100. * n);
   auto f = utos(m % 100);

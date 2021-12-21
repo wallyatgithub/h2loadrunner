@@ -24,22 +24,13 @@ struct RequestStat
     // true if stream was successfully closed.  This means stream was
     // not reset, but it does not mean HTTP level error (e.g., 404).
     bool completed;
-    size_t traffic_mix_index;
+    size_t scenario_index;
+    size_t request_index;
 
-    explicit RequestStat(size_t traffic_mix_id):
-      traffic_mix_index(traffic_mix_id)
+    explicit RequestStat(size_t scenario_id, size_t request_id):
+      scenario_index(scenario_id),
+      request_index(request_id)
     {};
-};
-
-struct TransactionStat
-{
-    std::chrono::steady_clock::time_point start_time;
-    bool successful;
-    explicit TransactionStat()
-    {
-        successful = false;
-        start_time = std::chrono::steady_clock::now();
-    };
 };
 
 struct ClientStat
@@ -52,8 +43,6 @@ struct ClientStat
     // The number of requests completed successful, but not necessarily
     // means successful HTTP status code.
     size_t req_success;
-    size_t leading_req_done;
-    size_t trans_done;
 
     // The following 3 numbers are overwritten each time when connection
     // is made.
@@ -68,8 +57,6 @@ struct ClientStat
     ClientStat()
     {
         req_success = 0;
-        leading_req_done = 0;
-        trans_done = 0;
     }
 };
 
@@ -133,13 +120,9 @@ struct Stats
     std::vector<RequestStat> req_stats;
     // The statistics per client
     std::vector<ClientStat> client_stats;
-    std::atomic<uint64_t> max_resp_time_ms;
-    std::atomic<uint64_t> min_resp_time_ms;
-    std::atomic<uint64_t> total_resp_time_ms;
-    std::atomic<uint64_t> trans_max_resp_time_ms;
-    std::atomic<uint64_t> trans_min_resp_time_ms;
-    size_t transaction_done;
-    size_t transaction_successful;
+//    std::atomic<uint64_t> max_resp_time_ms;
+//    std::atomic<uint64_t> min_resp_time_ms;
+//    std::atomic<uint64_t> total_resp_time_ms;
 };
 
 
@@ -147,7 +130,7 @@ struct Stream
 {
     RequestStat req_stat;
     int status_success;
-    Stream(size_t traffic_mix_id);
+    Stream(size_t scenario_id, size_t request_id);
 };
 
 
