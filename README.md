@@ -163,13 +163,13 @@
   
   Copy the content of the edit box and save it to a file <JSON FILE>, then use h2loadrunner --config-file=<JSON FILE> to start the load run
 
-  Example screenshot of another Json editor at https://pmk65.github.io/jedemov2/dist/demo.html:
+  Example screenshot using Json editor at https://pmk65.github.io/jedemov2/dist/demo.html:
   
   ![Example of GUI configuration](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor.png)
   ![Example of GUI configuration of scenario](https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Json_editor-scenario.png)
   
   
-  If wanted, it is possible to override some parameters with command line interface after the Json configuration file is provided.
+  If wanted, it is possible to override some parameters (derived from h2load CLI options) with command line interface after the Json configuration file is provided.
 
   For example, with this command line:
 
