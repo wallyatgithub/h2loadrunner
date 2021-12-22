@@ -218,7 +218,7 @@ void rate_period_timeout_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
 
         ++worker->nconns_made;
 
-        if (client->connect() != 0)
+        if (client->do_connect() != 0)
         {
             std::cerr << "client could not connect to host" << std::endl;
             client->fail();
@@ -259,12 +259,23 @@ void duration_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto worker = static_cast<Worker*>(w->data);
 
-    worker->current_phase = Phase::DURATION_OVER;
-
-    std::cerr << "Main benchmark duration is over for thread #" << worker->id
-              << ". Stopping all clients." << std::endl;
-    worker->stop_all_clients();
-    std::cerr << "Stopped all clients for thread #" << worker->id << std::endl;
+    if (worker->current_phase == Phase::MAIN_DURATION && worker->config->json_config_schema.scenarios.size())
+    {
+        worker->current_phase = Phase::MAIN_DURATION_GRACEFUL_SHUTDOWN;
+        std::cerr << "Main benchmark duration is over for thread #" << worker->id
+                  << ". Entering graceful shutdown." << std::endl;
+        ev_timer_init(w, duration_timeout_cb, ((double)worker->config->stream_timeout_in_ms/1000), 0.);
+        w->data = worker;
+        ev_timer_start(loop, w);
+    }
+    else
+    {
+        worker->current_phase = Phase::DURATION_OVER;
+        std::cerr << "Main benchmark duration is over for thread #" << worker->id
+                  << ". Stopping all clients." << std::endl;
+        worker->stop_all_clients();
+        std::cerr << "Stopped all clients for thread #" << worker->id << std::endl;
+    }
     //ev_break (EV_A_ EVBREAK_ALL);
 }
 
@@ -1173,10 +1184,10 @@ uint64_t find_common_multiple(std::vector<size_t> input)
 }
 
 template<typename T>
-std::string to_string_with_precision_2(const T a_value)
+std::string to_string_with_precision_3(const T a_value)
 {
     std::ostringstream out;
-    out.precision(2);
+    out.precision(3);
     out << std::fixed << a_value;
     return out.str();
 }
@@ -1224,16 +1235,15 @@ void output_realtime_stats(h2load::Config& config,
         if (counter % 10 == 0)
         {
             std::stringstream colStream;
-            colStream << "time, scenario, request-index, sent/s, recv/s, success/s, (recv/s)/(sent/s), (success/s)/(recv/s), 3xx/s, 4xx/s, 5xx/s, latency-min(ms), max, mean, sd, +/-sd, total-sent, total-recv, total-success, recv/sent(total), success/recv(total)";
+            colStream << "time, request, sent/s, recv/s, success/s, (recv/s)/(sent/s), (success/s)/(recv/s), 3xx/s, 4xx/s, 5xx/s, latency-min(ms), max, mean, sd, +/-sd, total-sent, total-recv, total-success, recv/sent(total), success/recv(total)";
             std::cout<<colStream.str()<<std::endl;
         }
         counter++;
 
         static uint16_t rps_width = 0;
         static uint16_t total_req_width = 0;
-        static uint16_t percentage_width = 7;
-        static uint16_t scenario_name_width = 25;
-        static uint16_t request_id_width = 3;
+        static uint16_t percentage_width = 8;
+        static uint16_t request_name_width = 28;
         static uint16_t latency_width = 5;
 
         auto latency_stats = produce_requests_latency_stats(workers);
@@ -1268,13 +1278,12 @@ void output_realtime_stats(h2load::Config& config,
                 std::stringstream ScenarioDatStream;
                 ScenarioDatStream
                     << std::put_time(std::localtime(&now_c), "%F %T")
-                    << ", " << std::left << std::setw(scenario_name_width)<< config.json_config_schema.scenarios[scenario_index].name
-                    << ", " << std::left << std::setw(request_id_width)<< request_index
+                    << ", " << std::left << std::setw(request_name_width)<< std::string(config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(request_index))
                     << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_sent)/period_duration)
                     << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_received)/period_duration)
                     << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_success)/period_duration)
-                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_2(delta_RPS_sent?(((double)delta_RPS_received / delta_RPS_sent) * 100):0).append( "%")
-                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_2(delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0).append("%")
+                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_sent?(((double)delta_RPS_received / delta_RPS_sent) * 100):0).append( "%")
+                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0).append("%")
                     << ", " << std::left << std::setw(rps_width) << delta_RPS_3xx
                     << ", " << std::left << std::setw(rps_width) << delta_RPS_4xx
                     << ", " << std::left << std::setw(rps_width) << delta_RPS_5xx
@@ -1282,12 +1291,12 @@ void output_realtime_stats(h2load::Config& config,
                     << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].max)
                     << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].mean)
                     << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].sd)
-                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_2(latency_stats[scenario_index][request_index].within_sd).append( "%")
+                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(latency_stats[scenario_index][request_index].within_sd).append( "%")
                     << ", " << std::left << std::setw(total_req_width) << scenario_req_sent_till_now[scenario_index][request_index]
                     << ", " << std::left << std::setw(total_req_width) << scenario_resp_received_till_now[scenario_index][request_index]
                     << ", " << std::left << std::setw(total_req_width) << scenario_req_success_till_now[scenario_index][request_index]
-                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_2(scenario_req_sent_till_now[scenario_index][request_index]?(((double)scenario_resp_received_till_now[scenario_index][request_index] / scenario_req_sent_till_now[scenario_index][request_index]) * 100):0).append( "%")
-                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_2(scenario_resp_received_till_now[scenario_index][request_index]?(((double)scenario_req_success_till_now[scenario_index][request_index] / scenario_resp_received_till_now[scenario_index][request_index]) * 100):0).append( "%")
+                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(scenario_req_sent_till_now[scenario_index][request_index]?(((double)scenario_resp_received_till_now[scenario_index][request_index] / scenario_req_sent_till_now[scenario_index][request_index]) * 100):0).append( "%")
+                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(scenario_resp_received_till_now[scenario_index][request_index]?(((double)scenario_req_success_till_now[scenario_index][request_index] / scenario_resp_received_till_now[scenario_index][request_index]) * 100):0).append( "%")
                 ;
                 std::cout<<ScenarioDatStream.str()<<std::endl;
             }
@@ -1326,13 +1335,12 @@ void output_realtime_stats(h2load::Config& config,
         DatStream.str(std::string());
         DatStream 
             << std::put_time(std::localtime(&now_c), "%F %T")
-            << ", " << std::left << std::setw(scenario_name_width) << "All-Scenarios"
-            << ", " << std::left << std::setw(request_id_width) << 0
+            << ", " << std::left << std::setw(request_name_width) << "All_Requests"
             << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_sent)/period_duration)
             << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_received)/period_duration)
             << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_success)/period_duration)
-            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_2(delta_RPS_sent?(((double)delta_RPS_received / delta_RPS_sent) * 100):0).append("%")
-            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_2(delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0).append("%")
+            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_sent?(((double)delta_RPS_received / delta_RPS_sent) * 100):0).append("%")
+            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0).append("%")
             << ", " << std::left << std::setw(rps_width) << delta_RPS_3xx
             << ", " << std::left << std::setw(rps_width) << delta_RPS_4xx
             << ", " << std::left << std::setw(rps_width) << delta_RPS_5xx
@@ -1340,12 +1348,12 @@ void output_realtime_stats(h2load::Config& config,
             << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[config.json_config_schema.scenarios.size()][0].max)
             << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[config.json_config_schema.scenarios.size()][0].mean)
             << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[config.json_config_schema.scenarios.size()][0].sd)
-            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_2(latency_stats[config.json_config_schema.scenarios.size()][0].within_sd).append( "%")
+            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(latency_stats[config.json_config_schema.scenarios.size()][0].within_sd).append( "%")
             << ", " << std::left << std::setw(total_req_width) << total_req_sent
             << ", " << std::left << std::setw(total_req_width) << total_resp_recv
             << ", " << std::left << std::setw(total_req_width) << total_resp_success
-            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_2(total_req_sent?(((double)total_resp_recv / total_req_sent) * 100):0).append("%")
-            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_2(total_resp_recv?(((double)total_resp_success / total_resp_recv) * 100):0).append("%")
+            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(total_req_sent?(((double)total_resp_recv / total_req_sent) * 100):0).append("%")
+            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(total_resp_recv?(((double)total_resp_success / total_resp_recv) * 100):0).append("%")
         ;
         std::cout<<DatStream.str()<<std::endl;
 
@@ -1360,6 +1368,7 @@ produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>
 {
     auto request_times_sampling = false;
     size_t nrequest_times = 0;
+    auto& config = workers[0]->config;
     for (const auto& w : workers)
     {
         nrequest_times += w->stats.req_stats.size();
@@ -1383,10 +1392,10 @@ produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>
     }
     std::vector<std::vector<h2load::SDStat>> stats;
 
-    for (size_t scenario_index = 0; scenario_index < request_times.size(); scenario_index++)
+    for (size_t scenario_index = 0; scenario_index < config->json_config_schema.scenarios.size(); scenario_index++)
     {
         std::vector<h2load::SDStat> requests_stats;
-        for (size_t request_index = 0; request_index < request_times[scenario_index].size(); request_index++)
+        for (size_t request_index = 0; request_index < config->json_config_schema.scenarios[scenario_index].requests.size(); request_index++)
         {
             requests_stats.push_back(compute_time_stat(request_times[scenario_index][request_index], request_times_sampling));
         }

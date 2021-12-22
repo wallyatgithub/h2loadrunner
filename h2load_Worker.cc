@@ -135,7 +135,7 @@ void Worker::run()
             }
 
             auto client = std::make_unique<Client>(next_client_id++, this, req_todo, config);
-            if (client->connect() != 0)
+            if (client->do_connect() != 0)
             {
                 std::cerr << "client could not connect to host" << std::endl;
                 client->fail();

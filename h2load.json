@@ -31,7 +31,7 @@
   "header-table-size": 4096,
   "encoder-header-table-size": 4096,
   "log-file": "",
-  "statistics-interval": 2,
+  "statistics-interval": 5,
   "window-bits": 30,
   "connection-window-bits": 30,
   "Scenarios": [

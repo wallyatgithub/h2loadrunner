@@ -67,23 +67,10 @@ struct Config
     std::vector<std::string> npn_list;
     // The number of request per second for each client.
     std::atomic<double> rps;
-//    uint64_t req_variable_start;
-//    uint64_t req_variable_end;
-//    std::string req_variable_name;
-    // this is the name of the header, identifying resource created by server
-    // h2load can send update/delete to operate the resource
-//    std::string crud_resource_header_name;
-//    std::string crud_create_method;
-//    std::string crud_read_method;
-//    std::string crud_update_method;
-//    std::string crud_delete_method;
-//    std::string crud_create_data_file_name;
-//    std::string crud_update_data_file_name;
     uint16_t stream_timeout_in_ms;
     std::string rps_file;
     Config_Schema json_config_schema;
     std::vector<std::string> reqlines;
-//    bool variable_range_slicing;
 
     Config();
     ~Config();

@@ -53,6 +53,7 @@ enum class Phase
     INITIAL_IDLE,  // Initial idle state before warm-up phase
     WARM_UP,       // Warm up phase when no measurements are done
     MAIN_DURATION, // Main measurement phase; if timing-based
+    MAIN_DURATION_GRACEFUL_SHUTDOWN,
     // test is not run, this is the default phase
     DURATION_OVER  // This phase occurs after the measurements are over
 };

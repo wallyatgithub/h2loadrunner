@@ -139,6 +139,7 @@ struct Client
     ev_io wev;
     ev_io rev;
     std::function<int(Client&)> readfn, writefn;
+    std::function<int(Client&)> connectfn;
     Worker* worker;
     SSL* ssl;
     ev_timer request_timeout_watcher;
@@ -333,6 +334,10 @@ struct Client
     size_t get_index_of_next_scenario_to_run();
     void update_scenario_based_stats(size_t scenario_index, size_t request_index, bool success, bool status_success);
     bool rps_mode();
+    int do_connect();
+    void setup_connect_with_async_fqdn_lookup();
+    void restore_connectfn();
+    int connect_with_async_fqdn_lookup();
 };
 
 class Submit_Requet_Wrapper

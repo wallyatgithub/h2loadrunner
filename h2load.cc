@@ -1671,8 +1671,13 @@ int main(int argc, char** argv)
             auto secd = std::chrono::duration_cast <
                         std::chrono::duration<double, std::chrono::seconds::period >> (
                             duration);
-            rps = stats.req_success / secd.count();
-            bps = stats.bytes_total / secd.count();
+            auto secd_count = secd.count();
+            if (config.rps_enabled() && config.json_config_schema.scenarios.size())
+            {
+               secd_count -= (double)config.stream_timeout_in_ms/1000;
+            }
+            rps = stats.req_success / secd_count;
+            bps = stats.bytes_total / secd_count;
         }
     }
 
@@ -1728,7 +1733,7 @@ time for request: )"
     if (config.json_config_schema.scenarios.size())
     {
         std::stringstream colStream;
-        colStream << "scenario, request-index, traffic-percentage, total-req-sent, total-resp-recv, total-resp-success, total-3xx-resp, total-4xx-resp, total-5xx-resp, latency-min(ms), latency-max, latency-mean, latency-sd, +/-sd";
+        colStream << "request, traffic-percentage, total-req-sent, total-resp-recv, total-resp-success, total-3xx-resp, total-4xx-resp, total-5xx-resp, latency-min(ms), latency-max, latency-mean, latency-sd, +/-sd";
         std::cerr<<colStream.str()<<std::endl;
         auto latency_stats = produce_requests_latency_stats(workers);
 
@@ -1754,7 +1759,7 @@ time for request: )"
                 }
 
                 std::stringstream dataStream;
-                dataStream << std::left << std::setw(25) << config.json_config_schema.scenarios[scenario_index].name
+                dataStream << std::left << std::setw(28) << std::string(config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(request_index))
                            << ", " <<std::left << std::setw(3) << request_index
                            << ", " <<std::left << std::setw(11) <<std::to_string(stats.req_done ? (double)(resp_received*100)/stats.req_done : 0).append("%")
                            << ", " <<req_sent
@@ -1767,7 +1772,7 @@ time for request: )"
                            << ", " <<std::left << std::setw(5)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].max)
                            << ", " <<std::left << std::setw(5)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].mean)
                            << ", " <<std::left << std::setw(5)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].sd)
-                           << ", " <<std::left << std::setw(7)<<to_string_with_precision_2(latency_stats[scenario_index][request_index].within_sd).append("%");
+                           << ", " <<std::left << std::setw(8)<<to_string_with_precision_3(latency_stats[scenario_index][request_index].within_sd).append("%");
                            ;
                 std::cerr<<dataStream.str()<<std::endl;
             }

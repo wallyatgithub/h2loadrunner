@@ -156,6 +156,6 @@ produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>
 void output_realtime_stats(h2load::Config& config, std::vector<std::unique_ptr<h2load::Worker>>& workers, std::atomic<bool>& workers_stopped, std::stringstream& DatStream);
 
 template<typename T>
-std::string to_string_with_precision_2(const T a_value);
+std::string to_string_with_precision_3(const T a_value);
 
 #endif

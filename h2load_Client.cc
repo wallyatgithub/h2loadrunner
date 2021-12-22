@@ -53,6 +53,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         parent_client(parent),
         schema(dest_schema),
         authority(dest_authority),
+        connectfn(&Client::connect),
         rps(conf->rps)
 {
     if (req_todo == 0)   // this means infinite number of requests are to be made
@@ -117,7 +118,8 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         }
     }
 
-    if (!parent)
+    if (is_controller_client() && (conf->no_tls_proto != Config::PROTO_HTTP1_1) &&
+        conf->json_config_schema.load_share_hosts.size())
     {
         auto init_hosts = [this, conf]()
         {
@@ -148,6 +150,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         {
             candidate_addresses.push_back(hosts[(++startIndex)%hosts.size()]);
         }
+        setup_connect_with_async_fqdn_lookup();
     }
     update_this_in_dest_client_map();
 }
@@ -340,11 +343,12 @@ int Client::connect()
     {
       rv = make_socket(ares_addr->nodes);
     }
+    /*
     else
     {
         return resolve_fqdn_and_connect(schema, authority);
     }
-
+*/
     if (fd == -1)
     {
         return -1;
@@ -358,7 +362,6 @@ int Client::connect()
     ev_io_set(&wev, fd, EV_WRITE);
 
     ev_io_start(worker->loop, &wev);
-
     return 0;
 }
 
@@ -537,7 +540,12 @@ int Client::submit_request()
 
     if (session->max_concurrent_streams() <= get_total_pending_streams())
     {
-        return 0;
+        return -1;
+    }
+
+    if (worker->current_phase == Phase::MAIN_DURATION_GRACEFUL_SHUTDOWN)
+    {
+        return -1;
     }
 
     if (requests_to_submit.empty() && (config->json_config_schema.scenarios.size()))
@@ -967,7 +975,8 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
 
     auto finished_request = requests_awaiting_response.find(stream_id);
 
-    if (worker->current_phase == Phase::MAIN_DURATION)
+    if (worker->current_phase == Phase::MAIN_DURATION ||
+        worker->current_phase == Phase::MAIN_DURATION_GRACEFUL_SHUTDOWN)
     {
         if (req_inflight > 0)
         {
@@ -2372,6 +2381,27 @@ void Client::submit_ping()
 bool Client::rps_mode()
 {
     return (rps > 0.0);
+}
+
+int Client::do_connect()
+{
+    return connectfn(*this);
+}
+
+int Client::connect_with_async_fqdn_lookup()
+{
+    restore_connectfn(); // one time deal
+    return connect_to_host(schema, authority);
+}
+
+void Client::setup_connect_with_async_fqdn_lookup()
+{
+    connectfn = &Client::connect_with_async_fqdn_lookup;
+}
+
+void Client::restore_connectfn()
+{
+    connectfn = &Client::connect;
 }
 
 }
