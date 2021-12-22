@@ -1760,7 +1760,7 @@ time for request: )"
 
                 std::stringstream dataStream;
                 dataStream << std::left << std::setw(28) << std::string(config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(request_index))
-                           << ", " <<std::left << std::setw(11) <<std::to_string(stats.req_done ? (double)(resp_received*100)/stats.req_done : 0).append("%")
+                           << ", " <<std::left << std::setw(8) << to_string_with_precision_3(stats.req_done ? (double)(resp_received*100)/stats.req_done : 0).append("%")
                            << ", " <<req_sent
                            << ", " <<resp_received
                            << ", " <<resp_success
