@@ -924,21 +924,30 @@ void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config)
   }
 }
 
-std::string reassemble_str_with_variable(const std::vector<std::string>& tokenized_source,
+std::string reassemble_str_with_variable(const Scenario& config_scenario, const std::vector<std::string>& tokenized_source,
                                                     uint64_t variable_value, size_t full_var_length)
 {
     std::string retStr = tokenized_source[0];
 
     if (tokenized_source.size() > 1)
     {
-        std::string curr_var_value_str = std::to_string(variable_value);
-        std::string padding;
-        padding.reserve(full_var_length - curr_var_value_str.size());
-        for (size_t i = 0; i < full_var_length - curr_var_value_str.size(); i++)
+        std::string curr_var_value_str;
+        if (config_scenario.user_ids.size())
         {
-            padding.append("0");
+            assert(variable_value < config_scenario.user_ids.size());
+            curr_var_value_str = config_scenario.user_ids[variable_value];
         }
-        curr_var_value_str.insert(0, padding);
+        else
+        {
+            curr_var_value_str = std::to_string(variable_value);
+            std::string padding;
+            padding.reserve(full_var_length - curr_var_value_str.size());
+            for (size_t i = 0; i < full_var_length - curr_var_value_str.size(); i++)
+            {
+                padding.append("0");
+            }
+            curr_var_value_str.insert(0, padding);
+        }
 
         std::string variable;
         for (size_t i = 1; i < tokenized_source.size(); i++)
@@ -1128,8 +1137,9 @@ void probe_writecb(struct ev_loop* loop, ev_io* w, int revents)
         std::cerr<<"preferred host is up: "<<client->preferred_authority<<std::endl;
         if (client->authority != client->preferred_authority && client->state == CLIENT_CONNECTED)
         {
-            std::cerr<<"switch back to preferred host: "<<client->preferred_authority<<std::endl;
+            std::cerr<<"switching back to preferred host: "<<client->preferred_authority<<std::endl;
             client->disconnect();
+            client->candidate_addresses.push_back(std::move(client->authority));
             client->authority = client->preferred_authority;
             client->resolve_fqdn_and_connect(client->schema, client->authority);
         }
@@ -1192,6 +1202,20 @@ std::string to_string_with_precision_3(const T a_value)
     return out.str();
 }
 
+size_t get_request_name_max_width (h2load::Config& config)
+{
+    size_t width = 0;
+    for (size_t scenario_index = 0; scenario_index < config.json_config_schema.scenarios.size(); scenario_index++)
+    {
+        std::string req_name = std::string(config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(config.json_config_schema.scenarios[scenario_index].requests.size()));
+        if (req_name.size() > width)
+        {
+            width = req_name.size();
+        }
+    }
+    return width;
+}
+
 void output_realtime_stats(h2load::Config& config,
                                    std::vector<std::unique_ptr<h2load::Worker>>& workers,
                                    std::atomic<bool>& workers_stopped, std::stringstream& DatStream)
@@ -1240,11 +1264,11 @@ void output_realtime_stats(h2load::Config& config,
         }
         counter++;
 
-        static uint16_t rps_width = 0;
-        static uint16_t total_req_width = 0;
-        static uint16_t percentage_width = 8;
-        static uint16_t request_name_width = 28;
-        static uint16_t latency_width = 5;
+        static size_t rps_width = 0;
+        static size_t total_req_width = 0;
+        static size_t percentage_width = 8;
+        static size_t latency_width = 5;
+        static size_t request_name_width = get_request_name_max_width(config);
 
         auto latency_stats = produce_requests_latency_stats(workers);
 
@@ -1418,3 +1442,94 @@ produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>
     return stats;
 }
 
+
+void post_process_json_config_schema(h2load::Config& config)
+{
+    util::inp_strlower(config.json_config_schema.host);
+    util::inp_strlower(config.json_config_schema.schema);
+
+    auto load_file_content = [](std::string& source)
+    {
+        if (source.size())
+        {
+            std::ifstream f(source);
+            if (f.good())
+            {
+                std::string dest((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+                source = dest;
+            }
+        }
+    };
+    for (auto& scenario: config.json_config_schema.scenarios)
+    {
+        if (scenario.user_id_list_file.size())
+        {
+            std::ifstream infile(scenario.user_id_list_file);
+            if (!infile)
+            {
+                std::cerr << "cannot read user-id-list-file: " << scenario.user_id_list_file << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+            scenario.user_ids = read_uri_from_file(infile);
+            scenario.variable_range_start = 0;
+            scenario.variable_range_end = scenario.user_ids.size();
+        }
+        for (auto& request : scenario.requests)
+        {
+            for (auto& header_with_value : request.additonalHeaders)
+            {
+                size_t t = header_with_value.find(":", 1);
+                if ((t == std::string::npos) ||
+                    (header_with_value[0] == ':' && 1 == t))
+                {
+                    std::cerr << "invalid header, no name: " << header_with_value << std::endl;
+                    continue;
+                }
+                std::string header_name = header_with_value.substr(0, t);
+                std::string header_value = header_with_value.substr(t + 1);
+                /*
+                header_value.erase(header_value.begin(), std::find_if(header_value.begin(), header_value.end(),
+                                                                      [](unsigned char ch)
+                {
+                    return !std::isspace(ch);
+                }));
+                */
+
+                if (header_value.empty())
+                {
+                    std::cerr << "invalid header - no value: " << header_with_value
+                              << std::endl;
+                    continue;
+                }
+                request.headers_in_map[header_name] = header_value;
+            }
+            load_file_content(request.payload);
+            load_file_content(request.luaScript);
+            if (request.uri.typeOfAction == "input")
+            {
+                http_parser_url u {};
+                if (http_parser_parse_url(request.uri.input.c_str(), request.uri.input.size(), 0, &u) != 0)
+                {
+                    std::cerr << "invalid URI given: " << request.uri.input << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                request.path = get_reqline(request.uri.input.c_str(), u);
+                if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
+                {
+                    request.schema = util::get_uri_field(request.uri.input.c_str(), u, UF_SCHEMA).str();
+                    util::inp_strlower(request.schema);
+                    request.authority = util::get_uri_field(request.uri.input.c_str(), u, UF_HOST).str();
+                    util::inp_strlower(request.authority);
+                    if (util::has_uri_field(u, UF_PORT))
+                    {
+                        request.authority.append(":").append(util::utos(u.port));
+                    }
+                }
+            }
+        }
+    }
+    load_file_content(config.json_config_schema.ca_cert);
+    load_file_content(config.json_config_schema.client_cert);
+    load_file_content(config.json_config_schema.private_key);
+}

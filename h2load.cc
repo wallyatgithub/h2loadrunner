@@ -886,80 +886,7 @@ int main(int argc, char** argv)
                             std::cerr << "error reading config file:" << result.description() << std::endl;
                             exit(EXIT_FAILURE);
                         }
-                        util::inp_strlower(config.json_config_schema.host);
-                        util::inp_strlower(config.json_config_schema.schema);
-
-                        auto load_file_content = [](std::string& source)
-                        {
-                            if (source.size())
-                            {
-                                std::ifstream f(source);
-                                if (f.good())
-                                {
-                                    std::string dest((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-                                    source = dest;
-                                }
-                            }
-                        };
-                        for (auto& scenario: config.json_config_schema.scenarios)
-                        {
-                            for (auto& request : scenario.requests)
-                            {
-                                for (auto& header_with_value : request.additonalHeaders)
-                                {
-                                    size_t t = header_with_value.find(":", 1);
-                                    if ((t == std::string::npos) ||
-                                        (header_with_value[0] == ':' && 1 == t))
-                                    {
-                                        std::cerr << "invalid header, no name: " << header_with_value << std::endl;
-                                        continue;
-                                    }
-                                    std::string header_name = header_with_value.substr(0, t);
-                                    std::string header_value = header_with_value.substr(t + 1);
-                                    /*
-                                    header_value.erase(header_value.begin(), std::find_if(header_value.begin(), header_value.end(),
-                                                                                          [](unsigned char ch)
-                                    {
-                                        return !std::isspace(ch);
-                                    }));
-                                    */
-
-                                    if (header_value.empty())
-                                    {
-                                        std::cerr << "invalid header - no value: " << header_with_value
-                                                  << std::endl;
-                                        continue;
-                                    }
-                                    request.headers_in_map[header_name] = header_value;
-                                }
-                                load_file_content(request.payload);
-                                load_file_content(request.luaScript);
-                                if (request.uri.typeOfAction == "input")
-                                {
-                                    http_parser_url u {};
-                                    if (http_parser_parse_url(request.uri.input.c_str(), request.uri.input.size(), 0, &u) != 0)
-                                    {
-                                        std::cerr << "invalid URI given: " << request.uri.input << std::endl;
-                                        exit(EXIT_FAILURE);
-                                    }
-                                    request.path = get_reqline(request.uri.input.c_str(), u);
-                                    if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
-                                    {
-                                        request.schema = util::get_uri_field(request.uri.input.c_str(), u, UF_SCHEMA).str();
-                                        util::inp_strlower(request.schema);
-                                        request.authority = util::get_uri_field(request.uri.input.c_str(), u, UF_HOST).str();
-                                        util::inp_strlower(request.authority);
-                                        if (util::has_uri_field(u, UF_PORT))
-                                        {
-                                            request.authority.append(":").append(util::utos(u.port));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        load_file_content(config.json_config_schema.ca_cert);
-                        load_file_content(config.json_config_schema.client_cert);
-                        load_file_content(config.json_config_schema.private_key);
+                        post_process_json_config_schema(config);
 
                         populate_config_from_json(config);
                         logfile = config.json_config_schema.log_file;
@@ -1736,6 +1663,9 @@ time for request: )"
         colStream << "request, traffic-percentage, total-req-sent, total-resp-recv, total-resp-success, total-3xx-resp, total-4xx-resp, total-5xx-resp, latency-min(ms), latency-max, latency-mean, latency-sd, +/-sd";
         std::cerr<<colStream.str()<<std::endl;
         auto latency_stats = produce_requests_latency_stats(workers);
+        size_t request_name_width = get_request_name_max_width(config);
+        static size_t percentage_width = 8;
+        static size_t latency_width = 5;
 
         for (size_t scenario_index = 0; scenario_index < config.json_config_schema.scenarios.size(); scenario_index++)
         {
@@ -1759,19 +1689,19 @@ time for request: )"
                 }
 
                 std::stringstream dataStream;
-                dataStream << std::left << std::setw(28) << std::string(config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(request_index))
-                           << ", " <<std::left << std::setw(8) << to_string_with_precision_3(stats.req_done ? (double)(resp_received*100)/stats.req_done : 0).append("%")
+                dataStream << std::left << std::setw(request_name_width) << std::string(config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(request_index))
+                           << ", " <<std::left << std::setw(percentage_width) << to_string_with_precision_3(stats.req_done ? (double)(resp_received*100)/stats.req_done : 0).append("%")
                            << ", " <<req_sent
                            << ", " <<resp_received
                            << ", " <<resp_success
                            << ", " <<resp_3xx
                            << ", " <<resp_4xx
                            << ", " <<resp_5xx
-                           << ", " <<std::left << std::setw(5)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].min)
-                           << ", " <<std::left << std::setw(5)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].max)
-                           << ", " <<std::left << std::setw(5)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].mean)
-                           << ", " <<std::left << std::setw(5)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].sd)
-                           << ", " <<std::left << std::setw(8)<<to_string_with_precision_3(latency_stats[scenario_index][request_index].within_sd).append("%");
+                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].min)
+                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].max)
+                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].mean)
+                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].sd)
+                           << ", " <<std::left << std::setw(latency_width)<<to_string_with_precision_3(latency_stats[scenario_index][request_index].within_sd).append("%");
                            ;
                 std::cerr<<dataStream.str()<<std::endl;
             }

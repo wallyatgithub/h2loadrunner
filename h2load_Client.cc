@@ -21,7 +21,7 @@ namespace h2load
 {
 
 
-std::atomic<uint32_t> Client::client_unique_id(0);
+std::atomic<uint64_t> Client::client_unique_id(0);
 
 Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
              Client* parent, const std::string& dest_schema,
@@ -56,6 +56,8 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         connectfn(&Client::connect),
         rps(conf->rps)
 {
+    this_client_id = client_unique_id++;
+
     if (req_todo == 0)   // this means infinite number of requests are to be made
     {
         // This ensures that number of requests are unbounded
@@ -139,8 +141,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
             return hosts;
         };
         static std::vector<std::string> hosts = init_hosts();
-        auto myId = client_unique_id++;
-        auto startIndex = myId % hosts.size();
+        auto startIndex = this_client_id % hosts.size();
         authority = hosts[startIndex];
         preferred_authority = authority;
         ares_addr = nullptr;
@@ -152,6 +153,7 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         }
         setup_connect_with_async_fqdn_lookup();
     }
+    slice_user_id();
     update_this_in_dest_client_map();
 }
 
@@ -475,6 +477,15 @@ void Client::disconnect()
     for (auto& it: ares_io_watchers)
     {
         stop_io_watcher(it.second);
+    }
+    if (probe_skt_fd != -1)
+    {
+        if (ev_is_active(&probe_wev))
+        {
+            ev_io_stop(worker->loop, &probe_wev);
+        }
+        close(probe_skt_fd);
+        probe_skt_fd = -1;
     }
     if (ssl)
     {
@@ -1218,76 +1229,6 @@ int Client::connection_made()
 
     state = CLIENT_CONNECTED;
 
-    if (config->nclients > 1 && (is_controller_client()))
-    {
-        for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
-        {
-            auto& scenario = config->json_config_schema.scenarios[index];
-            Runtime_Scenario_Data scenario_data;
-            if (!scenario.variable_range_slicing)
-            {
-                std::random_device                  rand_dev;
-                std::mt19937                        generator(rand_dev());
-                std::uniform_int_distribution<uint64_t>  distr(scenario.variable_range_start,
-                                                               scenario.variable_range_end);
-                scenario_data.curr_req_variable_value = distr(generator);
-                scenario_data.req_variable_value_start = scenario.variable_range_start;
-                scenario_data.req_variable_value_end = scenario.variable_range_end;
-            }
-            else
-            {
-                size_t nclients_per_worker = config->nclients / config->nthreads;
-                ssize_t extra_clients = config->nclients % config->nthreads;
-
-                uint64_t this_work_id = worker->id;
-                uint64_t this_client_id = id;
-                uint64_t tokens_per_client = (scenario.variable_range_end - scenario.variable_range_start)/
-                                            (config->nclients);
-
-                uint64_t tokens_per_client_left = (scenario.variable_range_end - scenario.variable_range_start)%
-                                                 (config->nclients);
-
-                uint64_t normal_tokens_per_worker = tokens_per_client * nclients_per_worker;
-                uint64_t this_client_token_value_start = scenario.variable_range_start +
-                                                         this_work_id * normal_tokens_per_worker +
-                                                         this_client_id * tokens_per_client;
-                if (extra_clients)
-                {
-                    // all workers before handle 1 extra client
-                    this_client_token_value_start += (this_work_id > extra_clients ? extra_clients:this_work_id)* tokens_per_client;
-                }
-
-                if ((this_work_id + 1 == config->nthreads) && (this_client_id + 1  == nclients_per_worker))
-                {
-                    tokens_per_client += tokens_per_client_left;
-                }
-
-                scenario_data.req_variable_value_start = this_client_token_value_start;
-                scenario_data.curr_req_variable_value = scenario_data.req_variable_value_start;
-                scenario_data.req_variable_value_end = this_client_token_value_start + tokens_per_client - 1;
-                std::cerr<<"worker Id:"<<this_work_id
-                         <<", client Id:"<<this_client_id
-                         <<", scenario index: " << index
-                         <<", variable id start:"<<scenario_data.req_variable_value_start
-                         <<", variable id end:"<<scenario_data.req_variable_value_end
-                         <<std::endl;
-            }
-            runtime_scenario_data.push_back(scenario_data);
-        }
-    }
-    else
-    {
-        for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
-        {
-            auto& scenario = config->json_config_schema.scenarios[index];
-            Runtime_Scenario_Data scenario_data;
-            scenario_data.curr_req_variable_value = scenario.variable_range_start;
-            scenario_data.req_variable_value_start = scenario.variable_range_start;
-            scenario_data.req_variable_value_end = scenario.variable_range_end;
-            runtime_scenario_data.push_back(scenario_data);
-        }
-    }
-
     session->on_connect();
 
     record_connect_time();
@@ -1794,7 +1735,14 @@ std::vector<size_t> Client::init_var_str_len(Config* config)
     std::vector<size_t> str_len_vec;
     for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
     {
-        str_len_vec.push_back(std::to_string(config->json_config_schema.scenarios[index].variable_range_end).size());
+        if (config->json_config_schema.scenarios[index].user_ids.size())
+        {
+            str_len_vec.push_back(0);
+        }
+        else
+        {
+            str_len_vec.push_back(std::to_string(config->json_config_schema.scenarios[index].variable_range_end).size());
+        }
     }
     return str_len_vec;
 }
@@ -1810,9 +1758,10 @@ void Client::populate_request_from_config_template(Request_Data& new_request,
     new_request.method = &request_template.method;
     new_request.schema = &request_template.schema;
     new_request.authority = &request_template.authority;
-    new_request.string_collection.emplace_back(reassemble_str_with_variable(request_template.tokenized_payload,
-                                              new_request.user_id,
-                                              str_len_vec[scenario_index]));
+    new_request.string_collection.emplace_back(reassemble_str_with_variable(config->json_config_schema.scenarios[scenario_index],
+                                                                            request_template.tokenized_payload,
+                                                                            new_request.user_id,
+                                                                            str_len_vec[scenario_index]));
     new_request.req_payload = &(new_request.string_collection.back());
     new_request.req_headers = &request_template.headers_in_map;
     new_request.expected_status_code = request_template.expected_status_code;
@@ -1887,7 +1836,7 @@ Request_Data Client::prepare_first_request()
     if (controller->runtime_scenario_data[scenario_index].req_variable_value_end)
     {
         controller->runtime_scenario_data[scenario_index].curr_req_variable_value++;
-        if (controller->runtime_scenario_data[scenario_index].curr_req_variable_value > controller->runtime_scenario_data[scenario_index].req_variable_value_end)
+        if (controller->runtime_scenario_data[scenario_index].curr_req_variable_value >= controller->runtime_scenario_data[scenario_index].req_variable_value_end)
         {
             std::cerr<<"user id (variable_value) wrapped, start over from range start"<<", scenario index: "<<scenario_index<<std::endl;
             controller->runtime_scenario_data[scenario_index].curr_req_variable_value = controller->runtime_scenario_data[scenario_index].req_variable_value_start;
@@ -1897,9 +1846,10 @@ Request_Data Client::prepare_first_request()
     populate_request_from_config_template(new_request, scenario_index, curr_index);
 
     auto& request_template = scenario.requests[curr_index];
-    new_request.string_collection.emplace_back(reassemble_str_with_variable(request_template.tokenized_path,
-                                              new_request.user_id,
-                                              str_len_vec[scenario_index]));
+    new_request.string_collection.emplace_back(reassemble_str_with_variable(config->json_config_schema.scenarios[scenario_index],
+                                                                            request_template.tokenized_path,
+                                                                            new_request.user_id,
+                                                                            str_len_vec[scenario_index]));
     new_request.path = &(new_request.string_collection.back());
 
     if (scenario.requests[curr_index].luaScript.size())
@@ -1957,9 +1907,10 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     if (request_template.uri.typeOfAction == "input")
     {
-         new_request.string_collection.emplace_back(reassemble_str_with_variable(request_template.tokenized_path,
-                                                    new_request.user_id,
-                                                    str_len_vec[scenario_index]));
+         new_request.string_collection.emplace_back(reassemble_str_with_variable(config->json_config_schema.scenarios[scenario_index],
+                                                                                 request_template.tokenized_path,
+                                                                                 new_request.user_id,
+                                                                                 str_len_vec[scenario_index]));
          new_request.path = &(new_request.string_collection.back());
     }
     else if (request_template.uri.typeOfAction == "sameWithLastOne")
@@ -2269,14 +2220,14 @@ bool Client::reconnect_to_alt_addr()
         {
             used_addresses.push_back(std::move(authority));
             authority = preferred_authority;
-            std::cerr<<"switch back to preferred host: "<<authority<<std::endl;
+            std::cerr<<"try with preferred host: "<<authority<<std::endl;
             resolve_fqdn_and_connect(schema, authority);
         }
         else if (candidate_addresses.size())
         {
             authority = std::move(candidate_addresses.front());
             candidate_addresses.pop_front();
-            std::cerr<<"switch to candidate host: "<<authority<<std::endl;
+            std::cerr<<"switching to candidate host: "<<authority<<std::endl;
             resolve_fqdn_and_connect(schema, authority);
         }
         else
@@ -2402,6 +2353,65 @@ void Client::setup_connect_with_async_fqdn_lookup()
 void Client::restore_connectfn()
 {
     connectfn = &Client::connect;
+}
+
+void Client::slice_user_id()
+{
+  if (config->nclients > 1 && (is_controller_client()))
+  {
+      for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
+      {
+          auto& scenario = config->json_config_schema.scenarios[index];
+          Runtime_Scenario_Data scenario_data;
+          if (!scenario.variable_range_slicing)
+          {
+              std::random_device                  rand_dev;
+              std::mt19937                        generator(rand_dev());
+              std::uniform_int_distribution<uint64_t>  distr(scenario.variable_range_start,
+                                                             scenario.variable_range_end);
+              scenario_data.curr_req_variable_value = distr(generator);
+              scenario_data.req_variable_value_start = scenario.variable_range_start;
+              scenario_data.req_variable_value_end = scenario.variable_range_end;
+          }
+          else
+          {
+              auto tokens_per_client = ((scenario.variable_range_end - scenario.variable_range_start)/(config->nclients));
+              if (tokens_per_client == 0)
+              {
+                  std::cerr<<"Error: number of user ids is smaller than number of clients, cannot continue"<<std::endl;
+                  exit(EXIT_FAILURE);
+              }
+              auto tokens_left = ((scenario.variable_range_end - scenario.variable_range_start)%(config->nclients));
+              scenario_data.req_variable_value_start = scenario.variable_range_start +
+                                                       (this_client_id * tokens_per_client) +
+                                                       std::min(this_client_id, tokens_left);
+              scenario_data.req_variable_value_end = scenario_data.req_variable_value_start +
+                                                     tokens_per_client +
+                                                     (this_client_id >= tokens_left ? 0: 1);
+
+              scenario_data.curr_req_variable_value = scenario_data.req_variable_value_start;
+
+              std::cerr<<", client Id:"<<this_client_id
+                       <<", scenario index: " << index
+                       <<", variable id start:"<<scenario_data.req_variable_value_start
+                       <<", variable id end:"<<scenario_data.req_variable_value_end
+                       <<std::endl;
+          }
+          runtime_scenario_data.push_back(scenario_data);
+      }
+  }
+  else
+  {
+      for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
+      {
+          auto& scenario = config->json_config_schema.scenarios[index];
+          Runtime_Scenario_Data scenario_data;
+          scenario_data.curr_req_variable_value = scenario.variable_range_start;
+          scenario_data.req_variable_value_start = scenario.variable_range_start;
+          scenario_data.req_variable_value_end = scenario.variable_range_end;
+          runtime_scenario_data.push_back(scenario_data);
+      }
+  }
 }
 
 }

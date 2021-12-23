@@ -119,7 +119,7 @@ void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config);
 
 std::vector<std::string> tokenize_string(const std::string& source, const std::string& delimeter);
 
-std::string reassemble_str_with_variable(const std::vector<std::string>& tokenized_source,
+std::string reassemble_str_with_variable(const Scenario& config_scenario, const std::vector<std::string>& tokenized_source,
                                                     uint64_t variable_value, size_t full_var_length);
 
 std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string, const std::string& origin_authority, const std::string& origin_schema);
@@ -157,5 +157,9 @@ void output_realtime_stats(h2load::Config& config, std::vector<std::unique_ptr<h
 
 template<typename T>
 std::string to_string_with_precision_3(const T a_value);
+
+size_t get_request_name_max_width (h2load::Config& config);
+
+void post_process_json_config_schema(h2load::Config& config);
 
 #endif

@@ -254,22 +254,27 @@
           },
           "user-id-variable-in-path-and-data":
           {
-            "description":"Specified the variable name in uri path and payload, which is considered as a user-id, and is to be replaced with an actual value between user-id-range-start and user-id-range-end.",
+            "description":"Specifies the variable name in uri path and payload, which is considered as a user id, and is to be replaced with an actual value specified by next fields.",
+            "type":"string"
+          },
+          "user-id-list-file":
+          {
+            "description":"Path of a file; each line of the file is a user id, which would be picked up in turn to replace the user id variable in path and data specified above. When this option is used, user-id-range-start/end would be ignored",
             "type":"string"
           },
           "user-id-range-start":
           {
-            "description":"Specify variable range start.",
+            "description":"Specify variable user id range start; for example, user-id-range-start = 0, user-id-range-end = 1000, then the actual user id would be 0000, 0001, 0002, ... 0999",
             "type":"integer"
           },
           "user-id-range-end":
           {
-            "description":"Specify variable range end.",
+            "description":"Specify variable user id range end.",
             "type":"integer"
           },
           "user-id-range-slicing":
           {
-            "description": "true: Slice the user-id range, each client get a sub range; e.g.: full range 1-1000, with 10 clients, each client gets a sub range of 100 (1-100, 101-200...); false: each client gets a full range",
+            "description": "true: Slice the user-id range, each client get a sub range; e.g.: full range 1-1000, with 10 clients, each client gets a sub range of 100 (1-100, 101-200...); if user-id-list-file is given, the full list of the user id list from that file will be sliced up, and each client will take a sub list. false: each client gets a full range",
             "default": false,
             "type":"boolean"
           },

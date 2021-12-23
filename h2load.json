@@ -1,11 +1,21 @@
 {
   "schema": "http",
-  "host": "192.168.1.107",
+  "host": "172.29.22.171",
   "port": 8080,
-  "load-share-hosts": [],
+  "load-share-hosts":
+  [
+    {
+      "host": "172.29.22.171",
+      "port": 8081
+    },
+    {
+      "host": "172.29.22.171",
+      "port": 8082
+    }
+  ],
   "open-new-connection-based-on-authority-header": false,
-  "connection-retry": false,
-  "switch-back-after-connection-retry": false,
+  "connection-retry": true,
+  "switch-back-after-connection-retry": true,
   "threads": 1,
   "clients": 1,
   "duration": 60,
@@ -31,17 +41,17 @@
   "header-table-size": 4096,
   "encoder-header-table-size": 4096,
   "log-file": "",
-  "statistics-interval": 5,
+  "statistics-interval": 2,
   "window-bits": 30,
   "connection-window-bits": 30,
   "Scenarios": [
     {
       "name": "subs-update-delete-get",
       "weight": 100,
-      "user-id-variable-in-path-and-data": "-user-name",
-      "user-id-range-start": 0,
-      "user-id-range-end": 100000000,
-      "user-id-range-slicing": true,
+      "variable-name-in-path-and-data": "-user-name",
+      "variable-range-start": 0,
+      "variable-range-end": 100000000,
+      "variable-range-slicing": true,
       "Requests": [
         {
           "uri": {
@@ -107,17 +117,17 @@
       ]
     },
     {
-      "name": "subscribe-delete-get",
-      "weight": 100,
-      "user-id-variable-in-path-and-data": "-user-name",
-      "user-id-range-start": 0,
-      "user-id-range-end": 100000000,
-      "user-id-range-slicing": true,
+      "name": "amf-reg-dereg",
+      "weight": 200,
+      "variable-name-in-path-and-data": "-user-name",
+      "variable-range-start": 0,
+      "variable-range-end": 100000000,
+      "variable-range-slicing": true,
       "Requests": [
         {
           "uri": {
             "typeOfAction": "input",
-            "input": "/udm-ee/subscribe/apiroot/-user-name"
+            "input": "/3gpp-amf-registration/apiroot/-user-name"
           },
           "clear-old-cookies": false,
           "method": "POST",
@@ -128,21 +138,6 @@
             "some: how"
           ],
           "luaScript": "function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send)    request_headers_to_send[\"lua-version\"] = \"5.1\"    return request_headers_to_send, request_payload_to_send end",
-          "expected-status-code": 201,
-          "delay-before-executing-next": 0
-        },
-        {
-          "uri": {
-            "typeOfAction": "fromResponseHeader",
-            "input": "location"
-          },
-          "clear-old-cookies": false,
-          "method": "DELETE",
-          "payload": "hello with apiroot: -user-name, delete.",
-          "additonalHeaders": [
-            "user-agent: h2load"
-          ],
-          "luaScript": "",
           "expected-status-code": 204,
           "delay-before-executing-next": 0
         },
@@ -152,11 +147,13 @@
             "input": ""
           },
           "clear-old-cookies": false,
-          "method": "GET",
-          "payload": "",
-          "additonalHeaders": [],
+          "method": "PATCH",
+          "payload": "hello with apiroot: -user-name, update.",
+          "additonalHeaders": [
+            "user-agent: h2load"
+          ],
           "luaScript": "",
-          "expected-status-code": 404,
+          "expected-status-code": 204,
           "delay-before-executing-next": 0
         }
       ]

@@ -101,6 +101,11 @@ void Worker::stop_all_clients()
     {
         if (client && client->session)
         {
+            auto write_clear_callback = [client]()
+            {
+                client->disconnect();
+            };
+            client->writefn = &Client::write_clear_with_callback;
             client->terminate_session();
             client->terminate_sub_clients();
         }

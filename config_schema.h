@@ -77,6 +77,8 @@ public:
     std::string name;
     uint32_t weight;
     std::string variable_name_in_path_and_data;
+    std::string user_id_list_file;
+    std::vector<std::string> user_ids;
     uint64_t variable_range_start;
     uint64_t variable_range_end;
     bool variable_range_slicing;
@@ -86,6 +88,7 @@ public:
         h->add_property("name", &this->name);
         h->add_property("weight", &this->weight, staticjson::Flags::Optional);
         h->add_property("user-id-variable-in-path-and-data", &this->variable_name_in_path_and_data, staticjson::Flags::Optional);
+        h->add_property("user-id-list-file", &this->user_id_list_file, staticjson::Flags::Optional);
         h->add_property("user-id-range-start", &this->variable_range_start, staticjson::Flags::Optional);
         h->add_property("user-id-range-end", &this->variable_range_end, staticjson::Flags::Optional);
         h->add_property("user-id-range-slicing", &this->variable_range_slicing, staticjson::Flags::Optional);

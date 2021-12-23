@@ -208,7 +208,8 @@ struct Client
     std::deque<std::string> candidate_addresses;
     std::deque<std::string> used_addresses;
     ev_timer delayed_reconnect_watcher;
-    static std::atomic<uint32_t> client_unique_id;
+    static std::atomic<uint64_t> client_unique_id;
+    uint64_t this_client_id;
     ev_timer connect_to_preferred_host_watcher;
     ev_io probe_wev;
     int probe_skt_fd;
@@ -338,6 +339,7 @@ struct Client
     void setup_connect_with_async_fqdn_lookup();
     void restore_connectfn();
     int connect_with_async_fqdn_lookup();
+    void slice_user_id();
 };
 
 class Submit_Requet_Wrapper
