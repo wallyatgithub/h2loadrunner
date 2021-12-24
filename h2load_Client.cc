@@ -56,7 +56,9 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         connectfn(&Client::connect),
         rps(conf->rps)
 {
-    this_client_id = client_unique_id++;
+    init_client_unique_id();
+
+    slice_user_id();
 
     if (req_todo == 0)   // this means infinite number of requests are to be made
     {
@@ -76,23 +78,21 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
 
     init_timer_watchers();
 
-    for (auto scenario_index = 0; scenario_index < conf->json_config_schema.scenarios.size(); scenario_index++)
-    {
-        std::vector<lua_State*> requests_lua_states;
-        for (auto request_index = 0; request_index < conf->json_config_schema.scenarios[scenario_index].requests.size(); request_index++)
-        {
-            auto& request = conf->json_config_schema.scenarios[scenario_index].requests[request_index];
-            lua_State* L = luaL_newstate();
-            luaL_openlibs(L);
-            if (request.luaScript.size())
-            {
-                luaL_dostring(L, request.luaScript.c_str());
-            }
-            requests_lua_states.push_back(L);
-        }
-        lua_states.push_back(requests_lua_states);
-    }
+    init_lua_states();
 
+    init_ares();
+
+    init_connection_targert();
+
+    update_this_in_dest_client_map();
+}
+
+void Client::init_client_unique_id()
+{
+    this_client_id = client_unique_id++;
+}
+void Client::init_ares()
+{
     struct ares_options options;
     options.sock_state_cb = ares_socket_state_cb;
     options.sock_state_cb_data = this;
@@ -103,30 +103,52 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         std::cerr<<"c-ares ares_init_options failed: "<<status<<std::endl;
         exit(EXIT_FAILURE);
     }
+}
+void Client::init_lua_states()
+{
+    for (auto scenario_index = 0; scenario_index < config->json_config_schema.scenarios.size(); scenario_index++)
+    {
+        std::vector<lua_State*> requests_lua_states;
+        for (auto request_index = 0; request_index < config->json_config_schema.scenarios[scenario_index].requests.size(); request_index++)
+        {
+            auto& request = config->json_config_schema.scenarios[scenario_index].requests[request_index];
+            lua_State* L = luaL_newstate();
+            luaL_openlibs(L);
+            if (request.luaScript.size())
+            {
+                luaL_dostring(L, request.luaScript.c_str());
+            }
+            requests_lua_states.push_back(L);
+        }
+        lua_states.push_back(requests_lua_states);
+    }
+}
 
+void Client::init_connection_targert()
+{
     if (schema.empty())
     {
-        schema = conf->scheme;
+        schema = config->scheme;
     }
     if (authority.empty())
     {
-        if (conf->port != conf->default_port)
+        if (config->port != config->default_port)
         {
-            authority = conf->host + ":" + util::utos(conf->port);
+            authority = config->host + ":" + util::utos(config->port);
         }
         else
         {
-            authority = conf->host;
+            authority = config->host;
         }
     }
 
-    if (is_controller_client() && (conf->no_tls_proto != Config::PROTO_HTTP1_1) &&
-        conf->json_config_schema.load_share_hosts.size())
+    if (is_controller_client() && (config->no_tls_proto != Config::PROTO_HTTP1_1) &&
+        config->json_config_schema.load_share_hosts.size())
     {
-        auto init_hosts = [this, conf]()
+        auto init_hosts = [this]()
         {
             std::vector<std::string> hosts;
-            for (auto& host: conf->json_config_schema.load_share_hosts)
+            for (auto& host: config->json_config_schema.load_share_hosts)
             {
                 hosts.push_back(host.host);
                 if (host.port)
@@ -153,8 +175,6 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
         }
         setup_connect_with_async_fqdn_lookup();
     }
-    slice_user_id();
-    update_this_in_dest_client_map();
 }
 
 void Client::init_timer_watchers()
@@ -1121,7 +1141,7 @@ void Client::on_data_chunk(int32_t stream_id, const uint8_t* data, size_t len)
     if (config->verbose)
     {
         std::string str((const char*)data, len);
-        std::cout<<"received data: "<<str<<std::endl;
+        std::cout<<"received data: "<<std::endl<<str<<std::endl;
     }
 }
 RequestStat* Client::get_req_stat(int32_t stream_id)
@@ -2351,8 +2371,16 @@ void Client::slice_user_id()
               auto tokens_per_client = ((scenario.variable_range_end - scenario.variable_range_start)/(config->nclients));
               if (tokens_per_client == 0)
               {
-                  std::cerr<<"Error: number of user IDs is smaller than number of clients, cannot continue"<<std::endl;
-                  exit(EXIT_FAILURE);
+                  if (worker->id == 0)
+                  {
+                      std::cerr<<"Error: number of user IDs is smaller than number of clients, cannot continue"<<std::endl;
+                      exit(EXIT_FAILURE);
+                  }
+                  else
+                  {
+                      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                      return;
+                  }
               }
               auto tokens_left = ((scenario.variable_range_end - scenario.variable_range_start)%(config->nclients));
               scenario_data.req_variable_value_start = scenario.variable_range_start +
@@ -2364,11 +2392,14 @@ void Client::slice_user_id()
 
               scenario_data.curr_req_variable_value = scenario_data.req_variable_value_start;
 
-              std::cerr<<", client Id:"<<this_client_id
-                       <<", scenario index: " << index
-                       <<", variable id start:"<<scenario_data.req_variable_value_start
-                       <<", variable id end:"<<scenario_data.req_variable_value_end
-                       <<std::endl;
+              if (config->verbose)
+              {
+                  std::cerr<<", client Id:"<<this_client_id
+                           <<", scenario index: " << index
+                           <<", variable id start:"<<scenario_data.req_variable_value_start
+                           <<", variable id end:"<<scenario_data.req_variable_value_end
+                           <<std::endl;
+              }
           }
           runtime_scenario_data.push_back(scenario_data);
       }

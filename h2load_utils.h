@@ -167,5 +167,9 @@ void post_process_json_config_schema(h2load::Config& config);
 
 std::vector<std::vector<std::string>> read_csv_file(const std::string& csv_file_name);
 
+void rpsUpdateFunc(std::atomic<bool>& workers_stopped, h2load::Config& config);
+
+void integrated_http2_server(std::stringstream& DatStream, h2load::Config& config);
+
 
 #endif

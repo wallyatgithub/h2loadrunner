@@ -60,6 +60,8 @@
 #include <sstream>
 #include <stdlib.h>
 #include <algorithm>
+#include <functional>
+
 
 
 #include <openssl/err.h>
@@ -73,7 +75,6 @@ extern "C" {
 #include "memchunk.h"
 #include "template.h"
 #include "url-parser/url_parser.h"
-#include <nghttp2/asio_http2_server.h>
 
 #include "h2load_http1_session.h"
 #include "h2load_http2_session.h"
@@ -1317,15 +1318,15 @@ int main(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
 
-    if (config.json_config_schema.scenarios.size() && config.custom_headers.size())
-    {
-        insert_customized_headers_to_Json_scenarios(config);
-    }
+    insert_customized_headers_to_Json_scenarios(config);
 
     normalize_request_templates(&config);
 
-    std::cerr << "Configuration dump:" << std::endl << staticjson::to_pretty_json_string(config.json_config_schema)
-              <<std::endl;
+    if (config.verbose)
+    {
+        std::cerr << "Configuration dump:" << std::endl << staticjson::to_pretty_json_string(config.json_config_schema)
+                  <<std::endl;
+    }
 
     tokenize_path_and_payload_for_fast_var_replace(config);
 
@@ -1415,111 +1416,20 @@ int main(int argc, char** argv)
     }
 
     auto start = std::chrono::steady_clock::now();
-    std::atomic<bool> workers_stopped;
-    workers_stopped = false;
+    std::atomic<bool> workers_stopped(false);
 
-    std::stringstream DatStream;
+    std::stringstream dataStream;
+
     if (config.json_config_schema.scenarios.size() > 0)
     {
-        auto thread_func = [&workers, &workers_stopped, &DatStream]()
-        {
-            output_realtime_stats(config, workers, workers_stopped, DatStream);
-        };
-        std::thread statThread(thread_func);
+        std::thread statThread(output_realtime_stats, std::ref(config), std::ref(workers), std::ref(workers_stopped), std::ref(dataStream));
         statThread.detach();
     }
 
-    auto rpsMonitorFunc = [&workers_stopped]()
-    {
-        while (!config.rps_file.empty() && !workers_stopped)
-        {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-            std::ifstream file;
-            file.open(config.rps_file);
-            std::string line;
-            if (!file)
-            {
-                std::cerr << "Error: Could not find:" << config.rps_file;
-            }
-            else
-            {
-                std::getline(file, line);
-                file.close();
-                char* end;
-                auto v = std::strtod(line.c_str(), &end);
-                if (end == line.c_str() || *end != '\0' || !std::isfinite(v) ||
-                    1. / v < 1e-6)
-                {
-                    std::cerr << "--rps: Invalid value, skip: " << line << std::endl;
-                }
-                else if (v != config.rps)
-                {
-                    config.rps = v;
-                }
-            }
-        }
-    };
-    std::thread monThread(rpsMonitorFunc);
+    std::thread monThread(rpsUpdateFunc, std::ref(workers_stopped), std::ref(config));
     monThread.detach();
 
-    uint32_t serverPort = 8080;
-    std::random_device                  rand_dev;
-    std::mt19937                        generator(rand_dev());
-    std::uniform_int_distribution<uint64_t>  distr(0, 10000);
-    serverPort += distr(generator);
-    std::cerr << "server listening at port: " << serverPort << std::endl;
-    auto serverFunc = [&DatStream, serverPort]()
-    {
-        nghttp2::asio_http2::server::http2 server;
-        boost::system::error_code ec;
-        server.num_threads(1);
-        server.handle("/stat", [&](const nghttp2::asio_http2::server::request &req, const nghttp2::asio_http2::server::response &res)
-        {
-            nghttp2::asio_http2::header_map headers;
-            nghttp2::asio_http2::header_value hdr_val;
-            hdr_val.sensitive = false;
-            std::string payload = DatStream.str();
-            hdr_val.value = std::to_string(payload.size());
-            headers.insert(std::make_pair("Content-Length", hdr_val));
-            res.write_head(200, headers);
-            res.end(payload);
-        });
-        server.handle("/config", [&](const nghttp2::asio_http2::server::request &req, const nghttp2::asio_http2::server::response &res)
-        {
-            std::string raw_query = req.uri().raw_query;
-            std::string replyMsg;
-
-            std::vector<std::string> tokens = tokenize_string(raw_query, "&");
-            auto rps_it = std::find_if(tokens.begin(), tokens.end(), [](std::string e) {return (e.find("rps") != std::string::npos);});
-            if (rps_it != tokens.end())
-            {
-                std::vector<std::string> rps_token = tokenize_string(*rps_it, "=");
-                if (rps_token.size() == 2)
-                {
-                    std::string rps = rps_token[1];
-                    try
-                    {
-                        config.rps = std::stod(rps);
-                        replyMsg = "rps update to: ";
-                        replyMsg.append(std::to_string(config.rps));
-                    }
-                    catch (...)
-                    {
-                        replyMsg = "unable to update rps";
-                    }
-                }
-            }
-
-            nghttp2::asio_http2::header_map headers;
-            res.write_head(200, headers);
-            res.end(std::string(replyMsg));
-        });
-        if (server.listen_and_serve(ec, std::string("0.0.0.0"), std::to_string(serverPort)))
-        {
-            std::cerr << "http2 server start error: " << ec.message() << std::endl;
-        }
-    };
-    std::thread serverThread(serverFunc);
+    std::thread serverThread(integrated_http2_server, std::ref(dataStream), std::ref(config));
     serverThread.detach();
 
     for (auto& fut : futures)

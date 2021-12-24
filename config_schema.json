@@ -217,6 +217,12 @@
       "default": 5,
       "type":"integer"
     },
+    "builtin-server-listening-port":
+    {
+      "description":"h2loadrunner has a builtin http2 server, which would handle incoming request to /stat to get the latest statistics report, and to /config to update configuration options; currently, the only supported configuration option update is rps, e.g., /config?rps=100 will update rps to 100",
+      "default": 8888,
+      "type":"integer"
+    },
     "window-bits":
     {
       "description":"Sets the stream level initial window size to (2^window-bits)-1",

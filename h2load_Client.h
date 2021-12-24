@@ -339,6 +339,10 @@ struct Client
     void restore_connectfn();
     int connect_with_async_fqdn_lookup();
     void slice_user_id();
+    void init_client_unique_id();
+    void init_ares();
+    void init_lua_states();
+    void init_connection_targert();
 };
 
 class Submit_Requet_Wrapper

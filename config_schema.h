@@ -156,6 +156,7 @@ public:
     bool connect_back_to_preferred_host;
     uint32_t interval_to_send_ping;
     std::vector<Scenario> scenarios;
+    uint32_t builtin_server_port;
 
     explicit Config_Schema():
         schema("http"),
@@ -186,7 +187,8 @@ public:
         open_new_connection_based_on_authority_header(false),
         connection_retry_on_disconnect(false),
         connect_back_to_preferred_host(false),
-        interval_to_send_ping(0)
+        interval_to_send_ping(0),
+        builtin_server_port(8888)
     {
     }
 
@@ -228,6 +230,7 @@ public:
         h->add_property("load-share-hosts", &this->load_share_hosts, staticjson::Flags::Optional);
         h->add_property("switch-back-after-connection-retry", &this->connect_back_to_preferred_host, staticjson::Flags::Optional);
         h->add_property("interval-between-ping-frames", &this->interval_to_send_ping, staticjson::Flags::Optional);
+        h->add_property("builtin-server-listening-port", &this->builtin_server_port, staticjson::Flags::Optional);
     }
 
 };

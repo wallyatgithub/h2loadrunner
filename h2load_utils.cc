@@ -18,6 +18,7 @@ extern "C" {
 #include "util.h"
 #include "config_schema.h"
 
+#include <nghttp2/asio_http2_server.h>
 
 #include "h2load_utils.h"
 #include "h2load_Client.h"
@@ -860,30 +861,28 @@ void populate_config_from_json(h2load::Config& config)
     config.rate = config.json_config_schema.rate;
     config.rate_period = config.json_config_schema.rate_period;
     config.rps = config.json_config_schema.request_per_second;
+    config.rps_file = config.json_config_schema.rps_file;
     config.stream_timeout_in_ms = config.json_config_schema.stream_timeout_in_ms;
     config.window_bits = config.json_config_schema.window_bits;
     config.connection_window_bits = config.json_config_schema.connection_window_bits;
     config.warm_up_time = config.json_config_schema.warm_up_time;
-//    config.variable_range_slicing = config.json_config_schema.variable_range_slicing;
-//    config.req_variable_start = config.json_config_schema.variable_range_start;
-//    config.req_variable_end = config.json_config_schema.variable_range_end;
-    //close(config.log_fd);
-    //config.log_fd = open(config.json_config_schema.log_file.c_str(), O_WRONLY | O_CREAT | O_APPEND,
-    //                     S_IRUSR | S_IWUSR | S_IRGRP);
 }
 
 void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
 {
-    for (auto& header : config.custom_headers)
+    if (config.json_config_schema.scenarios.size() && config.custom_headers.size())
     {
-        //std::string header_name = header.name;
-        //util::inp_strlower(header_name);
-        for (auto& scenario: config.json_config_schema.scenarios)
+        for (auto& header : config.custom_headers)
         {
-            for (auto& request : scenario.requests)
+            //std::string header_name = header.name;
+            //util::inp_strlower(header_name);
+            for (auto& scenario: config.json_config_schema.scenarios)
             {
-                request.headers_in_map[header.name] = header.value;
-                request.additonalHeaders.emplace_back(header.name + ":" + header.value);
+                for (auto& request : scenario.requests)
+                {
+                    request.headers_in_map[header.name] = header.value;
+                    request.additonalHeaders.emplace_back(header.name + ":" + header.value);
+                }
             }
         }
     }
@@ -1248,7 +1247,7 @@ size_t get_request_name_max_width (h2load::Config& config)
 
 void output_realtime_stats(h2load::Config& config,
                                    std::vector<std::unique_ptr<h2load::Worker>>& workers,
-                                   std::atomic<bool>& workers_stopped, std::stringstream& DatStream)
+                                   std::atomic<bool>& workers_stopped, std::stringstream& dataStream)
 {
     std::vector<std::vector<size_t>> scenario_req_sent_till_now;
     std::vector<std::vector<size_t>> scenario_resp_received_till_now;
@@ -1285,12 +1284,13 @@ void output_realtime_stats(h2load::Config& config,
         auto period_duration = std::chrono::duration_cast<std::chrono::milliseconds>(period_end - period_start).count();;
         period_start = period_end;
 
+        std::stringstream outputStream;
+
         static uint64_t counter = 0;
         if (counter % 10 == 0)
         {
-            std::stringstream colStream;
-            colStream << "time, request, sent/s, recv/s, success/s, (recv/s)/(sent/s), (success/s)/(recv/s), 3xx/s, 4xx/s, 5xx/s, latency-min(ms), max, mean, sd, +/-sd, total-sent, total-recv, total-success, recv/sent(total), success/recv(total)";
-            std::cout<<colStream.str()<<std::endl;
+            outputStream << "time, request, sent/s, recv/s, success/s, (recv/s)/(sent/s), (success/s)/(recv/s), 3xx/s, 4xx/s, 5xx/s, latency-min(ms), max, mean, sd, +/-sd, total-sent, total-recv, total-success, recv/sent(total), success/recv(total)";
+            outputStream <<std::endl;
         }
         counter++;
 
@@ -1329,8 +1329,7 @@ void output_realtime_stats(h2load::Config& config,
                 size_t delta_RPS_4xx = scenario_4xx_till_now[scenario_index][request_index] - scenario_4xx_till_last_interval[scenario_index][request_index];
                 size_t delta_RPS_5xx = scenario_5xx_till_now[scenario_index][request_index] - scenario_5xx_till_last_interval[scenario_index][request_index];
 
-                std::stringstream ScenarioDatStream;
-                ScenarioDatStream
+                outputStream
                     << std::put_time(std::localtime(&now_c), "%F %T")
                     << ", " << std::left << std::setw(request_name_width)<< std::string(config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(request_index))
                     << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_sent)/period_duration)
@@ -1352,7 +1351,7 @@ void output_realtime_stats(h2load::Config& config,
                     << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(scenario_req_sent_till_now[scenario_index][request_index]?(((double)scenario_resp_received_till_now[scenario_index][request_index] / scenario_req_sent_till_now[scenario_index][request_index]) * 100):0).append( "%")
                     << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(scenario_resp_received_till_now[scenario_index][request_index]?(((double)scenario_req_success_till_now[scenario_index][request_index] / scenario_resp_received_till_now[scenario_index][request_index]) * 100):0).append( "%")
                 ;
-                std::cout<<ScenarioDatStream.str()<<std::endl;
+                outputStream<<std::endl;
             }
         }
 
@@ -1386,8 +1385,7 @@ void output_realtime_stats(h2load::Config& config,
         auto delta_RPS_4xx = total_4xx - total_4xx_till_last_interval;
         auto delta_RPS_5xx = total_5xx - total_5xx_till_last_interval;
 
-        DatStream.str(std::string());
-        DatStream 
+        outputStream
             << std::put_time(std::localtime(&now_c), "%F %T")
             << ", " << std::left << std::setw(request_name_width) << "All_Requests"
             << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_sent)/period_duration)
@@ -1409,11 +1407,13 @@ void output_realtime_stats(h2load::Config& config,
             << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(total_req_sent?(((double)total_resp_recv / total_req_sent) * 100):0).append("%")
             << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(total_resp_recv?(((double)total_resp_success / total_resp_recv) * 100):0).append("%")
         ;
-        std::cout<<DatStream.str()<<std::endl;
+        outputStream<<std::endl;
+        std::cout<<outputStream.str();
 
         rps_width = std::to_string(delta_RPS_sent).size() > rps_width ? std::to_string(delta_RPS_sent).size() : rps_width;
         total_req_width = std::to_string(total_req_sent).size() > total_req_width ? std::to_string(total_req_sent).size(): total_req_width;
 
+        dataStream.str(outputStream.str());
     }
 }
 
@@ -1587,4 +1587,88 @@ std::vector<std::vector<std::string>> read_csv_file(const std::string& csv_file_
 
     return result;
 }
+
+void rpsUpdateFunc(std::atomic<bool>& workers_stopped, h2load::Config& config)
+{
+    while (!config.rps_file.empty() && !workers_stopped)
+    {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::ifstream file;
+        file.open(config.rps_file);
+        std::string line;
+        if (file)
+        {
+            std::getline(file, line);
+            file.close();
+            char* end;
+            auto v = std::strtod(line.c_str(), &end);
+            if (end == line.c_str() || *end != '\0' || !std::isfinite(v) ||
+                1. / v < 1e-6)
+            {
+                std::cerr << "--rps: Invalid value, skip: " << line << std::endl;
+            }
+            else if (v != config.rps)
+            {
+                config.rps = v;
+            }
+        }
+    }
+};
+
+void integrated_http2_server(std::stringstream& dataStream, h2load::Config& config)
+{
+    uint32_t serverPort = config.json_config_schema.builtin_server_port;
+    std::cerr << "builtin server listening at port: " << serverPort << std::endl;
+
+    nghttp2::asio_http2::server::http2 server;
+    boost::system::error_code ec;
+    server.num_threads(1);
+    server.handle("/stat", [&](const nghttp2::asio_http2::server::request &req, const nghttp2::asio_http2::server::response &res)
+    {
+        nghttp2::asio_http2::header_map headers;
+        nghttp2::asio_http2::header_value hdr_val;
+        hdr_val.sensitive = false;
+        std::string payload = dataStream.str();
+        hdr_val.value = std::to_string(payload.size());
+        headers.insert(std::make_pair("Content-Length", hdr_val));
+        res.write_head(200, headers);
+        res.end(payload);
+    });
+    server.handle("/config", [&](const nghttp2::asio_http2::server::request &req, const nghttp2::asio_http2::server::response &res)
+    {
+        std::string raw_query = req.uri().raw_query;
+        std::string replyMsg = "rps updated to ";
+
+        std::vector<std::string> tokens = tokenize_string(raw_query, "&");
+        auto rps_it = std::find_if(tokens.begin(), tokens.end(), [](std::string e) {return (e.find("rps") != std::string::npos);});
+        if (rps_it != tokens.end())
+        {
+            std::vector<std::string> rps_token = tokenize_string(*rps_it, "=");
+            if (rps_token.size() == 2)
+            {
+                std::string rps = rps_token[1];
+                char* end;
+                auto v = std::strtod(rps.c_str(), &end);
+                if (end == rps.c_str() || *end != '\0' || !std::isfinite(v) ||
+                    1. / v < 1e-6)
+                {
+                    replyMsg = "Invalid rps given";
+                }
+                else if (v != config.rps)
+                {
+                    config.rps = v;
+                    replyMsg.append(std::to_string(config.rps));
+                }
+            }
+        }
+
+        nghttp2::asio_http2::header_map headers;
+        res.write_head(200, headers);
+        res.end(std::string(replyMsg));
+    });
+    if (server.listen_and_serve(ec, std::string("0.0.0.0"), std::to_string(serverPort)))
+    {
+        std::cerr << "http2 server start error: " << ec.message() << std::endl;
+    }
+};
 
