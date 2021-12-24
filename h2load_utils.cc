@@ -924,10 +924,33 @@ void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config)
   }
 }
 
-std::string reassemble_str_with_variable(const Scenario& config_scenario, const std::vector<std::string>& tokenized_source,
-                                                    uint64_t variable_value, size_t full_var_length)
+std::string reassemble_str_with_variable(h2load::Config* config,
+                                                    size_t scenario_index,
+                                                    size_t request_index,
+                                                    const std::vector<std::string>& tokenized_source,
+                                                    uint64_t variable_value)
+
 {
+    auto init_full_var_len = [config]()
+    {
+        std::vector<size_t> str_len_vec;
+        for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
+        {
+            if (config->json_config_schema.scenarios[index].user_ids.size())
+            {
+                str_len_vec.push_back(0);
+            }
+            else
+            {
+                str_len_vec.push_back(std::to_string(config->json_config_schema.scenarios[index].variable_range_end).size());
+            }
+        }
+        return str_len_vec;
+    };
+
+    static thread_local auto str_len_vec = init_full_var_len();
     std::string retStr = tokenized_source[0];
+    auto& config_scenario = config->json_config_schema.scenarios[scenario_index];
 
     if (tokenized_source.size() > 1)
     {
@@ -935,14 +958,21 @@ std::string reassemble_str_with_variable(const Scenario& config_scenario, const 
         if (config_scenario.user_ids.size())
         {
             assert(variable_value < config_scenario.user_ids.size());
-            curr_var_value_str = config_scenario.user_ids[variable_value];
+            if (request_index < config_scenario.user_ids[variable_value].size())
+            {
+                curr_var_value_str = config_scenario.user_ids[variable_value][request_index];
+            }
+            else
+            {
+                curr_var_value_str = config_scenario.user_ids[variable_value][0];
+            }
         }
         else
         {
             curr_var_value_str = std::to_string(variable_value);
             std::string padding;
-            padding.reserve(full_var_length - curr_var_value_str.size());
-            for (size_t i = 0; i < full_var_length - curr_var_value_str.size(); i++)
+            padding.reserve(str_len_vec[scenario_index] - curr_var_value_str.size());
+            for (size_t i = 0; i < str_len_vec[scenario_index] - curr_var_value_str.size(); i++)
             {
                 padding.append("0");
             }
@@ -1464,14 +1494,12 @@ void post_process_json_config_schema(h2load::Config& config)
     {
         if (scenario.user_id_list_file.size())
         {
-            std::ifstream infile(scenario.user_id_list_file);
-            if (!infile)
+            scenario.user_ids = read_csv_file(scenario.user_id_list_file);
+            if (scenario.user_ids.empty())
             {
-                std::cerr << "cannot read user-id-list-file: " << scenario.user_id_list_file << std::endl;
+                std::cerr << "cannot read user IDs from: " << scenario.user_id_list_file << std::endl;
                 exit(EXIT_FAILURE);
             }
-
-            scenario.user_ids = read_uri_from_file(infile);
             scenario.variable_range_start = 0;
             scenario.variable_range_end = scenario.user_ids.size();
         }
@@ -1533,3 +1561,30 @@ void post_process_json_config_schema(h2load::Config& config)
     load_file_content(config.json_config_schema.client_cert);
     load_file_content(config.json_config_schema.private_key);
 }
+
+std::vector<std::vector<std::string>> read_csv_file(const std::string& csv_file_name)
+{
+    std::vector<std::vector<std::string>> result;
+    std::ifstream infile(csv_file_name);
+    if (!infile)
+    {
+        std::cerr << "cannot open file: " << csv_file_name << std::endl;
+        return result;
+    }
+    std::string line;
+    std::getline(infile, line); // remove first row which is column name;
+    while (std::getline(infile, line))
+    {
+        std::vector<std::string> row;
+        std::stringstream lineStream(line);
+        std::string cell;
+        while(std::getline(lineStream, cell, ','))
+        {
+            row.push_back(cell);
+        }
+        result.push_back(row);
+    }
+
+    return result;
+}
+

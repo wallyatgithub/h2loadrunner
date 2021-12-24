@@ -48,10 +48,10 @@
     {
       "name": "subs-update-delete-get",
       "weight": 100,
-      "variable-name-in-path-and-data": "-user-name",
-      "variable-range-start": 0,
-      "variable-range-end": 100000000,
-      "variable-range-slicing": true,
+      "user-id-variable-in-path-and-data": "-user-name",
+      "user-id-range-start": 0,
+      "user-id-range-end": 100000000,
+      "user-id-range-slicing": true,
       "Requests": [
         {
           "uri": {
@@ -119,10 +119,10 @@
     {
       "name": "amf-reg-dereg",
       "weight": 200,
-      "variable-name-in-path-and-data": "-user-name",
-      "variable-range-start": 0,
-      "variable-range-end": 100000000,
-      "variable-range-slicing": true,
+      "user-id-name-in-path-and-data": "-user-name",
+      "user-id-range-start": 0,
+      "user-id-range-end": 100000000,
+      "user-id-range-slicing": true,
       "Requests": [
         {
           "uri": {

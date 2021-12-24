@@ -1730,38 +1730,18 @@ void Client::produce_request_cookie_header(Request_Data& req_to_be_sent)
     }
 }
 
-std::vector<size_t> Client::init_var_str_len(Config* config)
-{
-    std::vector<size_t> str_len_vec;
-    for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
-    {
-        if (config->json_config_schema.scenarios[index].user_ids.size())
-        {
-            str_len_vec.push_back(0);
-        }
-        else
-        {
-            str_len_vec.push_back(std::to_string(config->json_config_schema.scenarios[index].variable_range_end).size());
-        }
-    }
-    return str_len_vec;
-}
-
 void Client::populate_request_from_config_template(Request_Data& new_request,
                                                                   size_t scenario_index,
                                                                   size_t index_in_config_template)
 {
-    static thread_local auto str_len_vec = init_var_str_len(config);
-
     auto& request_template = config->json_config_schema.scenarios[scenario_index].requests[index_in_config_template];
 
     new_request.method = &request_template.method;
     new_request.schema = &request_template.schema;
     new_request.authority = &request_template.authority;
-    new_request.string_collection.emplace_back(reassemble_str_with_variable(config->json_config_schema.scenarios[scenario_index],
+    new_request.string_collection.emplace_back(reassemble_str_with_variable(config, scenario_index, index_in_config_template,
                                                                             request_template.tokenized_payload,
-                                                                            new_request.user_id,
-                                                                            str_len_vec[scenario_index]));
+                                                                            new_request.user_id));
     new_request.req_payload = &(new_request.string_collection.back());
     new_request.req_headers = &request_template.headers_in_map;
     new_request.expected_status_code = request_template.expected_status_code;
@@ -1821,9 +1801,6 @@ Request_Data Client::prepare_first_request()
 
     auto& scenario = config->json_config_schema.scenarios[scenario_index];
 
-    static thread_local auto str_len_vec = init_var_str_len(config);
-
-
     static thread_local Request_Data dummy_data;
 
     Request_Data new_request;
@@ -1846,10 +1823,9 @@ Request_Data Client::prepare_first_request()
     populate_request_from_config_template(new_request, scenario_index, curr_index);
 
     auto& request_template = scenario.requests[curr_index];
-    new_request.string_collection.emplace_back(reassemble_str_with_variable(config->json_config_schema.scenarios[scenario_index],
+    new_request.string_collection.emplace_back(reassemble_str_with_variable(config, scenario_index, curr_index,
                                                                             request_template.tokenized_path,
-                                                                            new_request.user_id,
-                                                                            str_len_vec[scenario_index]));
+                                                                            new_request.user_id));
     new_request.path = &(new_request.string_collection.back());
 
     if (scenario.requests[curr_index].luaScript.size())
@@ -1885,8 +1861,6 @@ Request_Data Client::get_request_to_submit()
 
 bool Client::prepare_next_request(Request_Data& finished_request)
 {
-    static thread_local auto str_len_vec = init_var_str_len(config);
-
     size_t scenario_index = finished_request.scenario_index;
     Scenario& scenario = config->json_config_schema.scenarios[scenario_index];
 
@@ -1907,10 +1881,9 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     if (request_template.uri.typeOfAction == "input")
     {
-         new_request.string_collection.emplace_back(reassemble_str_with_variable(config->json_config_schema.scenarios[scenario_index],
+         new_request.string_collection.emplace_back(reassemble_str_with_variable(config, scenario_index, curr_index,
                                                                                  request_template.tokenized_path,
-                                                                                 new_request.user_id,
-                                                                                 str_len_vec[scenario_index]));
+                                                                                 new_request.user_id));
          new_request.path = &(new_request.string_collection.back());
     }
     else if (request_template.uri.typeOfAction == "sameWithLastOne")
@@ -2378,7 +2351,7 @@ void Client::slice_user_id()
               auto tokens_per_client = ((scenario.variable_range_end - scenario.variable_range_start)/(config->nclients));
               if (tokens_per_client == 0)
               {
-                  std::cerr<<"Error: number of user ids is smaller than number of clients, cannot continue"<<std::endl;
+                  std::cerr<<"Error: number of user IDs is smaller than number of clients, cannot continue"<<std::endl;
                   exit(EXIT_FAILURE);
               }
               auto tokens_left = ((scenario.variable_range_end - scenario.variable_range_start)%(config->nclients));

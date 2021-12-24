@@ -331,7 +331,6 @@ struct Client
     bool should_reconnect_on_disconnect();
 
     void submit_ping();
-    std::vector<size_t> init_var_str_len(Config* config);
     size_t get_index_of_next_scenario_to_run();
     void update_scenario_based_stats(size_t scenario_index, size_t request_index, bool success, bool status_success);
     bool rps_mode();

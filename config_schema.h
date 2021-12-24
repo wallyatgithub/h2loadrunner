@@ -78,7 +78,7 @@ public:
     uint32_t weight;
     std::string variable_name_in_path_and_data;
     std::string user_id_list_file;
-    std::vector<std::string> user_ids;
+    std::vector<std::vector<std::string>> user_ids;
     uint64_t variable_range_start;
     uint64_t variable_range_end;
     bool variable_range_slicing;

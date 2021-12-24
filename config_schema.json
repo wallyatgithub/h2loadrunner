@@ -259,7 +259,7 @@
           },
           "user-id-list-file":
           {
-            "description":"Path of a file; each line of the file is a user id, which would be picked up in turn to replace the user id variable in path and data specified above. When this option is used, user-id-range-start/end would be ignored",
+            "description":"path of a CSV file; Suppose this CSV file has M rows and N columns, then each row (except the first row which is column name) represents a list of identities for one user. So, this file will represent M - 1 users, with each user associated with N identities, and these N identities are for the N requests defined in this scenario respectively. It is acceptable that, there are N requests defined, while only 1 column is present in this file, then for each user, all the N requests will share the same identity from this single column. Note: if user-id-range-slicing is enabled, and the number of users (M - 1) from this file is less than the number of clients, the test cannot be done, as some client would have not even a single user. When user-id-list-file has a value, user-id-range-start/end would be ignored",
             "type":"string"
           },
           "user-id-range-start":

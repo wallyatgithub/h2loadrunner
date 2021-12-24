@@ -192,7 +192,9 @@
   
   h2loadrunner requires the lua script of any request in this format and naming convention:
   
-  It must be named "make_request", and it takes 4 input arguments, and it can return up to 2 output arguments: one table and one string. 
+  It must provide a function named "make_request", and it takes 4 input arguments, and it can return up to 2 output arguments: one table and one string. 
+
+  It can define other lua functions, and function "make_request" can call that. It can also "require" another lua module, the respective lua file required can be placed in the same directory of h2loadrunner, or any other directory that is within LUA_PATH
   
   Example:
   
@@ -222,7 +224,7 @@
 
   To summarize: with Lua script and the information made available to the Lua script, theoretically, h2loadrunner can generate whatever request needed.
   
-  Well, of course, to reach that, various Lua scripts are needed for various test needs. :)
+  Well, of course, to reach that, various Lua scripts are needed for various test needs.
   
     
 # HTTP 1.x support
