@@ -173,6 +173,10 @@ void Client::init_connection_targert()
         {
             candidate_addresses.push_back(hosts[(++startIndex)%hosts.size()]);
         }
+        std::random_device random_device;
+        std::mt19937 generator(random_device());
+        std::shuffle(candidate_addresses.begin(), candidate_addresses.end(), generator);
+
         setup_connect_with_async_fqdn_lookup();
     }
 }
