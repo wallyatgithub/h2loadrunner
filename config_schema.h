@@ -2,11 +2,19 @@
 #define H2LOAD_CONFIG_SCHEMA_H
 
 #include <iostream>
+#include <map>
+#include <fstream>
 
 #include "staticjson/document.hpp"
 #include "staticjson/staticjson.hpp"
 #include "rapidjson/schema.h"
 #include "rapidjson/prettywriter.h"
+
+const std::string extended_json_pointer_indicator = "/~#";
+
+const std::string extended_json_pointer_name_indicator = "#name";
+
+const std::string extended_json_pointer_value_indicator = "#value";
 
 struct ci_less
 {
@@ -36,6 +44,330 @@ public:
     }
 };
 
+class Schema_Header_Match
+{
+public:
+    std::string matchType;
+    std::string header;
+    std::string input;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("matchType", &this->matchType);
+        h->add_property("header-name", &this->header);
+        h->add_property("input", &this->input);
+    }
+};
+
+class Schema_Payload_Match
+{
+public:
+    std::string matchType;
+    std::string jsonPointer;
+    std::string input;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("matchType", &this->matchType);
+        h->add_property("JsonPointer", &this->jsonPointer);
+        h->add_property("input", &this->input);
+    }
+};
+
+class Schema_Response_Match
+{
+public:
+    std::vector<Schema_Header_Match> header_match;
+    std::vector<Schema_Payload_Match> payload_match;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("headers", &this->header_match);
+        h->add_property("payload", &this->payload_match, staticjson::Flags::Optional);
+    }
+};
+
+template<typename RapidJsonType>
+inline const rapidjson::Value* getNthValue(const RapidJsonType& d, int64_t n)
+{
+    if (d.MemberCount() && n > 0)
+    {
+        int64_t index = 1;
+        for (rapidjson::Value::ConstMemberIterator itr = d.MemberBegin();
+            itr != d.MemberEnd();)
+        {
+            if (index == n)
+            {
+                return &(itr->value);
+            }
+            ++index;
+            ++itr;
+        }
+    }
+    else if (d.MemberCount() && n < 0)
+    {
+        if ((0 - n) == d.MemberCount())
+        {
+            return &(d.MemberBegin()->value);
+        }
+        else
+        {
+            int64_t index = -1;
+            rapidjson::Value::ConstMemberIterator itr = d.MemberEnd();
+            itr--;
+            while (itr != d.MemberBegin())
+            {
+                if (index == n)
+                {
+                    return &(itr->value);
+                }
+                itr--;
+                index--;
+            }
+        }
+
+    }
+    return nullptr;
+}
+
+template<typename RapidJsonType>
+inline const rapidjson::Value* getNthName(const RapidJsonType& d, int64_t n)
+{
+    if (d.MemberCount() && n > 0)
+    {
+        int64_t index = 1;
+        for (rapidjson::Value::ConstMemberIterator itr = d.MemberBegin();
+            itr != d.MemberEnd();)
+        {
+            if (index == n)
+            {
+                return &(itr->name);
+            }
+            ++index;
+            ++itr;
+        }
+    }
+    else if (d.MemberCount() && n < 0)
+    {
+        if ((0 - n) == d.MemberCount())
+        {
+            return &(d.MemberBegin()->name);
+        }
+        else
+        {
+            int64_t index = -1;
+            rapidjson::Value::ConstMemberIterator itr = d.MemberEnd();
+            itr--;
+            while (itr != d.MemberBegin())
+            {
+                if (index == n)
+                {
+                    return &(itr->name);
+                }
+                itr--;
+                index--;
+            }
+        }
+
+    }
+    return nullptr;
+}
+
+inline std::vector<std::string> splitComplexJsonPointer(const std::string& json_pointer)
+{
+    std::vector<std::string> JsonPointers;
+    std::string extended_json_pointer_indicator = "/~#";
+    size_t start_pos = 0;
+    while (start_pos != std::string::npos)
+    {
+        size_t end_pos = json_pointer.find(extended_json_pointer_indicator, start_pos);
+        if (end_pos - start_pos)
+        {
+            JsonPointers.emplace_back(json_pointer.substr(start_pos, (end_pos - start_pos)));
+        }
+        if (end_pos != std::string::npos)
+        {
+            size_t nextJsonPtrPos = json_pointer.find("/", end_pos+1);
+            JsonPointers.emplace_back(json_pointer.substr(end_pos, (nextJsonPtrPos - end_pos)));
+            start_pos = nextJsonPtrPos;
+        }
+        else
+        {
+            break;
+        }
+    }
+    return JsonPointers;
+}
+
+template<typename RapidJsonType>
+inline std::string convertRapidVJsonValueToStr(RapidJsonType* value)
+{
+    if (value)
+    {
+        if (value->IsString())
+        {
+            return value->GetString();
+        }
+        else if (value->IsBool())
+        {
+            return value->GetBool() ? "true" : "false";
+        }
+        else if (value->IsUint64())
+        {
+            return std::to_string(value->GetUint64());
+        }
+        else if (value->IsDouble())
+        {
+            return std::to_string(value->GetDouble());
+        }
+        else if (value->IsObject())
+        {
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            value->Accept(writer);
+            return std::string(buffer.GetString());
+        }
+    }
+    return "";
+}
+
+
+template<typename RapidJsonType>
+inline std::string getValueFromJsonPtr(const RapidJsonType& d, const std::string& json_pointer)
+{
+    std::vector<std::string> pointers = splitComplexJsonPointer(json_pointer);
+    const rapidjson::Value* value = &d;
+    for (size_t vectorIndex = 0; vectorIndex < pointers.size(); vectorIndex++)
+    {
+        if (pointers[vectorIndex].find(extended_json_pointer_indicator) != std::string::npos)
+        {
+            try
+            {
+                int64_t index = std::stoi(pointers[vectorIndex].substr(extended_json_pointer_indicator.size()));
+                std::string str = extended_json_pointer_indicator;
+                str.append(std::to_string(index));
+                std::string name_or_value = pointers[vectorIndex].substr(str.size());
+                if (name_or_value.compare(extended_json_pointer_name_indicator) == 0)
+                {
+                    value = getNthName(*value, index);
+                    break; // a name is always a string, no more pointer into this string any more
+                }
+                else if (name_or_value.compare(extended_json_pointer_value_indicator) == 0)
+                {
+                    value = getNthValue(*value, index);
+                }
+                else
+                {
+                    std::cerr<<"invalid json pointer: "<<pointers[vectorIndex]<<std::endl;
+                }
+            }
+            catch (std::invalid_argument& e)
+            {
+                std::cerr<<"invalid_argument: "<<pointers[vectorIndex]<<std::endl;
+                exit(1);
+            }
+            catch (std::out_of_range& e)
+            {
+                std::cerr<<"out_of_range: "<<pointers[vectorIndex]<<std::endl;
+                exit(1);
+            }
+        }
+        else
+        {
+            rapidjson::Pointer ptr(pointers[vectorIndex].c_str());
+            value = ptr.Get(*value);
+        }
+        if (!value)
+        {
+            break;
+        }
+    }
+    return convertRapidVJsonValueToStr(value);
+}
+
+class Match_Rule
+{
+public:
+    enum Match_Type
+    {
+        EQUALS_TO = 0,
+        START_WITH,
+        END_WITH,
+        CONTAINS
+    };
+
+    Match_Type match_type;
+    std::string header_name;
+    std::string json_pointer;
+    std::string object;
+    mutable uint64_t unique_id;
+    Match_Rule(const Schema_Header_Match& header_match)
+    {
+        object = header_match.input;
+        header_name = header_match.header;
+        json_pointer = "";
+        match_type = string_to_match_type[header_match.matchType];
+    }
+    Match_Rule(const Schema_Payload_Match& payload_match)
+    {
+        object = payload_match.input;
+        header_name = "";
+        json_pointer = payload_match.jsonPointer;
+        match_type = string_to_match_type[payload_match.matchType];
+    }
+
+    std::map<std::string, Match_Type> string_to_match_type {{"EqualsTo", EQUALS_TO}, {"StartsWith", START_WITH}, {"EndsWith", END_WITH}, {"Contains", CONTAINS}};
+
+    bool run_match(const std::string& subject, Match_Type verb, const std::string& object) const
+    {
+        switch (verb)
+        {
+            case EQUALS_TO:
+            {
+                return (subject == object);
+            }
+            case START_WITH:
+            {
+                return (subject.find(object) == 0);
+            }
+            case END_WITH:
+            {
+                return (subject.size() >= object.size() && 0 == subject.compare(subject.size() - object.size(), object.size(), object));
+            }
+            case CONTAINS:
+            {
+                return (subject.find(object) != std::string::npos);
+            }
+        }
+        return false;
+    }
+
+    bool match_header(const std::map<std::string, std::string, ci_less>& response_headers) const
+    {
+        auto it = response_headers.find(header_name);
+        if (it != response_headers.end())
+        {
+            return run_match(it->second, match_type, object);
+        }
+        return false;
+    }
+
+    bool match_json_doc(const rapidjson::Document& d) const
+    {
+        return run_match(getValueFromJsonPtr(d, json_pointer), match_type, object);
+    }
+
+    bool match(const std::map<std::string, std::string, ci_less>& response_headers, const rapidjson::Document& d)
+    {
+        if (header_name.size())
+        {
+            return match_header(response_headers);
+        }
+        else
+        {
+            return match_json_doc(d);
+        }
+    }
+};
+
+
 class Request {
 public:
     bool clear_old_cookies;
@@ -47,7 +379,8 @@ public:
     std::string method;
     std::string payload;
     std::vector<std::string> additonalHeaders;
-    uint32_t expected_status_code; // staticJson does not accept uint16_t
+    Schema_Response_Match response_match;
+    std::vector<Match_Rule> response_match_rules;
     std::map<std::string, std::string, ci_less> headers_in_map;
     std::vector<std::string> tokenized_path;
     std::vector<std::string> tokenized_payload;
@@ -60,13 +393,12 @@ public:
         h->add_property("payload", &this->payload, staticjson::Flags::Optional);
         h->add_property("additonalHeaders", &this->additonalHeaders, staticjson::Flags::Optional);
         h->add_property("clear-old-cookies", &this->clear_old_cookies, staticjson::Flags::Optional);
-        h->add_property("expected-status-code", &this->expected_status_code, staticjson::Flags::Optional);
         h->add_property("delay-before-executing-next", &this->delay_before_executing_next, staticjson::Flags::Optional);
+        h->add_property("response-match", &this->response_match, staticjson::Flags::Optional);
     }
     explicit Request()
     {
         clear_old_cookies = false;
-        expected_status_code = 0;
         delay_before_executing_next = 0;
     }
 };
@@ -157,6 +489,7 @@ public:
     uint32_t interval_to_send_ping;
     std::vector<Scenario> scenarios;
     uint32_t builtin_server_port;
+    std::string failed_request_log_file;
 
     explicit Config_Schema():
         schema("http"),
@@ -231,8 +564,8 @@ public:
         h->add_property("switch-back-after-connection-retry", &this->connect_back_to_preferred_host, staticjson::Flags::Optional);
         h->add_property("interval-between-ping-frames", &this->interval_to_send_ping, staticjson::Flags::Optional);
         h->add_property("builtin-server-listening-port", &this->builtin_server_port, staticjson::Flags::Optional);
+        h->add_property("failed-request-log-file", &this->failed_request_log_file, staticjson::Flags::Optional);
     }
-
 };
 
 #endif

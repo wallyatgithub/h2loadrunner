@@ -16,6 +16,9 @@ extern "C" {
 #include "lauxlib.h"
 }
 #include "http2.h"
+extern "C" {
+#include <ares.h>
+}
 
 #include "memchunk.h"
 #include "template.h"
@@ -310,7 +313,7 @@ struct Client
 
     void enqueue_request(Request_Data& finished_request, Request_Data&& new_request);
 
-    void mark_response_success_or_failure(int32_t stream_id);
+    void inc_status_counter_and_validate_response(int32_t stream_id);
     uint64_t get_total_pending_streams();
 
     bool is_controller_client();
@@ -374,6 +377,7 @@ public:
   };
 };
 
+void log_failed_request(h2load::Config& config, h2load::Request_Data failed_req);
 
 }
 #endif

@@ -876,7 +876,7 @@ void Client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
     }
 }
 
-void Client::mark_response_success_or_failure(int32_t stream_id)
+void Client::inc_status_counter_and_validate_response(int32_t stream_id)
 {
     uint16_t status = 0;
     auto itr = streams.find(stream_id);
@@ -894,57 +894,62 @@ void Client::mark_response_success_or_failure(int32_t stream_id)
 
     status = stream.req_stat.status;
 
-    size_t scenario_index = 0;
-    size_t request_index = 0;
-    auto request_data = requests_awaiting_response.find(stream_id);
-    if (request_data != requests_awaiting_response.end())
+    if (status < 600)
     {
-        scenario_index = request_data->second.scenario_index;
-        request_index = request_data->second.curr_request_idx;
+        ++worker->stats.status[status / 100];
     }
-    if (request_data != requests_awaiting_response.end() &&
-        request_data->second.expected_status_code)
+
+    if (status < 400)
     {
-        if (status != request_data->second.expected_status_code)
-        {
-            stream.status_success = 0;
-        }
-        else
-        {
-            stream.status_success = 1;
-        }
+        stream.status_success = 1;
     }
     else
     {
+        stream.status_success = 0;
+    }
+
+    auto request_data = requests_awaiting_response.find(stream_id);
+    if (request_data != requests_awaiting_response.end())
+    {
+        auto scenario_index = request_data->second.scenario_index;
+        auto request_index = request_data->second.curr_request_idx;
         if (scenario_index < worker->scenario_stats.size() &&
-            request_index < worker->scenario_stats[scenario_index].size())
+            request_index < worker->scenario_stats[scenario_index].size()&&
+            status < 600)
         {
             auto& stats = worker->scenario_stats[scenario_index][request_index];
-            if (status < 600)
+            ++stats->status[status / 100];
+        }
+        auto& request = config->json_config_schema.scenarios[scenario_index].requests[request_index];
+        if (request.response_match_rules.size())
+        {
+            rapidjson::Document json_payload;
+            if (request.response_match.payload_match.size())
             {
-                ++stats->status[status / 100];
+                json_payload.Parse(request_data->second.resp_payload.c_str());
+            }
+            bool matched = false;
+            for (auto& match_rule: request.response_match_rules)
+            {
+                matched = match_rule.match(request_data->second.resp_headers, json_payload);
+                if (!matched)
+                {
+                    break;
+                }
+            }
+            if (matched)
+            {
+                stream.status_success = 1;
+            }
+            else
+            {
+                stream.status_success = 0;
             }
         }
-
-        if (status >= 200 && status < 300)
-        {
-            ++worker->stats.status[2];
-            stream.status_success = 1;
-        }
-        else if (status < 400)
-        {
-            ++worker->stats.status[3];
-            stream.status_success = 1;
-        }
-        else if (status < 600)
-        {
-            ++worker->stats.status[status / 100];
-            stream.status_success = 0;
-        }
-        else
-        {
-            stream.status_success = 0;
-        }
+    }
+    if (stream.status_success == 0)
+    {
+        log_failed_request(*config, request_data->second);
     }
 }
 
@@ -1006,7 +1011,7 @@ void Client::update_scenario_based_stats(size_t scenario_index, size_t request_i
 
 void Client::on_stream_close(int32_t stream_id, bool success, bool final)
 {
-    mark_response_success_or_failure(stream_id);
+    inc_status_counter_and_validate_response(stream_id);
 
     auto finished_request = requests_awaiting_response.find(stream_id);
 
@@ -1768,7 +1773,6 @@ void Client::populate_request_from_config_template(Request_Data& new_request,
                                                                             new_request.user_id));
     new_request.req_payload = &(new_request.string_collection.back());
     new_request.req_headers = &request_template.headers_in_map;
-    new_request.expected_status_code = request_template.expected_status_code;
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
 }
 
@@ -2124,7 +2128,7 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
     }
     else
     {
-        std::cerr << "lua script provisioned but required function not present, abort the whole scenario sequence" << std::endl;
+        std::cerr << "lua script provisioned but required function is not present or is ill-formed, abort the whole scenario sequence" << std::endl;
         retCode = false;
     }
     return retCode;
@@ -2420,6 +2424,16 @@ void Client::slice_user_id()
           runtime_scenario_data.push_back(scenario_data);
       }
   }
+}
+
+void log_failed_request(h2load::Config& config, h2load::Request_Data failed_req)
+{
+    if (config.json_config_schema.failed_request_log_file.empty())
+    {
+        return;
+    }
+    static std::ofstream log_file(config.json_config_schema.failed_request_log_file);
+    log_file<<failed_req;
 }
 
 }

@@ -2,6 +2,8 @@
 #include <cctype>
 #include <execinfo.h>
 #include <iomanip>
+#include <iostream>
+#include <fstream>
 
 #include <string>
 #include <openssl/err.h>
@@ -1289,7 +1291,7 @@ void output_realtime_stats(h2load::Config& config,
         static uint64_t counter = 0;
         if (counter % 10 == 0)
         {
-            outputStream << "time, request, sent/s, recv/s, success/s, (recv/s)/(sent/s), (success/s)/(recv/s), 3xx/s, 4xx/s, 5xx/s, latency-min(ms), max, mean, sd, +/-sd, total-sent, total-recv, total-success, recv/sent(total), success/recv(total)";
+            outputStream << "time, request, sent/s, recv/s, success/s, (recv/s)/(sent/s), (success/s)/(recv/s), delta_3xx, 4xx, 5xx, latency-min(ms), max, mean, sd, +/-sd, total-sent, total-recv, total-success, recv/sent(total), success/recv(total)";
             outputStream <<std::endl;
         }
         counter++;
@@ -1325,9 +1327,9 @@ void output_realtime_stats(h2load::Config& config,
                 size_t delta_RPS_sent = scenario_req_sent_till_now[scenario_index][request_index] - scenario_req_sent_till_last_interval[scenario_index][request_index];
                 size_t delta_RPS_received = scenario_resp_received_till_now[scenario_index][request_index] - scenario_resp_received_till_last_interval[scenario_index][request_index];
                 size_t delta_RPS_success = scenario_req_success_till_now[scenario_index][request_index] - scenario_req_success_till_last_interval[scenario_index][request_index];
-                size_t delta_RPS_3xx = scenario_3xx_till_now[scenario_index][request_index] - scenario_3xx_till_last_interval[scenario_index][request_index];
-                size_t delta_RPS_4xx = scenario_4xx_till_now[scenario_index][request_index] - scenario_4xx_till_last_interval[scenario_index][request_index];
-                size_t delta_RPS_5xx = scenario_5xx_till_now[scenario_index][request_index] - scenario_5xx_till_last_interval[scenario_index][request_index];
+                size_t request_delta_3xx = scenario_3xx_till_now[scenario_index][request_index] - scenario_3xx_till_last_interval[scenario_index][request_index];
+                size_t request_delta_4xx = scenario_4xx_till_now[scenario_index][request_index] - scenario_4xx_till_last_interval[scenario_index][request_index];
+                size_t request_delta_5xx = scenario_5xx_till_now[scenario_index][request_index] - scenario_5xx_till_last_interval[scenario_index][request_index];
 
                 outputStream
                     << std::put_time(std::localtime(&now_c), "%F %T")
@@ -1337,9 +1339,9 @@ void output_realtime_stats(h2load::Config& config,
                     << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_success)/period_duration)
                     << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_sent?(((double)delta_RPS_received / delta_RPS_sent) * 100):0).append( "%")
                     << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0).append("%")
-                    << ", " << std::left << std::setw(rps_width) << delta_RPS_3xx
-                    << ", " << std::left << std::setw(rps_width) << delta_RPS_4xx
-                    << ", " << std::left << std::setw(rps_width) << delta_RPS_5xx
+                    << ", " << std::left << std::setw(total_req_width) << request_delta_3xx
+                    << ", " << std::left << std::setw(total_req_width) << request_delta_4xx
+                    << ", " << std::left << std::setw(total_req_width) << request_delta_5xx
                     << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].min)
                     << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].max)
                     << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].mean)
@@ -1381,9 +1383,9 @@ void output_realtime_stats(h2load::Config& config,
         auto delta_RPS_sent = total_req_sent - total_req_sent_till_last_interval;
         auto delta_RPS_received = total_resp_recv - total_resp_recv_till_last_interval;
         auto delta_RPS_success = total_resp_success - total_resp_success_till_last_interval;
-        auto delta_RPS_3xx = total_3xx - total_3xx_till_last_interval;
-        auto delta_RPS_4xx = total_4xx - total_4xx_till_last_interval;
-        auto delta_RPS_5xx = total_5xx - total_5xx_till_last_interval;
+        auto delta_3xx = total_3xx - total_3xx_till_last_interval;
+        auto delta_4xx = total_4xx - total_4xx_till_last_interval;
+        auto delta_5xx = total_5xx - total_5xx_till_last_interval;
 
         outputStream
             << std::put_time(std::localtime(&now_c), "%F %T")
@@ -1393,9 +1395,9 @@ void output_realtime_stats(h2load::Config& config,
             << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_success)/period_duration)
             << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_sent?(((double)delta_RPS_received / delta_RPS_sent) * 100):0).append("%")
             << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0).append("%")
-            << ", " << std::left << std::setw(rps_width) << delta_RPS_3xx
-            << ", " << std::left << std::setw(rps_width) << delta_RPS_4xx
-            << ", " << std::left << std::setw(rps_width) << delta_RPS_5xx
+            << ", " << std::left << std::setw(total_req_width) << delta_3xx
+            << ", " << std::left << std::setw(total_req_width) << delta_4xx
+            << ", " << std::left << std::setw(total_req_width) << delta_5xx
             << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[config.json_config_schema.scenarios.size()][0].min)
             << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[config.json_config_schema.scenarios.size()][0].max)
             << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[config.json_config_schema.scenarios.size()][0].mean)
@@ -1416,6 +1418,7 @@ void output_realtime_stats(h2load::Config& config,
         dataStream.str(outputStream.str());
     }
 }
+
 
 std::vector<std::vector<h2load::SDStat>>
 produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>>& workers)
@@ -1554,6 +1557,15 @@ void post_process_json_config_schema(h2load::Config& config)
                         request.authority.append(":").append(util::utos(u.port));
                     }
                 }
+            }
+            for (auto& schema_header_match : request.response_match.header_match)
+            {
+                request.response_match_rules.emplace_back(Match_Rule(schema_header_match));
+            }
+            
+            for (auto& schema_payload_match : request.response_match.payload_match)
+            {
+                request.response_match_rules.emplace_back(Match_Rule(schema_payload_match));
             }
         }
     }
@@ -1725,4 +1737,5 @@ void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& co
         }
     }
 }
+
 
