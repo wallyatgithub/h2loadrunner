@@ -1804,9 +1804,9 @@ size_t Client::get_index_of_next_scenario_to_run()
     static thread_local auto total_weight = (schedule_map.rbegin()->first);
     static thread_local std::random_device                  randDev;
     static thread_local std::mt19937                        generator(randDev());
+    static thread_local std::uniform_int_distribution<int>  distr(0, total_weight - 1);
 
     size_t scenario_index = 0;
-    std::uniform_int_distribution<int>  distr(0, total_weight - 1);
     uint64_t randomNumber = distr(generator);
     auto iter = schedule_map.upper_bound(randomNumber);
     if (iter != schedule_map.end())

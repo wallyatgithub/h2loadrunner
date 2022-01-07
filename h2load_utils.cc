@@ -1672,3 +1672,57 @@ void integrated_http2_server(std::stringstream& dataStream, h2load::Config& conf
     }
 };
 
+void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& config, const std::vector<std::unique_ptr<h2load::Worker>>& workers)
+{
+    if (config.json_config_schema.scenarios.size())
+    {
+        std::stringstream colStream;
+        colStream << "request, traffic-percentage, total-req-sent, total-resp-recv, total-resp-success, total-3xx-resp, total-4xx-resp, total-5xx-resp, latency-min(ms), latency-max, latency-mean, latency-sd, +/-sd";
+        std::cerr<<colStream.str()<<std::endl;
+        auto latency_stats = produce_requests_latency_stats(workers);
+        size_t request_name_width = get_request_name_max_width(config);
+        static size_t percentage_width = 8;
+        static size_t latency_width = 5;
+
+        for (size_t scenario_index = 0; scenario_index < config.json_config_schema.scenarios.size(); scenario_index++)
+        {
+            for (size_t request_index = 0; request_index < config.json_config_schema.scenarios[scenario_index].requests.size(); request_index++)
+            {
+                size_t req_sent = 0;
+                size_t resp_received = 0;
+                size_t resp_success = 0;
+                size_t resp_3xx = 0;
+                size_t resp_4xx = 0;
+                size_t resp_5xx = 0;
+                for (auto& w : workers)
+                {
+                    auto& s = *(w->scenario_stats[scenario_index][request_index]);
+                    req_sent += s.req_started;
+                    resp_received += s.req_done;
+                    resp_success += s.req_status_success;
+                    resp_3xx += s.status[3];
+                    resp_4xx += s.status[4];
+                    resp_5xx += s.status[5];
+                }
+
+                std::stringstream dataStream;
+                dataStream << std::left << std::setw(request_name_width) << std::string(config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(request_index))
+                           << ", " <<std::left << std::setw(percentage_width) << to_string_with_precision_3(stats.req_done ? (double)(resp_received*100)/stats.req_done : 0).append("%")
+                           << ", " <<req_sent
+                           << ", " <<resp_received
+                           << ", " <<resp_success
+                           << ", " <<resp_3xx
+                           << ", " <<resp_4xx
+                           << ", " <<resp_5xx
+                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].min)
+                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].max)
+                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].mean)
+                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].sd)
+                           << ", " <<std::left << std::setw(latency_width)<<to_string_with_precision_3(latency_stats[scenario_index][request_index].within_sd).append("%");
+                           ;
+                std::cerr<<dataStream.str()<<std::endl;
+            }
+        }
+    }
+}
+

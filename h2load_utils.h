@@ -171,5 +171,6 @@ void rpsUpdateFunc(std::atomic<bool>& workers_stopped, h2load::Config& config);
 
 void integrated_http2_server(std::stringstream& DatStream, h2load::Config& config);
 
+void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& config, const std::vector<std::unique_ptr<h2load::Worker>>& workers);
 
 #endif

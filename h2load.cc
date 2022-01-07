@@ -194,7 +194,7 @@ Options:
               Default: )"
       << config.nthreads << R"(
   -i, --input-file=<PATH>
-              Path of a file with multiple URIs are separated by EOLs.
+              Path of a file  with  multiple URIs   separated by EOLs.
               This option will disable URIs getting from command-line.
               If '-' is given as <PATH>, URIs will be read from stdin.
               URIs are used  in this order for each  client.  All URIs
@@ -502,22 +502,9 @@ int main(int argc, char** argv)
             {"log-file", required_argument, &flag, 10},
             {"connect-to", required_argument, &flag, 11},
             {"rps", required_argument, &flag, 12},
-            /*
-            {"crud-create-method", required_argument, &flag, 13},
-            {"crud-read-method", required_argument, &flag, 14},
-            {"crud-update-method", required_argument, &flag, 15},
-            {"crud-delete-method", required_argument, &flag, 16},
-            {"crud-resource-header-name", required_argument, &flag, 17},
-            {"crud-create-data-file", required_argument, &flag, 18},
-            {"crud-update-data-file", required_argument, &flag, 19},
-            {"crud-request-variable-name", required_argument, &flag, 20},
-            {"crud-request-variable-value-start", required_argument, &flag, 21},
-            {"crud-request-variable-value-end", required_argument, &flag, 22},
-            */
             {"stream-timeout-interval-ms", required_argument, &flag, 23},
             {"rps-input-file", required_argument, &flag, 24},
             {"config-file", required_argument, &flag, 25},
-            //{"crud-request-variable-range-slicing", no_argument, &flag, 26},
             {nullptr, 0, nullptr, 0}
         };
         int option_index = 0;
@@ -806,65 +793,6 @@ int main(int argc, char** argv)
                         config.rps = v;
                         break;
                     }
-                    /*
-                    case 13:
-                    {
-                        // create-method
-                        config.crud_create_method = optarg;
-                        break;
-                    }
-                    case 14:
-                    {
-                        // read-method
-                        config.crud_read_method = optarg;
-                        break;
-                    }
-                    case 15:
-                    {
-                        // update-method
-                        config.crud_update_method = optarg;
-                        break;
-                    }
-                    case 16:
-                    {
-                        // delete-method
-                        config.crud_delete_method = optarg;
-                        break;
-                    }
-                    case 17:
-                    {
-                        // crud_resource_header_name
-                        config.crud_resource_header_name = optarg;
-                        break;
-                    }
-                    case 18:
-                    {
-                        // crud_create_data_file_name
-                        config.crud_create_data_file_name = optarg;
-                        break;
-                    }
-                    case 19:
-                    {
-                        // crud_update_data_file_name
-                        config.crud_update_data_file_name = optarg;
-                        break;
-                    }
-                    case 20:
-                    {
-                        config.req_variable_name = optarg;
-                    }
-                    break;
-                    case 21:
-                    {
-                        config.req_variable_start = strtoul(optarg, nullptr, 10);
-                    }
-                    break;
-                    case 22:
-                    {
-                        config.req_variable_end = strtoul(optarg, nullptr, 10);
-                    }
-                    break;
-                    */
                     case 23:
                     {
                         config.stream_timeout_in_ms = (uint16_t)strtoul(optarg, nullptr, 10);
@@ -893,13 +821,6 @@ int main(int argc, char** argv)
                         logfile = config.json_config_schema.log_file;
                     }
                     break;
-                    /*
-                    case 26:
-                    {
-                        config.variable_range_slicing = true;
-                    }
-                    break;
-                    */
                 }
                 break;
             default:
@@ -1567,57 +1488,7 @@ time for request: )"
               << ts.rps.mean << "  " << std::setw(10) << ts.rps.sd << std::setw(9)
               << util::dtos(ts.rps.within_sd) << "%" << std::endl;
 
-    if (config.json_config_schema.scenarios.size())
-    {
-        std::stringstream colStream;
-        colStream << "request, traffic-percentage, total-req-sent, total-resp-recv, total-resp-success, total-3xx-resp, total-4xx-resp, total-5xx-resp, latency-min(ms), latency-max, latency-mean, latency-sd, +/-sd";
-        std::cerr<<colStream.str()<<std::endl;
-        auto latency_stats = produce_requests_latency_stats(workers);
-        size_t request_name_width = get_request_name_max_width(config);
-        static size_t percentage_width = 8;
-        static size_t latency_width = 5;
-
-        for (size_t scenario_index = 0; scenario_index < config.json_config_schema.scenarios.size(); scenario_index++)
-        {
-            for (size_t request_index = 0; request_index < config.json_config_schema.scenarios[scenario_index].requests.size(); request_index++)
-            {
-                size_t req_sent = 0;
-                size_t resp_received = 0;
-                size_t resp_success = 0;
-                size_t resp_3xx = 0;
-                size_t resp_4xx = 0;
-                size_t resp_5xx = 0;
-                for (auto& w : workers)
-                {
-                    auto& s = *(w->scenario_stats[scenario_index][request_index]);
-                    req_sent += s.req_started;
-                    resp_received += s.req_done;
-                    resp_success += s.req_status_success;
-                    resp_3xx += s.status[3];
-                    resp_4xx += s.status[4];
-                    resp_5xx += s.status[5];
-                }
-
-                std::stringstream dataStream;
-                dataStream << std::left << std::setw(request_name_width) << std::string(config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(request_index))
-                           << ", " <<std::left << std::setw(percentage_width) << to_string_with_precision_3(stats.req_done ? (double)(resp_received*100)/stats.req_done : 0).append("%")
-                           << ", " <<req_sent
-                           << ", " <<resp_received
-                           << ", " <<resp_success
-                           << ", " <<resp_3xx
-                           << ", " <<resp_4xx
-                           << ", " <<resp_5xx
-                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].min)
-                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].max)
-                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].mean)
-                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].sd)
-                           << ", " <<std::left << std::setw(latency_width)<<to_string_with_precision_3(latency_stats[scenario_index][request_index].within_sd).append("%");
-                           ;
-                std::cerr<<dataStream.str()<<std::endl;
-            }
-        }
-    }
-
+    print_extended_stats_summary(stats, config, workers);
 
     SSL_CTX_free(ssl_ctx);
 
