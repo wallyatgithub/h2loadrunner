@@ -3,7 +3,11 @@
 #include <regex>
 #include <algorithm>
 #include <cctype>
+#include <execinfo.h>
+#include <iomanip>
 #include <string>
+#include <boost/asio/io_service.hpp>
+#include <boost/thread/thread.hpp>
 
 #include <ares.h>
 
@@ -920,21 +924,40 @@ void Client::inc_status_counter_and_validate_response(int32_t stream_id)
             auto& stats = worker->scenario_stats[scenario_index][request_index];
             ++stats->status[status / 100];
         }
-        auto& request = config->json_config_schema.scenarios[scenario_index].requests[request_index];
-        if (request.response_match_rules.size())
+        if (request_data->second.expected_status_code)
         {
+            if (status != request_data->second.expected_status_code)
+            {
+                stream.status_success = 0;
+            }
+            else
+            {
+                stream.status_success = 1;
+            }
+        }
+        else if (config->json_config_schema.scenarios[scenario_index].requests[request_index].response_match_rules.size())
+        {
+            auto& request = config->json_config_schema.scenarios[scenario_index].requests[request_index];
+            bool run_match_rule = true;
+            bool matched = false;
             rapidjson::Document json_payload;
             if (request.response_match.payload_match.size())
             {
                 json_payload.Parse(request_data->second.resp_payload.c_str());
-            }
-            bool matched = false;
-            for (auto& match_rule: request.response_match_rules)
-            {
-                matched = match_rule.match(request_data->second.resp_headers, json_payload);
-                if (!matched)
+                if (json_payload.HasParseError())
                 {
-                    break;
+                    run_match_rule = false;
+                }
+            }
+            if (run_match_rule)
+            {
+                for (auto& match_rule: request.response_match_rules)
+                {
+                    matched = match_rule.match(request_data->second.resp_headers, json_payload);
+                    if (!matched)
+                    {
+                        break;
+                    }
                 }
             }
             if (matched)
@@ -945,6 +968,10 @@ void Client::inc_status_counter_and_validate_response(int32_t stream_id)
             {
                 stream.status_success = 0;
             }
+        }
+        else if (config->json_config_schema.scenarios[scenario_index].requests[request_index].validate_response_function_present)
+        {
+            stream.status_success = validate_response_with_lua(lua_states[scenario_index][request_index], request_data->second);
         }
     }
     if (stream.status_success == 0)
@@ -1773,6 +1800,7 @@ void Client::populate_request_from_config_template(Request_Data& new_request,
                                                                             new_request.user_id));
     new_request.req_payload = &(new_request.string_collection.back());
     new_request.req_headers = &request_template.headers_in_map;
+    new_request.expected_status_code = request_template.expected_status_code;
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
 }
 
@@ -1856,7 +1884,7 @@ Request_Data Client::prepare_first_request()
                                                                             new_request.user_id));
     new_request.path = &(new_request.string_collection.back());
 
-    if (scenario.requests[curr_index].luaScript.size())
+    if (scenario.requests[curr_index].make_request_function_present)
     {
         if (!update_request_with_lua(lua_states[scenario_index][curr_index], dummy_data, new_request))
         {
@@ -2016,7 +2044,7 @@ void Client::enqueue_request(Request_Data& finished_request, Request_Data&& new_
 
 bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_request, Request_Data& request_to_send)
 {
-    lua_getglobal(L, "make_request");
+    lua_getglobal(L, make_request);
     bool retCode = true;
     if (lua_isfunction(L, -1))
     {
@@ -2128,8 +2156,7 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
     }
     else
     {
-        std::cerr << "lua script provisioned but required function is not present or is ill-formed, abort the whole scenario sequence" << std::endl;
-        retCode = false;
+        lua_settop(L, 0);
     }
     return retCode;
 }
@@ -2426,14 +2453,81 @@ void Client::slice_user_id()
   }
 }
 
-void log_failed_request(h2load::Config& config, h2load::Request_Data failed_req)
+void Client::log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req)
 {
     if (config.json_config_schema.failed_request_log_file.empty())
     {
         return;
     }
+    static boost::asio::io_service work_offload_io_service;
+    static boost::thread_group work_offload_thread_pool;
+    static boost::asio::io_service::work work(work_offload_io_service);
+    auto create_log_thread = []()
+    {
+        work_offload_thread_pool.create_thread(boost::bind(&boost::asio::io_service::run, &work_offload_io_service));
+        return true;
+    };
+    static bool dummyCode = create_log_thread();
     static std::ofstream log_file(config.json_config_schema.failed_request_log_file);
-    log_file<<failed_req;
+    std::stringstream ss;
+    ss<<failed_req;
+
+    auto log_func = [](const std::string& msg)
+    {
+        auto now = std::chrono::system_clock::now();
+        auto now_c = std::chrono::system_clock::to_time_t(now);
+        log_file << std::put_time(std::localtime(&now_c), "%F %T")<< std::endl;
+        log_file << msg;
+        log_file << std::endl;
+    };
+    auto log_routine = std::bind(log_func, ss.str());
+
+    work_offload_io_service.post(log_routine);
 }
+
+bool Client::validate_response_with_lua(lua_State* L, const Request_Data& finished_request)
+{
+    lua_getglobal(L, validate_response);
+    bool retCode = true;
+    if (lua_isfunction(L, -1))
+    {
+        lua_createtable(L, 0, finished_request.resp_headers.size());
+        for (auto& header : finished_request.resp_headers)
+        {
+            lua_pushlstring(L, header.first.c_str(), header.first.size());
+            lua_pushlstring(L, header.second.c_str(), header.second.size());
+            lua_rawset(L, -3);
+        }
+
+        lua_pushlstring(L, finished_request.resp_payload.c_str(), finished_request.resp_payload.size());
+        lua_pcall(L, 2, 1, 0);
+        int top = lua_gettop(L);
+        for (int i = 0; i < top; i++)
+        {
+            auto type = lua_type(L, -1);
+            switch (type)
+            {
+                case LUA_TBOOLEAN:
+                {
+                    retCode = lua_toboolean(L, -1);
+                    break;
+                }
+                default:
+                {
+                    std::cerr << "error occured in lua function validate_response" << std::endl;
+                    retCode = false;
+                    break;
+                }
+            }
+            lua_pop(L, 1);
+        }
+    }
+    else
+    {
+        lua_settop(L, 0);
+    }
+    return retCode;
+}
+
 
 }

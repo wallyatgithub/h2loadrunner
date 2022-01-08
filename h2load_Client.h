@@ -73,6 +73,8 @@ struct Request_Data
     friend std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
     {
         o << "Request_Data: { "<<std::endl
+          << "scenario index: "<<request_data.scenario_index<<std::endl
+          << "request index: "<<request_data.curr_request_idx<<std::endl
           << "schema:" << *request_data.schema<<std::endl
           << "authority:" << *request_data.authority<<std::endl
           << "req_payload:" << *request_data.req_payload<<std::endl
@@ -97,13 +99,10 @@ struct Request_Data
         {
             o << "response header name: "<<it.first<<", header value: " <<it.second<<std::endl;
         }
-        o << "current request index: "<<request_data.curr_request_idx<<std::endl;
-
         for (auto& it: request_data.saved_cookies)
         {
             o << "cookie name: "<<it.first<<", cookie content: " <<it.second<<std::endl;
         }
-
         o << "}"<<std::endl;
         return o;
     };
@@ -346,6 +345,8 @@ struct Client
     void init_ares();
     void init_lua_states();
     void init_connection_targert();
+    void log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req);
+    bool validate_response_with_lua(lua_State* L, const Request_Data& finished_request);
 };
 
 class Submit_Requet_Wrapper
@@ -376,8 +377,6 @@ public:
 
   };
 };
-
-void log_failed_request(h2load::Config& config, h2load::Request_Data failed_req);
 
 }
 #endif

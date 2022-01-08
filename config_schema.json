@@ -347,10 +347,16 @@
                 "luaScript":
                 {
                   "type":"string",
-                  "description": "lua script (or a filename containing the actual script) with a function named make_request, handling 4 arguments: response_headers, response_payload, request_headers_to_send, request_payload_to_send; returning request_headers_to_send and request_payload_to_send. h2loadrunner passes the response headers and payload of last request within this scenarios sequence, and the request headers (path, method, additional headers) and payload specified here, to this lua function, which can update the request headers and request payload, and h2loadrunner will use the updated headers and payload for the request. Example script: function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send) return request_headers_to_send, request_payload_to_send end"
+                  "description": "lua script (or a filename containing the actual script). The script can be used to customize the request, and to validate the response; to customized the request, a function named make_request should be present, handling 4 arguments: response_headers, response_payload, request_headers_to_send, request_payload_to_send; returning request_headers_to_send and request_payload_to_send. h2loadrunner passes the response headers and payload of last request within this scenarios sequence, and the request headers (path, method, additional headers) and payload specified here, to this lua function, which can update the request headers and request payload, and h2loadrunner will use the updated headers and payload for the request. Example make_request: function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send) return request_headers_to_send, request_payload_to_send end    To validate response, a function named validate_response should be present, handling 2 argument, response_header and response_payload, returning true or false. h2loadrunner passes the response headers and payload to function validate_response, and validate_response can do whatever check to decide whether the response is a success or a failure and return the result accordingly. Note: if validate_response function is provided, the result from it will override the result from expected-status-code and response-match"
+                },
+                "expected-status-code":
+                {
+                  "description":"the expected http status code for this request; if the returned status code matches the one specified here, this request is considered successful in statistics report; if nothing or 0 is specified here, 2xx status codes (i.e., 200, 201, 204, etc.) are all considered successful",
+                  "default": 0,
+                  "type":"integer"
                 },
                 "response-match":{
-                  "description": "A list of matching rules of both headers and payload; if provisioned, the received response is inspected against the matching rules; only if all matching rules are successful, the response is considered successful, otherwise, this response is considered as failed",
+                  "description": "A list of matching rules of both headers and payload; if provisioned, the received response is validated with the matching rules, and the result will override that from expected-status-code; if all matching rules given below are successful, the response is considered successful; otherwise, this response is considered as failed",
                   "type":"object",
                   "properties":{
                     "headers":{

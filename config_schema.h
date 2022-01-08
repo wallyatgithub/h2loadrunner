@@ -10,11 +10,11 @@
 #include "rapidjson/schema.h"
 #include "rapidjson/prettywriter.h"
 
-const std::string extended_json_pointer_indicator = "/~#";
-
-const std::string extended_json_pointer_name_indicator = "#name";
-
-const std::string extended_json_pointer_value_indicator = "#value";
+static const std::string extended_json_pointer_indicator = "/~#";
+static const std::string extended_json_pointer_name_indicator = "#name";
+static const std::string extended_json_pointer_value_indicator = "#value";
+static const char* validate_response = "validate_response";
+static const char* make_request = "make_request";
 
 struct ci_less
 {
@@ -367,11 +367,12 @@ public:
     }
 };
 
-
 class Request {
 public:
     bool clear_old_cookies;
     std::string luaScript;
+    bool make_request_function_present;
+    bool validate_response_function_present;
     std::string schema;
     std::string authority;
     std::string path;
@@ -379,6 +380,7 @@ public:
     std::string method;
     std::string payload;
     std::vector<std::string> additonalHeaders;
+    uint32_t expected_status_code; // staticJson does not accept uint16_t
     Schema_Response_Match response_match;
     std::vector<Match_Rule> response_match_rules;
     std::map<std::string, std::string, ci_less> headers_in_map;
@@ -393,13 +395,17 @@ public:
         h->add_property("payload", &this->payload, staticjson::Flags::Optional);
         h->add_property("additonalHeaders", &this->additonalHeaders, staticjson::Flags::Optional);
         h->add_property("clear-old-cookies", &this->clear_old_cookies, staticjson::Flags::Optional);
+        h->add_property("expected-status-code", &this->expected_status_code, staticjson::Flags::Optional);
         h->add_property("delay-before-executing-next", &this->delay_before_executing_next, staticjson::Flags::Optional);
         h->add_property("response-match", &this->response_match, staticjson::Flags::Optional);
     }
     explicit Request()
     {
         clear_old_cookies = false;
+        expected_status_code = 0;
         delay_before_executing_next = 0;
+        make_request_function_present = false;
+        validate_response_function_present = false;
     }
 };
 

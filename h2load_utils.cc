@@ -4,13 +4,17 @@
 #include <iomanip>
 #include <iostream>
 #include <fstream>
-
 #include <string>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
 extern "C" {
 #include <ares.h>
+}
+extern "C" {
+#include "lua.h"
+#include "lualib.h"
+#include "lauxlib.h"
 }
 
 #include <fstream>
@@ -1566,6 +1570,25 @@ void post_process_json_config_schema(h2load::Config& config)
             for (auto& schema_payload_match : request.response_match.payload_match)
             {
                 request.response_match_rules.emplace_back(Match_Rule(schema_payload_match));
+            }
+            if (request.luaScript.size())
+            {
+              lua_State* L = luaL_newstate();
+              luaL_openlibs(L);
+              luaL_dostring(L, request.luaScript.c_str());
+              lua_getglobal(L, make_request);
+              if (lua_isfunction(L, -1))
+              {
+                  request.make_request_function_present = true;
+              }
+              lua_settop(L, 0);
+              lua_getglobal(L, validate_response);
+              if (lua_isfunction(L, -1))
+              {
+                  request.validate_response_function_present = true;
+              }
+              lua_settop(L, 0);
+              lua_close(L);
             }
         }
     }
