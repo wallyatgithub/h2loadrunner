@@ -1,6 +1,6 @@
 {
   "schema": "http",
-  "host": "172.29.22.171",
+  "host": "192.168.1.107",
   "port": 8080,
   "load-share-hosts":
   [
@@ -15,7 +15,7 @@
   ],
   "open-new-connection-based-on-authority-header": false,
   "connection-retry": true,
-  "switch-back-after-connection-retry": true,
+  "switch-back-after-connection-retry": false,
   "threads": 1,
   "clients": 1,
   "duration": 60,
@@ -41,13 +41,14 @@
   "header-table-size": 4096,
   "encoder-header-table-size": 4096,
   "log-file": "",
+  "failed-request-log-file": "failed.log",
   "statistics-interval": 2,
   "window-bits": 30,
   "connection-window-bits": 30,
   "Scenarios": [
     {
       "name": "subs-update-delete-get",
-      "weight": 100,
+      "weight": 100000,
       "user-id-variable-in-path-and-data": "-user-name",
       "user-id-range-start": 0,
       "user-id-range-end": 100000000,
@@ -67,7 +68,23 @@
             "some: how"
           ],
           "luaScript": "function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send)    request_headers_to_send[\"lua-version\"] = \"5.1\"    return request_headers_to_send, request_payload_to_send end",
-          "expected-status-code": 201,
+          "expected-status-code": 0,
+          "response-match": {
+            "headers": [
+              {
+                "header-name": ":status",
+                "matchType": "EqualsTo",
+                "input": "201"
+              }
+            ],
+            "payload": [
+              {
+                "JsonPointer": "/schema",
+                "matchType": "EqualsTo",
+                "input": "http"
+              }
+            ]
+          },
           "delay-before-executing-next": 0
         },
         {
@@ -110,15 +127,15 @@
           "method": "GET",
           "payload": "",
           "additonalHeaders": [],
-          "luaScript": "",
-          "expected-status-code": 404,
+          "luaScript": "function validate_response(response_header, response_payload)     return true end",
+          "expected-status-code": 0,
           "delay-before-executing-next": 0
         }
       ]
     },
     {
       "name": "amf-reg-dereg",
-      "weight": 200,
+      "weight": 2,
       "user-id-name-in-path-and-data": "-user-name",
       "user-id-range-start": 0,
       "user-id-range-end": 100000000,
