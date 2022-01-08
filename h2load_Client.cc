@@ -935,7 +935,7 @@ void Client::inc_status_counter_and_validate_response(int32_t stream_id)
                 stream.status_success = 1;
             }
         }
-        else if (config->json_config_schema.scenarios[scenario_index].requests[request_index].response_match_rules.size())
+        if (config->json_config_schema.scenarios[scenario_index].requests[request_index].response_match_rules.size())
         {
             auto& request = config->json_config_schema.scenarios[scenario_index].requests[request_index];
             bool run_match_rule = true;
@@ -969,7 +969,7 @@ void Client::inc_status_counter_and_validate_response(int32_t stream_id)
                 stream.status_success = 0;
             }
         }
-        else if (config->json_config_schema.scenarios[scenario_index].requests[request_index].validate_response_function_present)
+        if (config->json_config_schema.scenarios[scenario_index].requests[request_index].validate_response_function_present)
         {
             stream.status_success = validate_response_with_lua(lua_states[scenario_index][request_index], request_data->second);
         }
