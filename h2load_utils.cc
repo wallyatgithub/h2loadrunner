@@ -1256,7 +1256,7 @@ void output_realtime_stats(h2load::Config& config,
                                    std::atomic<bool>& workers_stopped, std::stringstream& dataStream)
 {
     std::vector<std::vector<size_t>> scenario_req_sent_till_now;
-    std::vector<std::vector<size_t>> scenario_resp_received_till_now;
+    std::vector<std::vector<size_t>> scenario_req_done_till_now;
     std::vector<std::vector<size_t>> scenario_req_success_till_now;
     std::vector<std::vector<size_t>> scenario_2xx_till_now;
     std::vector<std::vector<size_t>> scenario_3xx_till_now;
@@ -1266,7 +1266,7 @@ void output_realtime_stats(h2load::Config& config,
     {
         std::vector<size_t> req_vec(config.json_config_schema.scenarios[scenario_index].requests.size(), 0);
         scenario_req_sent_till_now.push_back(req_vec);
-        scenario_resp_received_till_now.push_back(req_vec);
+        scenario_req_done_till_now.push_back(req_vec);
         scenario_req_success_till_now.push_back(req_vec);
         scenario_2xx_till_now.push_back(req_vec);
         scenario_3xx_till_now.push_back(req_vec);
@@ -1278,7 +1278,7 @@ void output_realtime_stats(h2load::Config& config,
     while (!workers_stopped)
     {
         auto scenario_req_sent_till_last_interval = scenario_req_sent_till_now;
-        auto scenario_resp_received_till_last_interval = scenario_resp_received_till_now;
+        auto scenario_req_done_till_last_interval = scenario_req_done_till_now;
         auto scenario_req_success_till_last_interval = scenario_req_success_till_now;
         auto scenario_2xx_till_last_interval = scenario_2xx_till_now;
         auto scenario_3xx_till_last_interval = scenario_3xx_till_now;
@@ -1298,7 +1298,7 @@ void output_realtime_stats(h2load::Config& config,
         static uint64_t counter = 0;
         if (counter % 10 == 0)
         {
-            outputStream << "time, request, sent/s, recv/s, success/s, (recv/s)/(sent/s), (success/s)/(recv/s), delta_2xx, 3xx, 4xx, 5xx, latency-min(ms), max, mean, sd, +/-sd, total-sent, total-recv, total-success, recv/sent(total), success/recv(total)";
+            outputStream << "time, request, sent/s, done/s, success/s, (done/s)/(sent/s), (success/s)/(done/s), delta_2xx, 3xx, 4xx, 5xx, latency-min(ms), max, mean, sd, +/-sd, total-sent, total-done, total-success, done/sent(total), success/done(total)";
             outputStream <<std::endl;
         }
         counter++;
@@ -1316,7 +1316,7 @@ void output_realtime_stats(h2load::Config& config,
             for (size_t request_index = 0; request_index < config.json_config_schema.scenarios[scenario_index].requests.size(); request_index++)
             {
                 scenario_req_sent_till_now[scenario_index][request_index] = 0;
-                scenario_resp_received_till_now[scenario_index][request_index] = 0;
+                scenario_req_done_till_now[scenario_index][request_index] = 0;
                 scenario_req_success_till_now[scenario_index][request_index] = 0;
                 scenario_2xx_till_now[scenario_index][request_index] = 0;
                 scenario_3xx_till_now[scenario_index][request_index] = 0;
@@ -1326,7 +1326,7 @@ void output_realtime_stats(h2load::Config& config,
                 {
                     auto& s = *(w->scenario_stats[scenario_index][request_index]);
                     scenario_req_sent_till_now[scenario_index][request_index] += s.req_started;
-                    scenario_resp_received_till_now[scenario_index][request_index] += s.req_done;
+                    scenario_req_done_till_now[scenario_index][request_index] += s.req_done;
                     scenario_req_success_till_now[scenario_index][request_index] += s.req_status_success;
                     scenario_2xx_till_now[scenario_index][request_index] += s.status[2];
                     scenario_3xx_till_now[scenario_index][request_index] += s.status[3];
@@ -1334,7 +1334,7 @@ void output_realtime_stats(h2load::Config& config,
                     scenario_5xx_till_now[scenario_index][request_index] += s.status[5];
                 }
                 size_t delta_RPS_sent = scenario_req_sent_till_now[scenario_index][request_index] - scenario_req_sent_till_last_interval[scenario_index][request_index];
-                size_t delta_RPS_received = scenario_resp_received_till_now[scenario_index][request_index] - scenario_resp_received_till_last_interval[scenario_index][request_index];
+                size_t delta_RPS_done = scenario_req_done_till_now[scenario_index][request_index] - scenario_req_done_till_last_interval[scenario_index][request_index];
                 size_t delta_RPS_success = scenario_req_success_till_now[scenario_index][request_index] - scenario_req_success_till_last_interval[scenario_index][request_index];
                 size_t request_delta_2xx = scenario_2xx_till_now[scenario_index][request_index] - scenario_2xx_till_last_interval[scenario_index][request_index];
                 size_t request_delta_3xx = scenario_3xx_till_now[scenario_index][request_index] - scenario_3xx_till_last_interval[scenario_index][request_index];
@@ -1345,10 +1345,10 @@ void output_realtime_stats(h2load::Config& config,
                     << std::put_time(std::localtime(&now_c), "%F %T")
                     << ", " << std::left << std::setw(request_name_width)<< std::string(config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(request_index))
                     << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_sent)/period_duration)
-                    << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_received)/period_duration)
+                    << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_done)/period_duration)
                     << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_success)/period_duration)
-                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_sent?(((double)delta_RPS_received / delta_RPS_sent) * 100):0).append( "%")
-                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0).append("%")
+                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_sent?(((double)delta_RPS_done / delta_RPS_sent) * 100):0).append( "%")
+                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_done?(((double)delta_RPS_success / delta_RPS_done) * 100):0).append("%")
                     << ", " << std::left << std::setw(total_req_width) << request_delta_2xx
                     << ", " << std::left << std::setw(total_req_width) << request_delta_3xx
                     << ", " << std::left << std::setw(total_req_width) << request_delta_4xx
@@ -1359,10 +1359,10 @@ void output_realtime_stats(h2load::Config& config,
                     << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].sd)
                     << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(latency_stats[scenario_index][request_index].within_sd).append( "%")
                     << ", " << std::left << std::setw(total_req_width) << scenario_req_sent_till_now[scenario_index][request_index]
-                    << ", " << std::left << std::setw(total_req_width) << scenario_resp_received_till_now[scenario_index][request_index]
+                    << ", " << std::left << std::setw(total_req_width) << scenario_req_done_till_now[scenario_index][request_index]
                     << ", " << std::left << std::setw(total_req_width) << scenario_req_success_till_now[scenario_index][request_index]
-                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(scenario_req_sent_till_now[scenario_index][request_index]?(((double)scenario_resp_received_till_now[scenario_index][request_index] / scenario_req_sent_till_now[scenario_index][request_index]) * 100):0).append( "%")
-                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(scenario_resp_received_till_now[scenario_index][request_index]?(((double)scenario_req_success_till_now[scenario_index][request_index] / scenario_resp_received_till_now[scenario_index][request_index]) * 100):0).append( "%")
+                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(scenario_req_sent_till_now[scenario_index][request_index]?(((double)scenario_req_done_till_now[scenario_index][request_index] / scenario_req_sent_till_now[scenario_index][request_index]) * 100):0).append( "%")
+                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(scenario_req_done_till_now[scenario_index][request_index]?(((double)scenario_req_success_till_now[scenario_index][request_index] / scenario_req_done_till_now[scenario_index][request_index]) * 100):0).append( "%")
                 ;
                 outputStream<<std::endl;
             }
@@ -1378,24 +1378,24 @@ void output_realtime_stats(h2load::Config& config,
             return sum;
         };
         auto total_req_sent = accumulate_2d_vector(scenario_req_sent_till_now);
-        auto total_resp_recv = accumulate_2d_vector(scenario_resp_received_till_now);
-        auto total_resp_success = accumulate_2d_vector(scenario_req_success_till_now);
+        auto total_req_done = accumulate_2d_vector(scenario_req_done_till_now);
+        auto total_req_success = accumulate_2d_vector(scenario_req_success_till_now);
         auto total_2xx = accumulate_2d_vector(scenario_2xx_till_now);
         auto total_3xx = accumulate_2d_vector(scenario_3xx_till_now);
         auto total_4xx = accumulate_2d_vector(scenario_4xx_till_now);
         auto total_5xx = accumulate_2d_vector(scenario_5xx_till_now);
 
         auto total_req_sent_till_last_interval = accumulate_2d_vector(scenario_req_sent_till_last_interval);
-        auto total_resp_recv_till_last_interval = accumulate_2d_vector(scenario_resp_received_till_last_interval);
-        auto total_resp_success_till_last_interval = accumulate_2d_vector(scenario_req_success_till_last_interval);
+        auto total_req_done_till_last_interval = accumulate_2d_vector(scenario_req_done_till_last_interval);
+        auto total_req_success_till_last_interval = accumulate_2d_vector(scenario_req_success_till_last_interval);
         auto total_2xx_till_last_interval = accumulate_2d_vector(scenario_2xx_till_last_interval);
         auto total_3xx_till_last_interval = accumulate_2d_vector(scenario_3xx_till_last_interval);
         auto total_4xx_till_last_interval = accumulate_2d_vector(scenario_4xx_till_last_interval);
         auto total_5xx_till_last_interval = accumulate_2d_vector(scenario_5xx_till_last_interval);
 
         auto delta_RPS_sent = total_req_sent - total_req_sent_till_last_interval;
-        auto delta_RPS_received = total_resp_recv - total_resp_recv_till_last_interval;
-        auto delta_RPS_success = total_resp_success - total_resp_success_till_last_interval;
+        auto delta_RPS_done = total_req_done - total_req_done_till_last_interval;
+        auto delta_RPS_success = total_req_success - total_req_success_till_last_interval;
         auto delta_2xx = total_2xx - total_2xx_till_last_interval;
         auto delta_3xx = total_3xx - total_3xx_till_last_interval;
         auto delta_4xx = total_4xx - total_4xx_till_last_interval;
@@ -1405,10 +1405,10 @@ void output_realtime_stats(h2load::Config& config,
             << std::put_time(std::localtime(&now_c), "%F %T")
             << ", " << std::left << std::setw(request_name_width) << "All_Requests"
             << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_sent)/period_duration)
-            << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_received)/period_duration)
+            << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_done)/period_duration)
             << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_success)/period_duration)
-            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_sent?(((double)delta_RPS_received / delta_RPS_sent) * 100):0).append("%")
-            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_received?(((double)delta_RPS_success / delta_RPS_received) * 100):0).append("%")
+            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_sent?(((double)delta_RPS_done / delta_RPS_sent) * 100):0).append("%")
+            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_done?(((double)delta_RPS_success / delta_RPS_done) * 100):0).append("%")
             << ", " << std::left << std::setw(total_req_width) << delta_2xx
             << ", " << std::left << std::setw(total_req_width) << delta_3xx
             << ", " << std::left << std::setw(total_req_width) << delta_4xx
@@ -1419,10 +1419,10 @@ void output_realtime_stats(h2load::Config& config,
             << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[config.json_config_schema.scenarios.size()][0].sd)
             << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(latency_stats[config.json_config_schema.scenarios.size()][0].within_sd).append( "%")
             << ", " << std::left << std::setw(total_req_width) << total_req_sent
-            << ", " << std::left << std::setw(total_req_width) << total_resp_recv
-            << ", " << std::left << std::setw(total_req_width) << total_resp_success
-            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(total_req_sent?(((double)total_resp_recv / total_req_sent) * 100):0).append("%")
-            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(total_resp_recv?(((double)total_resp_success / total_resp_recv) * 100):0).append("%")
+            << ", " << std::left << std::setw(total_req_width) << total_req_done
+            << ", " << std::left << std::setw(total_req_width) << total_req_success
+            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(total_req_sent?(((double)total_req_done / total_req_sent) * 100):0).append("%")
+            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(total_req_done?(((double)total_req_success / total_req_done) * 100):0).append("%")
         ;
         outputStream<<std::endl;
         if (config.json_config_schema.statistics_file.size())
@@ -1731,7 +1731,7 @@ void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& co
     if (config.json_config_schema.scenarios.size())
     {
         std::stringstream colStream;
-        colStream << "request, traffic-percentage, total-req-sent, total-resp-recv, total-resp-success, total-2xx-resp, 3xx, 4xx, 5xx, latency-min(ms), max, mean, sd, +/-sd";
+        colStream << "request, traffic-percentage, total-req-sent, total-req-done, total-req-success, total-2xx-resp, 3xx, 4xx, 5xx, latency-min(ms), max, mean, sd, +/-sd";
         std::cerr<<colStream.str()<<std::endl;
         auto latency_stats = produce_requests_latency_stats(workers);
         size_t request_name_width = get_request_name_max_width(config);
@@ -1743,8 +1743,8 @@ void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& co
             for (size_t request_index = 0; request_index < config.json_config_schema.scenarios[scenario_index].requests.size(); request_index++)
             {
                 size_t req_sent = 0;
-                size_t resp_received = 0;
-                size_t resp_success = 0;
+                size_t req_done = 0;
+                size_t req_success = 0;
                 size_t resp_2xx = 0;
                 size_t resp_3xx = 0;
                 size_t resp_4xx = 0;
@@ -1753,8 +1753,8 @@ void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& co
                 {
                     auto& s = *(w->scenario_stats[scenario_index][request_index]);
                     req_sent += s.req_started;
-                    resp_received += s.req_done;
-                    resp_success += s.req_status_success;
+                    req_done += s.req_done;
+                    req_success += s.req_status_success;
                     resp_2xx += s.status[2];
                     resp_3xx += s.status[3];
                     resp_4xx += s.status[4];
@@ -1763,10 +1763,10 @@ void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& co
 
                 std::stringstream dataStream;
                 dataStream << std::left << std::setw(request_name_width) << std::string(config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(request_index))
-                           << ", " <<std::left << std::setw(percentage_width) << to_string_with_precision_3(stats.req_done ? (double)(resp_received*100)/stats.req_done : 0).append("%")
+                           << ", " <<std::left << std::setw(percentage_width) << to_string_with_precision_3(stats.req_done ? (double)(req_done*100)/stats.req_done : 0).append("%")
                            << ", " <<req_sent
-                           << ", " <<resp_received
-                           << ", " <<resp_success
+                           << ", " <<req_done
+                           << ", " <<req_success
                            << ", " <<resp_2xx
                            << ", " <<resp_3xx
                            << ", " <<resp_4xx

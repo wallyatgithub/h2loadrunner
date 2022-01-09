@@ -894,7 +894,7 @@ void Client::inc_status_counter_and_validate_response(int32_t stream_id)
     }
     auto& stream = (*itr).second;
 
-    if (worker->current_phase != Phase::MAIN_DURATION)
+    if (!stream.statistics_eligible)
     {
         stream.status_success = 1;
         return;
