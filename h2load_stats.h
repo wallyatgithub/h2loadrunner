@@ -130,7 +130,8 @@ struct Stream
 {
     RequestStat req_stat;
     int status_success;
-    Stream(size_t scenario_id, size_t request_id);
+    bool statistics_eligible;
+    Stream(size_t scenario_id, size_t request_id, bool stat_eligible);
 };
 
 

@@ -129,7 +129,10 @@ Stats::Stats(size_t req_todo, size_t nclients)
       status()
       {}
 
-Stream::Stream(size_t scenario_id, size_t request_id) : req_stat(scenario_id, request_id), status_success(-1) {}
+Stream::Stream(size_t scenario_id, size_t request_id, bool stats_eligible)
+: req_stat(scenario_id, request_id),
+  status_success(-1),
+  statistics_eligible(stats_eligible){}
 
 namespace
 {

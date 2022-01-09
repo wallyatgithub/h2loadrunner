@@ -781,7 +781,8 @@ void Client::on_request_start(int32_t stream_id)
     {
         streams.erase(stream_id);
     }
-    streams.insert(std::make_pair(stream_id, Stream(scenario_index, request_index)));
+    bool stats_eligible = (worker->current_phase == Phase::MAIN_DURATION || worker->current_phase == Phase::MAIN_DURATION_GRACEFUL_SHUTDOWN);
+    streams.insert(std::make_pair(stream_id, Stream(scenario_index, request_index, stats_eligible)));
     auto curr_timepoint = std::chrono::steady_clock::now();
     stream_timestamp.insert(std::make_pair(curr_timepoint, stream_id));
 }
@@ -800,10 +801,14 @@ void Client::reset_timeout_requests()
     bool call_signal_write = false;
     while (it != no_timeout_it)
     {
-        if (streams.find(it->second) != streams.end())
+        auto stream_it = streams.find(it->second);
+        if (stream_it != streams.end())
         {
             session->submit_rst_stream(it->second);
-            worker->stats.req_timedout++;
+            if (stream_it->second.statistics_eligible)
+            {
+                worker->stats.req_timedout++;
+            }
             call_signal_write = true;
         }
         it = stream_timestamp.erase(it);
@@ -1062,42 +1067,44 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
         {
             return;
         }
-
-        if (success)
+        if (streams.count(stream_id) && streams.at(stream_id).statistics_eligible)
         {
-            req_stat->completed = true;
-            ++worker->stats.req_success;
-            ++cstat.req_success;
-
-            if (streams.count(stream_id) && streams.at(stream_id).status_success == 1)
+            if (success)
             {
-                ++worker->stats.req_status_success;
+                req_stat->completed = true;
+                ++worker->stats.req_success;
+                ++cstat.req_success;
+
+                if (streams.count(stream_id) && streams.at(stream_id).status_success == 1)
+                {
+                    ++worker->stats.req_status_success;
+                }
+                else
+                {
+                    ++worker->stats.req_failed;
+                }
+
+                worker->sample_req_stat(req_stat);
+
+                // Count up in successful cases only
+                ++worker->request_times_smp.n;
             }
             else
             {
                 ++worker->stats.req_failed;
+                ++worker->stats.req_error;
             }
 
-            worker->sample_req_stat(req_stat);
+            ++worker->stats.req_done;
+            ++req_done;
 
-            // Count up in successful cases only
-            ++worker->request_times_smp.n;
-        }
-        else
-        {
-            ++worker->stats.req_failed;
-            ++worker->stats.req_error;
-        }
-
-        ++worker->stats.req_done;
-        ++req_done;
-
-        if (finished_request != requests_awaiting_response.end())
-        {
-            bool status_success = (streams.count(stream_id) && streams.at(stream_id).status_success == 1) ? true : false;
-            update_scenario_based_stats(finished_request->second.scenario_index,
-                                        finished_request->second.curr_request_idx,
-                                        success, status_success);
+            if (finished_request != requests_awaiting_response.end())
+            {
+                bool status_success = (streams.count(stream_id) && streams.at(stream_id).status_success == 1) ? true : false;
+                update_scenario_based_stats(finished_request->second.scenario_index,
+                                            finished_request->second.curr_request_idx,
+                                            success, status_success);
+            }
         }
 
     }
