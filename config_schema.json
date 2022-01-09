@@ -208,7 +208,7 @@
     },
     "log-file":
     {
-      "description":"Write per-request brief information to a file with name specified here. columns: start time as microseconds since epoch; HTTP status code; microseconds until end of response. Note: this is not the file to print statistics",
+      "description":"Write per-request brief information to a file with name specified here. columns: start time as microseconds since epoch; HTTP status code; microseconds until end of response. Note: this is not the file to print statistics, and this per-request log may slow down the performance of h2loadrunner",
       "type":"string"
     },
     "failed-request-log-file":
@@ -218,9 +218,14 @@
     },
     "statistics-interval":
     {
-      "description":"This field specifies a repeated timer in seconds; h2loadrunner will print the statistics to stdout in Comma-separated values (CSV) format upon each timer expiry; please redirect stdout to a CSV file if statistics file is needed for further analysis",
+      "description":"This field specifies a repeated timer in seconds; h2loadrunner will print the statistics to stdout or to statistics-file, in Comma-separated values (CSV) format upon each timer expiry",
       "default": 5,
       "type":"integer"
+    },
+    "statistics-file":
+    {
+      "description":"Path to a file to write statistics periodically as instructed by statistics-interval. If no file is given here, statistics would be written to stdout",
+      "type":"string"
     },
     "builtin-server-listening-port":
     {

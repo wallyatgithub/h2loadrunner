@@ -345,8 +345,10 @@ struct Client
     void init_ares();
     void init_lua_states();
     void init_connection_targert();
-    void log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req);
+    void log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req, int32_t stream_id);
     bool validate_response_with_lua(lua_State* L, const Request_Data& finished_request);
+    void record_stream_close_time(int32_t stream_id);
+    void brief_log_to_file(int32_t stream_id, bool success);
 };
 
 class Submit_Requet_Wrapper

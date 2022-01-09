@@ -976,7 +976,7 @@ void Client::inc_status_counter_and_validate_response(int32_t stream_id)
     }
     if (stream.status_success == 0)
     {
-        log_failed_request(*config, request_data->second);
+        log_failed_request(*config, request_data->second, stream_id);
     }
 }
 
@@ -1038,6 +1038,10 @@ void Client::update_scenario_based_stats(size_t scenario_index, size_t request_i
 
 void Client::on_stream_close(int32_t stream_id, bool success, bool final)
 {
+    record_stream_close_time(stream_id);
+
+    brief_log_to_file(stream_id, success);
+
     inc_status_counter_and_validate_response(stream_id);
 
     auto finished_request = requests_awaiting_response.find(stream_id);
@@ -1059,7 +1063,6 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
             return;
         }
 
-        req_stat->stream_close_time = std::chrono::steady_clock::now();
         if (success)
         {
             req_stat->completed = true;
@@ -1097,36 +1100,6 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
                                         success, status_success);
         }
 
-        if (worker->config->log_fd != -1)
-        {
-            auto start = std::chrono::duration_cast<std::chrono::microseconds>(
-                             req_stat->request_wall_time.time_since_epoch());
-            auto delta = std::chrono::duration_cast<std::chrono::microseconds>(
-                             req_stat->stream_close_time - req_stat->request_time);
-
-            std::array<uint8_t, 256> buf;
-            auto p = std::begin(buf);
-            p = util::utos(p, start.count());
-            *p++ = '\t';
-            if (success)
-            {
-                p = util::utos(p, req_stat->status);
-            }
-            else
-            {
-                *p++ = '-';
-                *p++ = '1';
-            }
-            *p++ = '\t';
-            p = util::utos(p, delta.count());
-            *p++ = '\n';
-
-            auto nwrite = static_cast<size_t>(std::distance(std::begin(buf), p));
-            assert(nwrite <= buf.size());
-            while (write(worker->config->log_fd, buf.data(), nwrite) == -1 &&
-                   errno == EINTR)
-                ;
-        }
     }
 
     worker->report_progress();
@@ -2453,12 +2426,19 @@ void Client::slice_user_id()
   }
 }
 
-void Client::log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req)
+void Client::log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req, int32_t stream_id)
 {
     if (config.json_config_schema.failed_request_log_file.empty())
     {
         return;
     }
+
+    auto req_stat = get_req_stat(stream_id);
+    if (!req_stat)
+    {
+        return;
+    }
+
     static boost::asio::io_service work_offload_io_service;
     static boost::thread_group work_offload_thread_pool;
     static boost::asio::io_service::work work(work_offload_io_service);
@@ -2469,14 +2449,25 @@ void Client::log_failed_request(const h2load::Config& config, const h2load::Requ
     };
     static bool dummyCode = create_log_thread();
     static std::ofstream log_file(config.json_config_schema.failed_request_log_file);
+
     std::stringstream ss;
+
+    auto start_c = std::chrono::system_clock::to_time_t(req_stat->request_wall_time);
+    ss << "start timestamp: "<<std::put_time(std::localtime(&start_c), "%F %T")<< std::endl;
+
+    auto now = std::chrono::system_clock::now();
+    auto now_c = std::chrono::system_clock::to_time_t(now);
+    ss << "current time: "<<std::put_time(std::localtime(&now_c), "%F %T")<< std::endl;
+
+    auto stream_response_interval_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    req_stat->stream_close_time - req_stat->request_time).count();
+    ss << "duration(ms): "<<stream_response_interval_ms<< std::endl;
+
     ss<<failed_req;
+
 
     auto log_func = [](const std::string& msg)
     {
-        auto now = std::chrono::system_clock::now();
-        auto now_c = std::chrono::system_clock::to_time_t(now);
-        log_file << std::put_time(std::localtime(&now_c), "%F %T")<< std::endl;
         log_file << msg;
         log_file << std::endl;
     };
@@ -2527,6 +2518,55 @@ bool Client::validate_response_with_lua(lua_State* L, const Request_Data& finish
         lua_settop(L, 0);
     }
     return retCode;
+}
+
+void Client::record_stream_close_time(int32_t stream_id)
+{
+    auto req_stat = get_req_stat(stream_id);
+    if (!req_stat)
+    {
+        return;
+    }
+    req_stat->stream_close_time = std::chrono::steady_clock::now();
+}
+
+void Client::brief_log_to_file(int32_t stream_id, bool success)
+{
+    if (worker->config->log_fd != -1)
+    {
+        auto req_stat = get_req_stat(stream_id);
+        if (!req_stat)
+        {
+            return;
+        }
+        auto start = std::chrono::duration_cast<std::chrono::microseconds>(
+                         req_stat->request_wall_time.time_since_epoch());
+        auto delta = std::chrono::duration_cast<std::chrono::microseconds>(
+                         req_stat->stream_close_time - req_stat->request_time);
+
+        std::array<uint8_t, 256> buf;
+        auto p = std::begin(buf);
+        p = util::utos(p, start.count());
+        *p++ = '\t';
+        if (success)
+        {
+            p = util::utos(p, req_stat->status);
+        }
+        else
+        {
+            *p++ = '-';
+            *p++ = '1';
+        }
+        *p++ = '\t';
+        p = util::utos(p, delta.count());
+        *p++ = '\n';
+
+        auto nwrite = static_cast<size_t>(std::distance(std::begin(buf), p));
+        assert(nwrite <= buf.size());
+        while (write(worker->config->log_fd, buf.data(), nwrite) == -1 &&
+               errno == EINTR)
+            ;
+    }
 }
 
 
