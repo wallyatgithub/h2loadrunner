@@ -836,7 +836,6 @@ void Client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
         // But we do not update the count for 2xx, 3xx, etc status codes
         // Same has been done in on_status_code function
         stream.status_success = 1;
-        return;
     }
 
     auto request = requests_awaiting_response.find(stream_id);
@@ -987,7 +986,6 @@ void Client::inc_status_counter_and_validate_response(int32_t stream_id)
 
 void Client::on_status_code(int32_t stream_id, uint16_t status)
 {
-
     auto request_data = requests_awaiting_response.find(stream_id);
     if (request_data != requests_awaiting_response.end())
     {
