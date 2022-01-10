@@ -928,18 +928,11 @@ void Client::inc_status_counter_and_validate_response(int32_t stream_id)
             auto& stats = worker->scenario_stats[scenario_index][request_index];
             ++stats->status[status / 100];
         }
-        if (request_data->second.expected_status_code)
+        if (config->json_config_schema.scenarios[scenario_index].requests[request_index].validate_response_function_present)
         {
-            if (status != request_data->second.expected_status_code)
-            {
-                stream.status_success = 0;
-            }
-            else
-            {
-                stream.status_success = 1;
-            }
+            stream.status_success = validate_response_with_lua(lua_states[scenario_index][request_index], request_data->second);
         }
-        if (config->json_config_schema.scenarios[scenario_index].requests[request_index].response_match_rules.size())
+        else if (config->json_config_schema.scenarios[scenario_index].requests[request_index].response_match_rules.size())
         {
             auto& request = config->json_config_schema.scenarios[scenario_index].requests[request_index];
             bool run_match_rule = true;
@@ -973,9 +966,16 @@ void Client::inc_status_counter_and_validate_response(int32_t stream_id)
                 stream.status_success = 0;
             }
         }
-        if (config->json_config_schema.scenarios[scenario_index].requests[request_index].validate_response_function_present)
+        else if (request_data->second.expected_status_code)
         {
-            stream.status_success = validate_response_with_lua(lua_states[scenario_index][request_index], request_data->second);
+            if (status != request_data->second.expected_status_code)
+            {
+                stream.status_success = 0;
+            }
+            else
+            {
+                stream.status_success = 1;
+            }
         }
     }
     if (stream.status_success == 0)
