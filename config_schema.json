@@ -266,6 +266,8 @@
           {
             "description":"weight of this scenario among all scenarios; the chance for this scenario to be schedule to run is: weight / total weight of all scenarios",
             "default": 100,
+            "minimum": 0,
+            "maximum": 65535
             "type":"integer"
           },
           "user-id-variable-in-path-and-data":
