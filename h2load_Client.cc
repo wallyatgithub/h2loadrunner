@@ -830,14 +830,6 @@ void Client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
     }
     auto& stream = (*itr).second;
 
-    if (worker->current_phase != Phase::MAIN_DURATION)
-    {
-        // If the stream is for warm-up phase, then mark as a success
-        // But we do not update the count for 2xx, 3xx, etc status codes
-        // Same has been done in on_status_code function
-        stream.status_success = 1;
-    }
-
     auto request = requests_awaiting_response.find(stream_id);
     if (request != requests_awaiting_response.end())
     {
@@ -968,13 +960,13 @@ void Client::inc_status_counter_and_validate_response(int32_t stream_id)
         }
         else if (request_data->second.expected_status_code)
         {
-            if (status != request_data->second.expected_status_code)
+            if (status == request_data->second.expected_status_code)
             {
-                stream.status_success = 0;
+                stream.status_success = 1;
             }
             else
             {
-                stream.status_success = 1;
+                stream.status_success = 0;
             }
         }
     }
