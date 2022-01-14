@@ -1480,7 +1480,7 @@ void output_realtime_stats(h2load::Config& config,
 
 
 std::vector<std::vector<h2load::SDStat>>
-                                      produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>>& workers)
+produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>>& workers)
 {
     auto request_times_sampling = false;
     size_t nrequest_times = 0;
