@@ -45,21 +45,24 @@
 #  include <arpa/inet.h>
 #endif // HAVE_ARPA_INET_H
 
-namespace nghttp2 {
+namespace nghttp2
+{
 
-union sockaddr_union {
-  sockaddr_storage storage;
-  sockaddr sa;
-  sockaddr_in6 in6;
-  sockaddr_in in;
+union sockaddr_union
+{
+    sockaddr_storage storage;
+    sockaddr sa;
+    sockaddr_in6 in6;
+    sockaddr_in in;
 #ifndef _WIN32
-  sockaddr_un un;
+    sockaddr_un un;
 #endif // !_WIN32
 };
 
-struct Address {
-  size_t len;
-  union sockaddr_union su;
+struct Address
+{
+    size_t len;
+    union sockaddr_union su;
 };
 
 } // namespace nghttp2

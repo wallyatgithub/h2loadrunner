@@ -271,7 +271,7 @@ void duration_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
         worker->current_phase = Phase::MAIN_DURATION_GRACEFUL_SHUTDOWN;
         std::cerr << "Main benchmark duration is over for thread #" << worker->id
                   << ". Entering graceful shutdown." << std::endl;
-        ev_timer_init(w, duration_timeout_cb, ((double)worker->config->stream_timeout_in_ms/1000), 0.);
+        ev_timer_init(w, duration_timeout_cb, ((double)worker->config->stream_timeout_in_ms / 1000), 0.);
         w->data = worker;
         ev_timer_start(loop, w);
     }
@@ -882,7 +882,7 @@ void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
         {
             //std::string header_name = header.name;
             //util::inp_strlower(header_name);
-            for (auto& scenario: config.json_config_schema.scenarios)
+            for (auto& scenario : config.json_config_schema.scenarios)
             {
                 for (auto& request : scenario.requests)
                 {
@@ -902,8 +902,9 @@ std::vector<std::string> tokenize_string(const std::string& source, const std::s
     if (!delimeter.empty())
     {
         size_t pos = source.find(delimeter, start);
-        while (pos != std::string::npos) {
-            retVec.emplace_back(source.substr(start, (pos-start)));
+        while (pos != std::string::npos)
+        {
+            retVec.emplace_back(source.substr(start, (pos - start)));
             start = pos + delimeter_len;
             pos = source.find(delimeter, start);
         }
@@ -918,22 +919,22 @@ std::vector<std::string> tokenize_string(const std::string& source, const std::s
 
 void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config)
 {
-  for (auto& scenario : config.json_config_schema.scenarios)
-  {
-      assert(scenario.requests.size());
-      for (auto& request : scenario.requests)
-      {
-          request.tokenized_path = tokenize_string(request.path, scenario.variable_name_in_path_and_data);
-          request.tokenized_payload = tokenize_string(request.payload, scenario.variable_name_in_path_and_data);
-      }
-  }
+    for (auto& scenario : config.json_config_schema.scenarios)
+    {
+        assert(scenario.requests.size());
+        for (auto& request : scenario.requests)
+        {
+            request.tokenized_path = tokenize_string(request.path, scenario.variable_name_in_path_and_data);
+            request.tokenized_payload = tokenize_string(request.payload, scenario.variable_name_in_path_and_data);
+        }
+    }
 }
 
 std::string reassemble_str_with_variable(h2load::Config* config,
-                                                    size_t scenario_index,
-                                                    size_t request_index,
-                                                    const std::vector<std::string>& tokenized_source,
-                                                    uint64_t variable_value)
+                                         size_t scenario_index,
+                                         size_t request_index,
+                                         const std::vector<std::string>& tokenized_source,
+                                         uint64_t variable_value)
 
 {
     auto init_full_var_len = [config]()
@@ -1000,30 +1001,30 @@ void ping_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
     client->submit_ping();
 }
 
-void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ares_addrinfo* res) 
+void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ares_addrinfo* res)
 {
-  Client* client = static_cast<Client*>(arg);
+    Client* client = static_cast<Client*>(arg);
 
-  if (status == ARES_SUCCESS)
-  {
-      if (client->ares_addr)
-      {
-          ares_freeaddrinfo(client->ares_addr);
-      }
-      client->next_addr = nullptr;
-      client->current_addr = nullptr;
-      client->ares_addr = res;
-      client->connect();
-      ares_freeaddrinfo(client->ares_addr);
-      client->ares_addr = nullptr;
-  }
-  else
-  {
-      client->fail();
-  }
+    if (status == ARES_SUCCESS)
+    {
+        if (client->ares_addr)
+        {
+            ares_freeaddrinfo(client->ares_addr);
+        }
+        client->next_addr = nullptr;
+        client->current_addr = nullptr;
+        client->ares_addr = res;
+        client->connect();
+        ares_freeaddrinfo(client->ares_addr);
+        client->ares_addr = nullptr;
+    }
+    else
+    {
+        client->fail();
+    }
 }
 
-void ares_io_cb(struct ev_loop *loop, struct ev_io *watcher, int revents)
+void ares_io_cb(struct ev_loop* loop, struct ev_io* watcher, int revents)
 {
     Client* client = static_cast<Client*>(watcher->data);
     ares_process_fd(client->channel,
@@ -1032,17 +1033,17 @@ void ares_io_cb(struct ev_loop *loop, struct ev_io *watcher, int revents)
 }
 
 
-void ares_socket_state_cb(void *data, int s, int read, int write)
+void ares_socket_state_cb(void* data, int s, int read, int write)
 {
     Client* client = static_cast<Client*>(data);
     if (read != 0 || write != 0)
     {
         if (client->ares_io_watchers.find(s) == client->ares_io_watchers.end())
         {
-             ev_io watcher;
-             watcher.data = client;
-             client->ares_io_watchers[s] = watcher;
-             ev_init(&client->ares_io_watchers[s], ares_io_cb);
+            ev_io watcher;
+            watcher.data = client;
+            client->ares_io_watchers[s] = watcher;
+            ev_init(&client->ares_io_watchers[s], ares_io_cb);
         }
         ev_io_set(&client->ares_io_watchers[s], s, (read ? EV_READ : 0) | (write ? EV_WRITE : 0));
         ev_io_start(client->worker->loop, &client->ares_io_watchers[s]);
@@ -1106,7 +1107,7 @@ std::string get_tls_error_string()
                            sizeof(error_code_string));
         std::stringstream strm;
         strm << "tid==" << tid << ":" << error_code_string << ":" << file << ":" << line << ":additional info...\"" << ((
-          flags & ERR_TXT_STRING) ? data : "") << "\"\n";
+                                                                                                                            flags & ERR_TXT_STRING) ? data : "") << "\"\n";
         error_string += strm.str();
     }
     return error_string;
@@ -1125,24 +1126,24 @@ void reconnect_to_used_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
     {
         client->authority = std::move(client->used_addresses.front());
         client->used_addresses.pop_front();
-        std::cerr<<"switch to used host: "<<client->authority<<std::endl;
+        std::cerr << "switch to used host: " << client->authority << std::endl;
         client->resolve_fqdn_and_connect(client->schema, client->authority);
     }
     else
     {
-        std::cerr<<"retry current host: "<<client->authority<<std::endl;
+        std::cerr << "retry current host: " << client->authority << std::endl;
         client->resolve_fqdn_and_connect(client->schema, client->authority);
     }
 }
 
 void ares_addrinfo_query_callback_for_probe(void* arg, int status, int timeouts, struct ares_addrinfo* res)
 {
-  Client* client = static_cast<Client*>(arg);
-  if (status == ARES_SUCCESS)
-  {
-      client->probe_address(res);
-      ares_freeaddrinfo(res);
-  }
+    Client* client = static_cast<Client*>(arg);
+    if (status == ARES_SUCCESS)
+    {
+        client->probe_address(res);
+        ares_freeaddrinfo(res);
+    }
 }
 
 void connect_to_prefered_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
@@ -1169,10 +1170,10 @@ void probe_writecb(struct ev_loop* loop, ev_io* w, int revents)
     ev_io_stop(loop, w);
     if (util::check_socket_connected(client->probe_skt_fd))
     {
-        std::cerr<<"preferred host is up: "<<client->preferred_authority<<std::endl;
+        std::cerr << "preferred host is up: " << client->preferred_authority << std::endl;
         if (client->authority != client->preferred_authority && client->state == CLIENT_CONNECTED)
         {
-            std::cerr<<"switching back to preferred host: "<<client->preferred_authority<<std::endl;
+            std::cerr << "switching back to preferred host: " << client->preferred_authority << std::endl;
             client->disconnect();
             client->candidate_addresses.push_back(std::move(client->authority));
             client->authority = client->preferred_authority;
@@ -1183,10 +1184,11 @@ void probe_writecb(struct ev_loop* loop, ev_io* w, int revents)
 
 void printBacktrace()
 {
-    void *buffer[64];
+    void* buffer[64];
     int num = backtrace((void**) &buffer, 64);
-    char **addresses = backtrace_symbols(buffer, num);
-    for( int i = 0 ; i < num ; ++i ) {
+    char** addresses = backtrace_symbols(buffer, num);
+    for (int i = 0 ; i < num ; ++i)
+    {
         fprintf(stderr, "[%2d]: %s\n", i, addresses[i]);
     }
     free(addresses);
@@ -1196,19 +1198,19 @@ uint64_t find_common_multiple(std::vector<size_t> input)
 {
     std::set<size_t> unique_values;
 
-    for (auto val: input)
+    for (auto val : input)
     {
         unique_values.insert(val);
     }
 
     std::set<size_t> final_set;
 
-    for (auto iter = unique_values.rbegin(); iter!= unique_values.rend(); iter++)
+    for (auto iter = unique_values.rbegin(); iter != unique_values.rend(); iter++)
     {
         auto val = *iter;
         auto find_multiple = [val](size_t val_in_set)
         {
-            if ((val_in_set/val >= 1) && (val_in_set%val == 0))
+            if ((val_in_set / val >= 1) && (val_in_set % val == 0))
             {
                 return true;
             }
@@ -1221,7 +1223,7 @@ uint64_t find_common_multiple(std::vector<size_t> input)
     }
 
     uint64_t retVal = 1;
-    for (auto val: final_set)
+    for (auto val : final_set)
     {
         retVal *= val;
     }
@@ -1237,12 +1239,13 @@ std::string to_string_with_precision_3(const T a_value)
     return out.str();
 }
 
-size_t get_request_name_max_width (h2load::Config& config)
+size_t get_request_name_max_width(h2load::Config& config)
 {
     size_t width = 0;
     for (size_t scenario_index = 0; scenario_index < config.json_config_schema.scenarios.size(); scenario_index++)
     {
-        std::string req_name = std::string(config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(config.json_config_schema.scenarios[scenario_index].requests.size()));
+        std::string req_name = std::string(config.json_config_schema.scenarios[scenario_index].name).append("_").append(
+                                   std::to_string(config.json_config_schema.scenarios[scenario_index].requests.size()));
         if (req_name.size() > width)
         {
             width = req_name.size();
@@ -1252,8 +1255,8 @@ size_t get_request_name_max_width (h2load::Config& config)
 }
 
 void output_realtime_stats(h2load::Config& config,
-                                   std::vector<std::unique_ptr<h2load::Worker>>& workers,
-                                   std::atomic<bool>& workers_stopped, std::stringstream& dataStream)
+                           std::vector<std::unique_ptr<h2load::Worker>>& workers,
+                           std::atomic<bool>& workers_stopped, std::stringstream& dataStream)
 {
     std::vector<std::vector<size_t>> scenario_req_sent_till_now;
     std::vector<std::vector<size_t>> scenario_req_done_till_now;
@@ -1298,8 +1301,9 @@ void output_realtime_stats(h2load::Config& config,
         static uint64_t counter = 0;
         if (counter % 10 == 0)
         {
-            outputStream << "time, request, sent/s, done/s, success/s, (done/s)/(sent/s), (success/s)/(done/s), delta_2xx, 3xx, 4xx, 5xx, latency-min(ms), max, mean, sd, +/-sd, total-sent, total-done, total-success, done/sent(total), success/done(total)";
-            outputStream <<std::endl;
+            outputStream <<
+                         "time, request, sent/s, done/s, success/s, (done/s)/(sent/s), (success/s)/(done/s), delta_2xx, 3xx, 4xx, 5xx, latency-min(ms), max, mean, sd, +/-sd, total-sent, total-done, total-success, done/sent(total), success/done(total)";
+            outputStream << std::endl;
         }
         counter++;
 
@@ -1313,7 +1317,8 @@ void output_realtime_stats(h2load::Config& config,
 
         for (size_t scenario_index = 0; scenario_index < config.json_config_schema.scenarios.size(); scenario_index++)
         {
-            for (size_t request_index = 0; request_index < config.json_config_schema.scenarios[scenario_index].requests.size(); request_index++)
+            for (size_t request_index = 0; request_index < config.json_config_schema.scenarios[scenario_index].requests.size();
+                 request_index++)
             {
                 scenario_req_sent_till_now[scenario_index][request_index] = 0;
                 scenario_req_done_till_now[scenario_index][request_index] = 0;
@@ -1333,45 +1338,66 @@ void output_realtime_stats(h2load::Config& config,
                     scenario_4xx_till_now[scenario_index][request_index] += s.status[4];
                     scenario_5xx_till_now[scenario_index][request_index] += s.status[5];
                 }
-                size_t delta_RPS_sent = scenario_req_sent_till_now[scenario_index][request_index] - scenario_req_sent_till_last_interval[scenario_index][request_index];
-                size_t delta_RPS_done = scenario_req_done_till_now[scenario_index][request_index] - scenario_req_done_till_last_interval[scenario_index][request_index];
-                size_t delta_RPS_success = scenario_req_success_till_now[scenario_index][request_index] - scenario_req_success_till_last_interval[scenario_index][request_index];
-                size_t request_delta_2xx = scenario_2xx_till_now[scenario_index][request_index] - scenario_2xx_till_last_interval[scenario_index][request_index];
-                size_t request_delta_3xx = scenario_3xx_till_now[scenario_index][request_index] - scenario_3xx_till_last_interval[scenario_index][request_index];
-                size_t request_delta_4xx = scenario_4xx_till_now[scenario_index][request_index] - scenario_4xx_till_last_interval[scenario_index][request_index];
-                size_t request_delta_5xx = scenario_5xx_till_now[scenario_index][request_index] - scenario_5xx_till_last_interval[scenario_index][request_index];
+                size_t delta_RPS_sent = scenario_req_sent_till_now[scenario_index][request_index] -
+                                        scenario_req_sent_till_last_interval[scenario_index][request_index];
+                size_t delta_RPS_done = scenario_req_done_till_now[scenario_index][request_index] -
+                                        scenario_req_done_till_last_interval[scenario_index][request_index];
+                size_t delta_RPS_success = scenario_req_success_till_now[scenario_index][request_index] -
+                                           scenario_req_success_till_last_interval[scenario_index][request_index];
+                size_t request_delta_2xx = scenario_2xx_till_now[scenario_index][request_index] -
+                                           scenario_2xx_till_last_interval[scenario_index][request_index];
+                size_t request_delta_3xx = scenario_3xx_till_now[scenario_index][request_index] -
+                                           scenario_3xx_till_last_interval[scenario_index][request_index];
+                size_t request_delta_4xx = scenario_4xx_till_now[scenario_index][request_index] -
+                                           scenario_4xx_till_last_interval[scenario_index][request_index];
+                size_t request_delta_5xx = scenario_5xx_till_now[scenario_index][request_index] -
+                                           scenario_5xx_till_last_interval[scenario_index][request_index];
 
                 outputStream
-                    << std::put_time(std::localtime(&now_c), "%F %T")
-                    << ", " << std::left << std::setw(request_name_width)<< std::string(config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(request_index))
-                    << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_sent)/period_duration)
-                    << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_done)/period_duration)
-                    << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_success)/period_duration)
-                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_sent?(((double)delta_RPS_done / delta_RPS_sent) * 100):0).append( "%")
-                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_done?(((double)delta_RPS_success / delta_RPS_done) * 100):0).append("%")
-                    << ", " << std::left << std::setw(total_req_width) << request_delta_2xx
-                    << ", " << std::left << std::setw(total_req_width) << request_delta_3xx
-                    << ", " << std::left << std::setw(total_req_width) << request_delta_4xx
-                    << ", " << std::left << std::setw(total_req_width) << request_delta_5xx
-                    << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].min)
-                    << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].max)
-                    << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].mean)
-                    << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].sd)
-                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(latency_stats[scenario_index][request_index].within_sd).append( "%")
-                    << ", " << std::left << std::setw(total_req_width) << scenario_req_sent_till_now[scenario_index][request_index]
-                    << ", " << std::left << std::setw(total_req_width) << scenario_req_done_till_now[scenario_index][request_index]
-                    << ", " << std::left << std::setw(total_req_width) << scenario_req_success_till_now[scenario_index][request_index]
-                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(scenario_req_sent_till_now[scenario_index][request_index]?(((double)scenario_req_done_till_now[scenario_index][request_index] / scenario_req_sent_till_now[scenario_index][request_index]) * 100):0).append( "%")
-                    << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(scenario_req_done_till_now[scenario_index][request_index]?(((double)scenario_req_success_till_now[scenario_index][request_index] / scenario_req_done_till_now[scenario_index][request_index]) * 100):0).append( "%")
-                ;
-                outputStream<<std::endl;
+                        << std::put_time(std::localtime(&now_c), "%F %T")
+                        << ", " << std::left << std::setw(request_name_width) << std::string(
+                            config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(request_index))
+                        << ", " << std::left << std::setw(rps_width) << round((double)(1000 * delta_RPS_sent) / period_duration)
+                        << ", " << std::left << std::setw(rps_width) << round((double)(1000 * delta_RPS_done) / period_duration)
+                        << ", " << std::left << std::setw(rps_width) << round((double)(1000 * delta_RPS_success) / period_duration)
+                        << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_sent ? (((
+                                                                                                                                 double)delta_RPS_done / delta_RPS_sent) * 100) : 0).append("%")
+                        << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_done ? (((
+                                                                                                                                 double)delta_RPS_success / delta_RPS_done) * 100) : 0).append("%")
+                        << ", " << std::left << std::setw(total_req_width) << request_delta_2xx
+                        << ", " << std::left << std::setw(total_req_width) << request_delta_3xx
+                        << ", " << std::left << std::setw(total_req_width) << request_delta_4xx
+                        << ", " << std::left << std::setw(total_req_width) << request_delta_5xx
+                        << ", " << std::left << std::setw(latency_width) << util::format_duration_to_mili_second(
+                            latency_stats[scenario_index][request_index].min)
+                        << ", " << std::left << std::setw(latency_width) << util::format_duration_to_mili_second(
+                            latency_stats[scenario_index][request_index].max)
+                        << ", " << std::left << std::setw(latency_width) << util::format_duration_to_mili_second(
+                            latency_stats[scenario_index][request_index].mean)
+                        << ", " << std::left << std::setw(latency_width) << util::format_duration_to_mili_second(
+                            latency_stats[scenario_index][request_index].sd)
+                        << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(
+                            latency_stats[scenario_index][request_index].within_sd).append("%")
+                        << ", " << std::left << std::setw(total_req_width) << scenario_req_sent_till_now[scenario_index][request_index]
+                        << ", " << std::left << std::setw(total_req_width) << scenario_req_done_till_now[scenario_index][request_index]
+                        << ", " << std::left << std::setw(total_req_width) << scenario_req_success_till_now[scenario_index][request_index]
+                        << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(
+                            scenario_req_sent_till_now[scenario_index][request_index] ? (((double)
+                                                                                          scenario_req_done_till_now[scenario_index][request_index] / scenario_req_sent_till_now[scenario_index][request_index]) *
+                                                                                         100) : 0).append("%")
+                        << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(
+                            scenario_req_done_till_now[scenario_index][request_index] ? (((double)
+                                                                                          scenario_req_success_till_now[scenario_index][request_index] /
+                                                                                          scenario_req_done_till_now[scenario_index][request_index]) * 100) : 0).append("%")
+                        ;
+                outputStream << std::endl;
             }
         }
 
         auto accumulate_2d_vector = [](std::vector<std::vector<size_t>>& two_d_vec)
         {
             size_t sum = 0;
-            for (auto& one_d_vec: two_d_vec)
+            for (auto& one_d_vec : two_d_vec)
             {
                 sum += std::accumulate(one_d_vec.begin(), one_d_vec.end(), 0);
             }
@@ -1402,41 +1428,51 @@ void output_realtime_stats(h2load::Config& config,
         auto delta_5xx = total_5xx - total_5xx_till_last_interval;
 
         outputStream
-            << std::put_time(std::localtime(&now_c), "%F %T")
-            << ", " << std::left << std::setw(request_name_width) << "All_Requests"
-            << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_sent)/period_duration)
-            << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_done)/period_duration)
-            << ", " << std::left << std::setw(rps_width) << round((double)(1000*delta_RPS_success)/period_duration)
-            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_sent?(((double)delta_RPS_done / delta_RPS_sent) * 100):0).append("%")
-            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_done?(((double)delta_RPS_success / delta_RPS_done) * 100):0).append("%")
-            << ", " << std::left << std::setw(total_req_width) << delta_2xx
-            << ", " << std::left << std::setw(total_req_width) << delta_3xx
-            << ", " << std::left << std::setw(total_req_width) << delta_4xx
-            << ", " << std::left << std::setw(total_req_width) << delta_5xx
-            << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[config.json_config_schema.scenarios.size()][0].min)
-            << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[config.json_config_schema.scenarios.size()][0].max)
-            << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[config.json_config_schema.scenarios.size()][0].mean)
-            << ", " << std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[config.json_config_schema.scenarios.size()][0].sd)
-            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(latency_stats[config.json_config_schema.scenarios.size()][0].within_sd).append( "%")
-            << ", " << std::left << std::setw(total_req_width) << total_req_sent
-            << ", " << std::left << std::setw(total_req_width) << total_req_done
-            << ", " << std::left << std::setw(total_req_width) << total_req_success
-            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(total_req_sent?(((double)total_req_done / total_req_sent) * 100):0).append("%")
-            << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(total_req_done?(((double)total_req_success / total_req_done) * 100):0).append("%")
-        ;
-        outputStream<<std::endl;
+                << std::put_time(std::localtime(&now_c), "%F %T")
+                << ", " << std::left << std::setw(request_name_width) << "All_Requests"
+                << ", " << std::left << std::setw(rps_width) << round((double)(1000 * delta_RPS_sent) / period_duration)
+                << ", " << std::left << std::setw(rps_width) << round((double)(1000 * delta_RPS_done) / period_duration)
+                << ", " << std::left << std::setw(rps_width) << round((double)(1000 * delta_RPS_success) / period_duration)
+                << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_sent ? (((
+                                                                                                                         double)delta_RPS_done / delta_RPS_sent) * 100) : 0).append("%")
+                << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(delta_RPS_done ? (((
+                                                                                                                         double)delta_RPS_success / delta_RPS_done) * 100) : 0).append("%")
+                << ", " << std::left << std::setw(total_req_width) << delta_2xx
+                << ", " << std::left << std::setw(total_req_width) << delta_3xx
+                << ", " << std::left << std::setw(total_req_width) << delta_4xx
+                << ", " << std::left << std::setw(total_req_width) << delta_5xx
+                << ", " << std::left << std::setw(latency_width) << util::format_duration_to_mili_second(
+                    latency_stats[config.json_config_schema.scenarios.size()][0].min)
+                << ", " << std::left << std::setw(latency_width) << util::format_duration_to_mili_second(
+                    latency_stats[config.json_config_schema.scenarios.size()][0].max)
+                << ", " << std::left << std::setw(latency_width) << util::format_duration_to_mili_second(
+                    latency_stats[config.json_config_schema.scenarios.size()][0].mean)
+                << ", " << std::left << std::setw(latency_width) << util::format_duration_to_mili_second(
+                    latency_stats[config.json_config_schema.scenarios.size()][0].sd)
+                << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(
+                    latency_stats[config.json_config_schema.scenarios.size()][0].within_sd).append("%")
+                << ", " << std::left << std::setw(total_req_width) << total_req_sent
+                << ", " << std::left << std::setw(total_req_width) << total_req_done
+                << ", " << std::left << std::setw(total_req_width) << total_req_success
+                << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(total_req_sent ? (((
+                                                                                                                         double)total_req_done / total_req_sent) * 100) : 0).append("%")
+                << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(total_req_done ? (((
+                                                                                                                         double)total_req_success / total_req_done) * 100) : 0).append("%")
+                ;
+        outputStream << std::endl;
         if (config.json_config_schema.statistics_file.size())
         {
             static std::ofstream log_file(config.json_config_schema.statistics_file);
-            log_file<<outputStream.str();
+            log_file << outputStream.str();
         }
         else
         {
-            std::cout<<outputStream.str();
+            std::cout << outputStream.str();
         }
 
         rps_width = std::to_string(delta_RPS_sent).size() > rps_width ? std::to_string(delta_RPS_sent).size() : rps_width;
-        total_req_width = std::to_string(total_req_sent).size() > total_req_width ? std::to_string(total_req_sent).size(): total_req_width;
+        total_req_width = std::to_string(total_req_sent).size() > total_req_width ? std::to_string(
+                              total_req_sent).size() : total_req_width;
 
         dataStream.str(outputStream.str());
     }
@@ -1444,7 +1480,7 @@ void output_realtime_stats(h2load::Config& config,
 
 
 std::vector<std::vector<h2load::SDStat>>
-produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>>& workers)
+                                      produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>>& workers)
 {
     auto request_times_sampling = false;
     size_t nrequest_times = 0;
@@ -1475,7 +1511,8 @@ produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>
     for (size_t scenario_index = 0; scenario_index < config->json_config_schema.scenarios.size(); scenario_index++)
     {
         std::vector<h2load::SDStat> requests_stats;
-        for (size_t request_index = 0; request_index < config->json_config_schema.scenarios[scenario_index].requests.size(); request_index++)
+        for (size_t request_index = 0; request_index < config->json_config_schema.scenarios[scenario_index].requests.size();
+             request_index++)
         {
             requests_stats.push_back(compute_time_stat(request_times[scenario_index][request_index], request_times_sampling));
         }
@@ -1483,9 +1520,9 @@ produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>
     }
 
     std::vector<double> all_request_times;
-    for (auto& items: request_times)
+    for (auto& items : request_times)
     {
-        for (auto& item: items.second)
+        for (auto& item : items.second)
         {
             all_request_times.insert(all_request_times.end(),
                                      std::make_move_iterator(item.second.begin()),
@@ -1504,7 +1541,7 @@ void post_process_json_config_schema(h2load::Config& config)
     util::inp_strlower(config.json_config_schema.host);
     util::inp_strlower(config.json_config_schema.schema);
 
-    auto load_file_content = [](std::string& source)
+    auto load_file_content = [](std::string & source)
     {
         if (source.size())
         {
@@ -1516,7 +1553,7 @@ void post_process_json_config_schema(h2load::Config& config)
             }
         }
     };
-    for (auto& scenario: config.json_config_schema.scenarios)
+    for (auto& scenario : config.json_config_schema.scenarios)
     {
         if (scenario.user_id_list_file.size())
         {
@@ -1585,29 +1622,29 @@ void post_process_json_config_schema(h2load::Config& config)
             {
                 request.response_match_rules.emplace_back(Match_Rule(schema_header_match));
             }
-            
+
             for (auto& schema_payload_match : request.response_match.payload_match)
             {
                 request.response_match_rules.emplace_back(Match_Rule(schema_payload_match));
             }
             if (request.luaScript.size())
             {
-              lua_State* L = luaL_newstate();
-              luaL_openlibs(L);
-              luaL_dostring(L, request.luaScript.c_str());
-              lua_getglobal(L, make_request);
-              if (lua_isfunction(L, -1))
-              {
-                  request.make_request_function_present = true;
-              }
-              lua_settop(L, 0);
-              lua_getglobal(L, validate_response);
-              if (lua_isfunction(L, -1))
-              {
-                  request.validate_response_function_present = true;
-              }
-              lua_settop(L, 0);
-              lua_close(L);
+                lua_State* L = luaL_newstate();
+                luaL_openlibs(L);
+                luaL_dostring(L, request.luaScript.c_str());
+                lua_getglobal(L, make_request);
+                if (lua_isfunction(L, -1))
+                {
+                    request.make_request_function_present = true;
+                }
+                lua_settop(L, 0);
+                lua_getglobal(L, validate_response);
+                if (lua_isfunction(L, -1))
+                {
+                    request.validate_response_function_present = true;
+                }
+                lua_settop(L, 0);
+                lua_close(L);
             }
         }
     }
@@ -1632,7 +1669,7 @@ std::vector<std::vector<std::string>> read_csv_file(const std::string& csv_file_
         std::vector<std::string> row;
         std::stringstream lineStream(line);
         std::string cell;
-        while(std::getline(lineStream, cell, ','))
+        while (std::getline(lineStream, cell, ','))
         {
             row.push_back(cell);
         }
@@ -1677,7 +1714,8 @@ void integrated_http2_server(std::stringstream& dataStream, h2load::Config& conf
     nghttp2::asio_http2::server::http2 server;
     boost::system::error_code ec;
     server.num_threads(1);
-    server.handle("/stat", [&](const nghttp2::asio_http2::server::request &req, const nghttp2::asio_http2::server::response &res)
+    server.handle("/stat", [&](const nghttp2::asio_http2::server::request & req,
+                               const nghttp2::asio_http2::server::response & res)
     {
         nghttp2::asio_http2::header_map headers;
         nghttp2::asio_http2::header_value hdr_val;
@@ -1688,13 +1726,17 @@ void integrated_http2_server(std::stringstream& dataStream, h2load::Config& conf
         res.write_head(200, headers);
         res.end(payload);
     });
-    server.handle("/config", [&](const nghttp2::asio_http2::server::request &req, const nghttp2::asio_http2::server::response &res)
+    server.handle("/config", [&](const nghttp2::asio_http2::server::request & req,
+                                 const nghttp2::asio_http2::server::response & res)
     {
         std::string raw_query = req.uri().raw_query;
         std::string replyMsg = "rps updated to ";
 
         std::vector<std::string> tokens = tokenize_string(raw_query, "&");
-        auto rps_it = std::find_if(tokens.begin(), tokens.end(), [](std::string e) {return (e.find("rps") != std::string::npos);});
+        auto rps_it = std::find_if(tokens.begin(), tokens.end(), [](std::string e)
+        {
+            return (e.find("rps") != std::string::npos);
+        });
         if (rps_it != tokens.end())
         {
             std::vector<std::string> rps_token = tokenize_string(*rps_it, "=");
@@ -1726,13 +1768,15 @@ void integrated_http2_server(std::stringstream& dataStream, h2load::Config& conf
     }
 };
 
-void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& config, const std::vector<std::unique_ptr<h2load::Worker>>& workers)
+void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& config,
+                                  const std::vector<std::unique_ptr<h2load::Worker>>& workers)
 {
     if (config.json_config_schema.scenarios.size())
     {
         std::stringstream colStream;
-        colStream << "request, traffic-percentage, total-req-sent, total-req-done, total-req-success, total-2xx-resp, 3xx, 4xx, 5xx, latency-min(ms), max, mean, sd, +/-sd";
-        std::cerr<<colStream.str()<<std::endl;
+        colStream <<
+                  "request, traffic-percentage, total-req-sent, total-req-done, total-req-success, total-2xx-resp, 3xx, 4xx, 5xx, latency-min(ms), max, mean, sd, +/-sd";
+        std::cerr << colStream.str() << std::endl;
         auto latency_stats = produce_requests_latency_stats(workers);
         size_t request_name_width = get_request_name_max_width(config);
         static size_t percentage_width = 8;
@@ -1740,7 +1784,8 @@ void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& co
 
         for (size_t scenario_index = 0; scenario_index < config.json_config_schema.scenarios.size(); scenario_index++)
         {
-            for (size_t request_index = 0; request_index < config.json_config_schema.scenarios[scenario_index].requests.size(); request_index++)
+            for (size_t request_index = 0; request_index < config.json_config_schema.scenarios[scenario_index].requests.size();
+                 request_index++)
             {
                 size_t req_sent = 0;
                 size_t req_done = 0;
@@ -1762,22 +1807,29 @@ void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& co
                 }
 
                 std::stringstream dataStream;
-                dataStream << std::left << std::setw(request_name_width) << std::string(config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(request_index))
-                           << ", " <<std::left << std::setw(percentage_width) << to_string_with_precision_3(stats.req_done ? (double)(req_done*100)/stats.req_done : 0).append("%")
-                           << ", " <<req_sent
-                           << ", " <<req_done
-                           << ", " <<req_success
-                           << ", " <<resp_2xx
-                           << ", " <<resp_3xx
-                           << ", " <<resp_4xx
-                           << ", " <<resp_5xx
-                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].min)
-                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].max)
-                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].mean)
-                           << ", " <<std::left << std::setw(latency_width)<<util::format_duration_to_mili_second(latency_stats[scenario_index][request_index].sd)
-                           << ", " <<std::left << std::setw(latency_width)<<to_string_with_precision_3(latency_stats[scenario_index][request_index].within_sd).append("%");
-                           ;
-                std::cerr<<dataStream.str()<<std::endl;
+                dataStream << std::left << std::setw(request_name_width) << std::string(
+                               config.json_config_schema.scenarios[scenario_index].name).append("_").append(std::to_string(request_index))
+                           << ", " << std::left << std::setw(percentage_width) << to_string_with_precision_3(stats.req_done ? (double)(
+                                                                                                                 req_done * 100) / stats.req_done : 0).append("%")
+                           << ", " << req_sent
+                           << ", " << req_done
+                           << ", " << req_success
+                           << ", " << resp_2xx
+                           << ", " << resp_3xx
+                           << ", " << resp_4xx
+                           << ", " << resp_5xx
+                           << ", " << std::left << std::setw(latency_width) << util::format_duration_to_mili_second(
+                               latency_stats[scenario_index][request_index].min)
+                           << ", " << std::left << std::setw(latency_width) << util::format_duration_to_mili_second(
+                               latency_stats[scenario_index][request_index].max)
+                           << ", " << std::left << std::setw(latency_width) << util::format_duration_to_mili_second(
+                               latency_stats[scenario_index][request_index].mean)
+                           << ", " << std::left << std::setw(latency_width) << util::format_duration_to_mili_second(
+                               latency_stats[scenario_index][request_index].sd)
+                           << ", " << std::left << std::setw(latency_width) << to_string_with_precision_3(
+                               latency_stats[scenario_index][request_index].within_sd).append("%");
+                ;
+                std::cerr << dataStream.str() << std::endl;
             }
         }
     }

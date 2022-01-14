@@ -355,7 +355,8 @@ int Http1Session::_submit_request()
         {
             continue;
         }
-        if (header.first == path_header || header.first == scheme_header || header.first == authority_header || header.first == method_header)
+        if (header.first == path_header || header.first == scheme_header || header.first == authority_header
+            || header.first == method_header)
         {
             continue;
         }
@@ -366,7 +367,8 @@ int Http1Session::_submit_request()
     }
     for (auto& header : data.shadow_req_headers)
     {
-        if (header.first == path_header || header.first == scheme_header || header.first == authority_header || header.first == method_header)
+        if (header.first == path_header || header.first == scheme_header || header.first == authority_header
+            || header.first == method_header)
         {
             continue;
         }
@@ -380,7 +382,7 @@ int Http1Session::_submit_request()
 
     if (config->verbose)
     {
-        std::cout<<"sending headers:"<<req<<std::endl;
+        std::cout << "sending headers:" << req << std::endl;
     }
 
     client_->requests_awaiting_response[stream_req_counter_] = std::move(data);
@@ -465,7 +467,7 @@ Client* Http1Session::get_client()
 
 size_t Http1Session::max_concurrent_streams()
 {
-   return 1;
+    return 1;
 }
 
 } // namespace h2load

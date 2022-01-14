@@ -29,30 +29,35 @@
 
 #include <nghttp2/asio_http2_server.h>
 
-namespace nghttp2 {
+namespace nghttp2
+{
 
-namespace asio_http2 {
+namespace asio_http2
+{
 
-namespace server {
+namespace server
+{
 
 class request_impl;
 
 // port from go's ServeMux
 
-struct handler_entry {
-  bool user_defined;
-  request_cb cb;
-  std::string pattern;
+struct handler_entry
+{
+    bool user_defined;
+    request_cb cb;
+    std::string pattern;
 };
 
-class serve_mux {
+class serve_mux
+{
 public:
-  bool handle(std::string pattern, request_cb cb);
-  request_cb handler(request_impl &req) const;
-  request_cb match(const std::string &path) const;
+    bool handle(std::string pattern, request_cb cb);
+    request_cb handler(request_impl& req) const;
+    request_cb match(const std::string& path) const;
 
 private:
-  std::map<std::string, handler_entry> mux_;
+    std::map<std::string, handler_entry> mux_;
 };
 
 } // namespace server

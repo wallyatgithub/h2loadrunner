@@ -33,17 +33,20 @@
 
 #include "ssl_compat.h"
 
-namespace nghttp2 {
+namespace nghttp2
+{
 
-namespace tls {
+namespace tls
+{
 
 // Acquire OpenSSL global lock to share SSL_CTX across multiple
 // threads. The constructor acquires lock and destructor unlocks.
-class LibsslGlobalLock {
+class LibsslGlobalLock
+{
 public:
-  LibsslGlobalLock();
-  LibsslGlobalLock(const LibsslGlobalLock &) = delete;
-  LibsslGlobalLock &operator=(const LibsslGlobalLock &) = delete;
+    LibsslGlobalLock();
+    LibsslGlobalLock(const LibsslGlobalLock&) = delete;
+    LibsslGlobalLock& operator=(const LibsslGlobalLock&) = delete;
 };
 
 // Recommended general purpose "Modern compatibility" cipher suites by
@@ -71,24 +74,25 @@ constexpr auto NGHTTP2_TLS_MAX_VERSION = TLS1_3_VERSION;
 constexpr auto NGHTTP2_TLS_MAX_VERSION = TLS1_2_VERSION;
 #endif // !TLS1_3_VERSION
 
-const char *get_tls_protocol(SSL *ssl);
+const char* get_tls_protocol(SSL* ssl);
 
-struct TLSSessionInfo {
-  const char *cipher;
-  const char *protocol;
-  const uint8_t *session_id;
-  bool session_reused;
-  size_t session_id_length;
+struct TLSSessionInfo
+{
+    const char* cipher;
+    const char* protocol;
+    const uint8_t* session_id;
+    bool session_reused;
+    size_t session_id_length;
 };
 
-TLSSessionInfo *get_tls_session_info(TLSSessionInfo *tls_info, SSL *ssl);
+TLSSessionInfo* get_tls_session_info(TLSSessionInfo* tls_info, SSL* ssl);
 
 // Returns true iff the negotiated protocol is TLSv1.2.
-bool check_http2_tls_version(SSL *ssl);
+bool check_http2_tls_version(SSL* ssl);
 
 // Returns true iff the negotiated cipher suite is in HTTP/2 cipher
 // black list.
-bool check_http2_cipher_black_list(SSL *ssl);
+bool check_http2_cipher_black_list(SSL* ssl);
 
 // Returns true if SSL/TLS requirement for HTTP/2 is fulfilled.
 // To fulfill the requirement, the following 2 terms must be hold:
@@ -96,14 +100,14 @@ bool check_http2_cipher_black_list(SSL *ssl);
 // 1. The negotiated protocol must be TLSv1.2.
 // 2. The negotiated cipher cuite is not listed in the black list
 //    described in RFC 7540.
-bool check_http2_requirement(SSL *ssl);
+bool check_http2_requirement(SSL* ssl);
 
 // Initializes OpenSSL library
 void libssl_init();
 
 // Sets TLS min and max versions to |ssl_ctx|.  This function returns
 // 0 if it succeeds, or -1.
-int ssl_ctx_set_proto_versions(SSL_CTX *ssl_ctx, int min, int max);
+int ssl_ctx_set_proto_versions(SSL_CTX* ssl_ctx, int min, int max);
 
 } // namespace tls
 

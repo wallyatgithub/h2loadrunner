@@ -28,8 +28,8 @@ struct RequestStat
     size_t request_index;
 
     explicit RequestStat(size_t scenario_id, size_t request_id):
-      scenario_index(scenario_id),
-      request_index(request_id)
+        scenario_index(scenario_id),
+        request_index(request_id)
     {};
 };
 
@@ -120,9 +120,9 @@ struct Stats
     std::vector<RequestStat> req_stats;
     // The statistics per client
     std::vector<ClientStat> client_stats;
-//    std::atomic<uint64_t> max_resp_time_ms;
-//    std::atomic<uint64_t> min_resp_time_ms;
-//    std::atomic<uint64_t> total_resp_time_ms;
+    //    std::atomic<uint64_t> max_resp_time_ms;
+    //    std::atomic<uint64_t> min_resp_time_ms;
+    //    std::atomic<uint64_t> total_resp_time_ms;
 };
 
 

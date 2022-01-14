@@ -19,22 +19,25 @@ static const char* make_request = "make_request";
 
 struct ci_less
 {
-  // case-independent (ci) compare_less binary function
-  struct nocase_compare
-  {
-    bool operator() (const unsigned char& c1, const unsigned char& c2) const {
-        return tolower (c1) < tolower (c2);
+    // case-independent (ci) compare_less binary function
+    struct nocase_compare
+    {
+        bool operator()(const unsigned char& c1, const unsigned char& c2) const
+        {
+            return tolower(c1) < tolower(c2);
+        }
+    };
+    bool operator()(const std::string& s1, const std::string& s2) const
+    {
+        return std::lexicographical_compare
+               (s1.begin(), s1.end(),     // source range
+                s2.begin(), s2.end(),     // dest range
+                nocase_compare());   // comparison
     }
-  };
-  bool operator() (const std::string & s1, const std::string & s2) const {
-    return std::lexicographical_compare
-      (s1.begin (), s1.end (),   // source range
-      s2.begin (), s2.end (),   // dest range
-      nocase_compare ());  // comparison
-  }
 };
 
-class Uri {
+class Uri
+{
 public:
     std::string typeOfAction;
     std::string input;
@@ -92,7 +95,7 @@ inline const rapidjson::Value* getNthValue(const RapidJsonType& d, int64_t n)
     {
         int64_t index = 1;
         for (rapidjson::Value::ConstMemberIterator itr = d.MemberBegin();
-            itr != d.MemberEnd();)
+             itr != d.MemberEnd();)
         {
             if (index == n)
             {
@@ -135,7 +138,7 @@ inline const rapidjson::Value* getNthName(const RapidJsonType& d, int64_t n)
     {
         int64_t index = 1;
         for (rapidjson::Value::ConstMemberIterator itr = d.MemberBegin();
-            itr != d.MemberEnd();)
+             itr != d.MemberEnd();)
         {
             if (index == n)
             {
@@ -185,7 +188,7 @@ inline std::vector<std::string> splitComplexJsonPointer(const std::string& json_
         }
         if (end_pos != std::string::npos)
         {
-            size_t nextJsonPtrPos = json_pointer.find("/", end_pos+1);
+            size_t nextJsonPtrPos = json_pointer.find("/", end_pos + 1);
             JsonPointers.emplace_back(json_pointer.substr(end_pos, (nextJsonPtrPos - end_pos)));
             start_pos = nextJsonPtrPos;
         }
@@ -256,17 +259,17 @@ inline std::string getValueFromJsonPtr(const RapidJsonType& d, const std::string
                 }
                 else
                 {
-                    std::cerr<<"invalid json pointer: "<<pointers[vectorIndex]<<std::endl;
+                    std::cerr << "invalid json pointer: " << pointers[vectorIndex] << std::endl;
                 }
             }
             catch (std::invalid_argument& e)
             {
-                std::cerr<<"invalid_argument: "<<pointers[vectorIndex]<<std::endl;
+                std::cerr << "invalid_argument: " << pointers[vectorIndex] << std::endl;
                 exit(1);
             }
             catch (std::out_of_range& e)
             {
-                std::cerr<<"out_of_range: "<<pointers[vectorIndex]<<std::endl;
+                std::cerr << "out_of_range: " << pointers[vectorIndex] << std::endl;
                 exit(1);
             }
         }
@@ -309,7 +312,7 @@ public:
         match_type = string_to_match_type[header_match.matchType];
         if (REGEX_MATCH == match_type)
         {
-            reg_exp.assign(object, std::regex_constants::grep|std::regex_constants::optimize);
+            reg_exp.assign(object, std::regex_constants::grep | std::regex_constants::optimize);
         }
     }
     Match_Rule(const Schema_Payload_Match& payload_match)
@@ -320,7 +323,7 @@ public:
         match_type = string_to_match_type[payload_match.matchType];
         if (REGEX_MATCH == match_type)
         {
-            reg_exp.assign(object, std::regex_constants::grep|std::regex_constants::optimize);
+            reg_exp.assign(object, std::regex_constants::grep | std::regex_constants::optimize);
         }
     }
 
@@ -382,7 +385,8 @@ public:
     }
 };
 
-class Request {
+class Request
+{
 public:
     bool clear_old_cookies;
     std::string luaScript;
@@ -440,7 +444,8 @@ public:
     {
         h->add_property("name", &this->name);
         h->add_property("weight", &this->weight, staticjson::Flags::Optional);
-        h->add_property("user-id-variable-in-path-and-data", &this->variable_name_in_path_and_data, staticjson::Flags::Optional);
+        h->add_property("user-id-variable-in-path-and-data", &this->variable_name_in_path_and_data,
+                        staticjson::Flags::Optional);
         h->add_property("user-id-list-file", &this->user_id_list_file, staticjson::Flags::Optional);
         h->add_property("user-id-range-start", &this->variable_range_start, staticjson::Flags::Optional);
         h->add_property("user-id-range-end", &this->variable_range_end, staticjson::Flags::Optional);
@@ -552,7 +557,8 @@ public:
         h->add_property("schema", &this->schema);
         h->add_property("host", &this->host);
         h->add_property("port", &this->port, staticjson::Flags::Optional);
-        h->add_property("open-new-connection-based-on-authority-header", &this->open_new_connection_based_on_authority_header, staticjson::Flags::Optional);
+        h->add_property("open-new-connection-based-on-authority-header", &this->open_new_connection_based_on_authority_header,
+                        staticjson::Flags::Optional);
         h->add_property("threads", &this->threads, staticjson::Flags::Optional);
         h->add_property("clients", &this->clients, staticjson::Flags::Optional);
         h->add_property("max-concurrent-streams", &this->max_concurrent_streams, staticjson::Flags::Optional);
@@ -583,7 +589,8 @@ public:
         h->add_property("max-tls-version", &this->max_tls_version, staticjson::Flags::Optional);
         h->add_property("connection-retry", &this->connection_retry_on_disconnect, staticjson::Flags::Optional);
         h->add_property("load-share-hosts", &this->load_share_hosts, staticjson::Flags::Optional);
-        h->add_property("switch-back-after-connection-retry", &this->connect_back_to_preferred_host, staticjson::Flags::Optional);
+        h->add_property("switch-back-after-connection-retry", &this->connect_back_to_preferred_host,
+                        staticjson::Flags::Optional);
         h->add_property("interval-between-ping-frames", &this->interval_to_send_ping, staticjson::Flags::Optional);
         h->add_property("builtin-server-listening-port", &this->builtin_server_port, staticjson::Flags::Optional);
         h->add_property("failed-request-log-file", &this->failed_request_log_file, staticjson::Flags::Optional);

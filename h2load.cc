@@ -127,12 +127,12 @@ Stats::Stats(size_t req_todo, size_t nclients)
       bytes_head_decomp(0),
       bytes_body(0),
       status()
-      {}
+{}
 
 Stream::Stream(size_t scenario_id, size_t request_id, bool stats_eligible)
-: req_stat(scenario_id, request_id),
-  status_success(-1),
-  statistics_eligible(stats_eligible){}
+    : req_stat(scenario_id, request_id),
+      status_success(-1),
+      statistics_eligible(stats_eligible) {}
 
 namespace
 {
@@ -164,12 +164,13 @@ constexpr char UNIX_PATH_PREFIX[] = "unix:";
 
 namespace
 {
-void print_help(std::ostream &out) {
-  print_usage(out);
+void print_help(std::ostream& out)
+{
+    print_usage(out);
 
-  Config config;
+    Config config;
 
-  out << R"(
+    out << R"(
   <URI>       Specify URI to access.   Multiple URIs can be specified.
               URIs are used  in this order for each  client.  All URIs
               are used, then  first URI is used and then  2nd URI, and
@@ -186,16 +187,16 @@ Options:
               is ignored if timing-based  benchmarking is enabled (see
               --duration option).
               Default: )"
-      << config.nreqs << R"(
+        << config.nreqs << R"(
   -c, --clients=<N>
               Number  of concurrent  clients.   With  -r option,  this
               specifies the maximum number of connections to be made.
               Default: )"
-      << config.nclients << R"(
+        << config.nclients << R"(
   -t, --threads=<N>
               Number of native threads.
               Default: )"
-      << config.nthreads << R"(
+        << config.nthreads << R"(
   -i, --input-file=<PATH>
               Path of a file  with  multiple URIs   separated by EOLs.
               This option will disable URIs getting from command-line.
@@ -213,26 +214,26 @@ Options:
   -w, --window-bits=<N>
               Sets the stream level initial window size to (2**<N>)-1.
               Default: )"
-      << config.window_bits << R"(
+        << config.window_bits << R"(
   -W, --connection-window-bits=<N>
               Sets  the  connection  level   initial  window  size  to
               (2**<N>)-1.
               Default: )"
-      << config.connection_window_bits << R"(
+        << config.connection_window_bits << R"(
   -H, --header=<HEADER>
               Add/Override a header to the requests.
   --ciphers=<SUITE>
               Set allowed  cipher list.  The  format of the  string is
               described in OpenSSL ciphers(1).
               Default: )"
-      << config.ciphers << R"(
+        << config.ciphers << R"(
   -p, --no-tls-proto=<PROTOID>
               Specify ALPN identifier of the  protocol to be used when
               accessing http URI without SSL/TLS.
               Available protocols: )"
-      << NGHTTP2_CLEARTEXT_PROTO_VERSION_ID << R"( and )" << NGHTTP2_H1_1 << R"(
+        << NGHTTP2_CLEARTEXT_PROTO_VERSION_ID << R"( and )" << NGHTTP2_H1_1 << R"(
               Default: )"
-      << NGHTTP2_CLEARTEXT_PROTO_VERSION_ID << R"(
+        << NGHTTP2_CLEARTEXT_PROTO_VERSION_ID << R"(
   -d, --data=<PATH>
               Post FILE to  server.  The request method  is changed to
               POST.   For  http/1.1 connection,  if  -d  is used,  the
@@ -316,21 +317,21 @@ Options:
               only  and any  white spaces  are  treated as  a part  of
               protocol string.
               Default: )"
-      << DEFAULT_NPN_LIST << R"(
+        << DEFAULT_NPN_LIST << R"(
   --h1        Short        hand         for        --npn-list=http/1.1
               --no-tls-proto=http/1.1,    which   effectively    force
               http/1.1 for both http and https URI.
   --header-table-size=<SIZE>
               Specify decoder header table size.
               Default: )"
-      << util::utos_unit(config.header_table_size) << R"(
+        << util::utos_unit(config.header_table_size) << R"(
   --encoder-header-table-size=<SIZE>
               Specify encoder header table size.  The decoder (server)
               specifies  the maximum  dynamic table  size it  accepts.
               Then the negotiated dynamic table size is the minimum of
               this option value and the value which server specified.
               Default: )"
-      << util::utos_unit(config.encoder_header_table_size) << R"(
+        << util::utos_unit(config.encoder_header_table_size) << R"(
   --log-file=<PATH>
               Write per-request information to a file as tab-separated
               columns: start  time as  microseconds since  epoch; HTTP
@@ -366,7 +367,7 @@ Options:
   is 1 second and 500ms is 500 milliseconds).  Units are h, m, s or ms
   (hours, minutes, seconds and milliseconds, respectively).  If a unit
   is omitted, a second is used as unit.)"
-      << std::endl;
+        << std::endl;
 }
 
 } // namespace
@@ -383,7 +384,7 @@ void load_ca_cert(SSL_CTX* ctx, const std::string& pem_content)
     tmpFile.close();
     if (!SSL_CTX_load_verify_locations(ctx, fileName.c_str(), NULL))
     {
-        std::cerr<<"SSL_CTX_load_verify_locations failed: "<<get_tls_error_string()<<std::endl;
+        std::cerr << "SSL_CTX_load_verify_locations failed: " << get_tls_error_string() << std::endl;
     }
     std::remove(fileName.c_str());
 }
@@ -399,7 +400,7 @@ void load_cert(SSL_CTX* ctx, const std::string& pem_content)
     tmpFile.close();
     if (!SSL_CTX_use_certificate_chain_file(ctx, fileName.c_str()))
     {
-        std::cerr<<"SSL_CTX_use_certificate_chain_file failed"<<get_tls_error_string()<<std::endl;
+        std::cerr << "SSL_CTX_use_certificate_chain_file failed" << get_tls_error_string() << std::endl;
     }
     std::remove(fileName.c_str());
 }
@@ -415,7 +416,7 @@ void load_private_key(SSL_CTX* ctx, const std::string& pem_content)
     tmpFile.close();
     if (!SSL_CTX_use_PrivateKey_file(ctx, fileName.c_str(), SSL_FILETYPE_PEM))
     {
-        std::cerr<<"SSL_CTX_use_PrivateKey_file failed"<<get_tls_error_string()<<std::endl;
+        std::cerr << "SSL_CTX_use_PrivateKey_file failed" << get_tls_error_string() << std::endl;
     }
     std::remove(fileName.c_str());
 }
@@ -424,7 +425,7 @@ bool check_key_cert_consistency(SSL_CTX* ctx)
 {
     if (SSL_CTX_check_private_key(ctx) != 1)
     {
-        std::cerr<<"SSL_CTX_check_private_key failed"<<get_tls_error_string()<<std::endl;
+        std::cerr << "SSL_CTX_check_private_key failed" << get_tls_error_string() << std::endl;
         return false;
     }
     return true;
@@ -460,7 +461,7 @@ int main(int argc, char** argv)
     auto status = ares_library_init(ARES_LIB_INIT_ALL);
     if (status != ARES_SUCCESS)
     {
-        std::cerr<<"ares_library_init failed"<<std::endl;
+        std::cerr << "ares_library_init failed" << std::endl;
         exit(EXIT_FAILURE);
         return 1;
     }
@@ -1249,7 +1250,7 @@ int main(int argc, char** argv)
     if (config.verbose)
     {
         std::cerr << "Configuration dump:" << std::endl << staticjson::to_pretty_json_string(config.json_config_schema)
-                  <<std::endl;
+                  << std::endl;
     }
 
     tokenize_path_and_payload_for_fast_var_replace(config);
@@ -1346,7 +1347,8 @@ int main(int argc, char** argv)
 
     if (config.json_config_schema.scenarios.size() > 0)
     {
-        std::thread statThread(output_realtime_stats, std::ref(config), std::ref(workers), std::ref(workers_stopped), std::ref(dataStream));
+        std::thread statThread(output_realtime_stats, std::ref(config), std::ref(workers), std::ref(workers_stopped),
+                               std::ref(dataStream));
         statThread.detach();
     }
 
@@ -1435,7 +1437,7 @@ int main(int argc, char** argv)
             auto secd_count = secd.count();
             if (config.rps_enabled() && config.json_config_schema.scenarios.size())
             {
-               secd_count -= (double)config.stream_timeout_in_ms/1000;
+                secd_count -= (double)config.stream_timeout_in_ms / 1000;
             }
             rps = stats.req_success / secd_count;
             bps = stats.bytes_total / secd_count;
@@ -1454,7 +1456,7 @@ finished in )"
               << util::format_duration(duration) << ", " << rps << " req/s, "
               << util::utos_funit(bps) << R"(B/s
 requests: )" /*<< stats.req_todo
-              << " total, " */<< stats.req_started << " started, " << stats.req_done
+              << " total, " */ << stats.req_started << " started, " << stats.req_done
               << " done, " << stats.req_status_success << " succeeded, "
               << stats.req_failed << " failed, " << stats.req_error
               << " errored, " << stats.req_timedout << R"( timeout

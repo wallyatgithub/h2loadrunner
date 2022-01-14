@@ -14,7 +14,8 @@ struct Cookie
     bool        secure_origin;
     std::string cookie_key;
     std::string cookie_value;
-    std::string expires; // parsing supported, but not handled as it is not possible to expire in such short interval during load test
+    std::string
+    expires; // parsing supported, but not handled as it is not possible to expire in such short interval during load test
     bool        secure;
     bool        httpOnly; // parsing supported, but not handled as no JavaScript interaction for load test
     std::string domain;
@@ -27,8 +28,8 @@ struct Cookie
                                                    const std::string& origin_schema);
     static bool is_cookie_acceptable(const Cookie& cookie);
     static bool is_cookie_allowed_to_be_sent(const Cookie& cookie, const std::string dest_schema,
-                                                     const std::string& dest_authority,
-                                                     const std::string& dest_path);
+                                             const std::string& dest_authority,
+                                             const std::string& dest_path);
 };
 
 std::ostream& operator<<(std::ostream& o, const Cookie& cookie);

@@ -49,11 +49,14 @@
 
 #include "asio_io_service_pool.h"
 
-namespace nghttp2 {
+namespace nghttp2
+{
 
-namespace asio_http2 {
+namespace asio_http2
+{
 
-namespace server {
+namespace server
+{
 
 class serve_mux;
 
@@ -61,51 +64,52 @@ using boost::asio::ip::tcp;
 
 using ssl_socket = boost::asio::ssl::stream<tcp::socket>;
 
-class server : private boost::noncopyable {
+class server : private boost::noncopyable
+{
 public:
-  explicit server(std::size_t io_service_pool_size,
-                  const boost::posix_time::time_duration &tls_handshake_timeout,
-                  const boost::posix_time::time_duration &read_timeout);
+    explicit server(std::size_t io_service_pool_size,
+                    const boost::posix_time::time_duration& tls_handshake_timeout,
+                    const boost::posix_time::time_duration& read_timeout);
 
-  boost::system::error_code
-  listen_and_serve(boost::system::error_code &ec,
-                   boost::asio::ssl::context *tls_context,
-                   const std::string &address, const std::string &port,
-                   int backlog, serve_mux &mux, bool asynchronous = false);
-  void join();
-  void stop();
+    boost::system::error_code
+    listen_and_serve(boost::system::error_code& ec,
+                     boost::asio::ssl::context* tls_context,
+                     const std::string& address, const std::string& port,
+                     int backlog, serve_mux& mux, bool asynchronous = false);
+    void join();
+    void stop();
 
-  /// Get access to all io_service objects.
-  const std::vector<std::shared_ptr<boost::asio::io_service>> &
-  io_services() const;
+    /// Get access to all io_service objects.
+    const std::vector<std::shared_ptr<boost::asio::io_service>>&
+                                                             io_services() const;
 
-  /// Returns a vector with all the acceptors ports in use.
-  const std::vector<int> ports() const;
+    /// Returns a vector with all the acceptors ports in use.
+    const std::vector<int> ports() const;
 
 private:
-  /// Initiate an asynchronous accept operation.
-  void start_accept(tcp::acceptor &acceptor, serve_mux &mux);
-  /// Same as above but with tls_context
-  void start_accept(boost::asio::ssl::context &tls_context,
-                    tcp::acceptor &acceptor, serve_mux &mux);
+    /// Initiate an asynchronous accept operation.
+    void start_accept(tcp::acceptor& acceptor, serve_mux& mux);
+    /// Same as above but with tls_context
+    void start_accept(boost::asio::ssl::context& tls_context,
+                      tcp::acceptor& acceptor, serve_mux& mux);
 
-  /// Resolves address and bind socket to the resolved addresses.
-  boost::system::error_code bind_and_listen(boost::system::error_code &ec,
-                                            const std::string &address,
-                                            const std::string &port,
-                                            int backlog);
+    /// Resolves address and bind socket to the resolved addresses.
+    boost::system::error_code bind_and_listen(boost::system::error_code& ec,
+                                              const std::string& address,
+                                              const std::string& port,
+                                              int backlog);
 
-  /// The pool of io_service objects used to perform asynchronous
-  /// operations.
-  io_service_pool io_service_pool_;
+    /// The pool of io_service objects used to perform asynchronous
+    /// operations.
+    io_service_pool io_service_pool_;
 
-  /// Acceptor used to listen for incoming connections.
-  std::vector<tcp::acceptor> acceptors_;
+    /// Acceptor used to listen for incoming connections.
+    std::vector<tcp::acceptor> acceptors_;
 
-  std::unique_ptr<boost::asio::ssl::context> ssl_ctx_;
+    std::unique_ptr<boost::asio::ssl::context> ssl_ctx_;
 
-  boost::posix_time::time_duration tls_handshake_timeout_;
-  boost::posix_time::time_duration read_timeout_;
+    boost::posix_time::time_duration tls_handshake_timeout_;
+    boost::posix_time::time_duration read_timeout_;
 };
 
 } // namespace server

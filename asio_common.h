@@ -33,9 +33,11 @@
 
 #include "util.h"
 
-namespace nghttp2 {
+namespace nghttp2
+{
 
-namespace asio_http2 {
+namespace asio_http2
+{
 
 boost::system::error_code make_error_code(nghttp2_error ev);
 
@@ -47,24 +49,28 @@ generator_cb string_generator(std::string data);
 generator_cb deferred_generator();
 
 template <typename InputIt>
-void split_path(uri_ref &dst, InputIt first, InputIt last) {
-  auto path_last = std::find(first, last, '?');
-  InputIt query_first;
-  if (path_last == last) {
-    query_first = path_last = last;
-  } else {
-    query_first = path_last + 1;
-  }
-  dst.path = util::percent_decode(first, path_last);
-  dst.raw_path.assign(first, path_last);
-  dst.raw_query.assign(query_first, last);
+void split_path(uri_ref& dst, InputIt first, InputIt last)
+{
+    auto path_last = std::find(first, last, '?');
+    InputIt query_first;
+    if (path_last == last)
+    {
+        query_first = path_last = last;
+    }
+    else
+    {
+        query_first = path_last + 1;
+    }
+    dst.path = util::percent_decode(first, path_last);
+    dst.raw_path.assign(first, path_last);
+    dst.raw_query.assign(query_first, last);
 }
 
 using boost::asio::ip::tcp;
 
 using ssl_socket = boost::asio::ssl::stream<tcp::socket>;
 
-bool tls_h2_negotiated(ssl_socket &socket);
+bool tls_h2_negotiated(ssl_socket& socket);
 
 } // namespace asio_http2
 

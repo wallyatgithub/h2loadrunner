@@ -30,38 +30,55 @@
 
 #include "template.h"
 
-namespace nghttp2 {
-namespace asio_http2 {
-namespace server {
+namespace nghttp2
+{
+namespace asio_http2
+{
+namespace server
+{
 
 request::request() : impl_(std::make_unique<request_impl>()) {}
 
 request::~request() {}
 
-const header_map &request::header() const { return impl_->header(); }
-
-const std::string &request::method() const { return impl_->method(); }
-
-const uri_ref &request::uri() const { return impl_->uri(); }
-
-void request::on_data(data_cb cb) const {
-  return impl_->on_data(std::move(cb));
+const header_map& request::header() const
+{
+    return impl_->header();
 }
 
-request_impl &request::impl() const { return *impl_; }
+const std::string& request::method() const
+{
+    return impl_->method();
+}
 
-const boost::asio::ip::tcp::endpoint &request::remote_endpoint() const {
-  return impl_->remote_endpoint();
+const uri_ref& request::uri() const
+{
+    return impl_->uri();
+}
+
+void request::on_data(data_cb cb) const
+{
+    return impl_->on_data(std::move(cb));
+}
+
+request_impl& request::impl() const
+{
+    return *impl_;
+}
+
+const boost::asio::ip::tcp::endpoint& request::remote_endpoint() const
+{
+    return impl_->remote_endpoint();
 }
 
 std::string& request::payload()
 {
-  return impl_->payload();
+    return impl_->payload();
 }
 
 const std::string& request::unmutable_payload() const
 {
-  return impl_->unmutable_payload();
+    return impl_->unmutable_payload();
 }
 
 

@@ -120,20 +120,21 @@ void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config);
 std::vector<std::string> tokenize_string(const std::string& source, const std::string& delimeter);
 
 std::string reassemble_str_with_variable(h2load::Config* config,
-                                                    size_t scenario_index,
-                                                    size_t request_index,
-                                                    const std::vector<std::string>& tokenized_source,
-                                                    uint64_t variable_value);
+                                         size_t scenario_index,
+                                         size_t request_index,
+                                         const std::vector<std::string>& tokenized_source,
+                                         uint64_t variable_value);
 
-std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string, const std::string& origin_authority, const std::string& origin_schema);
+std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string, const std::string& origin_authority,
+                                                const std::string& origin_schema);
 
 void client_connection_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
 void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ares_addrinfo* res);
 
-void ares_socket_state_cb(void *data, int s, int read, int write);
+void ares_socket_state_cb(void* data, int s, int read, int write);
 
-void ares_io_cb(struct ev_loop *loop, struct ev_io *watcher, int revents);
+void ares_io_cb(struct ev_loop* loop, struct ev_io* watcher, int revents);
 
 void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
@@ -154,14 +155,15 @@ void printBacktrace();
 uint64_t find_common_multiple(std::vector<size_t> input);
 
 std::vector<std::vector<h2load::SDStat>>
-produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>>& workers);
+                                      produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>>& workers);
 
-void output_realtime_stats(h2load::Config& config, std::vector<std::unique_ptr<h2load::Worker>>& workers, std::atomic<bool>& workers_stopped, std::stringstream& DatStream);
+void output_realtime_stats(h2load::Config& config, std::vector<std::unique_ptr<h2load::Worker>>& workers,
+                           std::atomic<bool>& workers_stopped, std::stringstream& DatStream);
 
 template<typename T>
 std::string to_string_with_precision_3(const T a_value);
 
-size_t get_request_name_max_width (h2load::Config& config);
+size_t get_request_name_max_width(h2load::Config& config);
 
 void post_process_json_config_schema(h2load::Config& config);
 
@@ -171,6 +173,7 @@ void rpsUpdateFunc(std::atomic<bool>& workers_stopped, h2load::Config& config);
 
 void integrated_http2_server(std::stringstream& DatStream, h2load::Config& config);
 
-void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& config, const std::vector<std::unique_ptr<h2load::Worker>>& workers);
+void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& config,
+                                  const std::vector<std::unique_ptr<h2load::Worker>>& workers);
 
 #endif

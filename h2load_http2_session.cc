@@ -199,7 +199,7 @@ ssize_t buffer_read_callback(nghttp2_session* session, int32_t stream_id,
 
     if (config->verbose)
     {
-        std::cout<<"sending data:"<<stream_buffer<<std::endl;
+        std::cout << "sending data:" << stream_buffer << std::endl;
     }
 
     if (length >= stream_buffer.size())
@@ -433,7 +433,8 @@ int Http2Session::_submit_request()
         {
             continue;
         }
-        if (header.first == path_header || header.first == scheme_header || header.first == authority_header || header.first == method_header)
+        if (header.first == path_header || header.first == scheme_header || header.first == authority_header
+            || header.first == method_header)
         {
             continue;
         }
@@ -442,7 +443,8 @@ int Http2Session::_submit_request()
 
     for (auto& header : data.shadow_req_headers)
     {
-        if (header.first == path_header || header.first == scheme_header || header.first == authority_header || header.first == method_header)
+        if (header.first == path_header || header.first == scheme_header || header.first == authority_header
+            || header.first == method_header)
         {
             continue;
         }
@@ -452,12 +454,12 @@ int Http2Session::_submit_request()
     if (config->verbose)
     {
         //std::cout<<std::endl<<"Dump request to send: "<<std::endl<<data<<std::endl;
-        std::cout<<"sending headers:"<<std::endl;
-        for (auto nv: http2_nvs)
+        std::cout << "sending headers:" << std::endl;
+        for (auto nv : http2_nvs)
         {
             std::string name((const char*)nv.name, nv.namelen);
             std::string value((const char*)nv.value, nv.valuelen);
-            std::cout<<name<<":"<<value<<std::endl;
+            std::cout << name << ":" << value << std::endl;
         }
     }
 

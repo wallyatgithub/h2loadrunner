@@ -24,58 +24,96 @@
  */
 #include "asio_server_request_impl.h"
 
-namespace nghttp2 {
-namespace asio_http2 {
-namespace server {
+namespace nghttp2
+{
+namespace asio_http2
+{
+namespace server
+{
 
 request_impl::request_impl() : strm_(nullptr), header_buffer_size_(0) {}
 
-const header_map &request_impl::header() const { return header_; }
-
-const std::string &request_impl::method() const { return method_; }
-
-const uri_ref &request_impl::uri() const { return uri_; }
-
-uri_ref &request_impl::uri() { return uri_; }
-
-void request_impl::header(header_map h) { header_ = std::move(h); }
-
-header_map &request_impl::header() { return header_; }
-
-void request_impl::method(std::string arg) { method_ = std::move(arg); }
-
-void request_impl::on_data(data_cb cb) { on_data_cb_ = std::move(cb); }
-
-void request_impl::stream(class stream *s) { strm_ = s; }
-
-void request_impl::call_on_data(const uint8_t *data, std::size_t len) {
-  if (on_data_cb_) {
-    on_data_cb_(data, len);
-  }
+const header_map& request_impl::header() const
+{
+    return header_;
 }
 
-const boost::asio::ip::tcp::endpoint &request_impl::remote_endpoint() const {
-  return remote_ep_;
+const std::string& request_impl::method() const
+{
+    return method_;
 }
 
-void request_impl::remote_endpoint(boost::asio::ip::tcp::endpoint ep) {
-  remote_ep_ = std::move(ep);
+const uri_ref& request_impl::uri() const
+{
+    return uri_;
 }
 
-size_t request_impl::header_buffer_size() const { return header_buffer_size_; }
+uri_ref& request_impl::uri()
+{
+    return uri_;
+}
 
-void request_impl::update_header_buffer_size(size_t len) {
-  header_buffer_size_ += len;
+void request_impl::header(header_map h)
+{
+    header_ = std::move(h);
+}
+
+header_map& request_impl::header()
+{
+    return header_;
+}
+
+void request_impl::method(std::string arg)
+{
+    method_ = std::move(arg);
+}
+
+void request_impl::on_data(data_cb cb)
+{
+    on_data_cb_ = std::move(cb);
+}
+
+void request_impl::stream(class stream* s)
+{
+    strm_ = s;
+}
+
+void request_impl::call_on_data(const uint8_t* data, std::size_t len)
+{
+    if (on_data_cb_)
+    {
+        on_data_cb_(data, len);
+    }
+}
+
+const boost::asio::ip::tcp::endpoint& request_impl::remote_endpoint() const
+{
+    return remote_ep_;
+}
+
+void request_impl::remote_endpoint(boost::asio::ip::tcp::endpoint ep)
+{
+    remote_ep_ = std::move(ep);
+}
+
+size_t request_impl::header_buffer_size() const
+{
+    return header_buffer_size_;
+}
+
+void request_impl::update_header_buffer_size(size_t len)
+{
+    header_buffer_size_ += len;
 }
 
 std::string& request_impl::payload()
 {
-  return payload_;
+    return payload_;
 }
 
 const std::string& request_impl::unmutable_payload() const
 {
-  return payload_;
+    return payload_;
 }
 
 

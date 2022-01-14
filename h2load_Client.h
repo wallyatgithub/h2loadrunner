@@ -55,11 +55,11 @@ struct Request_Data
     size_t scenario_index;
     std::vector<std::string> string_collection;
     explicit Request_Data():
-    schema(&emptyString),
-    authority(&emptyString),
-    req_payload(&emptyString),
-    path(&emptyString),
-    method(&emptyString)
+        schema(&emptyString),
+        authority(&emptyString),
+        req_payload(&emptyString),
+        path(&emptyString),
+        method(&emptyString)
     {
         user_id = 0;
         status_code = 0;
@@ -72,38 +72,38 @@ struct Request_Data
 
     friend std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
     {
-        o << "Request_Data: { "<<std::endl
-          << "scenario index: "<<request_data.scenario_index<<std::endl
-          << "request index: "<<request_data.curr_request_idx<<std::endl
-          << "schema:" << *request_data.schema<<std::endl
-          << "authority:" << *request_data.authority<<std::endl
-          << "req_payload:" << *request_data.req_payload<<std::endl
-          << "path:" << *request_data.path<<std::endl
-          << "user_id:" << request_data.user_id<<std::endl
-          << "method:" << *request_data.method<<std::endl
-          << "expected_status_code:" << request_data.expected_status_code<<std::endl
-          << "delay_before_executing_next:" << request_data.delay_before_executing_next<<std::endl;
+        o << "Request_Data: { " << std::endl
+          << "scenario index: " << request_data.scenario_index << std::endl
+          << "request index: " << request_data.curr_request_idx << std::endl
+          << "schema:" << *request_data.schema << std::endl
+          << "authority:" << *request_data.authority << std::endl
+          << "req_payload:" << *request_data.req_payload << std::endl
+          << "path:" << *request_data.path << std::endl
+          << "user_id:" << request_data.user_id << std::endl
+          << "method:" << *request_data.method << std::endl
+          << "expected_status_code:" << request_data.expected_status_code << std::endl
+          << "delay_before_executing_next:" << request_data.delay_before_executing_next << std::endl;
 
-        for (auto& it: *(request_data.req_headers))
+        for (auto& it : * (request_data.req_headers))
         {
-            o << "request header name from template: "<<it.first<<", header value: " <<it.second<<std::endl;
+            o << "request header name from template: " << it.first << ", header value: " << it.second << std::endl;
         }
-        for (auto& it: request_data.shadow_req_headers)
+        for (auto& it : request_data.shadow_req_headers)
         {
-            o << "updated request header name: "<<it.first<<", header value: " <<it.second<<std::endl;
+            o << "updated request header name: " << it.first << ", header value: " << it.second << std::endl;
         }
 
-        o << "response status code:" << request_data.status_code<<std::endl;
-        o << "resp_payload:" << request_data.resp_payload<<std::endl;
-        for (auto& it: request_data.resp_headers)
+        o << "response status code:" << request_data.status_code << std::endl;
+        o << "resp_payload:" << request_data.resp_payload << std::endl;
+        for (auto& it : request_data.resp_headers)
         {
-            o << "response header name: "<<it.first<<", header value: " <<it.second<<std::endl;
+            o << "response header name: " << it.first << ", header value: " << it.second << std::endl;
         }
-        for (auto& it: request_data.saved_cookies)
+        for (auto& it : request_data.saved_cookies)
         {
-            o << "cookie name: "<<it.first<<", cookie content: " <<it.second<<std::endl;
+            o << "cookie name: " << it.first << ", cookie content: " << it.second << std::endl;
         }
-        o << "}"<<std::endl;
+        o << "}" << std::endl;
         return o;
     };
 
@@ -124,11 +124,11 @@ struct Runtime_Scenario_Data
     uint64_t req_variable_value_end;
     uint64_t curr_req_variable_value;
     explicit Runtime_Scenario_Data():
-      req_variable_value_start(0),
-      req_variable_value_end(0),
-      curr_req_variable_value(0)
-      {
-      };
+        req_variable_value_start(0),
+        req_variable_value_end(0),
+        curr_req_variable_value(0)
+    {
+    };
 };
 
 struct Client
@@ -221,8 +221,8 @@ struct Client
     enum { ERR_CONNECT_FAIL = -100 };
 
     Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
-             Client* parent = nullptr, const std::string& dest_schema = "",
-             const std::string& dest_authority = "");
+           Client* parent = nullptr, const std::string& dest_schema = "",
+           const std::string& dest_authority = "");
     ~Client();
     template<class T>
     int make_socket(T* addr);
@@ -299,13 +299,13 @@ struct Client
     void parse_and_save_cookies(Request_Data& finished_request);
     void move_cookies_to_new_request(Request_Data& finished_request, Request_Data& new_request);
     void populate_request_from_config_template(Request_Data& new_request,
-                                                              size_t scenario_index,
-                                                              size_t index_in_config_template);
+                                               size_t scenario_index,
+                                               size_t index_in_config_template);
 
     Client* find_or_create_dest_client(Request_Data& request_to_send);
 
     int resolve_fqdn_and_connect(const std::string& schema, const std::string& authority,
-                                           ares_addrinfo_callback callback = ares_addrinfo_query_callback);
+                                 ares_addrinfo_callback callback = ares_addrinfo_query_callback);
     int connect_to_host(const std::string& schema, const std::string& authority);
 
     void terminate_sub_clients();
@@ -354,30 +354,30 @@ struct Client
 class Submit_Requet_Wrapper
 {
 public:
-  Client* client;
+    Client* client;
 
-  Submit_Requet_Wrapper(Client* this_client, Client* next_client)
-  {
-      if (next_client != this_client && next_client)
-      {
-          client = next_client;
-      }
-      else
-      {
-          client = nullptr;
-      }
-  };
-  ~Submit_Requet_Wrapper()
-  {
-      if (client &&
-          !client->rps_mode() &&
-          client->state == CLIENT_CONNECTED)
-      {
-          client->submit_request();
-          client->signal_write();
-      }
+    Submit_Requet_Wrapper(Client* this_client, Client* next_client)
+    {
+        if (next_client != this_client && next_client)
+        {
+            client = next_client;
+        }
+        else
+        {
+            client = nullptr;
+        }
+    };
+    ~Submit_Requet_Wrapper()
+    {
+        if (client &&
+            !client->rps_mode() &&
+            client->state == CLIENT_CONNECTED)
+        {
+            client->submit_request();
+            client->signal_write();
+        }
 
-  };
+    };
 };
 
 }

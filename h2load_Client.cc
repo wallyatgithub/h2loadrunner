@@ -28,37 +28,37 @@ namespace h2load
 std::atomic<uint64_t> Client::client_unique_id(0);
 
 Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
-             Client* parent, const std::string& dest_schema,
-             const std::string& dest_authority)
-       :wb(&worker->mcpool),
-        cstat {},
-        worker(worker),
-        config(conf),
-        ssl(nullptr),
-        next_addr(conf->addrs),
-        current_addr(nullptr),
-        ares_addr(nullptr),
-        reqidx(0),
-        state(CLIENT_IDLE),
-        req_todo(req_todo),
-        req_left(req_todo),
-        req_inflight(0),
-        req_started(0),
-        req_done(0),
-        id(id),
-        fd(-1),
-        probe_skt_fd(-1),
-        new_connection_requested(false),
-        final(false),
-        rps_duration_started(0),
-        rps_req_pending(0),
-        rps_req_inflight(0),
-        curr_stream_id(0),
-        parent_client(parent),
-        schema(dest_schema),
-        authority(dest_authority),
-        connectfn(&Client::connect),
-        rps(conf->rps)
+               Client* parent, const std::string& dest_schema,
+               const std::string& dest_authority)
+    : wb(&worker->mcpool),
+      cstat {},
+      worker(worker),
+      config(conf),
+      ssl(nullptr),
+      next_addr(conf->addrs),
+      current_addr(nullptr),
+      ares_addr(nullptr),
+      reqidx(0),
+      state(CLIENT_IDLE),
+      req_todo(req_todo),
+      req_left(req_todo),
+      req_inflight(0),
+      req_started(0),
+      req_done(0),
+      id(id),
+      fd(-1),
+      probe_skt_fd(-1),
+      new_connection_requested(false),
+      final(false),
+      rps_duration_started(0),
+      rps_req_pending(0),
+      rps_req_inflight(0),
+      curr_stream_id(0),
+      parent_client(parent),
+      schema(dest_schema),
+      authority(dest_authority),
+      connectfn(&Client::connect),
+      rps(conf->rps)
 {
     init_client_unique_id();
 
@@ -104,7 +104,7 @@ void Client::init_ares()
     auto status = ares_init_options(&channel, &options, optmask);
     if (status)
     {
-        std::cerr<<"c-ares ares_init_options failed: "<<status<<std::endl;
+        std::cerr << "c-ares ares_init_options failed: " << status << std::endl;
         exit(EXIT_FAILURE);
     }
 }
@@ -113,7 +113,8 @@ void Client::init_lua_states()
     for (auto scenario_index = 0; scenario_index < config->json_config_schema.scenarios.size(); scenario_index++)
     {
         std::vector<lua_State*> requests_lua_states;
-        for (auto request_index = 0; request_index < config->json_config_schema.scenarios[scenario_index].requests.size(); request_index++)
+        for (auto request_index = 0; request_index < config->json_config_schema.scenarios[scenario_index].requests.size();
+             request_index++)
         {
             auto& request = config->json_config_schema.scenarios[scenario_index].requests[request_index];
             lua_State* L = luaL_newstate();
@@ -152,7 +153,7 @@ void Client::init_connection_targert()
         auto init_hosts = [this]()
         {
             std::vector<std::string> hosts;
-            for (auto& host: config->json_config_schema.load_share_hosts)
+            for (auto& host : config->json_config_schema.load_share_hosts)
             {
                 hosts.push_back(host.host);
                 if (host.port)
@@ -175,7 +176,7 @@ void Client::init_connection_targert()
         current_addr = nullptr;
         for (auto count = 0; count < hosts.size() - 1; count++)
         {
-            candidate_addresses.push_back(hosts[(++startIndex)%hosts.size()]);
+            candidate_addresses.push_back(hosts[(++startIndex) % hosts.size()]);
         }
         std::random_device random_device;
         std::mt19937 generator(random_device());
@@ -234,7 +235,7 @@ Client::~Client()
     ++worker->client_smp.n;
     for (auto& V : lua_states)
     {
-        for (auto& L: V)
+        for (auto& L : V)
         {
             lua_close(L);
         }
@@ -371,14 +372,14 @@ int Client::connect()
     }
     else if (ares_addr)
     {
-      rv = make_socket(ares_addr->nodes);
+        rv = make_socket(ares_addr->nodes);
     }
     /*
     else
     {
         return resolve_fqdn_and_connect(schema, authority);
     }
-*/
+    */
     if (fd == -1)
     {
         return -1;
@@ -465,11 +466,11 @@ void Client::disconnect()
 {
     if (CLIENT_CONNECTED == state)
     {
-        std::cerr<<"===============disconnected from "<<authority<<"==============="<<std::endl;
+        std::cerr << "===============disconnected from " << authority << "===============" << std::endl;
     }
 
     record_client_end_time();
-    auto stop_timer_watcher = [this](ev_timer& watcher)
+    auto stop_timer_watcher = [this](ev_timer & watcher)
     {
         if (ev_is_active(&watcher))
         {
@@ -477,7 +478,7 @@ void Client::disconnect()
         }
     };
 
-    auto stop_io_watcher = [this](ev_io& watcher)
+    auto stop_io_watcher = [this](ev_io & watcher)
     {
         if (ev_is_active(&watcher))
         {
@@ -502,7 +503,7 @@ void Client::disconnect()
     state = CLIENT_IDLE;
     stop_io_watcher(wev);
     stop_io_watcher(rev);
-    for (auto& it: ares_io_watchers)
+    for (auto& it : ares_io_watchers)
     {
         stop_io_watcher(it.second);
     }
@@ -552,7 +553,7 @@ uint64_t Client::get_total_pending_streams()
     else
     {
         auto pendingStreams = streams.size();
-        for (auto& client: dest_clients)
+        for (auto& client : dest_clients)
         {
             pendingStreams += client.second->streams.size();
         }
@@ -635,7 +636,7 @@ int Client::submit_request()
             {
                 --req_left;
             }
-            if (scenario_index < worker->scenario_stats.size()&&
+            if (scenario_index < worker->scenario_stats.size() &&
                 request_index < worker->scenario_stats[scenario_index].size())
             {
                 ++worker->scenario_stats[scenario_index][request_index]->req_started;
@@ -645,9 +646,9 @@ int Client::submit_request()
         // on this connection, start the active timeout.
         if (worker->config->conn_active_timeout > 0. && req_left == 0 && is_controller_client())
         {
-            for (auto& client: dest_clients) // "this" is also in dest_clients
+            for (auto& client : dest_clients) // "this" is also in dest_clients
             {
-               ev_timer_start(worker->loop, &client.second->conn_active_watcher);
+                ev_timer_start(worker->loop, &client.second->conn_active_watcher);
             }
         }
     }
@@ -781,7 +782,8 @@ void Client::on_request_start(int32_t stream_id)
     {
         streams.erase(stream_id);
     }
-    bool stats_eligible = (worker->current_phase == Phase::MAIN_DURATION || worker->current_phase == Phase::MAIN_DURATION_GRACEFUL_SHUTDOWN);
+    bool stats_eligible = (worker->current_phase == Phase::MAIN_DURATION
+                           || worker->current_phase == Phase::MAIN_DURATION_GRACEFUL_SHUTDOWN);
     streams.insert(std::make_pair(stream_id, Stream(scenario_index, request_index, stats_eligible)));
     auto curr_timepoint = std::chrono::steady_clock::now();
     stream_timestamp.insert(std::make_pair(curr_timepoint, stream_id));
@@ -872,7 +874,7 @@ void Client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
             }
         }
 
-        on_status_code(stream_id,status);
+        on_status_code(stream_id, status);
     }
 }
 
@@ -914,7 +916,7 @@ void Client::inc_status_counter_and_validate_response(int32_t stream_id)
         auto scenario_index = request_data->second.scenario_index;
         auto request_index = request_data->second.curr_request_idx;
         if (scenario_index < worker->scenario_stats.size() &&
-            request_index < worker->scenario_stats[scenario_index].size()&&
+            request_index < worker->scenario_stats[scenario_index].size() &&
             status < 600)
         {
             auto& stats = worker->scenario_stats[scenario_index][request_index];
@@ -940,7 +942,7 @@ void Client::inc_status_counter_and_validate_response(int32_t stream_id)
             }
             if (run_match_rule)
             {
-                for (auto& match_rule: request.response_match_rules)
+                for (auto& match_rule : request.response_match_rules)
                 {
                     matched = match_rule.match(request_data->second.resp_headers, json_payload);
                     if (!matched)
@@ -1125,7 +1127,7 @@ void Client::on_stream_close(int32_t stream_id, bool success, bool final)
         }
         else if (!rps_mode())
         {
-          submit_request();
+            submit_request();
         }
         else if (rps_req_pending)
         {
@@ -1147,7 +1149,7 @@ void Client::on_data_chunk(int32_t stream_id, const uint8_t* data, size_t len)
     if (config->verbose)
     {
         std::string str((const char*)data, len);
-        std::cout<<"received data: "<<std::endl<<str<<std::endl;
+        std::cout << "received data: " << std::endl << str << std::endl;
     }
 }
 RequestStat* Client::get_req_stat(int32_t stream_id)
@@ -1470,10 +1472,10 @@ int Client::connected()
 {
     if (!util::check_socket_connected(fd))
     {
-        std::cerr<<"check_socket_connected failed"<<std::endl;
+        std::cerr << "check_socket_connected failed" << std::endl;
         return ERR_CONNECT_FAIL;
     }
-    std::cerr<<"===============connected to "<<authority<<"==============="<<std::endl;
+    std::cerr << "===============connected to " << authority << "===============" << std::endl;
 
     ev_io_start(worker->loop, &rev);
     ev_io_stop(worker->loop, &wev);
@@ -1517,7 +1519,7 @@ int Client::tls_handshake()
                 ev_io_start(worker->loop, &wev);
                 return 0;
             default:
-                std::cerr<<get_tls_error_string()<<std::endl;
+                std::cerr << get_tls_error_string() << std::endl;
                 return -1;
         }
     }
@@ -1690,8 +1692,8 @@ void Client::parse_and_save_cookies(Request_Data& finished_request)
     if (finished_request.resp_headers.find("Set-Cookie") != finished_request.resp_headers.end())
     {
         auto new_cookies = Cookie::parse_cookie_string(finished_request.resp_headers["Set-Cookie"],
-                                               *finished_request.authority, *finished_request.schema);
-        for (auto& cookie: new_cookies)
+                                                       *finished_request.authority, *finished_request.schema);
+        for (auto& cookie : new_cookies)
         {
             if (Cookie::is_cookie_acceptable(cookie))
             {
@@ -1717,21 +1719,22 @@ void Client::produce_request_cookie_header(Request_Data& req_to_be_sent)
     if (iter != req_to_be_sent.req_headers->end())
     {
         auto cookie_vec = Cookie::parse_cookie_string(iter->second, *req_to_be_sent.authority, *req_to_be_sent.schema);
-        for (auto& cookie: cookie_vec)
+        for (auto& cookie : cookie_vec)
         {
             cookies_from_config.insert(cookie.cookie_key);
         }
     }
     const std::string cookie_delimeter = "; ";
     std::string cookies_to_append;
-    for (auto& cookie: req_to_be_sent.saved_cookies)
+    for (auto& cookie : req_to_be_sent.saved_cookies)
     {
         if (cookies_from_config.count(cookie.first))
         {
             // an overriding header from config carries the same cookie, config takes precedence
             continue;
         }
-        else if (!Cookie::is_cookie_allowed_to_be_sent(cookie.second, *req_to_be_sent.schema, *req_to_be_sent.authority, *req_to_be_sent.path))
+        else if (!Cookie::is_cookie_allowed_to_be_sent(cookie.second, *req_to_be_sent.schema, *req_to_be_sent.authority,
+                                                       *req_to_be_sent.path))
         {
             // cookie not allowed to be sent for this request
             continue;
@@ -1757,15 +1760,16 @@ void Client::produce_request_cookie_header(Request_Data& req_to_be_sent)
 }
 
 void Client::populate_request_from_config_template(Request_Data& new_request,
-                                                                  size_t scenario_index,
-                                                                  size_t index_in_config_template)
+                                                   size_t scenario_index,
+                                                   size_t index_in_config_template)
 {
     auto& request_template = config->json_config_schema.scenarios[scenario_index].requests[index_in_config_template];
 
     new_request.method = &request_template.method;
     new_request.schema = &request_template.schema;
     new_request.authority = &request_template.authority;
-    new_request.string_collection.emplace_back(reassemble_str_with_variable(config, scenario_index, index_in_config_template,
+    new_request.string_collection.emplace_back(reassemble_str_with_variable(config, scenario_index,
+                                                                            index_in_config_template,
                                                                             request_template.tokenized_payload,
                                                                             new_request.user_id));
     new_request.req_payload = &(new_request.string_collection.back());
@@ -1780,7 +1784,7 @@ size_t Client::get_index_of_next_scenario_to_run()
     {
         return 0;
     }
-    auto init_size_vec = [](Config* config)
+    auto init_size_vec = [](Config * config)
     {
         std::vector<size_t> vec;
         for (size_t scenario_index = 0; scenario_index < config->json_config_schema.scenarios.size(); scenario_index++)
@@ -1789,14 +1793,14 @@ size_t Client::get_index_of_next_scenario_to_run()
         }
         return vec;
     };
-    auto init_schedule_map = [](Config* config, uint64_t common_multiple)
+    auto init_schedule_map = [](Config * config, uint64_t common_multiple)
     {
         std::map<uint64_t, size_t> schedule_map;
         uint64_t totalWeight = 0;
         for (size_t scenario_index = 0; scenario_index < config->json_config_schema.scenarios.size(); scenario_index++)
         {
             auto& scenario = config->json_config_schema.scenarios[scenario_index];
-            totalWeight += ((scenario.weight * common_multiple)/scenario.requests.size());
+            totalWeight += ((scenario.weight * common_multiple) / scenario.requests.size());
             schedule_map[totalWeight] = scenario_index;
         }
         return schedule_map;
@@ -1839,10 +1843,13 @@ Request_Data Client::prepare_first_request()
     if (controller->runtime_scenario_data[scenario_index].req_variable_value_end)
     {
         controller->runtime_scenario_data[scenario_index].curr_req_variable_value++;
-        if (controller->runtime_scenario_data[scenario_index].curr_req_variable_value >= controller->runtime_scenario_data[scenario_index].req_variable_value_end)
+        if (controller->runtime_scenario_data[scenario_index].curr_req_variable_value >=
+            controller->runtime_scenario_data[scenario_index].req_variable_value_end)
         {
-            std::cerr<<"user id (variable_value) wrapped, start over from range start"<<", scenario index: "<<scenario_index<<std::endl;
-            controller->runtime_scenario_data[scenario_index].curr_req_variable_value = controller->runtime_scenario_data[scenario_index].req_variable_value_start;
+            std::cerr << "user id (variable_value) wrapped, start over from range start" << ", scenario index: " << scenario_index
+                      << std::endl;
+            controller->runtime_scenario_data[scenario_index].curr_req_variable_value =
+                controller->runtime_scenario_data[scenario_index].req_variable_value_start;
         }
     }
 
@@ -1858,8 +1865,8 @@ Request_Data Client::prepare_first_request()
     {
         if (!update_request_with_lua(lua_states[scenario_index][curr_index], dummy_data, new_request))
         {
-          std::cerr << "lua script failure for first request, cannot continue, exit"<< std::endl;
-          exit(EXIT_FAILURE);
+            std::cerr << "lua script failure for first request, cannot continue, exit" << std::endl;
+            exit(EXIT_FAILURE);
         }
     }
     update_content_length(new_request);
@@ -1878,7 +1885,7 @@ Request_Data Client::get_request_to_submit()
     }
     else
     {
-        std::cerr<<"this is not expected; contact support to report this error"<<std::endl;
+        std::cerr << "this is not expected; contact support to report this error" << std::endl;
         printBacktrace();
         abort(); // this should never happen
         return prepare_first_request();
@@ -1890,7 +1897,7 @@ bool Client::prepare_next_request(Request_Data& finished_request)
     size_t scenario_index = finished_request.scenario_index;
     Scenario& scenario = config->json_config_schema.scenarios[scenario_index];
 
-    size_t curr_index = ((finished_request.curr_request_idx+ 1) % scenario.requests.size());
+    size_t curr_index = ((finished_request.curr_request_idx + 1) % scenario.requests.size());
     if (curr_index == 0)
     {
         return false;
@@ -1907,10 +1914,10 @@ bool Client::prepare_next_request(Request_Data& finished_request)
 
     if (request_template.uri.typeOfAction == "input")
     {
-         new_request.string_collection.emplace_back(reassemble_str_with_variable(config, scenario_index, curr_index,
-                                                                                 request_template.tokenized_path,
-                                                                                 new_request.user_id));
-         new_request.path = &(new_request.string_collection.back());
+        new_request.string_collection.emplace_back(reassemble_str_with_variable(config, scenario_index, curr_index,
+                                                                                request_template.tokenized_path,
+                                                                                new_request.user_id));
+        new_request.path = &(new_request.string_collection.back());
     }
     else if (request_template.uri.typeOfAction == "sameWithLastOne")
     {
@@ -1951,10 +1958,10 @@ bool Client::prepare_next_request(Request_Data& finished_request)
                 }
                 else
                 {
-                  new_request.string_collection.emplace_back(*finished_request.schema);
-                  new_request.schema = &(new_request.string_collection.back());
-                  new_request.string_collection.emplace_back(*finished_request.authority);
-                  new_request.authority = &(new_request.string_collection.back());
+                    new_request.string_collection.emplace_back(*finished_request.schema);
+                    new_request.schema = &(new_request.string_collection.back());
+                    new_request.string_collection.emplace_back(*finished_request.authority);
+                    new_request.authority = &(new_request.string_collection.back());
                 }
             }
         }
@@ -1962,13 +1969,13 @@ bool Client::prepare_next_request(Request_Data& finished_request)
         {
             if (config->verbose)
             {
-                std::cout<<"response status code:"<<finished_request.status_code<<std::endl;
+                std::cout << "response status code:" << finished_request.status_code << std::endl;
                 std::cerr << "abort whole scenario sequence, as header not found: " << request_template.uri.input << std::endl;
-                for (auto& header: finished_request.resp_headers)
+                for (auto& header : finished_request.resp_headers)
                 {
-                    std::cout<<header.first<<":"<<header.second<<std::endl;
+                    std::cout << header.first << ":" << header.second << std::endl;
                 }
-                std::cout<<"response payload:"<<finished_request.resp_payload<<std::endl;
+                std::cout << "response payload:" << finished_request.resp_payload << std::endl;
             }
             return false;
         }
@@ -2043,7 +2050,7 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
         lua_pushlstring(L, finished_request.resp_payload.c_str(), finished_request.resp_payload.size());
 
         lua_createtable(L, 0, request_to_send.req_headers->size());
-        for (auto& header : *(request_to_send.req_headers))
+        for (auto& header : * (request_to_send.req_headers))
         {
             lua_pushlstring(L, header.first.c_str(), header.first.size());
             lua_pushlstring(L, header.second.c_str(), header.second.size());
@@ -2106,7 +2113,7 @@ bool Client::update_request_with_lua(lua_State* L, const Request_Data& finished_
                     request_to_send.path = &(request_to_send.string_collection.back());
                     headers.erase(path_header);
                     request_to_send.string_collection.emplace_back(headers[authority_header]);
-                    request_to_send.authority= &(request_to_send.string_collection.back());
+                    request_to_send.authority = &(request_to_send.string_collection.back());
                     headers.erase(authority_header);
                     request_to_send.string_collection.emplace_back(headers[scheme_header]);
                     request_to_send.schema = &(request_to_send.string_collection.back());
@@ -2158,7 +2165,8 @@ Client* Client::find_or_create_dest_client(Request_Data& request_to_send)
     }
 }
 
-int Client::resolve_fqdn_and_connect(const std::string& schema, const std::string& authority, ares_addrinfo_callback callback)
+int Client::resolve_fqdn_and_connect(const std::string& schema, const std::string& authority,
+                                     ares_addrinfo_callback callback)
 {
     std::string port;
     auto vec = tokenize_string(authority, ":");
@@ -2190,14 +2198,14 @@ int Client::connect_to_host(const std::string& schema, const std::string& author
 {
     //if (config->verbose)
     {
-        std::cerr<<"===============connecting to "<<schema<<"://"<<authority<<"==============="<<std::endl;
+        std::cerr << "===============connecting to " << schema << "://" << authority << "===============" << std::endl;
     }
     return resolve_fqdn_and_connect(schema, authority);
 }
 
 void Client::terminate_sub_clients()
 {
-    for (auto& sub_client: dest_clients)
+    for (auto& sub_client : dest_clients)
     {
         if (sub_client.second != this && sub_client.second->session)
         {
@@ -2218,14 +2226,14 @@ bool Client::reconnect_to_alt_addr()
         {
             used_addresses.push_back(std::move(authority));
             authority = preferred_authority;
-            std::cerr<<"try with preferred host: "<<authority<<std::endl;
+            std::cerr << "try with preferred host: " << authority << std::endl;
             resolve_fqdn_and_connect(schema, authority);
         }
         else if (candidate_addresses.size())
         {
             authority = std::move(candidate_addresses.front());
             candidate_addresses.pop_front();
-            std::cerr<<"switching to candidate host: "<<authority<<std::endl;
+            std::cerr << "switching to candidate host: " << authority << std::endl;
             resolve_fqdn_and_connect(schema, authority);
         }
         else
@@ -2268,18 +2276,18 @@ bool Client::probe_address(ares_addrinfo* ares_addr)
         probe_skt_fd = util::create_nonblock_socket(addr->ai_family);
         if (probe_skt_fd != -1)
         {
-          auto rv = ::connect(probe_skt_fd, addr->ai_addr, addr->ai_addrlen);
-          if (rv != 0 && errno != EINPROGRESS)
-          {
-              close(probe_skt_fd);
-              probe_skt_fd = -1;
-          }
-          else
-          {
-            ev_io_set(&probe_wev, probe_skt_fd, EV_WRITE);
-            ev_io_start(worker->loop, &probe_wev);
-            return true;
-          }
+            auto rv = ::connect(probe_skt_fd, addr->ai_addr, addr->ai_addrlen);
+            if (rv != 0 && errno != EINPROGRESS)
+            {
+                close(probe_skt_fd);
+                probe_skt_fd = -1;
+            }
+            else
+            {
+                ev_io_set(&probe_wev, probe_skt_fd, EV_WRITE);
+                ev_io_start(worker->loop, &probe_wev);
+                return true;
+            }
         }
     }
     return false;
@@ -2288,17 +2296,17 @@ bool Client::probe_address(ares_addrinfo* ares_addr)
 void Client::update_this_in_dest_client_map()
 {
     auto& clients = parent_client ? parent_client->dest_clients : dest_clients;
-    for( auto it = clients.begin(); it != clients.end(); )
+    for (auto it = clients.begin(); it != clients.end();)
     {
-      if(it->second == this)
-      {
-          clients.erase(it);
-          break;
-      }
-      else
-      {
-          ++it;
-      }
+        if (it->second == this)
+        {
+            clients.erase(it);
+            break;
+        }
+        else
+        {
+            ++it;
+        }
     }
     std::string dest = schema;
     dest.append("://").append(authority);
@@ -2355,72 +2363,72 @@ void Client::restore_connectfn()
 
 void Client::slice_user_id()
 {
-  if (config->nclients > 1 && (is_controller_client()))
-  {
-      for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
-      {
-          auto& scenario = config->json_config_schema.scenarios[index];
-          Runtime_Scenario_Data scenario_data;
-          if (!scenario.variable_range_slicing)
-          {
-              std::random_device                  rand_dev;
-              std::mt19937                        generator(rand_dev());
-              std::uniform_int_distribution<uint64_t>  distr(scenario.variable_range_start,
-                                                             scenario.variable_range_end);
-              scenario_data.curr_req_variable_value = distr(generator);
-              scenario_data.req_variable_value_start = scenario.variable_range_start;
-              scenario_data.req_variable_value_end = scenario.variable_range_end;
-          }
-          else
-          {
-              auto tokens_per_client = ((scenario.variable_range_end - scenario.variable_range_start)/(config->nclients));
-              if (tokens_per_client == 0)
-              {
-                  if (worker->id == 0)
-                  {
-                      std::cerr<<"Error: number of user IDs is smaller than number of clients, cannot continue"<<std::endl;
-                      exit(EXIT_FAILURE);
-                  }
-                  else
-                  {
-                      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                      return;
-                  }
-              }
-              auto tokens_left = ((scenario.variable_range_end - scenario.variable_range_start)%(config->nclients));
-              scenario_data.req_variable_value_start = scenario.variable_range_start +
-                                                       (this_client_id * tokens_per_client) +
-                                                       std::min(this_client_id, tokens_left);
-              scenario_data.req_variable_value_end = scenario_data.req_variable_value_start +
-                                                     tokens_per_client +
-                                                     (this_client_id >= tokens_left ? 0: 1);
+    if (config->nclients > 1 && (is_controller_client()))
+    {
+        for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
+        {
+            auto& scenario = config->json_config_schema.scenarios[index];
+            Runtime_Scenario_Data scenario_data;
+            if (!scenario.variable_range_slicing)
+            {
+                std::random_device                  rand_dev;
+                std::mt19937                        generator(rand_dev());
+                std::uniform_int_distribution<uint64_t>  distr(scenario.variable_range_start,
+                                                               scenario.variable_range_end);
+                scenario_data.curr_req_variable_value = distr(generator);
+                scenario_data.req_variable_value_start = scenario.variable_range_start;
+                scenario_data.req_variable_value_end = scenario.variable_range_end;
+            }
+            else
+            {
+                auto tokens_per_client = ((scenario.variable_range_end - scenario.variable_range_start) / (config->nclients));
+                if (tokens_per_client == 0)
+                {
+                    if (worker->id == 0)
+                    {
+                        std::cerr << "Error: number of user IDs is smaller than number of clients, cannot continue" << std::endl;
+                        exit(EXIT_FAILURE);
+                    }
+                    else
+                    {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                        return;
+                    }
+                }
+                auto tokens_left = ((scenario.variable_range_end - scenario.variable_range_start) % (config->nclients));
+                scenario_data.req_variable_value_start = scenario.variable_range_start +
+                                                         (this_client_id * tokens_per_client) +
+                                                         std::min(this_client_id, tokens_left);
+                scenario_data.req_variable_value_end = scenario_data.req_variable_value_start +
+                                                       tokens_per_client +
+                                                       (this_client_id >= tokens_left ? 0 : 1);
 
-              scenario_data.curr_req_variable_value = scenario_data.req_variable_value_start;
+                scenario_data.curr_req_variable_value = scenario_data.req_variable_value_start;
 
-              if (config->verbose)
-              {
-                  std::cerr<<", client Id:"<<this_client_id
-                           <<", scenario index: " << index
-                           <<", variable id start:"<<scenario_data.req_variable_value_start
-                           <<", variable id end:"<<scenario_data.req_variable_value_end
-                           <<std::endl;
-              }
-          }
-          runtime_scenario_data.push_back(scenario_data);
-      }
-  }
-  else
-  {
-      for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
-      {
-          auto& scenario = config->json_config_schema.scenarios[index];
-          Runtime_Scenario_Data scenario_data;
-          scenario_data.curr_req_variable_value = scenario.variable_range_start;
-          scenario_data.req_variable_value_start = scenario.variable_range_start;
-          scenario_data.req_variable_value_end = scenario.variable_range_end;
-          runtime_scenario_data.push_back(scenario_data);
-      }
-  }
+                if (config->verbose)
+                {
+                    std::cerr << ", client Id:" << this_client_id
+                              << ", scenario index: " << index
+                              << ", variable id start:" << scenario_data.req_variable_value_start
+                              << ", variable id end:" << scenario_data.req_variable_value_end
+                              << std::endl;
+                }
+            }
+            runtime_scenario_data.push_back(scenario_data);
+        }
+    }
+    else
+    {
+        for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
+        {
+            auto& scenario = config->json_config_schema.scenarios[index];
+            Runtime_Scenario_Data scenario_data;
+            scenario_data.curr_req_variable_value = scenario.variable_range_start;
+            scenario_data.req_variable_value_start = scenario.variable_range_start;
+            scenario_data.req_variable_value_end = scenario.variable_range_end;
+            runtime_scenario_data.push_back(scenario_data);
+        }
+    }
 }
 
 void Client::log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req, int32_t stream_id)
@@ -2450,20 +2458,20 @@ void Client::log_failed_request(const h2load::Config& config, const h2load::Requ
     std::stringstream ss;
 
     auto start_c = std::chrono::system_clock::to_time_t(req_stat->request_wall_time);
-    ss << "start timestamp: "<<std::put_time(std::localtime(&start_c), "%F %T")<< std::endl;
+    ss << "start timestamp: " << std::put_time(std::localtime(&start_c), "%F %T") << std::endl;
 
     auto now = std::chrono::system_clock::now();
     auto now_c = std::chrono::system_clock::to_time_t(now);
-    ss << "current time: "<<std::put_time(std::localtime(&now_c), "%F %T")<< std::endl;
+    ss << "current time: " << std::put_time(std::localtime(&now_c), "%F %T") << std::endl;
 
     auto stream_response_interval_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                    req_stat->stream_close_time - req_stat->request_time).count();
-    ss << "duration(ms): "<<stream_response_interval_ms<< std::endl;
+                                           req_stat->stream_close_time - req_stat->request_time).count();
+    ss << "duration(ms): " << stream_response_interval_ms << std::endl;
 
-    ss<<failed_req;
+    ss << failed_req;
 
 
-    auto log_func = [](const std::string& msg)
+    auto log_func = [](const std::string & msg)
     {
         log_file << msg;
         log_file << std::endl;

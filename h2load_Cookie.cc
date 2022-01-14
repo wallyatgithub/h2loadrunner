@@ -8,7 +8,8 @@
 namespace h2load
 {
 
-std::vector<h2load::Cookie> Cookie::parse_cookie_string(const std::string& cookie_string, const std::string& origin_authority, const std::string& origin_schema)
+std::vector<h2load::Cookie> Cookie::parse_cookie_string(const std::string& cookie_string,
+                                                        const std::string& origin_authority, const std::string& origin_schema)
 {
     static std::set<std::string, ci_less> cookie_attributes {"Secure", "HttpOnly", "Expires", "Domain", "Path", "SameSite", "Max-Age"};
     std::vector <Cookie> parsed_cookies;
@@ -16,7 +17,7 @@ std::vector<h2load::Cookie> Cookie::parse_cookie_string(const std::string& cooki
     bool secure_origin = (origin_schema == "https");
     std::vector<std::string> tokens = tokenize_string(cookie_string, "; ");
 
-    for (auto& token: tokens)
+    for (auto& token : tokens)
     {
         std::vector<std::string> key_value_pair = tokenize_string(token, "=");
         if ((cookie_attributes.count(key_value_pair[0]) == 0) && (key_value_pair.size() == 2))
@@ -69,7 +70,7 @@ std::vector<h2load::Cookie> Cookie::parse_cookie_string(const std::string& cooki
         }
         else
         {
-            std::cerr<<"invalid token in cookie string:"<<key_value_pair[0]<<std::endl;
+            std::cerr << "invalid token in cookie string:" << key_value_pair[0] << std::endl;
         }
     }
     return parsed_cookies;
@@ -114,8 +115,8 @@ bool Cookie::is_cookie_acceptable(const Cookie& cookie)
 }
 
 bool Cookie::is_cookie_allowed_to_be_sent(const Cookie& cookie, const std::string dest_schema,
-                                                     const std::string& dest_authority,
-                                                     const std::string& dest_path)
+                                          const std::string& dest_authority,
+                                          const std::string& dest_path)
 {
     if (cookie.secure && dest_schema == "http")
     {
@@ -137,11 +138,11 @@ bool Cookie::is_cookie_allowed_to_be_sent(const Cookie& cookie, const std::strin
     }
     else // domain empty, origin exact match with no sub domain allowed
     {
-      std::string origin = cookie.origin;
-      if (origin != authority)
-      {
-          return false;
-      }
+        std::string origin = cookie.origin;
+        if (origin != authority)
+        {
+            return false;
+        }
     }
 
     if (cookie.path.size() && dest_path.size())

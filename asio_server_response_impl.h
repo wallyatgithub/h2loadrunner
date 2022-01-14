@@ -29,60 +29,65 @@
 
 #include <nghttp2/asio_http2_server.h>
 
-namespace nghttp2 {
-namespace asio_http2 {
-namespace server {
+namespace nghttp2
+{
+namespace asio_http2
+{
+namespace server
+{
 
 class stream;
 
-enum class response_state {
-  INITIAL,
-  // response_impl::write_head() was called
-  HEADER_DONE,
-  // response_impl::end() was called
-  BODY_STARTED,
+enum class response_state
+{
+    INITIAL,
+    // response_impl::write_head() was called
+    HEADER_DONE,
+    // response_impl::end() was called
+    BODY_STARTED,
 };
 
-class response_impl {
+class response_impl
+{
 public:
-  response_impl();
-  void write_head(unsigned int status_code, header_map h = header_map{});
-  void end(std::string data = "");
-  void end(generator_cb cb);
-  void write_trailer(header_map h);
-  void on_close(close_cb cb);
-  void resume();
+    response_impl();
+    void write_head(unsigned int status_code, header_map h = header_map{});
+    void end(std::string data = "");
+    void end(generator_cb cb);
+    void write_trailer(header_map h);
+    void on_close(close_cb cb);
+    void resume();
 
-  void cancel(uint32_t error_code);
+    void cancel(uint32_t error_code);
 
-  response *push(boost::system::error_code &ec, std::string method,
-                 std::string raw_path_query, header_map) const;
+    response* push(boost::system::error_code& ec, std::string method,
+                   std::string raw_path_query, header_map) const;
 
-  boost::asio::io_service &io_service();
+    boost::asio::io_service& io_service();
 
-  void start_response();
+    void start_response();
 
-  unsigned int status_code() const;
-  const header_map &header() const;
-  void pushed(bool f);
-  void push_promise_sent();
-  void stream(class stream *s);
-  generator_cb::result_type call_read(uint8_t *data, std::size_t len,
-                                      uint32_t *data_flags);
-  void call_on_close(uint32_t error_code);
+    unsigned int status_code() const;
+    const header_map& header() const;
+    void pushed(bool f);
+    void push_promise_sent();
+    void stream(class stream* s);
+    generator_cb::result_type call_read(uint8_t* data, std::size_t len,
+                                        uint32_t* data_flags);
+    void call_on_close(uint32_t error_code);
 
 private:
-  class stream *strm_;
-  header_map header_;
-  generator_cb generator_cb_;
-  close_cb close_cb_;
-  unsigned int status_code_;
-  response_state state_;
-  // true if this is pushed stream's response
-  bool pushed_;
-  // true if PUSH_PROMISE is sent if this is response of a pushed
-  // stream
-  bool push_promise_sent_;
+    class stream* strm_;
+    header_map header_;
+    generator_cb generator_cb_;
+    close_cb close_cb_;
+    unsigned int status_code_;
+    response_state state_;
+    // true if this is pushed stream's response
+    bool pushed_;
+    // true if PUSH_PROMISE is sent if this is response of a pushed
+    // stream
+    bool push_promise_sent_;
 };
 
 } // namespace server

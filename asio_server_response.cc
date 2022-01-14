@@ -30,45 +30,73 @@
 
 #include "template.h"
 
-namespace nghttp2 {
-namespace asio_http2 {
-namespace server {
+namespace nghttp2
+{
+namespace asio_http2
+{
+namespace server
+{
 
 response::response() : impl_(std::make_unique<response_impl>()) {}
 
 response::~response() {}
 
-void response::write_head(unsigned int status_code, header_map h) const {
-  impl_->write_head(status_code, std::move(h));
+void response::write_head(unsigned int status_code, header_map h) const
+{
+    impl_->write_head(status_code, std::move(h));
 }
 
-void response::end(std::string data) const { impl_->end(std::move(data)); }
-
-void response::end(generator_cb cb) const { impl_->end(std::move(cb)); }
-
-void response::write_trailer(header_map h) const {
-  impl_->write_trailer(std::move(h));
+void response::end(std::string data) const
+{
+    impl_->end(std::move(data));
 }
 
-void response::on_close(close_cb cb) const { impl_->on_close(std::move(cb)); }
+void response::end(generator_cb cb) const
+{
+    impl_->end(std::move(cb));
+}
 
-void response::cancel(uint32_t error_code) const { impl_->cancel(error_code); }
+void response::write_trailer(header_map h) const
+{
+    impl_->write_trailer(std::move(h));
+}
 
-const response *response::push(boost::system::error_code &ec,
+void response::on_close(close_cb cb) const
+{
+    impl_->on_close(std::move(cb));
+}
+
+void response::cancel(uint32_t error_code) const
+{
+    impl_->cancel(error_code);
+}
+
+const response* response::push(boost::system::error_code& ec,
                                std::string method, std::string path,
-                               header_map h) const {
-  return impl_->push(ec, std::move(method), std::move(path), std::move(h));
+                               header_map h) const
+{
+    return impl_->push(ec, std::move(method), std::move(path), std::move(h));
 }
 
-void response::resume() const { impl_->resume(); }
-
-unsigned int response::status_code() const { return impl_->status_code(); }
-
-boost::asio::io_service &response::io_service() const {
-  return impl_->io_service();
+void response::resume() const
+{
+    impl_->resume();
 }
 
-response_impl &response::impl() const { return *impl_; }
+unsigned int response::status_code() const
+{
+    return impl_->status_code();
+}
+
+boost::asio::io_service& response::io_service() const
+{
+    return impl_->io_service();
+}
+
+response_impl& response::impl() const
+{
+    return *impl_;
+}
 
 } // namespace server
 } // namespace asio_http2
