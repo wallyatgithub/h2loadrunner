@@ -24,21 +24,142 @@
  */
 #ifndef H2LOAD_H
 #define H2LOAD_H
-
+#include <string>
+#include <map>
+#include <iostream>
+#include <vector>
+#include "h2load_Cookie.h"
 #include "http2.h"
 #include "memchunk.h"
 #include "template.h"
-#include <string>
 
 using namespace nghttp2;
+
+struct ci_less
+{
+    // case-independent (ci) compare_less binary function
+    struct nocase_compare
+    {
+        bool operator()(const unsigned char& c1, const unsigned char& c2) const
+        {
+            return tolower(c1) < tolower(c2);
+        }
+    };
+    bool operator()(const std::string& s1, const std::string& s2) const
+    {
+        return std::lexicographical_compare
+               (s1.begin(), s1.end(),     // source range
+                s2.begin(), s2.end(),     // dest range
+                nocase_compare());   // comparison
+    }
+};
+
+
+namespace h2load
+{
 
 const  std::string scheme_header = ":scheme";
 const  std::string path_header = ":path";
 const  std::string authority_header = ":authority";
 const  std::string method_header = ":method";
 
-namespace h2load
+static std::string emptyString;
+
+struct Request_Data
 {
+    std::string* schema;
+    std::string* authority;
+    std::string* req_payload;
+    std::string* path;
+    uint64_t user_id;
+    std::string* method;
+    std::map<std::string, std::string, ci_less>* req_headers;
+    std::map<std::string, std::string, ci_less> shadow_req_headers;
+    std::string resp_payload;
+    std::map<std::string, std::string, ci_less> resp_headers;
+    uint16_t status_code;
+    uint16_t expected_status_code;
+    uint32_t delay_before_executing_next;
+    std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
+    size_t curr_request_idx;
+    size_t scenario_index;
+    std::vector<std::string> string_collection;
+    explicit Request_Data():
+        schema(&emptyString),
+        authority(&emptyString),
+        req_payload(&emptyString),
+        path(&emptyString),
+        method(&emptyString)
+    {
+        user_id = 0;
+        status_code = 0;
+        expected_status_code = 0;
+        delay_before_executing_next = 0;
+        curr_request_idx = 0;
+        scenario_index = 0;
+        string_collection.reserve(12); // (path, authority, method, schema, payload, xx) * 2
+    };
+
+    friend std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
+    {
+        o << "Request_Data: { " << std::endl
+          << "scenario index: " << request_data.scenario_index << std::endl
+          << "request index: " << request_data.curr_request_idx << std::endl
+          << "schema:" << *request_data.schema << std::endl
+          << "authority:" << *request_data.authority << std::endl
+          << "req_payload:" << *request_data.req_payload << std::endl
+          << "path:" << *request_data.path << std::endl
+          << "user_id:" << request_data.user_id << std::endl
+          << "method:" << *request_data.method << std::endl
+          << "expected_status_code:" << request_data.expected_status_code << std::endl
+          << "delay_before_executing_next:" << request_data.delay_before_executing_next << std::endl;
+
+        for (auto& it : * (request_data.req_headers))
+        {
+            o << "request header name from template: " << it.first << ", header value: " << it.second << std::endl;
+        }
+        for (auto& it : request_data.shadow_req_headers)
+        {
+            o << "updated request header name: " << it.first << ", header value: " << it.second << std::endl;
+        }
+
+        o << "response status code:" << request_data.status_code << std::endl;
+        o << "resp_payload:" << request_data.resp_payload << std::endl;
+        for (auto& it : request_data.resp_headers)
+        {
+            o << "response header name: " << it.first << ", header value: " << it.second << std::endl;
+        }
+        for (auto& it : request_data.saved_cookies)
+        {
+            o << "cookie name: " << it.first << ", cookie content: " << it.second << std::endl;
+        }
+        o << "}" << std::endl;
+        return o;
+    };
+
+    bool is_empty()
+    {
+        if (schema == &emptyString && authority == &emptyString && method == &emptyString)
+        {
+            return true;
+        }
+        return false;
+    };
+
+};
+
+struct Runtime_Scenario_Data
+{
+    uint64_t req_variable_value_start;
+    uint64_t req_variable_value_end;
+    uint64_t curr_req_variable_value;
+    explicit Runtime_Scenario_Data():
+        req_variable_value_start(0),
+        req_variable_value_end(0),
+        curr_req_variable_value(0)
+    {
+    };
+};
 
 constexpr auto BACKOFF_WRITE_BUFFER_THRES = 16_k;
 constexpr int MAX_STREAM_TO_BE_EXHAUSTED = -2;

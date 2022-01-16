@@ -11,30 +11,13 @@
 #include "rapidjson/schema.h"
 #include "rapidjson/prettywriter.h"
 
+#include "h2load.h"
+
 static const std::string extended_json_pointer_indicator = "/~#";
 static const std::string extended_json_pointer_name_indicator = "#name";
 static const std::string extended_json_pointer_value_indicator = "#value";
 static const char* validate_response = "validate_response";
 static const char* make_request = "make_request";
-
-struct ci_less
-{
-    // case-independent (ci) compare_less binary function
-    struct nocase_compare
-    {
-        bool operator()(const unsigned char& c1, const unsigned char& c2) const
-        {
-            return tolower(c1) < tolower(c2);
-        }
-    };
-    bool operator()(const std::string& s1, const std::string& s2) const
-    {
-        return std::lexicographical_compare
-               (s1.begin(), s1.end(),     // source range
-                s2.begin(), s2.end(),     // dest range
-                nocase_compare());   // comparison
-    }
-};
 
 class Uri
 {

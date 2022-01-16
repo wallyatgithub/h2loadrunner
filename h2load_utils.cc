@@ -149,7 +149,7 @@ void sampling_init(h2load::Sampling& smp, size_t max_samples)
 void writecb(struct ev_loop* loop, ev_io* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
-    client->restart_timeout();
+    client->restart_timeout_timer();
     auto rv = client->do_write();
     if (rv == Client::ERR_CONNECT_FAIL)
     {
@@ -185,7 +185,7 @@ void writecb(struct ev_loop* loop, ev_io* w, int revents)
 void readcb(struct ev_loop* loop, ev_io* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
-    client->restart_timeout();
+    client->restart_timeout_timer();
     if (client->do_read() != 0)
     {
         if (client->try_again_or_fail() == 0)
@@ -1007,16 +1007,16 @@ void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ar
 
     if (status == ARES_SUCCESS)
     {
-        if (client->ares_addr)
+        if (client->ares_address)
         {
-            ares_freeaddrinfo(client->ares_addr);
+            ares_freeaddrinfo(client->ares_address);
         }
         client->next_addr = nullptr;
         client->current_addr = nullptr;
-        client->ares_addr = res;
+        client->ares_address = res;
         client->connect();
-        ares_freeaddrinfo(client->ares_addr);
-        client->ares_addr = nullptr;
+        ares_freeaddrinfo(client->ares_address);
+        client->ares_address = nullptr;
     }
     else
     {

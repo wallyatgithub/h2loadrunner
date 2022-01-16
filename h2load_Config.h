@@ -5,6 +5,7 @@
 #include <vector>
 #include <atomic>
 
+#include "http2.h"
 #include <ev.h>
 
 #include "config_schema.h"

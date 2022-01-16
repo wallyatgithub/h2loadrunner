@@ -24,9 +24,9 @@ extern "C" {
 #include "h2load_Cookie.h"
 #include "h2load_stats.h"
 
+
 #include "h2load_http1_session.h"
 #include "h2load_http2_session.h"
-
 
 std::unique_ptr<h2load::Worker> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
                                               size_t nreqs, size_t nclients,

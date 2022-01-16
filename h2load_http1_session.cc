@@ -29,7 +29,7 @@
 
 #include "h2load.h"
 #include "h2load_Config.h"
-#include "h2load_Client.h"
+#include "Client_Interface.h"
 #include "h2load_Worker.h"
 
 #include "util.h"
@@ -91,26 +91,26 @@ int htp_msg_completecb(llhttp_t* htp)
         return 0;
     }
 
-    client->final = llhttp_should_keep_alive(htp) == 0;
+    client->set_final(llhttp_should_keep_alive(htp) == 0);
     auto req_stat = client->get_req_stat(session->stream_resp_counter_);
 
     assert(req_stat);
 
-    auto config = client->worker->config;
+    auto config = client->get_config();
     if (req_stat->data_offset >= config->data_length)
     {
-        client->on_stream_close(session->stream_resp_counter_, true, client->final);
+        client->on_stream_close(session->stream_resp_counter_, true, client->is_final());
     }
 
     session->stream_resp_counter_ += 2;
 
-    if (client->final)
+    if (client->is_final())
     {
         session->stream_req_counter_ = session->stream_resp_counter_;
 
         // Connection is going down.  If we have still request to do,
         // create new connection and keep on doing the job.
-        if (client->req_left)
+        if (client->get_req_left())
         {
             client->try_new_connection();
         }
@@ -129,8 +129,8 @@ int htp_hdr_keycb(llhttp_t* htp, const char* data, size_t len)
     auto session = static_cast<Http1Session*>(htp->data);
     auto client = session->get_client();
 
-    client->worker->stats.bytes_head += len;
-    client->worker->stats.bytes_head_decomp += len;
+    session->stats.bytes_head += len;
+    session->stats.bytes_head_decomp += len;
     return 0;
 }
 } // namespace
@@ -142,8 +142,8 @@ int htp_hdr_valcb(llhttp_t* htp, const char* data, size_t len)
     auto session = static_cast<Http1Session*>(htp->data);
     auto client = session->get_client();
 
-    client->worker->stats.bytes_head += len;
-    client->worker->stats.bytes_head_decomp += len;
+    session->stats.bytes_head += len;
+    session->stats.bytes_head_decomp += len;
     return 0;
 }
 } // namespace
@@ -165,7 +165,7 @@ int htp_body_cb(llhttp_t* htp, const char* data, size_t len)
     client->on_data_chunk(session->stream_resp_counter_, (const uint8_t*)data, len);
 
     client->record_ttfb();
-    client->worker->stats.bytes_body += len;
+    session->stats.bytes_body += len;
 
     return 0;
 }
@@ -188,12 +188,15 @@ constexpr llhttp_settings_t htp_hooks =
 };
 } // namespace
 
-Http1Session::Http1Session(Client* client)
+Http1Session::Http1Session(Client_Interface* client)
     : stream_req_counter_(1),
       stream_resp_counter_(1),
       client_(client),
       htp_(),
-      complete_(false)
+      complete_(false),
+      config(client->get_config()),
+      stats(client->get_stats()),
+      request_map(client->requests_waiting_for_response())
 {
     llhttp_init(&htp_, HTTP_RESPONSE, &htp_hooks);
     htp_.data = this;
@@ -208,18 +211,17 @@ void Http1Session::on_connect()
 
 int Http1Session::submit_request()
 {
-    auto config = client_->worker->config;
     if (config->json_config_schema.scenarios.size())
     {
         return _submit_request();
     }
 
-    const auto& req = config->h1reqs[client_->reqidx];
-    client_->reqidx++;
+    const auto& req = config->h1reqs[client_->get_current_req_index()];
+    client_->get_current_req_index()++;
 
-    if (client_->reqidx == config->h1reqs.size())
+    if (client_->get_current_req_index() == config->h1reqs.size())
     {
-        client_->reqidx = 0;
+        client_->get_current_req_index() = 0;
     }
 
     client_->on_request_start(stream_req_counter_);
@@ -227,7 +229,7 @@ int Http1Session::submit_request()
     auto req_stat = client_->get_req_stat(stream_req_counter_);
 
     client_->record_request_time(req_stat);
-    client_->wb.append(req);
+    client_->send_out_data(reinterpret_cast<const uint8_t*>(req.c_str()), req.size());
 
     if (config->data_fd == -1 || config->data_length == 0)
     {
@@ -250,7 +252,7 @@ int Http1Session::on_read(const uint8_t* data, size_t len)
                                            llhttp_get_error_pos(&htp_)) -
                                        data);
 
-    if (client_->worker->config->verbose)
+    if (config->verbose)
     {
         std::cout.write(reinterpret_cast<const char*>(data), nread);
     }
@@ -279,7 +281,6 @@ int Http1Session::on_write()
         return -1;
     }
 
-    auto config = client_->worker->config;
     if (config->json_config_schema.scenarios.size())
     {
         return _on_write();
@@ -294,7 +295,6 @@ int Http1Session::on_write()
     if (req_stat->data_offset < config->data_length)
     {
         auto req_stat = client_->get_req_stat(stream_req_counter_);
-        auto& wb = client_->wb;
 
         // TODO unfortunately, wb has no interface to use with read(2)
         // family functions.
@@ -313,9 +313,9 @@ int Http1Session::on_write()
 
         req_stat->data_offset += nread;
 
-        wb.append(buf.data(), nread);
+        client_->send_out_data(buf.data(), nread);
 
-        if (client_->worker->config->verbose)
+        if (config->verbose)
         {
             std::cout << "[send " << nread << " byte(s)]" << std::endl;
         }
@@ -329,7 +329,7 @@ int Http1Session::on_write()
             {
                 // Response has already been received
                 client_->on_stream_close(stream_resp_counter_ - 2, true,
-                                         client_->final);
+                                         client_->is_final());
             }
         }
     }
@@ -344,7 +344,6 @@ int Http1Session::_submit_request()
     {
         return -1;
     }
-    auto config = client_->worker->config;
     std::string req;
     req.append(*data.method).append(" ").append(*data.path).append(" HTTP/1.1\r\n");
     req.append("Host: ").append(*data.authority).append("\r\n");
@@ -385,14 +384,14 @@ int Http1Session::_submit_request()
         std::cout << "sending headers:" << req << std::endl;
     }
 
-    client_->requests_awaiting_response[stream_req_counter_] = std::move(data);
+    request_map[stream_req_counter_] = std::move(data);
 
     client_->on_request_start(stream_req_counter_);
 
     auto req_stat = client_->get_req_stat(stream_req_counter_);
 
     client_->record_request_time(req_stat);
-    client_->wb.append(req);
+    client_->send_out_data(reinterpret_cast<const uint8_t*>(req.c_str()), req.size());
 
     if (data.req_payload->empty())
     {
@@ -412,24 +411,22 @@ int Http1Session::_on_write()
         return -1;
     }
 
-    auto config = client_->worker->config;
     auto req_stat = client_->get_req_stat(stream_req_counter_);
     if (!req_stat)
     {
         return 0;
     }
-    auto request = client_->requests_awaiting_response.find(stream_req_counter_);
-    assert(request != client_->requests_awaiting_response.end());
-    std::string& stream_buffer = *(client_->requests_awaiting_response[stream_req_counter_].req_payload);
+    auto request = request_map.find(stream_req_counter_);
+    assert(request != request_map.end());
+    std::string& stream_buffer = *(request_map[stream_req_counter_].req_payload);
 
     if (!stream_buffer.empty())
     {
-        auto& wb = client_->wb;
         size_t send_size = stream_buffer.size() > 16_k ? 16_k : stream_buffer.size();
 
-        wb.append(stream_buffer.c_str(), send_size);
+        client_->send_out_data(reinterpret_cast<const uint8_t*>(stream_buffer.c_str()), send_size);
 
-        if (client_->worker->config->verbose)
+        if (config->verbose)
         {
             std::cout << "[send " << send_size << " byte(s)]" << std::endl;
         }
@@ -447,7 +444,7 @@ int Http1Session::_on_write()
             {
                 // Response has already been received
                 client_->on_stream_close(stream_resp_counter_ - 2, true,
-                                         client_->final);
+                                         client_->is_final());
             }
         }
     }
@@ -460,7 +457,7 @@ void Http1Session::terminate()
     complete_ = true;
 }
 
-Client* Http1Session::get_client()
+Client_Interface* Http1Session::get_client()
 {
     return client_;
 }

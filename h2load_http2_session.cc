@@ -36,6 +36,8 @@
 #include "h2load_Config.h"
 #include "h2load_Client.h"
 #include "h2load_Worker.h"
+#include "Client_Interface.h"
+
 
 #include "util.h"
 #include "template.h"
@@ -45,8 +47,16 @@ using namespace nghttp2;
 namespace h2load
 {
 
-Http2Session::Http2Session(Client* client)
-    : client_(client), session_(nullptr) {}
+Http2Session::Http2Session(Client_Interface* client)
+    : client_(client),
+    session_(nullptr),
+    curr_stream_id(0),
+    config(client->get_config()),
+    stats(client->get_stats()),
+    request_map(client->requests_waiting_for_response())
+{
+
+}
 
 Http2Session::~Http2Session()
 {
@@ -60,16 +70,16 @@ int on_header_callback(nghttp2_session* session, const nghttp2_frame* frame,
                        const uint8_t* value, size_t valuelen, uint8_t flags,
                        void* user_data)
 {
-    auto client = static_cast<Client*>(user_data);
+    auto client = static_cast<Client_Interface*>(user_data);
     if (frame->hd.type != NGHTTP2_HEADERS ||
         frame->headers.cat != NGHTTP2_HCAT_RESPONSE)
     {
         return 0;
     }
     client->on_header(frame->hd.stream_id, name, namelen, value, valuelen);
-    client->worker->stats.bytes_head_decomp += namelen + valuelen;
+    client->get_stats().bytes_head_decomp += namelen + valuelen;
 
-    if (client->worker->config->verbose)
+    if (client->get_config()->verbose)
     {
         std::cout << "[stream_id=" << frame->hd.stream_id << "] ";
         std::cout.write(reinterpret_cast<const char*>(name), namelen);
@@ -87,13 +97,13 @@ namespace
 int on_frame_recv_callback(nghttp2_session* session, const nghttp2_frame* frame,
                            void* user_data)
 {
-    auto client = static_cast<Client*>(user_data);
+    auto client = static_cast<Client_Interface*>(user_data);
     if (frame->hd.type != NGHTTP2_HEADERS ||
         frame->headers.cat != NGHTTP2_HCAT_RESPONSE)
     {
         return 0;
     }
-    client->worker->stats.bytes_head +=
+    client->get_stats().bytes_head +=
         frame->hd.length - frame->headers.padlen -
         ((frame->hd.flags & NGHTTP2_FLAG_PRIORITY) ? 5 : 0);
     if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM)
@@ -110,10 +120,10 @@ int on_data_chunk_recv_callback(nghttp2_session* session, uint8_t flags,
                                 int32_t stream_id, const uint8_t* data,
                                 size_t len, void* user_data)
 {
-    auto client = static_cast<Client*>(user_data);
+    auto client = static_cast<Client_Interface*>(user_data);
     client->on_data_chunk(stream_id, data, len);
     client->record_ttfb();
-    client->worker->stats.bytes_body += len;
+    client->get_stats().bytes_body += len;
     return 0;
 }
 } // namespace
@@ -123,7 +133,7 @@ namespace
 int on_stream_close_callback(nghttp2_session* session, int32_t stream_id,
                              uint32_t error_code, void* user_data)
 {
-    auto client = static_cast<Client*>(user_data);
+    auto client = static_cast<Client_Interface*>(user_data);
     client->on_stream_close(stream_id, error_code == NGHTTP2_NO_ERROR);
     return 0;
 }
@@ -140,7 +150,7 @@ int before_frame_send_callback(nghttp2_session* session,
         return 0;
     }
 
-    auto client = static_cast<Client*>(user_data);
+    auto client = static_cast<Client_Interface*>(user_data);
     auto req_stat = client->get_req_stat(frame->hd.stream_id);
     assert(req_stat);
     client->record_request_time(req_stat);
@@ -155,11 +165,11 @@ ssize_t file_read_callback(nghttp2_session* session, int32_t stream_id,
                            uint8_t* buf, size_t length, uint32_t* data_flags,
                            nghttp2_data_source* source, void* user_data)
 {
-    auto client = static_cast<Client*>(user_data);
-    auto config = client->worker->config;
+    auto client = static_cast<Client_Interface*>(user_data);
     auto req_stat = client->get_req_stat(stream_id);
     assert(req_stat);
     ssize_t nread;
+    auto config = client->get_config();
     while ((nread = pread(config->data_fd, buf, length, req_stat->data_offset)) ==
            -1 &&
            errno == EINTR)
@@ -191,11 +201,12 @@ ssize_t buffer_read_callback(nghttp2_session* session, int32_t stream_id,
                              uint8_t* buf, size_t length, uint32_t* data_flags,
                              nghttp2_data_source* source, void* user_data)
 {
-    auto client = static_cast<Client*>(user_data);
-    auto config = client->config;
-    auto request = client->requests_awaiting_response.find(stream_id);
-    assert(request != client->requests_awaiting_response.end());
-    std::string& stream_buffer = *(client->requests_awaiting_response[stream_id].req_payload);
+    auto client = static_cast<Client_Interface*>(user_data);
+    auto config = client->get_config();
+    auto request_map = client->requests_waiting_for_response();
+    auto request = request_map.find(stream_id);
+    assert(request != request_map.end());
+    std::string& stream_buffer = *(request_map[stream_id].req_payload);
 
     if (config->verbose)
     {
@@ -223,15 +234,9 @@ namespace
 ssize_t send_callback(nghttp2_session* session, const uint8_t* data,
                       size_t length, int flags, void* user_data)
 {
-    auto client = static_cast<Client*>(user_data);
-    auto& wb = client->wb;
+    auto client = static_cast<Client_Interface*>(user_data);
 
-    if (wb.rleft() >= BACKOFF_WRITE_BUFFER_THRES)
-    {
-        return NGHTTP2_ERR_WOULDBLOCK;
-    }
-
-    return wb.append(data, length);
+    return client->send_out_data(data, length);
 }
 } // namespace
 
@@ -269,8 +274,6 @@ void Http2Session::on_connect()
 
     rv = nghttp2_option_new(&opt);
     assert(rv == 0);
-
-    auto config = client_->worker->config;
 
     if (config->encoder_header_table_size != NGHTTP2_DEFAULT_HEADER_TABLE_SIZE)
     {
@@ -313,17 +316,16 @@ int Http2Session::submit_request()
         return -1;
     }
 
-    auto config = client_->worker->config;
     if (config->json_config_schema.scenarios.size())
     {
         return _submit_request();
     }
 
-    auto& nva = config->nva[client_->reqidx++];
+    auto& nva = config->nva[client_->get_current_req_index()++];
 
-    if (client_->reqidx == config->nva.size())
+    if (client_->get_current_req_index() == config->nva.size())
     {
-        client_->reqidx = 0;
+        client_->get_current_req_index() = 0;
     }
 
     nghttp2_data_provider prd {{0}, file_read_callback};
@@ -352,7 +354,7 @@ int Http2Session::on_read(const uint8_t* data, size_t len)
     assert(static_cast<size_t>(rv) == len);
 
     if (nghttp2_session_want_read(session_) == 0 &&
-        nghttp2_session_want_write(session_) == 0 && client_->wb.rleft() == 0)
+        nghttp2_session_want_write(session_) == 0 && !client_->any_pending_data_to_write())
     {
         return -1;
     }
@@ -371,7 +373,7 @@ int Http2Session::on_write()
     }
 
     if (nghttp2_session_want_read(session_) == 0 &&
-        nghttp2_session_want_write(session_) == 0 && client_->wb.rleft() == 0)
+        nghttp2_session_want_write(session_) == 0 && !client_->any_pending_data_to_write())
     {
         return -1;
     }
@@ -386,7 +388,7 @@ void Http2Session::terminate()
 
 size_t Http2Session::max_concurrent_streams()
 {
-    return (size_t)client_->worker->config->max_concurrent_streams;
+    return (size_t)config->max_concurrent_streams;
 }
 
 void Http2Session::submit_rst_stream(int32_t stream_id)
@@ -400,13 +402,12 @@ int Http2Session::_submit_request()
     {
         return -1;
     }
-    auto config = client_->config;
 
     // tear down the client which is approaching max stream, and reconnect again
     if ((config->nclients > 1 && config->rps > 0 &&
-         INT32_MAX - client_->curr_stream_id < 64 * config->nclients * config->rps &&
+         INT32_MAX - curr_stream_id < 64 * config->nclients * config->rps &&
          rand() % config->nclients == 0) ||
-        (client_->curr_stream_id >= INT32_MAX - 1))
+        (curr_stream_id >= INT32_MAX - 1))
     {
         return MAX_STREAM_TO_BE_EXHAUSTED;
     }
@@ -471,8 +472,8 @@ int Http2Session::_submit_request()
         return -1;
     }
 
-    client_->curr_stream_id = stream_id;
-    client_->requests_awaiting_response.insert(std::make_pair(stream_id, std::move(data)));
+    curr_stream_id = stream_id;
+    request_map.insert(std::make_pair(stream_id, std::move(data)));
     client_->on_request_start(stream_id);
     return 0;
 }

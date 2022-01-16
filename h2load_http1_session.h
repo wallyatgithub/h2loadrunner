@@ -25,21 +25,24 @@
 #ifndef H2LOAD_HTTP1_SESSION_H
 #define H2LOAD_HTTP1_SESSION_H
 
-#include "h2load_session.h"
-
 #include <nghttp2/nghttp2.h>
+
+#include "h2load_session.h"
+#include "Client_Interface.h"
+#include "h2load_Config.h"
+#include "h2load_Stats.h"
 
 #include "llhttp.h"
 
 namespace h2load
 {
 
-struct Client;
+struct Client_Interface;
 
 class Http1Session : public Session
 {
 public:
-    Http1Session(Client* client);
+    Http1Session(Client_Interface* client);
     virtual ~Http1Session();
     virtual void on_connect();
     virtual int submit_request();
@@ -47,14 +50,17 @@ public:
     virtual int on_write();
     virtual void terminate();
     virtual size_t max_concurrent_streams();
-    Client* get_client();
+    Client_Interface* get_client();
     int _submit_request();
     int _on_write();
     int32_t stream_req_counter_;
     int32_t stream_resp_counter_;
+    Config* config;
+    Stats& stats;
+    std::map<int32_t, Request_Data>& request_map;
 
 private:
-    Client* client_;
+    Client_Interface* client_;
     llhttp_t htp_;
     bool complete_;
 };

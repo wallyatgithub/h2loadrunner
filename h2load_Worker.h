@@ -8,13 +8,17 @@
 
 #include "memchunk.h"
 #include "h2load_stats.h"
-#include "memory"
+#include "h2load_Config.h"
 
+
+#include "memory"
+#include "template.h"
+#include "h2load.h"
 
 namespace h2load
 {
 
-struct Client;
+class Client;
 
 struct Worker
 {

@@ -26,18 +26,18 @@
 #define H2LOAD_HTTP2_SESSION_H
 
 #include "h2load_session.h"
+#include "Client_Interface.h"
+#include "h2load_Config.h"
+#include "h2load_Stats.h"
 
-#include <nghttp2/nghttp2.h>
-
+ 
 namespace h2load
 {
-
-struct Client;
 
 class Http2Session : public Session
 {
 public:
-    Http2Session(Client* client);
+    Http2Session(Client_Interface* client);
     virtual ~Http2Session();
     virtual void on_connect();
     virtual int submit_request();
@@ -48,10 +48,17 @@ public:
     virtual void submit_rst_stream(int32_t stream_id);
     virtual void submit_ping();
 
+    Config* config;
+    Stats& stats;
+    std::map<int32_t, Request_Data>& request_map;
+
+
 private:
-    Client* client_;
-    nghttp2_session* session_;
     int _submit_request();
+
+    Client_Interface* client_;
+    nghttp2_session* session_;
+    int32_t curr_stream_id;
 };
 
 } // namespace h2load
