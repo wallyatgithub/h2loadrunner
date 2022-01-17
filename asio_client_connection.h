@@ -32,6 +32,7 @@
 #include "h2load_Client.h"
 #include "h2load_Config.h"
 #include "h2load_stats.h"
+#include "config_schema.h"
 
 
 template <typename socket_type>
@@ -45,7 +46,9 @@ public:
           client_socket(io_service),
           connect_timeout(boost::posix_time::seconds(2)),
           config(conf),
-          stats(st)
+          stats(st),
+          input_buffer(8 * 1024, 0),
+          output_buffers(2, std::vector<uint8_t>(64 * 1024, 0))
     {
     }
     virtual ~asio_client_connection() {}
@@ -53,16 +56,13 @@ public:
     virtual std::map<int32_t, h2load::Request_Data>& requests_waiting_for_response() = 0;
     virtual size_t send_out_data(const uint8_t* data, size_t length)
     {
-        if (is_write_in_progress)
+        if (output_buffers[output_buffer_index].capacity() - output_data_length < length)
         {
-            return NGHTTP2_ERR_WOULDBLOCK;
+            output_buffers[output_buffer_index].reserve(output_data_length + length);
         }
-        if (output_buffer.capacity() - output_data_length < length)
-        {
-            output_buffer.resize(output_data_length + length);
-        }
-        std::memcpy(output_buffer.data() + output_data_length, data, length);
+        std::memcpy(output_buffers[output_buffer_index].data() + output_data_length, data, length);
         output_data_length += length;
+        return output_data_length;
     }
     virtual void signal_write()
     {
@@ -95,8 +95,6 @@ public:
         {
             port = vec[1];
         }
-        input_buffer.resize(8 * 1024);
-        output_buffer.resize(64 * 1024);
 
         boost::asio::ip::tcp::resolver::query query(vec[0], port);
         dns_resolver.async_resolve(query,
@@ -118,6 +116,58 @@ public:
     }
 
 private:
+
+    bool timer_common_check(boost::asio::deadline_timer& timer, void (asio_client_connection::*handler)())
+    {
+        if (is_client_stopped)
+        {
+            return false;
+        }
+
+        if (timer.expires_at() >
+            boost::asio::deadline_timer::traits_type::now())
+        {
+            timer.async_wait(
+                std::bind(handler, this->shared_from_this()));
+            return false;
+        }
+        return true;
+    }
+    virtual void start_rps_timer()
+    {
+        rps_timer.expires_from_now(boost::posix_time::seconds(std::max(0.01, 1. / rps)));
+        rps_timer.async_wait(
+            std::bind(&asio_client_connection::handle_rps_timer_timeout, this->shared_from_this()));
+    }
+
+    void handle_rps_timer_timeout()
+    {
+        if (!timer_common_check(rps_timer, &asio_client_connection::handle_rps_timer_timeout))
+        {
+            return;
+        }
+        start_rps_timer();
+        on_rps_timer();
+    }
+
+
+    virtual void start_request_delay_execution_timer()
+    {
+        delay_request_execution_timer.expires_from_now(boost::posix_time::seconds(0.01));
+        delay_request_execution_timer.async_wait(
+            std::bind(&asio_client_connection::handle_request_execution_timer_timeout, this->shared_from_this()));
+
+    }
+
+    void handle_request_execution_timer_timeout()
+    {
+        if (!timer_common_check(delay_request_execution_timer, &asio_client_connection::handle_request_execution_timer_timeout))
+        {
+            return;
+        }
+        resume_delayed_request_execution();
+        start_request_delay_execution_timer();
+    }
 
     void on_connected_event(const boost::system::error_code& err,
                             boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
@@ -205,8 +255,14 @@ private:
             return;
         }
 
+        auto& buffer = output_buffers[output_buffer_index];
+        auto length = output_data_length;
+
+        output_data_length = 0;
+        output_buffer_index = ((++output_buffer_index) % output_buffers.size());
+
         boost::asio::async_write(
-            client_socket, boost::asio::buffer(output_buffer, output_data_length),
+            client_socket, boost::asio::buffer(buffer, length),
             [this, self](const boost::system::error_code & e, std::size_t)
         {
             if (e)
@@ -216,7 +272,6 @@ private:
             }
 
             is_write_in_progress = false;
-            output_data_length = 0;
 
             do_write();
         });
@@ -255,21 +310,17 @@ private:
         }
     }
 
-    int connection_made()
-    {
-        return 1;
-    }
-
     boost::asio::ip::tcp::resolver dns_resolver;
     boost::asio::ip::tcp::socket client_socket;
-    bool is_write_in_progress;
-    bool is_client_stopped;
+    bool is_write_in_progress = false;
+    bool is_client_stopped = false;
     std::shared_ptr<h2load::Http2Session> session;
 
     /// Buffer for incoming data.
     std::vector<uint8_t> input_buffer;
-    std::vector<uint8_t> output_buffer;
-    size_t output_data_length;
+    std::vector<std::vector<uint8_t>> output_buffers;
+    size_t output_data_length = 0;
+    size_t output_buffer_index = 0;
 
     boost::asio::deadline_timer connect_timer;
     boost::posix_time::time_duration connect_timeout;
@@ -278,6 +329,8 @@ private:
     std::string schema;
     std::string authority;
     std::string original_authority;
+    boost::asio::deadline_timer delay_request_execution_timer;
+    boost::asio::deadline_timer rps_timer;
 };
 
 #endif

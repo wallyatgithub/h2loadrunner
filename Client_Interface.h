@@ -3,6 +3,8 @@
 
 #include <map>
 #include <string>
+#include <chrono>
+
 extern "C" {
 #include "lua.h"
 #include "lualib.h"
@@ -11,7 +13,7 @@ extern "C" {
 #include "http2.h"
 
 
-#include "Config_Schema.h"
+#include "config_schema.h"
 #include "h2load_Stats.h"
 #include "h2load_Worker.h"
 #include "h2load_session.h"
@@ -30,6 +32,9 @@ public:
     uint64_t my_id;
     Unique_Id();
 };
+
+using time_point_in_seconds_double =
+    std::chrono::time_point<std::chrono::steady_clock, std::chrono::duration< double >>;
 
 class Client_Interface
 {
@@ -58,7 +63,11 @@ public:
     virtual void start_connect_to_preferred_host_timer() = 0;
     virtual void start_timing_script_request_timeout_timer(double duration) = 0;
     virtual int select_protocol_and_allocate_session() = 0;
+    virtual void stop_rps_timer() = 0;
+    virtual void start_request_delay_execution_timer() = 0;
 
+    void on_rps_timer();
+    void resume_delayed_request_execution();
 
     void print_app_info();
     int connection_made();
@@ -186,6 +195,8 @@ public:
     Unique_Id this_client_id;
     std::function<void()> write_clear_callback;
     std::vector<Runtime_Scenario_Data> runtime_scenario_data;
+
+    time_point_in_seconds_double rps_duration_started;
 };
 
 }

@@ -322,48 +322,7 @@ void warmup_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 void rps_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
-    auto& session = client->session;
-    client->reset_timeout_requests();
-    assert(!client->config->timing_script);
-
-    if (client->req_left == 0)
-    {
-        ev_timer_stop(loop, w);
-        return;
-    }
-
-    auto now = ev_now(loop);
-    auto d = now - client->rps_duration_started;
-    auto n = static_cast<size_t>(round(d * client->config->rps));
-    client->rps_req_pending = n; // += n; do not accumulate to avoid burst of load
-    client->rps_duration_started = now - d + static_cast<double>(n) / client->config->rps;
-
-    if (client->rps_req_pending == 0)
-    {
-        return;
-    }
-
-    auto nreq = session->max_concurrent_streams() - client->streams.size();
-    if (nreq == 0)
-    {
-        return;
-    }
-
-    nreq = client->config->is_timing_based_mode() ? std::max(nreq, client->req_left)
-           : std::min(nreq, client->req_left);
-    nreq = std::min(nreq, client->rps_req_pending);
-
-    for (; nreq > 0; --nreq)
-    {
-        auto retCode = client->submit_request();
-        if (retCode != 0)
-        {
-            break;
-        }
-        client->rps_req_inflight++;
-        client->rps_req_pending--;
-    }
-    // client->signal_write(); // submit_request already calls signal_write()
+    client->on_rps_timer();
 }
 
 void stream_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
@@ -385,14 +344,7 @@ void client_connection_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents
 void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
-    std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
-    auto barrier = client->delayed_requests_to_submit.upper_bound(curr_time_point);
-    auto it = client->delayed_requests_to_submit.begin();
-    while (it != barrier)
-    {
-        client->requests_to_submit.emplace_back(std::move(it->second));
-        it = client->delayed_requests_to_submit.erase(it);
-    }
+    client->resume_delayed_request_execution();
 }
 
 // Called when an a connection has been inactive for a set period of time
@@ -1480,7 +1432,7 @@ void output_realtime_stats(h2load::Config& config,
 
 
 std::vector<std::vector<h2load::SDStat>>
-produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>>& workers)
+                                      produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>>& workers)
 {
     auto request_times_sampling = false;
     size_t nrequest_times = 0;

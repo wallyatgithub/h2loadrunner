@@ -36,7 +36,6 @@ Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
       ares_address(nullptr),
       fd(-1),
       probe_skt_fd(-1),
-      rps_duration_started(0),
       connectfn(&Client::connect)
 {
     slice_user_id();
@@ -424,7 +423,12 @@ void Client::start_rps_timer()
 {
     rps_watcher.repeat = std::max(0.01, 1. / rps);
     ev_timer_again(worker->loop, &rps_watcher);
-    rps_duration_started = ev_now(worker->loop);
+    rps_duration_started = std::chrono::steady_clock::now();
+}
+
+void Client::stop_rps_timer()
+{
+    ev_timer_stop(worker->loop, &rps_watcher);
 }
 
 void Client::start_stream_timeout_timer()
@@ -523,7 +527,7 @@ int Client::select_protocol_and_allocate_session()
         }
         print_app_info();
     }
-    
+
     return 0;
 }
 
@@ -651,6 +655,10 @@ int Client::write_clear()
     return 0;
 }
 
+void Client::start_request_delay_execution_timer()
+{
+    ev_timer_start(worker->loop, &delayed_request_watcher);
+}
 int Client::connected()
 {
     if (!util::check_socket_connected(fd))
@@ -663,7 +671,6 @@ int Client::connected()
     ev_io_start(worker->loop, &rev);
     ev_io_stop(worker->loop, &wev);
     ev_timer_stop(worker->loop, &connection_timeout_watcher);
-    ev_timer_start(worker->loop, &delayed_request_watcher);
 
     if (ssl)
     {
@@ -808,7 +815,8 @@ void Client::try_new_connection()
     new_connection_requested = true;
 }
 
-std::unique_ptr<Client_Interface> Client::create_dest_client(const std::string& dst_sch, const std::string& dest_authority)
+std::unique_ptr<Client_Interface> Client::create_dest_client(const std::string& dst_sch,
+                                                             const std::string& dest_authority)
 {
     auto new_client = std::make_unique<Client>(this->id, this->worker, this->req_todo, this->config,
                                                this, dst_sch, dst_sch);
@@ -958,7 +966,7 @@ size_t Client::send_out_data(const uint8_t* data, size_t length)
 
 bool Client::any_pending_data_to_write()
 {
-    return (wb.rleft()> 0);
+    return (wb.rleft() > 0);
 }
 
 }

@@ -42,7 +42,8 @@ Client_Interface::Client_Interface(uint32_t id, Worker* wrker, size_t req_todo, 
     schema(dest_schema),
     authority(dest_authority),
     rps(conf->rps),
-    this_client_id()
+    this_client_id(),
+    rps_duration_started()
 {
 }
 
@@ -1130,7 +1131,50 @@ void Client_Interface::reset_timeout_requests()
     }
 }
 
+void Client_Interface::on_rps_timer()
+{
+    reset_timeout_requests();
+    assert(!config->timing_script);
 
+    if (req_left == 0)
+    {
+        stop_rps_timer();
+        return;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    auto d = now - rps_duration_started;
+    auto n = static_cast<size_t>(round(std::chrono::duration<double>(d).count() * config->rps));
+    rps_req_pending = n; // += n; do not accumulate to avoid burst of load
+    rps_duration_started = now - d + std::chrono::duration<double>(static_cast<double>(n) / config->rps);
+
+    if (rps_req_pending == 0)
+    {
+        return;
+    }
+
+    auto nreq = session->max_concurrent_streams() - streams.size();
+    if (nreq == 0)
+    {
+        return;
+    }
+
+    nreq = config->is_timing_based_mode() ? std::max(nreq, req_left)
+           : std::min(nreq, req_left);
+    nreq = std::min(nreq, rps_req_pending);
+
+    for (; nreq > 0; --nreq)
+    {
+        auto retCode = submit_request();
+        if (retCode != 0)
+        {
+            break;
+        }
+        rps_req_inflight++;
+        rps_req_pending--;
+    }
+    // client->signal_write(); // submit_request already calls signal_write()
+}
 void Client_Interface::process_timedout_streams()
 {
     if (worker->current_phase != Phase::MAIN_DURATION)
@@ -1289,6 +1333,8 @@ int Client_Interface::connection_made()
         return 0;
     }
 
+    start_request_delay_execution_timer();
+
     if (rps_mode())
     {
         start_rps_timer();
@@ -1369,6 +1415,17 @@ void Client_Interface::on_data_chunk(int32_t stream_id, const uint8_t* data, siz
     }
 }
 
+void Client_Interface::resume_delayed_request_execution()
+{
+    std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
+    auto barrier = delayed_requests_to_submit.upper_bound(curr_time_point);
+    auto it = delayed_requests_to_submit.begin();
+    while (it != barrier)
+    {
+        requests_to_submit.emplace_back(std::move(it->second));
+        it = delayed_requests_to_submit.erase(it);
+    }
+}
 
 RequestStat* Client_Interface::get_req_stat(int32_t stream_id)
 {

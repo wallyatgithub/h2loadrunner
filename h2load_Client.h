@@ -43,7 +43,8 @@ public:
     virtual bool any_pending_data_to_write();
     virtual void try_new_connection();
     virtual void start_conn_active_watcher(Client_Interface* client);
-    virtual std::unique_ptr<Client_Interface> create_dest_client(const std::string& dst_sch, const std::string& dest_authority);
+    virtual std::unique_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
+                                                                 const std::string& dest_authority);
     virtual int connect_to_host(const std::string& schema, const std::string& authority);
     virtual int connect();
     virtual void disconnect();
@@ -57,6 +58,8 @@ public:
     virtual void start_connect_to_preferred_host_timer();
     virtual void start_timing_script_request_timeout_timer(double duration);
     virtual int select_protocol_and_allocate_session();
+    virtual void stop_rps_timer();
+    virtual void start_request_delay_execution_timer();
 
     void report_tls_info();
 
@@ -94,7 +97,7 @@ public:
     template<class T>
     int make_socket(T* addr);
 
-    
+
     DefaultMemchunks wb;
     ev_io wev;
     ev_io rev;
@@ -117,9 +120,7 @@ public:
     ev_timer rps_watcher;
     ev_timer stream_timeout_watcher;
     ev_timer connection_timeout_watcher;
-    // The timestamp that starts the period which contributes to the
-    // next request generation.
-    ev_tstamp rps_duration_started;
+
     // The number of requests allowed by rps, but limited by stream
     // concurrency.
     ev_timer send_ping_watcher;
