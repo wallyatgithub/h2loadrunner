@@ -208,57 +208,7 @@ void readcb(struct ev_loop* loop, ev_io* w, int revents)
 void rate_period_timeout_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto worker = static_cast<Worker*>(w->data);
-    auto nclients_per_second = worker->rate;
-    auto conns_remaining = worker->nclients - worker->nconns_made;
-    auto nclients = std::min(nclients_per_second, conns_remaining);
-
-    for (size_t i = 0; i < nclients; ++i)
-    {
-        auto req_todo = worker->nreqs_per_client;
-        if (worker->nreqs_rem > 0)
-        {
-            ++req_todo;
-            --worker->nreqs_rem;
-        }
-        auto client =
-            std::make_unique<Client>(worker->next_client_id++, worker, req_todo, (worker->config));
-
-        ++worker->nconns_made;
-
-        if (client->do_connect() != 0)
-        {
-            std::cerr << "client could not connect to host" << std::endl;
-            client->fail();
-        }
-        else
-        {
-            if (worker->config->is_timing_based_mode())
-            {
-                worker->clients.push_back(client.release());
-            }
-            else
-            {
-                client.release();
-            }
-        }
-        worker->report_rate_progress();
-    }
-    if (!worker->config->is_timing_based_mode())
-    {
-        if (worker->nconns_made >= worker->nclients)
-        {
-            ev_timer_stop(worker->loop, w);
-        }
-    }
-    else
-    {
-        // To check whether all created clients are pushed correctly
-        if (worker->nclients != worker->clients.size())
-        {
-            std::cerr << "client not started successfully, exit" << worker->id << std::endl;
-            exit(EXIT_FAILURE);
-        }
-    }
+    worker->rate_period_timeout_handler();
 }
 
 // Called when the duration for infinite number of requests are over
@@ -290,33 +240,7 @@ void duration_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 void warmup_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto worker = static_cast<Worker*>(w->data);
-
-    std::cerr << "Warm-up phase is over for thread #" << worker->id << "."
-              << std::endl;
-    std::cerr << "Main benchmark duration is started for thread #" << worker->id
-              << "." << std::endl;
-    assert(worker->stats.req_started == 0);
-    assert(worker->stats.req_done == 0);
-
-    for (auto client : worker->clients)
-    {
-        if (client)
-        {
-            assert(client->req_todo == 0);
-            assert(client->req_left == 1);
-            assert(client->req_inflight == 0);
-            assert(client->req_started == 0);
-            assert(client->req_done == 0);
-
-            client->record_client_start_time();
-            client->clear_connect_times();
-            client->record_connect_start_time();
-        }
-    }
-
-    worker->current_phase = Phase::MAIN_DURATION;
-
-    ev_timer_start(worker->loop, &worker->duration_watcher);
+    worker->warmup_timeout_handler();
 }
 
 void rps_cb(struct ev_loop* loop, ev_timer* w, int revents)
@@ -335,10 +259,7 @@ void stream_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 void client_connection_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
-    ev_timer_stop(loop, w);
-    client->fail();
-    client->reconnect_to_alt_addr();
-    //ev_break (EV_A_ EVBREAK_ALL);
+    client->connection_timeout_handler();
 }
 
 void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents)
@@ -353,73 +274,13 @@ void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents)
 void conn_activity_timeout_cb(EV_P_ ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
-
-    ev_timer_stop(client->worker->loop, &client->conn_inactivity_watcher);
-    ev_timer_stop(client->worker->loop, &client->conn_active_watcher);
-
-    if (util::check_socket_connected(client->fd))
-    {
-        client->timeout();
-    }
-}
-
-bool check_stop_client_request_timeout(h2load::Client* client, ev_timer* w)
-{
-    if (client->req_left == 0)
-    {
-        // no more requests to make, stop timer
-        ev_timer_stop(client->worker->loop, w);
-        return true;
-    }
-
-    return false;
+    client->conn_activity_timeout_handler();
 }
 
 void client_request_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
-    client->reset_timeout_requests();
-
-    if (client->streams.size() >= (size_t)client->config->max_concurrent_streams)
-    {
-        ev_timer_stop(client->worker->loop, w);
-        return;
-    }
-
-    if (client->submit_request() != 0)
-    {
-        ev_timer_stop(client->worker->loop, w);
-        return;
-    }
-    client->signal_write();
-
-    if (check_stop_client_request_timeout(client, w))
-    {
-        return;
-    }
-
-    ev_tstamp duration =
-        client->config->timings[client->reqidx] - client->config->timings[client->reqidx - 1];
-
-    while (duration < 1e-9)
-    {
-        if (client->submit_request() != 0)
-        {
-            ev_timer_stop(client->worker->loop, w);
-            return;
-        }
-        client->signal_write();
-        if (check_stop_client_request_timeout(client, w))
-        {
-            return;
-        }
-
-        duration =
-            client->config->timings[client->reqidx] - client->config->timings[client->reqidx - 1];
-    }
-
-    client->request_timeout_watcher.repeat = duration;
-    ev_timer_again(client->worker->loop, &client->request_timeout_watcher);
+    client->timing_script_timeout_handler();
 }
 
 bool recorded(const std::chrono::steady_clock::time_point& t)
@@ -988,6 +849,7 @@ void ares_io_cb(struct ev_loop* loop, struct ev_io* watcher, int revents)
 void ares_socket_state_cb(void* data, int s, int read, int write)
 {
     Client* client = static_cast<Client*>(data);
+    auto worker = static_cast<Worker*>(client->worker);
     if (read != 0 || write != 0)
     {
         if (client->ares_io_watchers.find(s) == client->ares_io_watchers.end())
@@ -998,11 +860,11 @@ void ares_socket_state_cb(void* data, int s, int read, int write)
             ev_init(&client->ares_io_watchers[s], ares_io_cb);
         }
         ev_io_set(&client->ares_io_watchers[s], s, (read ? EV_READ : 0) | (write ? EV_WRITE : 0));
-        ev_io_start(client->worker->loop, &client->ares_io_watchers[s]);
+        ev_io_start(worker->loop, &client->ares_io_watchers[s]);
     }
     else if (client->ares_io_watchers.find(s) != client->ares_io_watchers.end())
     {
-        ev_io_stop(client->worker->loop, &client->ares_io_watchers[s]);
+        ev_io_stop(worker->loop, &client->ares_io_watchers[s]);
         client->ares_io_watchers.erase(s);
     }
 }

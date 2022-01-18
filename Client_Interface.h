@@ -15,7 +15,7 @@ extern "C" {
 
 #include "config_schema.h"
 #include "h2load_Stats.h"
-#include "h2load_Worker.h"
+//#include "Worker_Interface.h"
 #include "h2load_session.h"
 #include "h2load.h"
 
@@ -24,6 +24,7 @@ namespace h2load
 
 class Config;
 class RequestStat;
+class Worker_Interface;
 
 class Unique_Id
 {
@@ -39,7 +40,7 @@ using time_point_in_seconds_double =
 class Client_Interface
 {
 public:
-    Client_Interface(uint32_t id, Worker* wrker, size_t req_todo, Config* conf,
+    Client_Interface(uint32_t id, Worker_Interface* wrker, size_t req_todo, Config* conf,
                      Client_Interface* parent = nullptr, const std::string& dest_schema = "",
                      const std::string& dest_authority = "");
     virtual ~Client_Interface() {}
@@ -51,7 +52,6 @@ public:
     virtual std::unique_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
                                                                  const std::string& dest_authority) = 0;
     virtual int connect_to_host(const std::string& schema, const std::string& authority) = 0;
-    virtual int connect() = 0;
     virtual void disconnect() = 0;
     virtual void clear_default_addr_info() = 0;
     virtual void setup_connect_with_async_fqdn_lookup() = 0;
@@ -62,10 +62,24 @@ public:
     virtual void start_stream_timeout_timer() = 0;
     virtual void start_connect_to_preferred_host_timer() = 0;
     virtual void start_timing_script_request_timeout_timer(double duration) = 0;
+    virtual void stop_timing_script_request_timeout_timer() = 0;
     virtual int select_protocol_and_allocate_session() = 0;
     virtual void stop_rps_timer() = 0;
     virtual void start_request_delay_execution_timer() = 0;
+    virtual void conn_activity_timeout_handler() = 0;
+    virtual void start_connect_timeout_timer() = 0;
+    virtual void stop_connect_timeout_timer() = 0;
+    virtual bool reconnect_to_alt_addr() = 0;
+    virtual void start_warmup_timer() = 0;
+    virtual void stop_warmup_timer() = 0;
+    virtual void start_conn_inactivity_timer() = 0;
+    virtual void stop_conn_inactivity_timer() = 0;
+    virtual int make_async_connection() = 0;
+    virtual int do_connect() = 0;
 
+    int connect();
+    void connection_timeout_handler();
+    void timing_script_timeout_handler();
     void on_rps_timer();
     void resume_delayed_request_execution();
 
@@ -148,7 +162,7 @@ public:
     bool should_reconnect_on_disconnect();
 
 
-    Worker* worker;
+    Worker_Interface* worker;
     ClientStat cstat;
     std::multimap<std::chrono::steady_clock::time_point, int32_t> stream_timestamp;
     std::unordered_map<int32_t, Stream> streams;

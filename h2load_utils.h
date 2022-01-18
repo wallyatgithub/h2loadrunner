@@ -28,6 +28,10 @@ extern "C" {
 #include "h2load_http1_session.h"
 #include "h2load_http2_session.h"
 
+namespace h2load
+{
+class Client;
+}
 std::unique_ptr<h2load::Worker> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
                                               size_t nreqs, size_t nclients,
                                               size_t rate, size_t max_samples, h2load::Config& config);
@@ -64,8 +68,6 @@ void stream_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
 // or a fixed amount of time after all requests have been made on a
 // connection
 void conn_activity_timeout_cb(EV_P_ ev_timer* w, int revents);
-
-bool check_stop_client_request_timeout(h2load::Client* client, ev_timer* w);
 
 void client_request_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
 

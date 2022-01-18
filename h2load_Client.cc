@@ -25,11 +25,11 @@ namespace h2load
 {
 
 
-Client::Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
+Client::Client(uint32_t id, Worker* wrker, size_t req_todo, Config* conf,
                Client* parent, const std::string& dest_schema,
                const std::string& dest_authority)
-    : Client_Interface(id, worker, req_todo, conf, parent, dest_schema, dest_authority),
-      wb(&worker->mcpool),
+    : Client_Interface(id, wrker, req_todo, conf, parent, dest_schema, dest_authority),
+      wb(&static_cast<Worker*>(worker)->mcpool),
       ssl(nullptr),
       next_addr(conf->addrs),
       current_addr(nullptr),
@@ -84,11 +84,11 @@ void Client::init_ares()
 void Client::init_timer_watchers()
 {
     ev_timer_init(&conn_inactivity_watcher, conn_activity_timeout_cb, 0.,
-                  worker->config->conn_inactivity_timeout);
+                  config->conn_inactivity_timeout);
     conn_inactivity_watcher.data = this;
 
     ev_timer_init(&conn_active_watcher, conn_activity_timeout_cb,
-                  worker->config->conn_active_timeout, 0.);
+                  config->conn_active_timeout, 0.);
     conn_active_watcher.data = this;
 
     ev_timer_init(&request_timeout_watcher, client_request_timeout_cb, 0., 0.);
@@ -172,10 +172,9 @@ int Client::make_socket(T* addr)
     {
         if (!ssl)
         {
-            ssl = SSL_new(worker->ssl_ctx);
+            ssl = SSL_new(static_cast<Worker*>(worker)->ssl_ctx);
         }
 
-        auto config = worker->config;
         std::string host = tokenize_string(authority, ":")[0];
         if (host.empty())
         {
@@ -213,34 +212,18 @@ void Client::clear_default_addr_info()
     current_addr = nullptr;
 }
 
-int Client::connect()
+void Client::start_conn_inactivity_timer()
 {
-    if (is_test_finished())
-    {
-        return -1;
-    }
+    ev_timer_again(static_cast<Worker*>(worker)->loop, &conn_inactivity_watcher);
+}
+void Client::stop_conn_inactivity_timer()
+{
+    ev_timer_stop(static_cast<Worker*>(worker)->loop, &conn_inactivity_watcher);
+}
+
+int Client::make_async_connection()
+{
     int rv;
-
-    if (!worker->config->is_timing_based_mode() ||
-        worker->current_phase == Phase::MAIN_DURATION)
-    {
-        record_client_start_time();
-        clear_connect_times();
-        record_connect_start_time();
-    }
-    else if (worker->current_phase == Phase::INITIAL_IDLE)
-    {
-        worker->current_phase = Phase::WARM_UP;
-        std::cerr << "Warm-up started for thread #" << worker->id << "."
-                  << std::endl;
-        ev_timer_start(worker->loop, &worker->warmup_watcher);
-    }
-
-    if (worker->config->conn_inactivity_timeout > 0.)
-    {
-        ev_timer_again(worker->loop, &conn_inactivity_watcher);
-    }
-
     if (current_addr)
     {
         rv = make_socket(current_addr);
@@ -262,14 +245,14 @@ int Client::connect()
                 break;
             }
         }
-
+    
         if (fd == -1)
         {
             return -1;
         }
-
+    
         assert(addr);
-
+    
         current_addr = addr;
     }
     else if (ares_address)
@@ -286,27 +269,26 @@ int Client::connect()
     {
         return -1;
     }
-
+    
     writefn = &Client::connected;
     state = CLIENT_CONNECTING;
-    ev_timer_start(worker->loop, &connection_timeout_watcher);
-
+    
     ev_io_set(&rev, fd, EV_READ);
     ev_io_set(&wev, fd, EV_WRITE);
-
-    ev_io_start(worker->loop, &wev);
+    
+    ev_io_start(static_cast<Worker*>(worker)->loop, &wev);
     return 0;
 }
 
 void Client::restart_timeout_timer()
 {
-    if (worker->config->conn_inactivity_timeout > 0.)
+    if (config->conn_inactivity_timeout > 0.)
     {
-        ev_timer_again(worker->loop, &conn_inactivity_watcher);
+        ev_timer_again(static_cast<Worker*>(worker)->loop, &conn_inactivity_watcher);
     }
     if (config->json_config_schema.interval_to_send_ping > 0.)
     {
-        ev_timer_again(worker->loop, &send_ping_watcher);
+        ev_timer_again(static_cast<Worker*>(worker)->loop, &send_ping_watcher);
     }
 }
 
@@ -322,7 +304,7 @@ void Client::disconnect()
     {
         if (ev_is_active(&watcher))
         {
-            ev_timer_stop(worker->loop, &watcher);
+            ev_timer_stop(static_cast<Worker*>(worker)->loop, &watcher);
         }
     };
 
@@ -330,7 +312,7 @@ void Client::disconnect()
     {
         if (ev_is_active(&watcher))
         {
-            ev_io_stop(worker->loop, &watcher);
+            ev_io_stop(static_cast<Worker*>(worker)->loop, &watcher);
         }
     };
 
@@ -359,7 +341,7 @@ void Client::disconnect()
     {
         if (ev_is_active(&probe_wev))
         {
-            ev_io_stop(worker->loop, &probe_wev);
+            ev_io_stop(static_cast<Worker*>(worker)->loop, &probe_wev);
         }
         close(probe_skt_fd);
         probe_skt_fd = -1;
@@ -393,7 +375,7 @@ void Client::disconnect()
 
 void Client::start_conn_active_watcher(Client_Interface* client)
 {
-    ev_timer_start(worker->loop, &(dynamic_cast<Client*>(client)->conn_active_watcher));
+    ev_timer_start(static_cast<Worker*>(worker)->loop, &(dynamic_cast<Client*>(client)->conn_active_watcher));
 }
 
 void Client::graceful_restart_connection()
@@ -422,19 +404,19 @@ void Client::report_tls_info()
 void Client::start_rps_timer()
 {
     rps_watcher.repeat = std::max(0.01, 1. / rps);
-    ev_timer_again(worker->loop, &rps_watcher);
+    ev_timer_again(static_cast<Worker*>(worker)->loop, &rps_watcher);
     rps_duration_started = std::chrono::steady_clock::now();
 }
 
 void Client::stop_rps_timer()
 {
-    ev_timer_stop(worker->loop, &rps_watcher);
+    ev_timer_stop(static_cast<Worker*>(worker)->loop, &rps_watcher);
 }
 
 void Client::start_stream_timeout_timer()
 {
     stream_timeout_watcher.repeat = 0.01;
-    ev_timer_again(worker->loop, &stream_timeout_watcher);
+    ev_timer_again(static_cast<Worker*>(worker)->loop, &stream_timeout_watcher);
 }
 
 int Client::select_protocol_and_allocate_session()
@@ -531,15 +513,40 @@ int Client::select_protocol_and_allocate_session()
     return 0;
 }
 
+void Client::start_warmup_timer()
+{
+    ev_timer_start(static_cast<Worker*>(worker)->loop, &static_cast<Worker*>(worker)->warmup_watcher);
+}
+void Client::stop_warmup_timer()
+{
+    ev_timer_stop(static_cast<Worker*>(worker)->loop, &static_cast<Worker*>(worker)->warmup_watcher);
+}
+
 void Client::start_timing_script_request_timeout_timer(double duration)
 {
     request_timeout_watcher.repeat = duration;
-    ev_timer_again(worker->loop, &request_timeout_watcher);
+    ev_timer_again(static_cast<Worker*>(worker)->loop, &request_timeout_watcher);
 }
 
 void Client::start_connect_to_preferred_host_timer()
 {
-    ev_timer_start(worker->loop, &connect_to_preferred_host_watcher);
+    ev_timer_start(static_cast<Worker*>(worker)->loop, &connect_to_preferred_host_watcher);
+}
+
+void Client::stop_timing_script_request_timeout_timer()
+{
+    ev_timer_stop(static_cast<Worker*>(worker)->loop, &request_timeout_watcher);
+}
+
+void Client::conn_activity_timeout_handler()
+{
+    ev_timer_stop(static_cast<Worker*>(worker)->loop, &conn_inactivity_watcher);
+    ev_timer_stop(static_cast<Worker*>(worker)->loop, &conn_active_watcher);
+    
+    if (util::check_socket_connected(fd))
+    {
+        timeout();
+    }
 }
 
 int Client::on_read(const uint8_t* data, size_t len)
@@ -641,7 +648,7 @@ int Client::write_clear()
         {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
             {
-                ev_io_start(worker->loop, &wev);
+                ev_io_start(static_cast<Worker*>(worker)->loop, &wev);
                 return 0;
             }
             return -1;
@@ -650,14 +657,14 @@ int Client::write_clear()
         wb.drain(nwrite);
     }
 
-    ev_io_stop(worker->loop, &wev);
+    ev_io_stop(static_cast<Worker*>(worker)->loop, &wev);
 
     return 0;
 }
 
 void Client::start_request_delay_execution_timer()
 {
-    ev_timer_start(worker->loop, &delayed_request_watcher);
+    ev_timer_start(static_cast<Worker*>(worker)->loop, &delayed_request_watcher);
 }
 int Client::connected()
 {
@@ -668,9 +675,9 @@ int Client::connected()
     }
     std::cerr << "===============connected to " << authority << "===============" << std::endl;
 
-    ev_io_start(worker->loop, &rev);
-    ev_io_stop(worker->loop, &wev);
-    ev_timer_stop(worker->loop, &connection_timeout_watcher);
+    ev_io_start(static_cast<Worker*>(worker)->loop, &rev);
+    ev_io_stop(static_cast<Worker*>(worker)->loop, &wev);
+    ev_timer_stop(static_cast<Worker*>(worker)->loop, &connection_timeout_watcher);
 
     if (ssl)
     {
@@ -703,10 +710,10 @@ int Client::tls_handshake()
         switch (err)
         {
             case SSL_ERROR_WANT_READ:
-                ev_io_stop(worker->loop, &wev);
+                ev_io_stop(static_cast<Worker*>(worker)->loop, &wev);
                 return 0;
             case SSL_ERROR_WANT_WRITE:
-                ev_io_start(worker->loop, &wev);
+                ev_io_start(static_cast<Worker*>(worker)->loop, &wev);
                 return 0;
             default:
                 std::cerr << get_tls_error_string() << std::endl;
@@ -714,7 +721,7 @@ int Client::tls_handshake()
         }
     }
 
-    ev_io_stop(worker->loop, &wev);
+    ev_io_stop(static_cast<Worker*>(worker)->loop, &wev);
 
     readfn = &Client::read_tls;
     writefn = &Client::write_tls;
@@ -790,7 +797,7 @@ int Client::write_tls()
                     // renegotiation started
                     return -1;
                 case SSL_ERROR_WANT_WRITE:
-                    ev_io_start(worker->loop, &wev);
+                    ev_io_start(static_cast<Worker*>(worker)->loop, &wev);
                     return 0;
                 default:
                     return -1;
@@ -800,14 +807,14 @@ int Client::write_tls()
         wb.drain(rv);
     }
 
-    ev_io_stop(worker->loop, &wev);
+    ev_io_stop(static_cast<Worker*>(worker)->loop, &wev);
 
     return 0;
 }
 
 void Client::signal_write()
 {
-    ev_io_start(worker->loop, &wev);
+    ev_io_start(static_cast<Worker*>(worker)->loop, &wev);
 }
 
 void Client::try_new_connection()
@@ -818,7 +825,7 @@ void Client::try_new_connection()
 std::unique_ptr<Client_Interface> Client::create_dest_client(const std::string& dst_sch,
                                                              const std::string& dest_authority)
 {
-    auto new_client = std::make_unique<Client>(this->id, this->worker, this->req_todo, this->config,
+    auto new_client = std::make_unique<Client>(this->id, static_cast<Worker*>(worker), this->req_todo, this->config,
                                                this, dst_sch, dst_sch);
     return new_client;
 }
@@ -885,7 +892,7 @@ bool Client::reconnect_to_alt_addr()
         }
         else
         {
-            ev_timer_start(worker->loop, &delayed_reconnect_watcher);
+            ev_timer_start(static_cast<Worker*>(worker)->loop, &delayed_reconnect_watcher);
         }
         return true;
     }
@@ -898,7 +905,7 @@ bool Client::probe_address(ares_addrinfo* ares_address)
     {
         if (ev_is_active(&probe_wev))
         {
-            ev_io_stop(worker->loop, &probe_wev);
+            ev_io_stop(static_cast<Worker*>(worker)->loop, &probe_wev);
         }
         close(probe_skt_fd);
         probe_skt_fd = -1;
@@ -918,7 +925,7 @@ bool Client::probe_address(ares_addrinfo* ares_address)
             else
             {
                 ev_io_set(&probe_wev, probe_skt_fd, EV_WRITE);
-                ev_io_start(worker->loop, &probe_wev);
+                ev_io_start(static_cast<Worker*>(worker)->loop, &probe_wev);
                 return true;
             }
         }
@@ -946,8 +953,18 @@ void Client::feed_timing_script_request_timeout_timer()
 {
     if (!ev_is_active(&request_timeout_watcher))
     {
-        ev_feed_event(worker->loop, &request_timeout_watcher, EV_TIMER);
+        ev_feed_event(static_cast<Worker*>(worker)->loop, &request_timeout_watcher, EV_TIMER);
     }
+}
+
+void Client::start_connect_timeout_timer()
+{
+    ev_timer_start(static_cast<Worker*>(worker)->loop, &connection_timeout_watcher);
+}
+
+void Client::stop_connect_timeout_timer()
+{
+    ev_timer_stop(static_cast<Worker*>(worker)->loop, &connection_timeout_watcher);
 }
 
 void Client::restore_connectfn()

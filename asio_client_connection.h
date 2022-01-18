@@ -28,12 +28,15 @@
 #include <boost/noncopyable.hpp>
 
 #include "h2load_http2_session.h"
+#include "h2load_http1_session.h"
 #include "h2load_utils.h"
 #include "h2load_Client.h"
 #include "h2load_Config.h"
 #include "h2load_stats.h"
 #include "config_schema.h"
 
+namespace h2load
+{
 
 template <typename socket_type>
 class asio_client_connection
@@ -53,7 +56,34 @@ public:
     }
     virtual ~asio_client_connection() {}
 
-    virtual std::map<int32_t, h2load::Request_Data>& requests_waiting_for_response() = 0;
+    virtual int select_protocol_and_allocate_session()
+    {
+        // TODO: 
+        //if (ssl)
+        //{
+        //}
+        //else
+        {
+            switch (config->no_tls_proto)
+            {
+                case Config::PROTO_HTTP2:
+                    session = std::make_unique<Http2Session>(this);
+                    selected_proto = NGHTTP2_CLEARTEXT_PROTO_VERSION_ID;
+                    break;
+                case Config::PROTO_HTTP1_1:
+                    session = std::make_unique<Http1Session>(this);
+                    selected_proto = NGHTTP2_H1_1.str();
+                    break;
+                default:
+                    // unreachable
+                    assert(0);
+            }
+            print_app_info();
+        }
+    
+        return 0;
+    }
+
     virtual size_t send_out_data(const uint8_t* data, size_t length)
     {
         if (output_buffers[output_buffer_index].capacity() - output_data_length < length)
@@ -71,11 +101,18 @@ public:
             do_write();
         }
     }
-    virtual bool any_pending_data_to_write() = 0;
+    virtual bool any_pending_data_to_write()
+    {
+        return (output_data_length > 0);
+    }
+
     virtual void try_new_connection() = 0;
+
     virtual std::unique_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
                                                                  const std::string& dest_authority) = 0;
-    virtual void setup_connect_with_async_fqdn_lookup() = 0;
+
+    virtual void setup_connect_with_async_fqdn_lookup(){};
+
     virtual void connect_to_host(const std::string& dest_schema, const std::string& dest_authority)
     {
         std::string port;
@@ -107,12 +144,6 @@ public:
         schema = dest_schema;
         authority = dest_authority;
 
-    }
-
-    virtual int connect()
-    {
-        connect_to_host(schema, authority);
-        return 0;
     }
 
 private:
@@ -333,4 +364,5 @@ private:
     boost::asio::deadline_timer rps_timer;
 };
 
+}
 #endif

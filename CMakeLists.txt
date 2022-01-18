@@ -99,6 +99,7 @@ set(H2LOAD_SOURCES
   asio_server_tls_context.cc
   asio_h2load.cc
   Client_Interface.cc
+  Worker_Interface.cc
 )
 
 add_executable(h2loadrunner ${H2LOAD_SOURCES} $<TARGET_OBJECTS:llhttp>

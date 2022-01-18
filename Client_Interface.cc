@@ -20,7 +20,7 @@ Unique_Id::Unique_Id()
     my_id = client_unique_id++;
 }
 
-Client_Interface::Client_Interface(uint32_t id, Worker* wrker, size_t req_todo, Config* conf,
+Client_Interface::Client_Interface(uint32_t id, Worker_Interface* wrker, size_t req_todo, Config* conf,
                                    Client_Interface* parent, const std::string& dest_schema,
                                    const std::string& dest_authority):
     worker(wrker),
@@ -45,6 +45,41 @@ Client_Interface::Client_Interface(uint32_t id, Worker* wrker, size_t req_todo, 
     this_client_id(),
     rps_duration_started()
 {
+}
+
+int Client_Interface::connect()
+{
+    if (is_test_finished())
+    {
+        return -1;
+    }
+    if (!worker->config->is_timing_based_mode() ||
+        worker->current_phase == Phase::MAIN_DURATION)
+    {
+        record_client_start_time();
+        clear_connect_times();
+        record_connect_start_time();
+    }
+    else if (worker->current_phase == Phase::INITIAL_IDLE)
+    {
+        worker->current_phase = Phase::WARM_UP;
+        std::cerr << "Warm-up started for thread #" << worker->id << "."
+                  << std::endl;
+        start_warmup_timer();
+    }
+
+    if (worker->config->conn_inactivity_timeout > 0.)
+    {
+        start_conn_inactivity_timer();
+    }
+
+    auto rv = make_async_connection();
+    if (rv != 0)
+    {
+        return rv;
+    }
+    start_connect_timeout_timer();
+    return 0;
 }
 
 uint64_t Client_Interface::get_total_pending_streams()
@@ -177,6 +212,61 @@ void Client_Interface::record_stream_close_time(int32_t stream_id)
         return;
     }
     req_stat->stream_close_time = std::chrono::steady_clock::now();
+}
+
+void Client_Interface::connection_timeout_handler()
+{
+    stop_connect_timeout_timer();
+    fail();
+    reconnect_to_alt_addr();
+    //ev_break (EV_A_ EVBREAK_ALL);
+}
+
+void Client_Interface::timing_script_timeout_handler()
+{
+    reset_timeout_requests();
+  
+    if (streams.size() >= (size_t)config->max_concurrent_streams)
+    {
+        stop_timing_script_request_timeout_timer();
+        return;
+    }
+    
+    if (submit_request() != 0)
+    {
+        stop_timing_script_request_timeout_timer();
+        return;
+    }
+    signal_write();
+    
+    if (req_left == 0)
+    {
+        stop_timing_script_request_timeout_timer();
+        return;
+    }
+    
+    double duration =
+        config->timings[reqidx] - config->timings[reqidx - 1];
+    
+    while (duration < 1e-9)
+    {
+        if (submit_request() != 0)
+        {
+            stop_timing_script_request_timeout_timer();
+            return;
+        }
+        signal_write();
+        if (req_left == 0)
+        {
+            stop_timing_script_request_timeout_timer();
+            return;
+        }
+    
+        duration =
+            config->timings[reqidx] - config->timings[reqidx - 1];
+    }
+    
+    start_timing_script_request_timeout_timer(duration);
 }
 
 void Client_Interface::brief_log_to_file(int32_t stream_id, bool success)

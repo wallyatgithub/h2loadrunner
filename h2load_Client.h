@@ -34,7 +34,7 @@ class Client: public Client_Interface
 public:
     enum { ERR_CONNECT_FAIL = -100 };
 
-    Client(uint32_t id, Worker* worker, size_t req_todo, Config* conf,
+    Client(uint32_t id, Worker* wrker, size_t req_todo, Config* conf,
            Client* parent = nullptr, const std::string& dest_schema = "",
            const std::string& dest_authority = "");
     virtual ~Client();
@@ -46,7 +46,6 @@ public:
     virtual std::unique_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
                                                                  const std::string& dest_authority);
     virtual int connect_to_host(const std::string& schema, const std::string& authority);
-    virtual int connect();
     virtual void disconnect();
     virtual void clear_default_addr_info();
     virtual void setup_connect_with_async_fqdn_lookup();
@@ -57,9 +56,21 @@ public:
     virtual void start_stream_timeout_timer();
     virtual void start_connect_to_preferred_host_timer();
     virtual void start_timing_script_request_timeout_timer(double duration);
+    virtual void stop_timing_script_request_timeout_timer();
     virtual int select_protocol_and_allocate_session();
     virtual void stop_rps_timer();
     virtual void start_request_delay_execution_timer();
+    virtual void conn_activity_timeout_handler();
+    virtual void start_connect_timeout_timer();
+    virtual void stop_connect_timeout_timer();
+    virtual bool reconnect_to_alt_addr();
+
+    virtual void start_warmup_timer();
+    virtual void stop_warmup_timer();
+    virtual void start_conn_inactivity_timer();
+    virtual void stop_conn_inactivity_timer();
+    virtual int make_async_connection();
+    virtual int do_connect();
 
     void report_tls_info();
 
@@ -80,23 +91,17 @@ public:
     int resolve_fqdn_and_connect(const std::string& schema, const std::string& authority,
                                  ares_addrinfo_callback callback = ares_addrinfo_query_callback);
 
-    bool reconnect_to_alt_addr();
-
     void init_timer_watchers();
 
     bool probe_address(ares_addrinfo* ares_address);
 
     int write_clear_with_callback();
-
-    int do_connect();
-
     void restore_connectfn();
     int connect_with_async_fqdn_lookup();
     void init_ares();
 
     template<class T>
     int make_socket(T* addr);
-
 
     DefaultMemchunks wb;
     ev_io wev;
