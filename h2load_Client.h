@@ -41,7 +41,6 @@ public:
     virtual size_t send_out_data(const uint8_t* data, size_t length);
     virtual void signal_write() ;
     virtual bool any_pending_data_to_write();
-    virtual void try_new_connection();
     virtual void start_conn_active_watcher(Client_Interface* client);
     virtual std::unique_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
                                                                  const std::string& dest_authority);

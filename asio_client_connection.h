@@ -26,6 +26,7 @@
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
 #include <boost/noncopyable.hpp>
+#include <boost/asio/ssl.hpp>
 
 #include "h2load_http2_session.h"
 #include "h2load_http1_session.h"
@@ -44,21 +45,36 @@ class asio_client_connection
       private boost::noncopyable
 {
 public:
-    asio_client_connection(boost::asio::io_service& io_service, h2load::Config* conf, h2load::Stats& st)
-        : dns_resolver(io_service),
+    asio_client_connection
+    (
+        boost::asio::io_service& io_serv,
+        boost::asio::ssl::context& ssl_ctx,
+        uint32_t id,
+        Worker_Interface* wrker,
+        size_t req_todo,
+        Config* conf,
+        Client_Interface* parent = nullptr,
+        const std::string& dest_schema,
+        const std::string& dest_authority
+    )
+        : Client_Interface(id, wrker, req_todo, conf, parent, dest_schema, dest_authority),
+          io_service(io_serv),
+          ssl_context(ssl_ctx),
+          dns_resolver(io_service),
           client_socket(io_service),
           connect_timeout(boost::posix_time::seconds(2)),
-          config(conf),
-          stats(st),
           input_buffer(8 * 1024, 0),
           output_buffers(2, std::vector<uint8_t>(64 * 1024, 0))
     {
     }
-    virtual ~asio_client_connection() {}
+    virtual ~asio_client_connection()
+    {
+        std::cerr<<"asio_client_connection deallocated: "<<schema<<"://"<<authority<<std::stdl;
+    }
 
     virtual int select_protocol_and_allocate_session()
     {
-        // TODO: 
+        // TODO:
         //if (ssl)
         //{
         //}
@@ -80,7 +96,7 @@ public:
             }
             print_app_info();
         }
-    
+
         return 0;
     }
 
@@ -106,12 +122,26 @@ public:
         return (output_data_length > 0);
     }
 
-    virtual void try_new_connection() = 0;
-
     virtual std::unique_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
-                                                                 const std::string& dest_authority) = 0;
+                                                                 const std::string& dest_authority)
+    {
+        if (dst_sch == "https")
+        {
+            auto new_client =
+                std::make_unique<asio_client_connection<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>>(io_service,
+                                                                                                                 ssl_context, this->id, worker, req_todo, config, this, dst_sch, dest_authority);
+            return new_client;
+        }
+        else
+        {
+            auto new_client =
+                std::make_unique<asio_client_connection<boost::asio::ip::tcp::socket>>(io_service, ssl_context, this->id, worker,
+                                                                                       req_todo, config, this, dst_sch, dest_authority);
+            return new_client;
+        }
+    }
 
-    virtual void setup_connect_with_async_fqdn_lookup(){};
+    virtual void setup_connect_with_async_fqdn_lookup() {};
 
     virtual void connect_to_host(const std::string& dest_schema, const std::string& dest_authority)
     {
@@ -206,7 +236,16 @@ private:
         static thread_local boost::asio::ip::tcp::resolver::iterator end_of_resolve_result;
         if (!err)
         {
-            connection_made();
+            if (connected != 0)
+            {
+                fail();
+                if (reconnect_to_alt_addr())
+                {
+                    return;
+                }
+                worker->free_client(this);
+                stop();
+            }
         }
         else if (endpoint_iterator != end_of_resolve_result)
         {
@@ -223,6 +262,19 @@ private:
         }
     }
 
+
+
+    int connected()
+    {
+        if (schema = "https")
+        {
+            
+        }
+        else
+        {
+            return connection_made();
+        }
+    }
     socket_type& socket()
     {
         return client_socket;
@@ -331,9 +383,9 @@ private:
             // Attempt a connection to the first endpoint in the list. Each endpoint
             // will be tried until we successfully establish a connection.
             boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
-            client_socket.async_connect(endpoint,
-                                        boost::bind(&asio_client_connection::on_connected_event, this,
-                                                    boost::asio::placeholders::error, ++endpoint_iterator));
+            client_socket.lowest_layer().async_connect(endpoint,
+                                                       boost::bind(&asio_client_connection::on_connected_event, this,
+                                                                   boost::asio::placeholders::error, ++endpoint_iterator));
         }
         else
         {
@@ -341,11 +393,12 @@ private:
         }
     }
 
+    boost::asio::io_service& io_service;
+    boost::asio::ssl::context& ssl_context;
     boost::asio::ip::tcp::resolver dns_resolver;
-    boost::asio::ip::tcp::socket client_socket;
+    socket_type client_socket;
     bool is_write_in_progress = false;
     bool is_client_stopped = false;
-    std::shared_ptr<h2load::Http2Session> session;
 
     /// Buffer for incoming data.
     std::vector<uint8_t> input_buffer;
@@ -355,11 +408,6 @@ private:
 
     boost::asio::deadline_timer connect_timer;
     boost::posix_time::time_duration connect_timeout;
-    h2load::Config* config;
-    h2load::Stats& stats;
-    std::string schema;
-    std::string authority;
-    std::string original_authority;
     boost::asio::deadline_timer delay_request_execution_timer;
     boost::asio::deadline_timer rps_timer;
 };

@@ -99,6 +99,11 @@ uint64_t Client_Interface::get_total_pending_streams()
     }
 }
 
+void Client_Interface::try_new_connection()
+{
+    new_connection_requested = true;
+}
+
 void Client_Interface::record_ttfb()
 {
     if (recorded(cstat.ttfb))
@@ -225,29 +230,29 @@ void Client_Interface::connection_timeout_handler()
 void Client_Interface::timing_script_timeout_handler()
 {
     reset_timeout_requests();
-  
+
     if (streams.size() >= (size_t)config->max_concurrent_streams)
     {
         stop_timing_script_request_timeout_timer();
         return;
     }
-    
+
     if (submit_request() != 0)
     {
         stop_timing_script_request_timeout_timer();
         return;
     }
     signal_write();
-    
+
     if (req_left == 0)
     {
         stop_timing_script_request_timeout_timer();
         return;
     }
-    
+
     double duration =
         config->timings[reqidx] - config->timings[reqidx - 1];
-    
+
     while (duration < 1e-9)
     {
         if (submit_request() != 0)
@@ -261,11 +266,11 @@ void Client_Interface::timing_script_timeout_handler()
             stop_timing_script_request_timeout_timer();
             return;
         }
-    
+
         duration =
             config->timings[reqidx] - config->timings[reqidx - 1];
     }
-    
+
     start_timing_script_request_timeout_timer(duration);
 }
 
@@ -1234,7 +1239,12 @@ void Client_Interface::on_rps_timer()
 
     auto now = std::chrono::steady_clock::now();
     auto d = now - rps_duration_started;
-    auto n = static_cast<size_t>(round(std::chrono::duration<double>(d).count() * config->rps));
+    auto duration = std::chrono::duration<double>(d).count();
+    if (duration < 0.0)
+    {
+        return;
+    }
+    auto n = static_cast<size_t>(round(duration * config->rps));
     rps_req_pending = n; // += n; do not accumulate to avoid burst of load
     rps_duration_started = now - d + std::chrono::duration<double>(static_cast<double>(n) / config->rps);
 

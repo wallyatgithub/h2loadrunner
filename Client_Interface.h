@@ -47,10 +47,11 @@ public:
     virtual size_t send_out_data(const uint8_t* data, size_t length) = 0;
     virtual void signal_write() = 0;
     virtual bool any_pending_data_to_write() = 0;
-    virtual void try_new_connection() = 0;
-    virtual void start_conn_active_watcher(Client_Interface* client) = 0;
     virtual std::unique_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
                                                                  const std::string& dest_authority) = 0;
+
+
+    virtual void start_conn_active_watcher(Client_Interface* client) = 0;
     virtual int connect_to_host(const std::string& schema, const std::string& authority) = 0;
     virtual void disconnect() = 0;
     virtual void clear_default_addr_info() = 0;
@@ -78,6 +79,7 @@ public:
     virtual int do_connect() = 0;
 
     int connect();
+    void try_new_connection();
     void connection_timeout_handler();
     void timing_script_timeout_handler();
     void on_rps_timer();

@@ -22,7 +22,7 @@ namespace h2load
 class Worker: public Worker_Interface
 {
 public:
-    // TODO: 
+    // TODO:
     struct ev_loop* loop;
     MemchunkPool mcpool;
     SSL_CTX* ssl_ctx;
@@ -35,7 +35,6 @@ public:
     virtual ~Worker();
     Worker(Worker&& o) = default;
 
-    virtual void init_timers();
     virtual void start_rate_mode_period_timer();
     virtual void start_warmup_timer();
     virtual void start_duration_timer();
@@ -44,6 +43,9 @@ public:
     virtual void stop_duration_timer();
     virtual void run_event_loop();
     virtual std::unique_ptr<Client_Interface> create_new_client(size_t req_todo);
+
+
+    void init_timers();
 
 };
 

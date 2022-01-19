@@ -245,14 +245,14 @@ int Client::make_async_connection()
                 break;
             }
         }
-    
+
         if (fd == -1)
         {
             return -1;
         }
-    
+
         assert(addr);
-    
+
         current_addr = addr;
     }
     else if (ares_address)
@@ -269,13 +269,13 @@ int Client::make_async_connection()
     {
         return -1;
     }
-    
+
     writefn = &Client::connected;
     state = CLIENT_CONNECTING;
-    
+
     ev_io_set(&rev, fd, EV_READ);
     ev_io_set(&wev, fd, EV_WRITE);
-    
+
     ev_io_start(static_cast<Worker*>(worker)->loop, &wev);
     return 0;
 }
@@ -542,7 +542,7 @@ void Client::conn_activity_timeout_handler()
 {
     ev_timer_stop(static_cast<Worker*>(worker)->loop, &conn_inactivity_watcher);
     ev_timer_stop(static_cast<Worker*>(worker)->loop, &conn_active_watcher);
-    
+
     if (util::check_socket_connected(fd))
     {
         timeout();
@@ -817,16 +817,11 @@ void Client::signal_write()
     ev_io_start(static_cast<Worker*>(worker)->loop, &wev);
 }
 
-void Client::try_new_connection()
-{
-    new_connection_requested = true;
-}
-
 std::unique_ptr<Client_Interface> Client::create_dest_client(const std::string& dst_sch,
                                                              const std::string& dest_authority)
 {
     auto new_client = std::make_unique<Client>(this->id, static_cast<Worker*>(worker), this->req_todo, this->config,
-                                               this, dst_sch, dst_sch);
+                                               this, dst_sch, dest_authority);
     return new_client;
 }
 
