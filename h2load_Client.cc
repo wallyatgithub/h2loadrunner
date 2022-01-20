@@ -403,7 +403,7 @@ void Client::report_tls_info()
 
 void Client::start_rps_timer()
 {
-    rps_watcher.repeat = std::max(0.01, 1. / rps);
+    rps_watcher.repeat = std::max(0.1, 1. / rps);
     ev_timer_again(static_cast<Worker*>(worker)->loop, &rps_watcher);
     rps_duration_started = std::chrono::steady_clock::now();
 }

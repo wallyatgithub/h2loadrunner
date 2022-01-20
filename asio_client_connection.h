@@ -196,7 +196,7 @@ private:
     }
     virtual void start_rps_timer()
     {
-        rps_timer.expires_from_now(boost::posix_time::seconds(std::max(0.01, 1. / rps)));
+        rps_timer.expires_from_now(boost::posix_time::seconds(std::max(0.1, 1. / rps)));
         rps_timer.async_wait(
             std::bind(&asio_client_connection::handle_rps_timer_timeout, this->shared_from_this()));
     }
@@ -236,7 +236,7 @@ private:
         static thread_local boost::asio::ip::tcp::resolver::iterator end_of_resolve_result;
         if (!err)
         {
-            if (connected != 0)
+            if (connected() != 0)
             {
                 fail();
                 if (reconnect_to_alt_addr())
