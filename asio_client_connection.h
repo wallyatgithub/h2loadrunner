@@ -40,7 +40,7 @@ namespace h2load
 {
 
 class asio_client_connection
-    : public std::enable_shared_from_this<asio_client_connection>, h2load::Client_Interface,
+    : public std::enable_shared_from_this<asio_client_connection>, public h2load::Client_Interface,
       private boost::noncopyable
 {
 public:
@@ -64,7 +64,14 @@ public:
           output_buffers(2, std::vector<uint8_t>(64 * 1024, 0)),
           connect_timer(io_serv),
           delay_request_execution_timer(io_serv),
-          rps_timer(io_serv)
+          rps_timer(io_serv),
+          conn_activity_timer(io_serv),
+          ping_timer(io_serv),
+          conn_inactivity_timer(io_serv),
+          stream_timeout_timer(io_serv),
+          timing_script_request_timeout_timer(io_serv),
+          connect_back_to_preferred_host_timer(io_serv),
+          delayed_reconnect_timer(io_serv)
     {
     }
     virtual ~asio_client_connection()
@@ -72,6 +79,133 @@ public:
         std::cerr<<"asio_client_connection deallocated: "<<schema<<"://"<<authority<<std::endl;
     }
 
+    virtual void start_conn_active_watcher()
+    {
+        conn_activity_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000*config->conn_active_timeout)));
+        conn_activity_timer.async_wait(
+            std::bind(&asio_client_connection::handle_con_activity_timer_timeout, this->shared_from_this()));
+    }
+
+    virtual void start_conn_inactivity_watcher()
+    {
+        conn_inactivity_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000*config->conn_inactivity_timeout)));
+        conn_inactivity_timer.async_wait(
+            std::bind(&asio_client_connection::handle_con_activity_timer_timeout, this->shared_from_this()));
+    }
+
+    virtual void start_ping_watcher()
+    {
+        ping_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000*config->json_config_schema.interval_to_send_ping)));
+        ping_timer.async_wait(
+            std::bind(&asio_client_connection::handle_ping_timeout, this->shared_from_this()));
+    }
+
+    virtual void start_stream_timeout_timer()
+    {
+        stream_timeout_timer.expires_from_now(boost::posix_time::millisec(10));
+        stream_timeout_timer.async_wait(
+            std::bind(&asio_client_connection::handle_stream_timeout_timer_timeout, this->shared_from_this()));
+    }
+
+    virtual void restart_timeout_timer()
+    {
+        start_conn_inactivity_watcher();
+        start_ping_watcher();
+    }
+
+    virtual void stop_rps_timer()
+    {
+        rps_timer.cancel();
+    }
+
+    virtual void start_timing_script_request_timeout_timer(double duration)
+    {
+        timing_script_request_timeout_timer.expires_from_now(boost::posix_time::millisec((size_t)(duration*1000)));
+        timing_script_request_timeout_timer.async_wait(
+            std::bind(&asio_client_connection::handle_timing_script_request_timeout, this->shared_from_this()));
+    }
+
+    virtual void stop_timing_script_request_timeout_timer()
+    {
+        timing_script_request_timeout_timer.cancel();
+    }
+
+    virtual void start_connect_timeout_timer()
+    {
+        connect_timer.expires_from_now(connect_timeout);
+        connect_timer.async_wait(
+            std::bind(&asio_client_connection::handle_connect_timeout, this->shared_from_this()));
+    }
+
+    virtual void stop_connect_timeout_timer()
+    {
+        connect_timer.cancel();
+    }
+
+    virtual void start_connect_to_preferred_host_timer()
+    {
+        connect_back_to_preferred_host_timer.expires_from_now(boost::posix_time::millisec(1000));
+        connect_back_to_preferred_host_timer.async_wait(
+            std::bind(&asio_client_connection::connect_to_prefered_host_timer_handler, this->shared_from_this()));
+    }
+
+    virtual void start_delayed_reconnect_timer()
+    {
+        delayed_reconnect_timer.expires_from_now(boost::posix_time::millisec(1000));
+        delayed_reconnect_timer.async_wait(
+            std::bind(&asio_client_connection::delayed_reconnect_timer_handler, this->shared_from_this()));
+    }
+
+    virtual void stop_conn_inactivity_timer()
+    {
+        conn_inactivity_timer.cancel();
+    }
+
+    virtual int make_async_connection()
+    {
+        return 0;
+    }
+
+    virtual int do_connect()
+    {
+        connect_to_host(schema, authority);
+        return 0;
+    }
+
+    virtual void disconnect()
+    {
+        stop();
+    }
+
+    virtual void start_warmup_timer()
+    {
+        worker->start_warmup_timer();
+    }
+
+    virtual void stop_warmup_timer()
+    {
+        worker->stop_warmup_timer();
+    }
+
+    virtual void clear_default_addr_info()
+    {
+        stop();
+    }
+
+    virtual int connected()
+    {
+        if (connection_made() != 0)
+        {
+            return -1;
+        }
+        return 0;
+    }
+
+    virtual void feed_timing_script_request_timeout_timer()
+    {
+        io_service.post(std::bind(&asio_client_connection::handle_con_activity_timer_timeout, this->shared_from_this()));
+    }
+    
     virtual int select_protocol_and_allocate_session()
     {
         // TODO:
@@ -171,9 +305,7 @@ public:
                                    boost::bind(&asio_client_connection::on_resolve_result_event, this,
                                                boost::asio::placeholders::error,
                                                boost::asio::placeholders::iterator));
-        connect_timer.expires_from_now(connect_timeout);
-        connect_timer.async_wait(
-            std::bind(&asio_client_connection::handle_connect_timeout, this->shared_from_this()));
+        start_connect_timeout_timer();
         schema = dest_schema;
         authority = dest_authority;
 
@@ -206,6 +338,44 @@ private:
             std::bind(&asio_client_connection::handle_rps_timer_timeout, this->shared_from_this()));
     }
 
+    virtual void conn_activity_timeout_handler()
+    {
+        if (!timer_common_check(conn_activity_timer, &asio_client_connection::conn_activity_timeout_handler))
+        {
+            return;
+        }
+        stop();
+    }
+
+    virtual void delayed_reconnect_timer_handler()
+    {
+        if (!timer_common_check(delayed_reconnect_timer, &asio_client_connection::delayed_reconnect_timer_handler))
+        {
+            return;
+        }
+        reconnect_to_used_host();
+    }
+
+    virtual void connect_to_prefered_host_timer_handler()
+    {
+        if (!timer_common_check(connect_back_to_preferred_host_timer, &asio_client_connection::connect_to_prefered_host_timer_handler))
+        {
+            return;
+        }
+        if (CLIENT_CONNECTED != state)
+        {
+            return;
+        }
+        else if (authority == preferred_authority && CLIENT_CONNECTED == state)
+        {
+            return;
+        }
+        else
+        {
+            start_connect_to_preferred_host_timer();
+        }
+    }
+
     void handle_rps_timer_timeout()
     {
         if (!timer_common_check(rps_timer, &asio_client_connection::handle_rps_timer_timeout))
@@ -216,6 +386,65 @@ private:
         on_rps_timer();
     }
 
+    void handle_timing_script_request_timeout()
+    {
+        if (!timer_common_check(timing_script_request_timeout_timer, &asio_client_connection::handle_timing_script_request_timeout))
+        {
+            return;
+        }
+        timing_script_timeout_handler();
+    }
+
+    void handle_stream_timeout_timer_timeout()
+    {
+        if (!timer_common_check(stream_timeout_timer, &asio_client_connection::handle_stream_timeout_timer_timeout))
+        {
+            return;
+        }
+        reset_timeout_requests();
+        start_stream_timeout_timer();
+    }
+
+    void handle_con_activity_timer_timeout()
+    {
+        if (!timer_common_check(conn_activity_timer, &asio_client_connection::handle_con_activity_timer_timeout))
+        {
+            return;
+        }
+        conn_activity_timeout_handler();
+        start_conn_active_watcher();
+    }
+
+    void handle_con_inactivity_timer_timeout()
+    {
+        if (!timer_common_check(conn_activity_timer, &asio_client_connection::handle_con_inactivity_timer_timeout))
+        {
+            return;
+        }
+        conn_activity_timeout_handler();
+        start_conn_inactivity_watcher();
+    }
+
+
+    void handle_ping_timeout()
+    {
+        if (!timer_common_check(ping_timer, &asio_client_connection::handle_ping_timeout))
+        {
+            return;
+        }
+        submit_request();
+        start_ping_watcher();
+    }
+
+    virtual void graceful_restart_connection()
+    {
+        write_clear_callback = [this]()
+        {
+            disconnect();
+            connect_to_host(schema, authority);
+        };
+        terminate_session();
+    }
 
     virtual void start_request_delay_execution_timer()
     {
@@ -267,10 +496,6 @@ private:
         }
     }
 
-
-
-    virtual int connected() = 0;
-
     boost::asio::ip::tcp::socket& socket()
     {
         return client_socket;
@@ -278,19 +503,14 @@ private:
 
     void handle_connect_timeout()
     {
+        if (!timer_common_check(connect_timer, &asio_client_connection::handle_connect_timeout))
+        {
+            return;
+        }
         if (is_client_stopped)
         {
             return;
         }
-
-        if (connect_timer.expires_at() >
-            boost::asio::deadline_timer::traits_type::now())
-        {
-            connect_timer.async_wait(
-                std::bind(&asio_client_connection::handle_connect_timeout, this->shared_from_this()));
-            return;
-        }
-
         stop();
     }
 
@@ -308,7 +528,7 @@ private:
                 stop();
                 return;
             }
-
+            restart_timeout_timer();
             if (session->on_read(input_buffer.data(), bytes_transferred) != 0)
             {
                 stop();
@@ -334,6 +554,8 @@ private:
             return;
         }
 
+        restart_timeout_timer();
+
         auto& buffer = output_buffers[output_buffer_index];
         auto length = output_data_length;
 
@@ -352,6 +574,12 @@ private:
 
             is_write_in_progress = false;
 
+            auto func = std::move(write_clear_callback);
+            if (func)
+            {
+                func();
+            }
+
             do_write();
         });
         is_write_in_progress = true;
@@ -368,7 +596,15 @@ private:
         boost::system::error_code ignored_ec;
         client_socket.lowest_layer().close(ignored_ec);
         connect_timer.cancel();
-
+        rps_timer.cancel();
+        delay_request_execution_timer.cancel();
+        conn_activity_timer.cancel();
+        ping_timer.cancel();
+        conn_inactivity_timer.cancel();
+        stream_timeout_timer.cancel();
+        timing_script_request_timeout_timer.cancel();
+        connect_back_to_preferred_host_timer.cancel();
+        delayed_reconnect_timer.cancel();
     }
 
     void on_resolve_result_event(const boost::system::error_code& err,
@@ -401,10 +637,21 @@ private:
     size_t output_data_length = 0;
     size_t output_buffer_index = 0;
 
-    boost::asio::deadline_timer connect_timer;
     boost::posix_time::time_duration connect_timeout;
+
+    boost::asio::deadline_timer connect_timer;
     boost::asio::deadline_timer delay_request_execution_timer;
     boost::asio::deadline_timer rps_timer;
+    boost::asio::deadline_timer conn_activity_timer;
+    boost::asio::deadline_timer ping_timer;
+    boost::asio::deadline_timer conn_inactivity_timer;
+    boost::asio::deadline_timer stream_timeout_timer;
+    boost::asio::deadline_timer timing_script_request_timeout_timer;
+    boost::asio::deadline_timer connect_back_to_preferred_host_timer;
+    boost::asio::deadline_timer delayed_reconnect_timer;
+    
+
+    std::function<void()> write_clear_callback;
 };
 
 

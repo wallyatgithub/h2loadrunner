@@ -932,22 +932,7 @@ void reconnect_to_used_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
     ev_timer_stop(loop, w);
-    if (CLIENT_CONNECTED == client->state)
-    {
-        return;
-    }
-    if (client->used_addresses.size())
-    {
-        client->authority = std::move(client->used_addresses.front());
-        client->used_addresses.pop_front();
-        std::cerr << "switch to used host: " << client->authority << std::endl;
-        client->resolve_fqdn_and_connect(client->schema, client->authority);
-    }
-    else
-    {
-        std::cerr << "retry current host: " << client->authority << std::endl;
-        client->resolve_fqdn_and_connect(client->schema, client->authority);
-    }
+    client->reconnect_to_used_host();
 }
 
 void ares_addrinfo_query_callback_for_probe(void* arg, int status, int timeouts, struct ares_addrinfo* res)

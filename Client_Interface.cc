@@ -70,7 +70,7 @@ int Client_Interface::connect()
 
     if (worker->config->conn_inactivity_timeout > 0.)
     {
-        start_conn_inactivity_timer();
+        start_conn_inactivity_watcher();
     }
 
     auto rv = make_async_connection();
@@ -225,6 +225,57 @@ void Client_Interface::connection_timeout_handler()
     fail();
     reconnect_to_alt_addr();
     //ev_break (EV_A_ EVBREAK_ALL);
+}
+
+void Client_Interface::reconnect_to_used_host()
+{
+    if (CLIENT_CONNECTED == state)
+    {
+        return;
+    }
+    if (used_addresses.size())
+    {
+        authority = std::move(used_addresses.front());
+        used_addresses.pop_front();
+        std::cerr << "switch to used host: " << authority << std::endl;
+        connect_to_host(schema, authority);
+    }
+    else
+    {
+        std::cerr << "retry current host: " << authority << std::endl;
+        connect_to_host(schema, authority);
+    }
+}
+
+bool Client_Interface::reconnect_to_alt_addr()
+{
+    if (CLIENT_CONNECTED == state)
+    {
+        return false;
+    }
+    if (should_reconnect_on_disconnect())
+    {
+        if (authority != preferred_authority)
+        {
+            used_addresses.push_back(std::move(authority));
+            authority = preferred_authority;
+            std::cerr << "try with preferred host: " << authority << std::endl;
+            connect_to_host(schema, authority);
+        }
+        else if (candidate_addresses.size())
+        {
+            authority = std::move(candidate_addresses.front());
+            candidate_addresses.pop_front();
+            std::cerr << "switching to candidate host: " << authority << std::endl;
+            connect_to_host(schema, authority);
+        }
+        else
+        {
+            start_delayed_reconnect_timer();
+        }
+        return true;
+    }
+    return false;
 }
 
 void Client_Interface::timing_script_timeout_handler()
@@ -1840,7 +1891,7 @@ int Client_Interface::submit_request()
         {
             for (auto& client : dest_clients) // "this" is also in dest_clients
             {
-                start_conn_active_watcher(client.second);
+                client.second->start_conn_active_watcher();
             }
         }
     }

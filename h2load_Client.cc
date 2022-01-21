@@ -212,7 +212,7 @@ void Client::clear_default_addr_info()
     current_addr = nullptr;
 }
 
-void Client::start_conn_inactivity_timer()
+void Client::start_conn_inactivity_watcher()
 {
     ev_timer_again(static_cast<Worker*>(worker)->loop, &conn_inactivity_watcher);
 }
@@ -373,9 +373,9 @@ void Client::disconnect()
     }
 }
 
-void Client::start_conn_active_watcher(Client_Interface* client)
+void Client::start_conn_active_watcher()
 {
-    ev_timer_start(static_cast<Worker*>(worker)->loop, &(dynamic_cast<Client*>(client)->conn_active_watcher));
+    ev_timer_start(static_cast<Worker*>(worker)->loop, &conn_active_watcher);
 }
 
 void Client::graceful_restart_connection()
@@ -863,35 +863,9 @@ int Client::connect_to_host(const std::string& schema, const std::string& author
     return resolve_fqdn_and_connect(schema, authority);
 }
 
-bool Client::reconnect_to_alt_addr()
+void Client::start_delayed_reconnect_timer()
 {
-    if (CLIENT_CONNECTED == state)
-    {
-        return false;
-    }
-    if (should_reconnect_on_disconnect())
-    {
-        if (authority != preferred_authority)
-        {
-            used_addresses.push_back(std::move(authority));
-            authority = preferred_authority;
-            std::cerr << "try with preferred host: " << authority << std::endl;
-            resolve_fqdn_and_connect(schema, authority);
-        }
-        else if (candidate_addresses.size())
-        {
-            authority = std::move(candidate_addresses.front());
-            candidate_addresses.pop_front();
-            std::cerr << "switching to candidate host: " << authority << std::endl;
-            resolve_fqdn_and_connect(schema, authority);
-        }
-        else
-        {
-            ev_timer_start(static_cast<Worker*>(worker)->loop, &delayed_reconnect_watcher);
-        }
-        return true;
-    }
-    return false;
+  ev_timer_start(static_cast<Worker*>(worker)->loop, &delayed_reconnect_watcher);
 }
 
 bool Client::probe_address(ares_addrinfo* ares_address)

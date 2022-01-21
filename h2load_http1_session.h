@@ -30,7 +30,7 @@
 #include "h2load_session.h"
 #include "Client_Interface.h"
 #include "h2load_Config.h"
-#include "h2load_Stats.h"
+#include "h2load_stats.h"
 
 #include "llhttp.h"
 

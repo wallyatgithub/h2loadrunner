@@ -41,7 +41,7 @@ public:
     virtual size_t send_out_data(const uint8_t* data, size_t length);
     virtual void signal_write() ;
     virtual bool any_pending_data_to_write();
-    virtual void start_conn_active_watcher(Client_Interface* client);
+    virtual void start_conn_active_watcher();
     virtual std::unique_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
                                                                  const std::string& dest_authority);
     virtual int connect_to_host(const std::string& schema, const std::string& authority);
@@ -62,14 +62,14 @@ public:
     virtual void conn_activity_timeout_handler();
     virtual void start_connect_timeout_timer();
     virtual void stop_connect_timeout_timer();
-    virtual bool reconnect_to_alt_addr();
 
     virtual void start_warmup_timer();
     virtual void stop_warmup_timer();
-    virtual void start_conn_inactivity_timer();
+    virtual void start_conn_inactivity_watcher();
     virtual void stop_conn_inactivity_timer();
     virtual int make_async_connection();
     virtual int do_connect();
+    virtual void start_delayed_reconnect_timer();
 
     void report_tls_info();
 
