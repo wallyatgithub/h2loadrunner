@@ -1450,6 +1450,19 @@ void Client_Interface::on_stream_close(int32_t stream_id, bool success, bool fin
     }
 }
 
+void Client_Interface::on_prefered_host_up()
+{
+    std::cerr << "preferred host is up: " << preferred_authority << std::endl;
+    if (authority != preferred_authority && state == CLIENT_CONNECTED)
+    {
+        std::cerr << "switching back to preferred host: " << preferred_authority << std::endl;
+        disconnect();
+        candidate_addresses.push_back(std::move(authority));
+        authority = preferred_authority;
+        connect_to_host(schema, authority);
+    }
+}
+
 int Client_Interface::connection_made()
 {
     auto ret = select_protocol_and_allocate_session();

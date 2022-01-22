@@ -280,6 +280,12 @@ int Client::make_async_connection()
     return 0;
 }
 
+void Client::probe_and_connect_to(const std::string& schema, const std::string& authority)
+{
+    resolve_fqdn_and_connect(schema, authority, ares_addrinfo_query_callback_for_probe);
+
+}
+
 void Client::restart_timeout_timer()
 {
     if (config->conn_inactivity_timeout > 0.)

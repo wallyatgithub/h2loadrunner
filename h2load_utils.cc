@@ -958,8 +958,7 @@ void connect_to_prefered_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
     }
     else // connected, but not to preferred host, so check if preferred host is up for connection
     {
-        client->resolve_fqdn_and_connect(client->schema, client->preferred_authority,
-                                         ares_addrinfo_query_callback_for_probe);
+        client->probe_and_connect_to(client->schema, client->preferred_authority);
     }
 }
 
@@ -969,15 +968,7 @@ void probe_writecb(struct ev_loop* loop, ev_io* w, int revents)
     ev_io_stop(loop, w);
     if (util::check_socket_connected(client->probe_skt_fd))
     {
-        std::cerr << "preferred host is up: " << client->preferred_authority << std::endl;
-        if (client->authority != client->preferred_authority && client->state == CLIENT_CONNECTED)
-        {
-            std::cerr << "switching back to preferred host: " << client->preferred_authority << std::endl;
-            client->disconnect();
-            client->candidate_addresses.push_back(std::move(client->authority));
-            client->authority = client->preferred_authority;
-            client->resolve_fqdn_and_connect(client->schema, client->authority);
-        }
+        client->on_prefered_host_up();
     }
 }
 

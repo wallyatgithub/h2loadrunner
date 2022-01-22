@@ -70,6 +70,7 @@ public:
     virtual int make_async_connection();
     virtual int do_connect();
     virtual void start_delayed_reconnect_timer();
+    virtual void probe_and_connect_to(const std::string& schema, const std::string& authority);
 
     void report_tls_info();
 

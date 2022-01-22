@@ -59,7 +59,7 @@ public:
           io_service(io_serv),
           dns_resolver(io_serv),
           client_socket(io_serv),
-          connect_timeout(boost::posix_time::seconds(2)),
+          client_probe_socket(io_serv),
           input_buffer(8 * 1024, 0),
           output_buffers(2, std::vector<uint8_t>(64 * 1024, 0)),
           connect_timer(io_serv),
@@ -132,7 +132,7 @@ public:
 
     virtual void start_connect_timeout_timer()
     {
-        connect_timer.expires_from_now(connect_timeout);
+        connect_timer.expires_from_now(boost::posix_time::seconds(2));
         connect_timer.async_wait(
             std::bind(&asio_client_connection::handle_connect_timeout, this->shared_from_this()));
     }
@@ -175,6 +175,15 @@ public:
     virtual void disconnect()
     {
         stop();
+        if (CLIENT_CONNECTED == state)
+        {
+            std::cerr << "===============disconnected from " << authority << "===============" << std::endl;
+        }
+        
+        record_client_end_time();
+        streams.clear();
+        session.reset();
+        state = CLIENT_IDLE;
     }
 
     virtual void start_warmup_timer()
@@ -278,7 +287,10 @@ public:
         }
     }
 
-    virtual void setup_connect_with_async_fqdn_lookup() {};
+    virtual void setup_connect_with_async_fqdn_lookup()
+    {
+        return;
+    }
 
     virtual int connect_to_host(const std::string& dest_schema, const std::string& dest_authority)
     {
@@ -311,6 +323,33 @@ public:
 
         return 1;
 
+    }
+
+    virtual void probe_and_connect_to(const std::string& schema, const std::string& authority)
+    {
+        std::string port;
+        auto vec = tokenize_string(authority, ":");
+        if (vec.size() == 1)
+        {
+            if (schema == "https")
+            {
+                port = "443";
+            }
+            else
+            {
+                port = "80";
+            }
+        }
+        else
+        {
+            port = vec[1];
+        }
+
+        boost::asio::ip::tcp::resolver::query query(vec[0], port);
+        dns_resolver.async_resolve(query,
+                                   boost::bind(&asio_client_connection::on_probe_resolve_result_event, this,
+                                               boost::asio::placeholders::error,
+                                               boost::asio::placeholders::iterator));
     }
 
 private:
@@ -372,6 +411,7 @@ private:
         }
         else
         {
+            probe_and_connect_to(schema, preferred_authority);
             start_connect_to_preferred_host_timer();
         }
     }
@@ -432,7 +472,7 @@ private:
         {
             return;
         }
-        submit_request();
+        submit_ping();
         start_ping_watcher();
     }
 
@@ -462,6 +502,17 @@ private:
         }
         resume_delayed_request_execution();
         start_request_delay_execution_timer();
+    }
+
+    void on_probe_connected_event(const boost::system::error_code& err,
+                            boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
+    {
+        boost::system::error_code ignored_ec;
+        client_probe_socket.lowest_layer().close(ignored_ec);
+        if (!err)
+        {
+            on_prefered_host_up();
+        }
     }
 
     void on_connected_event(const boost::system::error_code& err,
@@ -625,9 +676,28 @@ private:
         }
     }
 
+    void on_probe_resolve_result_event(const boost::system::error_code& err,
+                                 boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
+    {
+        if (!err)
+        {
+            // Attempt a connection to the first endpoint in the list. Each endpoint
+            // will be tried until we successfully establish a connection.
+            boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
+            client_probe_socket.lowest_layer().async_connect(endpoint,
+                                                       boost::bind(&asio_client_connection::on_probe_connected_event, this,
+                                                                   boost::asio::placeholders::error, ++endpoint_iterator));
+        }
+        else
+        {
+            std::cerr << "Error: " << err.message() << "\n";
+        }
+    }
+
     boost::asio::io_service& io_service;
     boost::asio::ip::tcp::resolver dns_resolver;
     boost::asio::ip::tcp::socket client_socket;
+    boost::asio::ip::tcp::socket client_probe_socket;
     bool is_write_in_progress = false;
     bool is_client_stopped = false;
 
@@ -636,8 +706,6 @@ private:
     std::vector<std::vector<uint8_t>> output_buffers;
     size_t output_data_length = 0;
     size_t output_buffer_index = 0;
-
-    boost::posix_time::time_duration connect_timeout;
 
     boost::asio::deadline_timer connect_timer;
     boost::asio::deadline_timer delay_request_execution_timer;

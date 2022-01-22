@@ -77,9 +77,11 @@ public:
     virtual int make_async_connection() = 0;
     virtual int do_connect() = 0;
     virtual void start_delayed_reconnect_timer() = 0;
+    virtual void probe_and_connect_to(const std::string& schema, const std::string& authority) = 0;
 
     int connect();
     void reconnect_to_used_host();
+    void on_prefered_host_up();
     bool reconnect_to_alt_addr();
     void try_new_connection();
     void connection_timeout_handler();
