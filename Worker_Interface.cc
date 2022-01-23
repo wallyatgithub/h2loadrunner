@@ -205,6 +205,24 @@ void Worker_Interface::rate_period_timeout_handler()
         }
     }
 }
+void Worker_Interface::duration_timeout_handler()
+{
+    if (current_phase == Phase::MAIN_DURATION && config->json_config_schema.scenarios.size())
+    {
+        current_phase = Phase::MAIN_DURATION_GRACEFUL_SHUTDOWN;
+        std::cerr << "Main benchmark duration is over for thread #" << id
+                  << ". Entering graceful shutdown." << std::endl;
+        start_graceful_stop_timer();
+    }
+    else
+    {
+        current_phase = Phase::DURATION_OVER;
+        std::cerr << "Main benchmark duration is over for thread #" << id
+                  << ". Stopping all clients." << std::endl;
+        stop_all_clients();
+        std::cerr << "Stopped all clients for thread #" << id << std::endl;
+    }
+}
 
 void Worker_Interface::warmup_timeout_handler()
 {

@@ -62,9 +62,11 @@ public:
     virtual void stop_duration_timer() = 0;
     virtual void run_event_loop() = 0;
     virtual std::unique_ptr<Client_Interface> create_new_client(size_t req_todo) = 0;
+    virtual void start_graceful_stop_timer() = 0;
 
     void rate_period_timeout_handler();
     void warmup_timeout_handler();
+    void duration_timeout_handler();
     void run();
     void sample_req_stat(RequestStat* req_stat);
     void sample_client_stat(ClientStat* cstat);

@@ -216,23 +216,7 @@ void duration_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto worker = static_cast<Worker*>(w->data);
 
-    if (worker->current_phase == Phase::MAIN_DURATION && worker->config->json_config_schema.scenarios.size())
-    {
-        worker->current_phase = Phase::MAIN_DURATION_GRACEFUL_SHUTDOWN;
-        std::cerr << "Main benchmark duration is over for thread #" << worker->id
-                  << ". Entering graceful shutdown." << std::endl;
-        ev_timer_init(w, duration_timeout_cb, ((double)worker->config->stream_timeout_in_ms / 1000), 0.);
-        w->data = worker;
-        ev_timer_start(loop, w);
-    }
-    else
-    {
-        worker->current_phase = Phase::DURATION_OVER;
-        std::cerr << "Main benchmark duration is over for thread #" << worker->id
-                  << ". Stopping all clients." << std::endl;
-        worker->stop_all_clients();
-        std::cerr << "Stopped all clients for thread #" << worker->id << std::endl;
-    }
+    worker->duration_timeout_handler();
     //ev_break (EV_A_ EVBREAK_ALL);
 }
 
