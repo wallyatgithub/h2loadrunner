@@ -85,7 +85,7 @@ extern "C" {
 #include "h2load_utils.h"
 #include "h2load_Config.h"
 #include "h2load_Client.h"
-#include "h2load_Worker.h"
+#include "Worker_Interface.h"
 #include "h2load_stats.h"
 #include "staticjson/document.hpp"
 #include "staticjson/staticjson.hpp"
@@ -1259,7 +1259,7 @@ int main(int argc, char** argv)
 
     std::cerr << "starting benchmark..." << std::endl;
 
-    std::vector<std::unique_ptr<Worker>> workers;
+    std::vector<std::unique_ptr<Worker_Interface>> workers;
     workers.reserve(config.nthreads);
 
 #ifndef NOTHREADS

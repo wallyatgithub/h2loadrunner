@@ -491,7 +491,7 @@ std::vector<std::string> read_uri_from_file(std::istream& infile)
 }
 
 h2load::SDStats
-process_time_stats(const std::vector<std::unique_ptr<h2load::Worker>>& workers)
+process_time_stats(const std::vector<std::unique_ptr<h2load::Worker_Interface>>& workers)
 {
     auto request_times_sampling = false;
     auto client_times_sampling = false;
@@ -1029,7 +1029,7 @@ size_t get_request_name_max_width(h2load::Config& config)
 }
 
 void output_realtime_stats(h2load::Config& config,
-                           std::vector<std::unique_ptr<h2load::Worker>>& workers,
+                           std::vector<std::unique_ptr<h2load::Worker_Interface>>& workers,
                            std::atomic<bool>& workers_stopped, std::stringstream& dataStream)
 {
     std::vector<std::vector<size_t>> scenario_req_sent_till_now;
@@ -1254,7 +1254,7 @@ void output_realtime_stats(h2load::Config& config,
 
 
 std::vector<std::vector<h2load::SDStat>>
-                                      produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker>>& workers)
+                                      produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker_Interface>>& workers)
 {
     auto request_times_sampling = false;
     size_t nrequest_times = 0;
@@ -1543,7 +1543,7 @@ void integrated_http2_server(std::stringstream& dataStream, h2load::Config& conf
 };
 
 void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& config,
-                                  const std::vector<std::unique_ptr<h2load::Worker>>& workers)
+                                  const std::vector<std::unique_ptr<h2load::Worker_Interface>>& workers)
 {
     if (config.json_config_schema.scenarios.size())
     {
