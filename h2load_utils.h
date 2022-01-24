@@ -32,7 +32,7 @@ namespace h2load
 {
 class Client;
 }
-std::unique_ptr<h2load::Worker> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
+std::unique_ptr<h2load::Worker_Interface> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
                                               size_t nreqs, size_t nclients,
                                               size_t rate, size_t max_samples, h2load::Config& config);
 

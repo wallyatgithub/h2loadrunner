@@ -73,6 +73,11 @@ public:
           connect_back_to_preferred_host_timer(io_serv),
           delayed_reconnect_timer(io_serv)
     {
+        init_lua_states();
+        
+        init_connection_targert();
+        
+        update_this_in_dest_client_map();
     }
     virtual ~asio_client_connection()
     {
@@ -314,7 +319,7 @@ public:
 
         boost::asio::ip::tcp::resolver::query query(vec[0], port);
         dns_resolver.async_resolve(query,
-                                   boost::bind(&asio_client_connection::on_resolve_result_event, this,
+                                   boost::bind(&asio_client_connection::on_resolve_result_event, this->shared_from_this(),
                                                boost::asio::placeholders::error,
                                                boost::asio::placeholders::iterator));
         start_connect_timeout_timer();
@@ -347,7 +352,7 @@ public:
 
         boost::asio::ip::tcp::resolver::query query(vec[0], port);
         dns_resolver.async_resolve(query,
-                                   boost::bind(&asio_client_connection::on_probe_resolve_result_event, this,
+                                   boost::bind(&asio_client_connection::on_probe_resolve_result_event, this->shared_from_this(),
                                                boost::asio::placeholders::error,
                                                boost::asio::placeholders::iterator));
     }
@@ -667,7 +672,7 @@ private:
             // will be tried until we successfully establish a connection.
             boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
             client_socket.lowest_layer().async_connect(endpoint,
-                                                       boost::bind(&asio_client_connection::on_connected_event, this,
+                                                       boost::bind(&asio_client_connection::on_connected_event, this->shared_from_this(),
                                                                    boost::asio::placeholders::error, ++endpoint_iterator));
         }
         else
@@ -685,7 +690,7 @@ private:
             // will be tried until we successfully establish a connection.
             boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
             client_probe_socket.lowest_layer().async_connect(endpoint,
-                                                       boost::bind(&asio_client_connection::on_probe_connected_event, this,
+                                                       boost::bind(&asio_client_connection::on_probe_connected_event, this->shared_from_this(),
                                                                    boost::asio::placeholders::error, ++endpoint_iterator));
         }
         else

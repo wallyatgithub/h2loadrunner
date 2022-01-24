@@ -29,10 +29,12 @@ extern "C" {
 #include "h2load_utils.h"
 #include "h2load_Client.h"
 
+#include "asio_worker.h"
+
 
 using namespace h2load;
 
-std::unique_ptr<h2load::Worker> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
+std::unique_ptr<h2load::Worker_Interface> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
                                               size_t nreqs, size_t nclients,
                                               size_t rate, size_t max_samples, h2load::Config& config)
 {
@@ -60,14 +62,14 @@ std::unique_ptr<h2load::Worker> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
 
     if (config.is_rate_mode())
     {
-        return std::make_unique<Worker>(id, ssl_ctx, nreqs, nclients, rate,
+        return std::make_unique<asio_worker>(id, nreqs, nclients, rate,
                                         max_samples, &config);
     }
     else
     {
         // Here rate is same as client because the rate_timeout callback
         // will be called only once
-        return std::make_unique<Worker>(id, ssl_ctx, nreqs, nclients, nclients,
+        return std::make_unique<asio_worker>(id, nreqs, nclients, nclients,
                                         max_samples, &config);
     }
 }
