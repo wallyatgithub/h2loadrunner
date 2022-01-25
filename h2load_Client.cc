@@ -38,14 +38,7 @@ Client::Client(uint32_t id, Worker* wrker, size_t req_todo, Config* conf,
       probe_skt_fd(-1),
       connectfn(&Client::connect)
 {
-    slice_user_id();
 
-    if (req_todo == 0)   // this means infinite number of requests are to be made
-    {
-        // This ensures that number of requests are unbounded
-        // Just a positive number is fine, we chose the first positive number
-        req_left = 1;
-    }
     ev_io_init(&wev, writecb, 0, EV_WRITE);
     ev_io_init(&rev, readcb, 0, EV_READ);
 
@@ -58,13 +51,9 @@ Client::Client(uint32_t id, Worker* wrker, size_t req_todo, Config* conf,
 
     init_timer_watchers();
 
-    init_lua_states();
-
     init_ares();
 
     init_connection_targert();
-
-    update_this_in_dest_client_map();
 }
 
 void Client::init_ares()
@@ -683,7 +672,6 @@ int Client::connected()
 
     ev_io_start(static_cast<Worker*>(worker)->loop, &rev);
     ev_io_stop(static_cast<Worker*>(worker)->loop, &wev);
-    ev_timer_stop(static_cast<Worker*>(worker)->loop, &connection_timeout_watcher);
 
     if (ssl)
     {
@@ -871,7 +859,7 @@ int Client::connect_to_host(const std::string& schema, const std::string& author
 
 void Client::start_delayed_reconnect_timer()
 {
-  ev_timer_start(static_cast<Worker*>(worker)->loop, &delayed_reconnect_watcher);
+    ev_timer_start(static_cast<Worker*>(worker)->loop, &delayed_reconnect_watcher);
 }
 
 bool Client::probe_address(ares_addrinfo* ares_address)

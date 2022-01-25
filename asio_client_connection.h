@@ -46,7 +46,7 @@ class asio_client_connection
 public:
     asio_client_connection
     (
-        boost::asio::io_service& io_serv,
+        boost::asio::io_context& io_ctx,
         uint32_t id,
         Worker_Interface* wrker,
         size_t req_todo,
@@ -56,60 +56,73 @@ public:
         const std::string& dest_authority = ""
     )
         : Client_Interface(id, wrker, req_todo, conf, parent, dest_schema, dest_authority),
-          io_service(io_serv),
-          dns_resolver(io_serv),
-          client_socket(io_serv),
-          client_probe_socket(io_serv),
+          io_context(io_ctx),
+          dns_resolver(io_ctx),
+          client_socket(io_ctx),
+          client_probe_socket(io_ctx),
           input_buffer(8 * 1024, 0),
           output_buffers(2, std::vector<uint8_t>(64 * 1024, 0)),
-          connect_timer(io_serv),
-          delay_request_execution_timer(io_serv),
-          rps_timer(io_serv),
-          conn_activity_timer(io_serv),
-          ping_timer(io_serv),
-          conn_inactivity_timer(io_serv),
-          stream_timeout_timer(io_serv),
-          timing_script_request_timeout_timer(io_serv),
-          connect_back_to_preferred_host_timer(io_serv),
-          delayed_reconnect_timer(io_serv)
+          connect_timer(io_ctx),
+          delay_request_execution_timer(io_ctx),
+          rps_timer(io_ctx),
+          conn_activity_timer(io_ctx),
+          ping_timer(io_ctx),
+          conn_inactivity_timer(io_ctx),
+          stream_timeout_timer(io_ctx),
+          timing_script_request_timeout_timer(io_ctx),
+          connect_back_to_preferred_host_timer(io_ctx),
+          delayed_reconnect_timer(io_ctx)
     {
-        init_lua_states();
-        
         init_connection_targert();
-        
-        update_this_in_dest_client_map();
     }
     virtual ~asio_client_connection()
     {
-        std::cerr<<"asio_client_connection deallocated: "<<schema<<"://"<<authority<<std::endl;
+        std::cerr << "asio_client_connection deallocated: " << schema << "://" << authority << std::endl;
     }
 
     virtual void start_conn_active_watcher()
     {
-        conn_activity_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000*config->conn_active_timeout)));
-        conn_activity_timer.async_wait(
-            std::bind(&asio_client_connection::handle_con_activity_timer_timeout, this->shared_from_this()));
+        conn_activity_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 * config->conn_active_timeout)));
+        conn_activity_timer.async_wait
+            (
+            [this](const boost::system::error_code& ec)
+            {
+                handle_con_activity_timer_timeout(ec);
+            });
     }
 
     virtual void start_conn_inactivity_watcher()
     {
-        conn_inactivity_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000*config->conn_inactivity_timeout)));
-        conn_inactivity_timer.async_wait(
-            std::bind(&asio_client_connection::handle_con_activity_timer_timeout, this->shared_from_this()));
+        conn_inactivity_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 * config->conn_inactivity_timeout)));
+        conn_inactivity_timer.async_wait
+            (
+            [this](const boost::system::error_code& ec)
+            {
+                handle_con_activity_timer_timeout(ec);
+            });
     }
 
     virtual void start_ping_watcher()
     {
-        ping_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000*config->json_config_schema.interval_to_send_ping)));
-        ping_timer.async_wait(
-            std::bind(&asio_client_connection::handle_ping_timeout, this->shared_from_this()));
+        ping_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 *
+                                                                         config->json_config_schema.interval_to_send_ping)));
+        ping_timer.async_wait
+            (
+            [this](const boost::system::error_code& ec)
+            {
+                handle_ping_timeout(ec);
+            });
     }
 
     virtual void start_stream_timeout_timer()
     {
         stream_timeout_timer.expires_from_now(boost::posix_time::millisec(10));
-        stream_timeout_timer.async_wait(
-            std::bind(&asio_client_connection::handle_stream_timeout_timer_timeout, this->shared_from_this()));
+        stream_timeout_timer.async_wait
+            (
+            [this](const boost::system::error_code& ec)
+            {
+                handle_stream_timeout_timer_timeout(ec);
+            });
     }
 
     virtual void restart_timeout_timer()
@@ -125,9 +138,13 @@ public:
 
     virtual void start_timing_script_request_timeout_timer(double duration)
     {
-        timing_script_request_timeout_timer.expires_from_now(boost::posix_time::millisec((size_t)(duration*1000)));
-        timing_script_request_timeout_timer.async_wait(
-            std::bind(&asio_client_connection::handle_timing_script_request_timeout, this->shared_from_this()));
+        timing_script_request_timeout_timer.expires_from_now(boost::posix_time::millisec((size_t)(duration * 1000)));
+        timing_script_request_timeout_timer.async_wait
+            (
+            [this](const boost::system::error_code& ec)
+            {
+                handle_timing_script_request_timeout(ec);
+            });
     }
 
     virtual void stop_timing_script_request_timeout_timer()
@@ -138,8 +155,12 @@ public:
     virtual void start_connect_timeout_timer()
     {
         connect_timer.expires_from_now(boost::posix_time::seconds(2));
-        connect_timer.async_wait(
-            std::bind(&asio_client_connection::handle_connect_timeout, this->shared_from_this()));
+        connect_timer.async_wait
+            (
+            [this](const boost::system::error_code& ec)
+            {
+                handle_connect_timeout(ec);
+            });
     }
 
     virtual void stop_connect_timeout_timer()
@@ -150,15 +171,23 @@ public:
     virtual void start_connect_to_preferred_host_timer()
     {
         connect_back_to_preferred_host_timer.expires_from_now(boost::posix_time::millisec(1000));
-        connect_back_to_preferred_host_timer.async_wait(
-            std::bind(&asio_client_connection::connect_to_prefered_host_timer_handler, this->shared_from_this()));
+        connect_back_to_preferred_host_timer.async_wait
+            (
+            [this](const boost::system::error_code& ec)
+            {
+                connect_to_prefered_host_timer_handler(ec);
+            });
     }
 
     virtual void start_delayed_reconnect_timer()
     {
         delayed_reconnect_timer.expires_from_now(boost::posix_time::millisec(1000));
-        delayed_reconnect_timer.async_wait(
-            std::bind(&asio_client_connection::delayed_reconnect_timer_handler, this->shared_from_this()));
+        delayed_reconnect_timer.async_wait
+            (
+            [this](const boost::system::error_code& ec)
+            {
+                handle_delayed_reconnect_timer_timeout(ec);
+            });
     }
 
     virtual void stop_conn_inactivity_timer()
@@ -184,7 +213,7 @@ public:
         {
             std::cerr << "===============disconnected from " << authority << "===============" << std::endl;
         }
-        
+
         record_client_end_time();
         streams.clear();
         session.reset();
@@ -203,11 +232,11 @@ public:
 
     virtual void clear_default_addr_info()
     {
-        stop();
     }
 
     virtual int connected()
     {
+        do_read();
         if (connection_made() != 0)
         {
             return -1;
@@ -217,9 +246,9 @@ public:
 
     virtual void feed_timing_script_request_timeout_timer()
     {
-        io_service.post(std::bind(&asio_client_connection::handle_con_activity_timer_timeout, this->shared_from_this()));
+        io_context.post(std::bind(&asio_client_connection::handle_con_activity_timer_timeout, this, boost::asio::error::timed_out));
     }
-    
+
     virtual int select_protocol_and_allocate_session()
     {
         // TODO:
@@ -273,12 +302,12 @@ public:
     virtual std::unique_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
                                                                  const std::string& dest_authority)
     {
-        // TODO: 
+        // TODO:
         /*
         if (dst_sch == "https")
         {
             auto new_client =
-                std::make_unique<asio_client_connection<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>>(io_service,
+                std::make_unique<asio_client_connection<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>>(io_context,
                                                                                                                  ssl_context, this->id, worker, req_todo, config, this, dst_sch, dest_authority);
             return new_client;
         }
@@ -286,7 +315,7 @@ public:
         */
         {
             auto new_client =
-                std::make_unique<asio_client_connection>(io_service, this->id, worker,
+                std::make_unique<asio_client_connection>(io_context, this->id, worker,
                                                          req_todo, config, this, dst_sch, dest_authority);
             return new_client;
         }
@@ -319,7 +348,7 @@ public:
 
         boost::asio::ip::tcp::resolver::query query(vec[0], port);
         dns_resolver.async_resolve(query,
-                                   boost::bind(&asio_client_connection::on_resolve_result_event, this->shared_from_this(),
+                                   boost::bind(&asio_client_connection::on_resolve_result_event, this,
                                                boost::asio::placeholders::error,
                                                boost::asio::placeholders::iterator));
         start_connect_timeout_timer();
@@ -352,16 +381,21 @@ public:
 
         boost::asio::ip::tcp::resolver::query query(vec[0], port);
         dns_resolver.async_resolve(query,
-                                   boost::bind(&asio_client_connection::on_probe_resolve_result_event, this->shared_from_this(),
+                                   boost::bind(&asio_client_connection::on_probe_resolve_result_event, this,
                                                boost::asio::placeholders::error,
                                                boost::asio::placeholders::iterator));
     }
 
 private:
 
-    bool timer_common_check(boost::asio::deadline_timer& timer, void (asio_client_connection::*handler)())
+    bool timer_common_check(boost::asio::deadline_timer& timer, const boost::system::error_code& ec, void (asio_client_connection::*handler)(const boost::system::error_code&))
     {
         if (is_client_stopped)
+        {
+            return false;
+        }
+
+        if (boost::asio::error::operation_aborted == ec)
         {
             return false;
         }
@@ -369,40 +403,45 @@ private:
         if (timer.expires_at() >
             boost::asio::deadline_timer::traits_type::now())
         {
-            timer.async_wait(
-                std::bind(handler, this->shared_from_this()));
+            timer.async_wait
+                (
+                [this, handler](const boost::system::error_code& ec)
+                {
+                    (this->*handler)(ec);
+                });
             return false;
         }
         return true;
     }
     virtual void start_rps_timer()
     {
-        rps_timer.expires_from_now(boost::posix_time::millisec(std::max(100, 1000/(int)rps)));
-        rps_timer.async_wait(
-            std::bind(&asio_client_connection::handle_rps_timer_timeout, this->shared_from_this()));
+        rps_timer.expires_from_now(boost::posix_time::millisec(std::max(100, 1000 / (int)rps)));
+        rps_timer.async_wait
+            (
+            [this](const boost::system::error_code& ec)
+            {
+                handle_rps_timer_timeout(ec);
+            });
     }
 
     virtual void conn_activity_timeout_handler()
     {
-        if (!timer_common_check(conn_activity_timer, &asio_client_connection::conn_activity_timeout_handler))
-        {
-            return;
-        }
         stop();
     }
 
-    virtual void delayed_reconnect_timer_handler()
+    virtual void handle_delayed_reconnect_timer_timeout(const boost::system::error_code& ec)
     {
-        if (!timer_common_check(delayed_reconnect_timer, &asio_client_connection::delayed_reconnect_timer_handler))
+        if (!timer_common_check(delayed_reconnect_timer, ec, &asio_client_connection::handle_delayed_reconnect_timer_timeout))
         {
             return;
         }
         reconnect_to_used_host();
     }
 
-    virtual void connect_to_prefered_host_timer_handler()
+    virtual void connect_to_prefered_host_timer_handler(const boost::system::error_code& ec)
     {
-        if (!timer_common_check(connect_back_to_preferred_host_timer, &asio_client_connection::connect_to_prefered_host_timer_handler))
+        if (!timer_common_check(connect_back_to_preferred_host_timer, ec,
+                                &asio_client_connection::connect_to_prefered_host_timer_handler))
         {
             return;
         }
@@ -421,9 +460,9 @@ private:
         }
     }
 
-    void handle_rps_timer_timeout()
+    void handle_rps_timer_timeout(const boost::system::error_code& ec)
     {
-        if (!timer_common_check(rps_timer, &asio_client_connection::handle_rps_timer_timeout))
+        if (!timer_common_check(rps_timer, ec, &asio_client_connection::handle_rps_timer_timeout))
         {
             return;
         }
@@ -431,18 +470,19 @@ private:
         on_rps_timer();
     }
 
-    void handle_timing_script_request_timeout()
+    void handle_timing_script_request_timeout(const boost::system::error_code& ec)
     {
-        if (!timer_common_check(timing_script_request_timeout_timer, &asio_client_connection::handle_timing_script_request_timeout))
+        if (!timer_common_check(timing_script_request_timeout_timer,
+                                ec, &asio_client_connection::handle_timing_script_request_timeout))
         {
             return;
         }
         timing_script_timeout_handler();
     }
 
-    void handle_stream_timeout_timer_timeout()
+    void handle_stream_timeout_timer_timeout(const boost::system::error_code& ec)
     {
-        if (!timer_common_check(stream_timeout_timer, &asio_client_connection::handle_stream_timeout_timer_timeout))
+        if (!timer_common_check(stream_timeout_timer, ec, &asio_client_connection::handle_stream_timeout_timer_timeout))
         {
             return;
         }
@@ -450,9 +490,9 @@ private:
         start_stream_timeout_timer();
     }
 
-    void handle_con_activity_timer_timeout()
+    void handle_con_activity_timer_timeout(const boost::system::error_code& ec)
     {
-        if (!timer_common_check(conn_activity_timer, &asio_client_connection::handle_con_activity_timer_timeout))
+        if (!timer_common_check(conn_activity_timer, ec, &asio_client_connection::handle_con_activity_timer_timeout))
         {
             return;
         }
@@ -460,9 +500,9 @@ private:
         start_conn_active_watcher();
     }
 
-    void handle_con_inactivity_timer_timeout()
+    void handle_con_inactivity_timer_timeout(const boost::system::error_code& ec)
     {
-        if (!timer_common_check(conn_activity_timer, &asio_client_connection::handle_con_inactivity_timer_timeout))
+        if (!timer_common_check(conn_activity_timer, ec, &asio_client_connection::handle_con_inactivity_timer_timeout))
         {
             return;
         }
@@ -471,9 +511,9 @@ private:
     }
 
 
-    void handle_ping_timeout()
+    void handle_ping_timeout(const boost::system::error_code& ec)
     {
-        if (!timer_common_check(ping_timer, &asio_client_connection::handle_ping_timeout))
+        if (!timer_common_check(ping_timer, ec, &asio_client_connection::handle_ping_timeout))
         {
             return;
         }
@@ -494,14 +534,17 @@ private:
     virtual void start_request_delay_execution_timer()
     {
         delay_request_execution_timer.expires_from_now(boost::posix_time::millisec(10));
-        delay_request_execution_timer.async_wait(
-            std::bind(&asio_client_connection::handle_request_execution_timer_timeout, this->shared_from_this()));
-
+        delay_request_execution_timer.async_wait
+            (
+            [this](const boost::system::error_code& ec)
+            {
+                handle_request_execution_timer_timeout(ec);
+            });
     }
 
-    void handle_request_execution_timer_timeout()
+    void handle_request_execution_timer_timeout(const boost::system::error_code& ec)
     {
-        if (!timer_common_check(delay_request_execution_timer, &asio_client_connection::handle_request_execution_timer_timeout))
+        if (!timer_common_check(delay_request_execution_timer, ec, &asio_client_connection::handle_request_execution_timer_timeout))
         {
             return;
         }
@@ -510,7 +553,7 @@ private:
     }
 
     void on_probe_connected_event(const boost::system::error_code& err,
-                            boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
+                                  boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
     {
         boost::system::error_code ignored_ec;
         client_probe_socket.lowest_layer().close(ignored_ec);
@@ -557,9 +600,9 @@ private:
         return client_socket;
     }
 
-    void handle_connect_timeout()
+    void handle_connect_timeout(const boost::system::error_code& ec)
     {
-        if (!timer_common_check(connect_timer, &asio_client_connection::handle_connect_timeout))
+        if (!timer_common_check(connect_timer, ec, &asio_client_connection::handle_connect_timeout))
         {
             return;
         }
@@ -572,11 +615,9 @@ private:
 
     void do_read()
     {
-        auto self = this->shared_from_this();
-
         client_socket.async_read_some(
             boost::asio::buffer(input_buffer),
-            [this, self](const boost::system::error_code & e,
+            [this](const boost::system::error_code & e,
                          std::size_t bytes_transferred)
         {
             if (e)
@@ -597,8 +638,6 @@ private:
 
     void do_write()
     {
-        auto self = this->shared_from_this();
-
         if (is_write_in_progress)
         {
             return;
@@ -620,7 +659,7 @@ private:
 
         boost::asio::async_write(
             client_socket, boost::asio::buffer(buffer, length),
-            [this, self](const boost::system::error_code & e, std::size_t)
+            [this](const boost::system::error_code & e, std::size_t)
         {
             if (e)
             {
@@ -630,9 +669,9 @@ private:
 
             is_write_in_progress = false;
 
-            auto func = std::move(write_clear_callback);
-            if (func)
+            if (write_clear_callback)
             {
+                auto func = std::move(write_clear_callback);
                 func();
             }
 
@@ -672,7 +711,7 @@ private:
             // will be tried until we successfully establish a connection.
             boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
             client_socket.lowest_layer().async_connect(endpoint,
-                                                       boost::bind(&asio_client_connection::on_connected_event, this->shared_from_this(),
+                                                       boost::bind(&asio_client_connection::on_connected_event, this,
                                                                    boost::asio::placeholders::error, ++endpoint_iterator));
         }
         else
@@ -682,7 +721,7 @@ private:
     }
 
     void on_probe_resolve_result_event(const boost::system::error_code& err,
-                                 boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
+                                       boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
     {
         if (!err)
         {
@@ -690,8 +729,8 @@ private:
             // will be tried until we successfully establish a connection.
             boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
             client_probe_socket.lowest_layer().async_connect(endpoint,
-                                                       boost::bind(&asio_client_connection::on_probe_connected_event, this->shared_from_this(),
-                                                                   boost::asio::placeholders::error, ++endpoint_iterator));
+                                                             boost::bind(&asio_client_connection::on_probe_connected_event, this,
+                                                                         boost::asio::placeholders::error, ++endpoint_iterator));
         }
         else
         {
@@ -699,7 +738,7 @@ private:
         }
     }
 
-    boost::asio::io_service& io_service;
+    boost::asio::io_context& io_context;
     boost::asio::ip::tcp::resolver dns_resolver;
     boost::asio::ip::tcp::socket client_socket;
     boost::asio::ip::tcp::socket client_probe_socket;
@@ -722,7 +761,7 @@ private:
     boost::asio::deadline_timer timing_script_request_timeout_timer;
     boost::asio::deadline_timer connect_back_to_preferred_host_timer;
     boost::asio::deadline_timer delayed_reconnect_timer;
-    
+
 
     std::function<void()> write_clear_callback;
 };

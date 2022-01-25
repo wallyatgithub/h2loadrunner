@@ -45,6 +45,14 @@ Client_Interface::Client_Interface(uint32_t id, Worker_Interface* wrker, size_t 
     this_client_id(),
     rps_duration_started()
 {
+    init_req_left();
+
+    slice_user_id();
+
+    init_lua_states();
+
+    update_this_in_dest_client_map();
+
 }
 
 int Client_Interface::connect()
@@ -364,6 +372,15 @@ void Client_Interface::brief_log_to_file(int32_t stream_id, bool success)
     }
 }
 
+void Client_Interface::init_req_left()
+{
+    if (req_todo == 0)   // this means infinite number of requests are to be made
+    {
+        // This ensures that number of requests are unbounded
+        // Just a positive number is fine, we chose the first positive number
+        req_left = 1;
+    }
+}
 
 void Client_Interface::init_connection_targert()
 {
@@ -1465,6 +1482,8 @@ void Client_Interface::on_prefered_host_up()
 
 int Client_Interface::connection_made()
 {
+    stop_connect_timeout_timer();
+
     auto ret = select_protocol_and_allocate_session();
     if (ret != 0)
     {

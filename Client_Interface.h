@@ -80,6 +80,7 @@ public:
     virtual void probe_and_connect_to(const std::string& schema, const std::string& authority) = 0;
 
     int connect();
+    void init_req_left();
     void reconnect_to_used_host();
     void on_prefered_host_up();
     bool reconnect_to_alt_addr();
