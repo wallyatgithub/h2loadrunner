@@ -271,6 +271,15 @@ void Client::restart_timeout_timer()
     }
 }
 
+void Client::setup_graceful_shutdown()
+{
+  auto write_clear_callback = [this]()
+  {
+      disconnect();
+  };
+  writefn = &Client::write_clear_with_callback;
+}
+
 void Client::disconnect()
 {
     cleanup_due_to_disconnect();

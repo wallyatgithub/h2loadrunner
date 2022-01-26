@@ -71,6 +71,7 @@ public:
     virtual int do_connect();
     virtual void start_delayed_reconnect_timer();
     virtual void probe_and_connect_to(const std::string& schema, const std::string& authority);
+    virtual void setup_graceful_shutdown();
 
     void report_tls_info();
 

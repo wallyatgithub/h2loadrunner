@@ -347,6 +347,7 @@ public:
         start_connect_timeout_timer();
         schema = dest_schema;
         authority = dest_authority;
+        is_client_stopped = false;
 
         return 0;
 
@@ -377,6 +378,14 @@ public:
                                    boost::bind(&asio_client_connection::on_probe_resolve_result_event, this,
                                                boost::asio::placeholders::error,
                                                boost::asio::placeholders::iterator));
+    }
+
+    virtual void setup_graceful_shutdown()
+    {
+        write_clear_callback = [this]()
+        {
+            disconnect();
+        };
     }
 
 private:
@@ -611,8 +620,24 @@ private:
         stop();
     }
 
+    void handle_connection_error()
+    {
+        fail();
+        if (reconnect_to_alt_addr())
+        {
+            return;
+        }
+        worker->free_client(this);
+        delete this;
+        return;
+    }
+    
     void do_read()
     {
+        if (is_client_stopped)
+        {
+            return;
+        }
         client_socket.async_read_some(
             boost::asio::buffer(input_buffer),
             [this](const boost::system::error_code & e,
@@ -620,14 +645,12 @@ private:
         {
             if (e)
             {
-                stop();
-                return;
+                return handle_connection_error();
             }
             restart_timeout_timer();
             if (session->on_read(input_buffer.data(), bytes_transferred) != 0)
             {
-                stop();
-                return;
+                return handle_connection_error();
             }
 
             do_read();
@@ -636,7 +659,7 @@ private:
 
     void do_write()
     {
-        if (is_write_in_progress)
+        if (is_write_in_progress || is_client_stopped)
         {
             return;
         }
@@ -661,8 +684,7 @@ private:
         {
             if (e)
             {
-                stop();
-                return;
+                return handle_connection_error();
             }
 
             is_write_in_progress = false;

@@ -632,7 +632,7 @@ void Client_Interface::timeout()
 {
     if (should_reconnect_on_disconnect())
     {
-        // it will need to reconnect anyway, why bother to disconnect
+        // it will need to re-connect anyway, why bother
         return;
     }
     process_timedout_streams();

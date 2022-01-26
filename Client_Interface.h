@@ -78,6 +78,7 @@ public:
     virtual int do_connect() = 0;
     virtual void start_delayed_reconnect_timer() = 0;
     virtual void probe_and_connect_to(const std::string& schema, const std::string& authority) = 0;
+    virtual void setup_graceful_shutdown() = 0;
 
     int connect();
     void cleanup_due_to_disconnect();
