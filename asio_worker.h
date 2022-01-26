@@ -39,23 +39,36 @@ public:
     {
     }
 
-    bool timer_common_check(boost::asio::deadline_timer& timer, void (asio_worker::*handler)())
+    bool timer_common_check(boost::asio::deadline_timer& timer, const boost::system::error_code& ec, void (asio_worker::*handler)(const boost::system::error_code&))
     {
+        if (boost::asio::error::operation_aborted == ec)
+        {
+            return false;
+        }
 
         if (timer.expires_at() >
             boost::asio::deadline_timer::traits_type::now())
         {
-            timer.async_wait(
-                std::bind(handler, this->shared_from_this()));
+            timer.async_wait
+                (
+                [this, handler](const boost::system::error_code& ec)
+                {
+                    (this->*handler)(ec);
+                });
             return false;
         }
         return true;
     }
+
     virtual void start_rate_mode_period_timer()
     {
         rate_mode_period_timer.expires_from_now(boost::posix_time::millisec((int64_t)(config->rate_period * 1000)));
-        rate_mode_period_timer.async_wait(
-            std::bind(&asio_worker::handle_rate_mode_period_timer_timeout, this));
+        rate_mode_period_timer.async_wait
+          (
+          [this](const boost::system::error_code& ec)
+          {
+              handle_rate_mode_period_timer_timeout(ec);
+          });
     }
 
     virtual void stop_rate_mode_period_timer()
@@ -63,9 +76,9 @@ public:
         rate_mode_period_timer.cancel();
     }
 
-    virtual void handle_rate_mode_period_timer_timeout()
+    virtual void handle_rate_mode_period_timer_timeout(const boost::system::error_code& ec)
     {
-        if (!timer_common_check(rate_mode_period_timer, &asio_worker::handle_rate_mode_period_timer_timeout))
+        if (!timer_common_check(rate_mode_period_timer, ec, &asio_worker::handle_rate_mode_period_timer_timeout))
         {
             return;
         }
@@ -76,8 +89,12 @@ public:
     virtual void start_warmup_timer()
     {
         warmup_timer.expires_from_now(boost::posix_time::millisec((int64_t)(config->warm_up_time * 1000)));
-        warmup_timer.async_wait(
-            std::bind(&asio_worker::handle_warmup_timer_timeout, this));
+        warmup_timer.async_wait
+          (
+          [this](const boost::system::error_code& ec)
+          {
+              handle_warmup_timer_timeout(ec);
+          });
     }
 
     virtual void stop_warmup_timer()
@@ -85,9 +102,9 @@ public:
         warmup_timer.cancel();
     }
 
-    virtual void handle_warmup_timer_timeout()
+    virtual void handle_warmup_timer_timeout(const boost::system::error_code& ec)
     {
-        if (!timer_common_check(warmup_timer, &asio_worker::handle_warmup_timer_timeout))
+        if (!timer_common_check(warmup_timer, ec, &asio_worker::handle_warmup_timer_timeout))
         {
             return;
         }
@@ -97,13 +114,17 @@ public:
     virtual void start_duration_timer()
     {
         duration_timer.expires_from_now(boost::posix_time::millisec((int64_t)(config->duration * 1000)));
-        duration_timer.async_wait(
-            std::bind(&asio_worker::handle_duration_timer_timeout, this));
+        duration_timer.async_wait
+          (
+          [this](const boost::system::error_code& ec)
+          {
+              handle_duration_timer_timeout(ec);
+          });
     }
 
-    virtual void handle_duration_timer_timeout()
+    virtual void handle_duration_timer_timeout(const boost::system::error_code& ec)
     {
-        if (!timer_common_check(duration_timer, &asio_worker::handle_duration_timer_timeout))
+        if (!timer_common_check(duration_timer, ec, &asio_worker::handle_duration_timer_timeout))
         {
             return;
         }
@@ -119,8 +140,12 @@ public:
     virtual void start_graceful_stop_timer()
     {
         duration_timer.expires_from_now(boost::posix_time::millisec(config->stream_timeout_in_ms));
-        duration_timer.async_wait(
-            std::bind(&asio_worker::handle_duration_timer_timeout, this));
+        duration_timer.async_wait
+          (
+          [this](const boost::system::error_code& ec)
+          {
+              handle_duration_timer_timeout(ec);
+          });
     }
 
 

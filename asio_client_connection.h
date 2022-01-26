@@ -78,6 +78,8 @@ public:
     virtual ~asio_client_connection()
     {
         std::cerr << "asio_client_connection deallocated: " << schema << "://" << authority << std::endl;
+        disconnect();
+        final_cleanup();
     }
 
     virtual void start_conn_active_watcher()
@@ -197,27 +199,18 @@ public:
 
     virtual int make_async_connection()
     {
-        return 0;
+        return connect_to_host(schema, authority);
     }
 
     virtual int do_connect()
     {
-        connect_to_host(schema, authority);
-        return 0;
+        return connect();
     }
 
     virtual void disconnect()
     {
         stop();
-        if (CLIENT_CONNECTED == state)
-        {
-            std::cerr << "===============disconnected from " << authority << "===============" << std::endl;
-        }
-
-        record_client_end_time();
-        streams.clear();
-        session.reset();
-        state = CLIENT_IDLE;
+        cleanup_due_to_disconnect();
     }
 
     virtual void start_warmup_timer()
@@ -355,7 +348,7 @@ public:
         schema = dest_schema;
         authority = dest_authority;
 
-        return 1;
+        return 0;
 
     }
 
@@ -388,6 +381,17 @@ public:
 
 private:
 
+    void restart_rps_timer()
+    {
+        rps_timer.expires_from_now(boost::posix_time::millisec(std::max(100, 1000 / (int)rps)));
+        rps_timer.async_wait
+            (
+            [this](const boost::system::error_code& ec)
+            {
+                handle_rps_timer_timeout(ec);
+            });
+    }
+
     bool timer_common_check(boost::asio::deadline_timer& timer, const boost::system::error_code& ec, void (asio_client_connection::*handler)(const boost::system::error_code&))
     {
         if (is_client_stopped)
@@ -415,13 +419,7 @@ private:
     }
     virtual void start_rps_timer()
     {
-        rps_timer.expires_from_now(boost::posix_time::millisec(std::max(100, 1000 / (int)rps)));
-        rps_timer.async_wait
-            (
-            [this](const boost::system::error_code& ec)
-            {
-                handle_rps_timer_timeout(ec);
-            });
+        restart_rps_timer();
     }
 
     virtual void conn_activity_timeout_handler()
@@ -466,7 +464,7 @@ private:
         {
             return;
         }
-        start_rps_timer();
+        restart_rps_timer();
         on_rps_timer();
     }
 

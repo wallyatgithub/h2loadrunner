@@ -691,6 +691,40 @@ void Client_Interface::record_client_start_time()
     cstat.client_start_time = std::chrono::steady_clock::now();
 }
 
+void Client_Interface::final_cleanup()
+{
+    worker->sample_client_stat(&cstat);
+    ++worker->client_smp.n;
+    for (auto& V : lua_states)
+    {
+        for (auto& L : V)
+        {
+            lua_close(L);
+        }
+    }
+    lua_states.clear();
+
+    std::string dest = schema;
+    dest.append("://").append(authority);
+    if (parent_client && parent_client->dest_clients.count(dest) && parent_client->dest_clients[dest] == this)
+    {
+        parent_client->dest_clients.erase(dest);
+    }
+}
+
+void Client_Interface::cleanup_due_to_disconnect()
+{
+    if (CLIENT_CONNECTED == state)
+    {
+        std::cerr << "===============disconnected from " << authority << "===============" << std::endl;
+    }
+    
+    record_client_end_time();
+    streams.clear();
+    session.reset();
+    state = CLIENT_IDLE;
+}
+
 void Client_Interface::record_client_end_time()
 {
     // Unlike client_start_time, we overwrite client_end_time.  This
@@ -1521,6 +1555,7 @@ int Client_Interface::connection_made()
     if (rps_mode())
     {
         start_rps_timer();
+        rps_duration_started = std::chrono::steady_clock::now();
     }
 
     start_stream_timeout_timer();

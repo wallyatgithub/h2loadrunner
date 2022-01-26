@@ -52,7 +52,7 @@ Client::Client(uint32_t id, Worker* wrker, size_t req_todo, Config* conf,
     init_timer_watchers();
 
     init_ares();
-
+    // TODO: move this to base class, but this calls a virtual func
     init_connection_targert();
 }
 
@@ -115,23 +115,7 @@ Client::~Client()
         SSL_free(ssl);
     }
 
-    worker->sample_client_stat(&cstat);
-    ++worker->client_smp.n;
-    for (auto& V : lua_states)
-    {
-        for (auto& L : V)
-        {
-            lua_close(L);
-        }
-    }
-    lua_states.clear();
-
-    std::string dest = schema;
-    dest.append("://").append(authority);
-    if (parent_client && parent_client->dest_clients.count(dest) && parent_client->dest_clients[dest] == this)
-    {
-        parent_client->dest_clients.erase(dest);
-    }
+    final_cleanup();
 
     ares_freeaddrinfo(ares_address);
 }
@@ -289,12 +273,8 @@ void Client::restart_timeout_timer()
 
 void Client::disconnect()
 {
-    if (CLIENT_CONNECTED == state)
-    {
-        std::cerr << "===============disconnected from " << authority << "===============" << std::endl;
-    }
-
-    record_client_end_time();
+    cleanup_due_to_disconnect();
+    
     auto stop_timer_watcher = [this](ev_timer & watcher)
     {
         if (ev_is_active(&watcher))
@@ -322,10 +302,7 @@ void Client::disconnect()
     stop_timer_watcher(delayed_reconnect_watcher);
     stop_timer_watcher(connect_to_preferred_host_watcher);
 
-    streams.clear();
-    session.reset();
     wb.reset();
-    state = CLIENT_IDLE;
     stop_io_watcher(wev);
     stop_io_watcher(rev);
     for (auto& it : ares_io_watchers)
@@ -400,7 +377,6 @@ void Client::start_rps_timer()
 {
     rps_watcher.repeat = std::max(0.1, 1. / rps);
     ev_timer_again(static_cast<Worker*>(worker)->loop, &rps_watcher);
-    rps_duration_started = std::chrono::steady_clock::now();
 }
 
 void Client::stop_rps_timer()
@@ -510,7 +486,7 @@ int Client::select_protocol_and_allocate_session()
 
 void Client::start_warmup_timer()
 {
-    ev_timer_start(static_cast<Worker*>(worker)->loop, &static_cast<Worker*>(worker)->warmup_watcher);
+    worker->start_warmup_timer();
 }
 void Client::stop_warmup_timer()
 {

@@ -53,17 +53,17 @@ void Worker::start_graceful_stop_timer()
 {
     ev_timer_init(&duration_watcher, duration_timeout_cb, ((double)config->stream_timeout_in_ms / 1000), 0.);
     duration_watcher.data = this;
-    ev_timer_start(loop, &duration_watcher);
+    start_duration_timer();
 }
 
 void Worker::start_warmup_timer()
 {
-    ev_timer_again(loop, &warmup_watcher);
+    ev_timer_start(loop, &warmup_watcher);
 }
 
 void Worker::start_duration_timer()
 {
-    ev_timer_again(loop, &duration_watcher);
+    ev_timer_start(loop, &duration_watcher);
 }
 
 void Worker::stop_rate_mode_period_timer()

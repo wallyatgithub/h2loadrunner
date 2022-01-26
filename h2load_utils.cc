@@ -62,14 +62,14 @@ std::unique_ptr<h2load::Worker_Interface> create_worker(uint32_t id, SSL_CTX* ss
 
     if (config.is_rate_mode())
     {
-        return std::make_unique<asio_worker>(id, nreqs, nclients, rate,
+        return std::make_unique<Worker>(id, ssl_ctx, nreqs, nclients, rate,
                                         max_samples, &config);
     }
     else
     {
         // Here rate is same as client because the rate_timeout callback
         // will be called only once
-        return std::make_unique<asio_worker>(id, nreqs, nclients, nclients,
+        return std::make_unique<Worker>(id, ssl_ctx, nreqs, nclients, nclients,
                                         max_samples, &config);
     }
 }
