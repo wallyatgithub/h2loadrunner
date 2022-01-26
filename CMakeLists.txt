@@ -97,7 +97,6 @@ set(H2LOAD_SOURCES
   asio_server_serve_mux.cc
   asio_server_request_handler.cc
   asio_server_tls_context.cc
-  asio_h2load.cc
   Client_Interface.cc
   Worker_Interface.cc
 )
