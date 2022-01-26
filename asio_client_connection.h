@@ -578,13 +578,7 @@ private:
         {
             if (connected() != 0)
             {
-                fail();
-                if (reconnect_to_alt_addr())
-                {
-                    return;
-                }
-                worker->free_client(this);
-                stop();
+                handle_connection_error();
             }
         }
         else if (endpoint_iterator != end_of_resolve_result)
