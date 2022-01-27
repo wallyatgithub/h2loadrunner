@@ -60,7 +60,6 @@ public:
           dns_resolver(io_ctx),
           client_socket(io_ctx),
           client_probe_socket(io_ctx),
-          input_buffer(8 * 1024, 0),
           output_buffers(2, std::vector<uint8_t>(64 * 1024, 0)),
           connect_timer(io_ctx),
           delay_request_execution_timer(io_ctx),
@@ -637,7 +636,27 @@ private:
         delete this;
         return;
     }
-    
+
+    void handle_read_complete(const boost::system::error_code & e, std::size_t bytes_transferred)
+    {
+        if (e)
+        {
+            if (e != boost::asio::error::operation_aborted)
+            {
+                std::cerr<<"read error_code:"<<e<<", bytes_transferred:"<<bytes_transferred<<std::endl;
+                return handle_connection_error();
+            }
+            return;
+        }
+        restart_timeout_timer();
+        if (session->on_read(input_buffer.data(), bytes_transferred) != 0)
+        {
+            return handle_connection_error();
+        }
+        
+        do_read();
+    }
+
     void do_read()
     {
         if (is_client_stopped)
@@ -646,22 +665,33 @@ private:
         }
         client_socket.async_read_some(
             boost::asio::buffer(input_buffer),
-            [this](const boost::system::error_code & e,
-                         std::size_t bytes_transferred)
+            [this](const boost::system::error_code & e, std::size_t bytes_transferred)
         {
-            if (e)
-            {
-                std::cerr<<"read error_code:"<<e<<", bytes_transferred:"<<bytes_transferred<<std::endl;
-                return handle_connection_error();
-            }
-            restart_timeout_timer();
-            if (session->on_read(input_buffer.data(), bytes_transferred) != 0)
-            {
-                return handle_connection_error();
-            }
-
-            do_read();
+            handle_read_complete(e, bytes_transferred);
         });
+    }
+
+    void handle_write_complete(const boost::system::error_code & e, std::size_t bytes_transferred)
+    {
+        if (e)
+        {
+            if (e != boost::asio::error::operation_aborted)
+            {
+                std::cerr<<"write error_code:"<<e<<", bytes_transferred:"<<bytes_transferred<<std::endl;
+                return handle_connection_error();
+            }
+            return;
+        }
+        
+        is_write_in_progress = false;
+        
+        if (write_clear_callback)
+        {
+            auto func = std::move(write_clear_callback);
+            func();
+        }
+        
+        do_write();
     }
 
     void do_write()
@@ -687,23 +717,9 @@ private:
 
         boost::asio::async_write(
             client_socket, boost::asio::buffer(buffer, length),
-            [this](const boost::system::error_code & e, std::size_t)
+            [this](const boost::system::error_code & e, std::size_t bytes_transferred)
         {
-            if (e)
-            {
-                std::cerr<<"write error_code:"<<e<<std::endl;
-                return handle_connection_error();
-            }
-
-            is_write_in_progress = false;
-
-            if (write_clear_callback)
-            {
-                auto func = std::move(write_clear_callback);
-                func();
-            }
-
-            do_write();
+            handle_write_complete(e, bytes_transferred);
         });
         is_write_in_progress = true;
     }
@@ -774,7 +790,7 @@ private:
     bool is_client_stopped = false;
 
     /// Buffer for incoming data.
-    std::vector<uint8_t> input_buffer;
+    std::array<uint8_t, 16_k> input_buffer;
     std::vector<std::vector<uint8_t>> output_buffers;
     size_t output_data_length = 0;
     size_t output_buffer_index = 0;
