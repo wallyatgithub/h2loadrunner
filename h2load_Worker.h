@@ -22,7 +22,6 @@ namespace h2load
 class Worker: public Worker_Interface
 {
 public:
-    // TODO:
     struct ev_loop* loop;
     MemchunkPool mcpool;
     SSL_CTX* ssl_ctx;

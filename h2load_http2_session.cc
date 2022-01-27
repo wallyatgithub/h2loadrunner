@@ -236,7 +236,7 @@ ssize_t send_callback(nghttp2_session* session, const uint8_t* data,
 {
     auto client = static_cast<Client_Interface*>(user_data);
 
-    return client->send_out_data(data, length);
+    return client->push_data_to_output_buffer(data, length);
 }
 } // namespace
 

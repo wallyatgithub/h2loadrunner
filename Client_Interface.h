@@ -44,7 +44,7 @@ public:
                      Client_Interface* parent = nullptr, const std::string& dest_schema = "",
                      const std::string& dest_authority = "");
     virtual ~Client_Interface() {}
-    virtual size_t send_out_data(const uint8_t* data, size_t length) = 0;
+    virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length) = 0;
     virtual void signal_write() = 0;
     virtual bool any_pending_data_to_write() = 0;
     virtual std::unique_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,

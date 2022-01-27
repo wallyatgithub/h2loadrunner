@@ -920,7 +920,7 @@ void Client::restore_connectfn()
     connectfn = &Client::connect;
 }
 
-size_t Client::send_out_data(const uint8_t* data, size_t length)
+size_t Client::push_data_to_output_buffer(const uint8_t* data, size_t length)
 {
     if (wb.rleft() >= BACKOFF_WRITE_BUFFER_THRES)
     {

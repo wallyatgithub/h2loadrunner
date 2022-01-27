@@ -84,6 +84,10 @@ public:
 
     virtual void start_conn_active_watcher()
     {
+        if (!config->conn_active_timeout > 0.)
+        {
+            return;
+        }
         conn_activity_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 * config->conn_active_timeout)));
         conn_activity_timer.async_wait
             (
@@ -95,24 +99,16 @@ public:
 
     virtual void start_conn_inactivity_watcher()
     {
+        if (!config->conn_inactivity_timeout > 0.)
+        {
+            return;
+        }
         conn_inactivity_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 * config->conn_inactivity_timeout)));
         conn_inactivity_timer.async_wait
             (
             [this](const boost::system::error_code& ec)
             {
                 handle_con_activity_timer_timeout(ec);
-            });
-    }
-
-    virtual void start_ping_watcher()
-    {
-        ping_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 *
-                                                                         config->json_config_schema.interval_to_send_ping)));
-        ping_timer.async_wait
-            (
-            [this](const boost::system::error_code& ec)
-            {
-                handle_ping_timeout(ec);
             });
     }
 
@@ -229,6 +225,7 @@ public:
 
     virtual int connected()
     {
+        is_client_stopped = false;
         do_read();
         if (connection_made() != 0)
         {
@@ -270,7 +267,7 @@ public:
         return 0;
     }
 
-    virtual size_t send_out_data(const uint8_t* data, size_t length)
+    virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length)
     {
         if (output_buffers[output_buffer_index].capacity() - output_data_length < length)
         {
@@ -347,7 +344,6 @@ public:
         start_connect_timeout_timer();
         schema = dest_schema;
         authority = dest_authority;
-        is_client_stopped = false;
 
         return 0;
 
@@ -389,6 +385,22 @@ public:
     }
 
 private:
+
+    void start_ping_watcher()
+    {
+        if (!config->json_config_schema.interval_to_send_ping > 0.)
+        {
+            return;
+        }
+        ping_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 *
+                                                                         config->json_config_schema.interval_to_send_ping)));
+        ping_timer.async_wait
+            (
+            [this](const boost::system::error_code& ec)
+            {
+                handle_ping_timeout(ec);
+            });
+    }
 
     void restart_rps_timer()
     {
@@ -592,7 +604,7 @@ private:
         }
         else
         {
-            std::cout << "Error: " << err.message() << "\n";
+            handle_connection_error();
         }
     }
 
@@ -639,6 +651,7 @@ private:
         {
             if (e)
             {
+                std::cerr<<"read error_code:"<<e<<", bytes_transferred:"<<bytes_transferred<<std::endl;
                 return handle_connection_error();
             }
             restart_timeout_timer();
@@ -678,6 +691,7 @@ private:
         {
             if (e)
             {
+                std::cerr<<"write error_code:"<<e<<std::endl;
                 return handle_connection_error();
             }
 

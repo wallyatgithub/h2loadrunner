@@ -229,7 +229,7 @@ int Http1Session::submit_request()
     auto req_stat = client_->get_req_stat(stream_req_counter_);
 
     client_->record_request_time(req_stat);
-    client_->send_out_data(reinterpret_cast<const uint8_t*>(req.c_str()), req.size());
+    client_->push_data_to_output_buffer(reinterpret_cast<const uint8_t*>(req.c_str()), req.size());
 
     if (config->data_fd == -1 || config->data_length == 0)
     {
@@ -313,7 +313,7 @@ int Http1Session::on_write()
 
         req_stat->data_offset += nread;
 
-        client_->send_out_data(buf.data(), nread);
+        client_->push_data_to_output_buffer(buf.data(), nread);
 
         if (config->verbose)
         {
@@ -391,7 +391,7 @@ int Http1Session::_submit_request()
     auto req_stat = client_->get_req_stat(stream_req_counter_);
 
     client_->record_request_time(req_stat);
-    client_->send_out_data(reinterpret_cast<const uint8_t*>(req.c_str()), req.size());
+    client_->push_data_to_output_buffer(reinterpret_cast<const uint8_t*>(req.c_str()), req.size());
 
     if (data.req_payload->empty())
     {
@@ -424,7 +424,7 @@ int Http1Session::_on_write()
     {
         size_t send_size = stream_buffer.size() > 16_k ? 16_k : stream_buffer.size();
 
-        client_->send_out_data(reinterpret_cast<const uint8_t*>(stream_buffer.c_str()), send_size);
+        client_->push_data_to_output_buffer(reinterpret_cast<const uint8_t*>(stream_buffer.c_str()), send_size);
 
         if (config->verbose)
         {
