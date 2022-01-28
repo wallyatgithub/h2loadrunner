@@ -270,6 +270,8 @@ public:
     {
         if (output_buffers[output_buffer_index].capacity() - output_data_length < length)
         {
+        std::cerr<<"output_buffer_index: "<<output_buffer_index<<", capacity: "<<output_buffers[output_buffer_index].capacity()
+                 <<", needed capacity: "<< output_data_length + length<<std::endl;
             output_buffers[output_buffer_index].reserve(output_data_length + length);
         }
         std::memcpy(output_buffers[output_buffer_index].data() + output_data_length, data, length);
@@ -278,9 +280,12 @@ public:
     }
     virtual void signal_write()
     {
+        //write_signaled = true;
+
         if (!is_write_in_progress)
         {
-            do_write();
+            io_context.post([this](){do_write();});
+            //do_write();
         }
     }
     virtual bool any_pending_data_to_write()
@@ -414,12 +419,12 @@ private:
 
     bool timer_common_check(boost::asio::deadline_timer& timer, const boost::system::error_code& ec, void (asio_client_connection::*handler)(const boost::system::error_code&))
     {
-        if (is_client_stopped)
+        if (boost::asio::error::operation_aborted == ec)
         {
             return false;
         }
 
-        if (boost::asio::error::operation_aborted == ec)
+        if (is_client_stopped)
         {
             return false;
         }
@@ -592,18 +597,22 @@ private:
                 handle_connection_error();
             }
         }
-        else if (endpoint_iterator != end_of_resolve_result)
-        {
-            // The connection failed. Try the next endpoint in the list.
-            client_socket.close();
-            boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
-            client_socket.async_connect(endpoint,
-                                        boost::bind(&asio_client_connection::on_connected_event, this,
-                                                    boost::asio::placeholders::error, ++endpoint_iterator));
-        }
         else
         {
-            handle_connection_error();
+            std::cerr<<__FUNCTION__<<" err: "<<err<<std::endl;
+            if (endpoint_iterator != end_of_resolve_result)
+            {
+                // The connection failed. Try the next endpoint in the list.
+                client_socket.close();
+                boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
+                client_socket.async_connect(endpoint,
+                                            boost::bind(&asio_client_connection::on_connected_event, this,
+                                                        boost::asio::placeholders::error, ++endpoint_iterator));
+            }
+            else
+            {
+                handle_connection_error();
+            }
         }
     }
 
@@ -627,6 +636,7 @@ private:
 
     void handle_connection_error()
     {
+        std::cerr<<__FUNCTION__ <<":" << schema << "://" << authority << std::endl;
         fail();
         if (reconnect_to_alt_addr())
         {
@@ -641,6 +651,11 @@ private:
     {
         if (e)
         {
+            if (boost::asio::error::misc_errors::eof == e)
+            {
+                std::cerr<<"EOF, remote disconnected: " << schema << "://" << authority << std::endl;
+            }
+
             if (e != boost::asio::error::operation_aborted)
             {
                 std::cerr<<"read error_code:"<<e<<", bytes_transferred:"<<bytes_transferred<<std::endl;
@@ -701,6 +716,11 @@ private:
             return;
         }
 
+        //if (!write_signaled)
+        //{
+        //    return;
+        //}
+
         session->on_write();
         if (output_data_length <= 0)
         {
@@ -712,16 +732,16 @@ private:
         auto& buffer = output_buffers[output_buffer_index];
         auto length = output_data_length;
 
-        output_data_length = 0;
-        output_buffer_index = ((++output_buffer_index) % output_buffers.size());
-
         boost::asio::async_write(
-            client_socket, boost::asio::buffer(buffer, length),
+            client_socket, boost::asio::buffer(buffer.data(), length),
             [this](const boost::system::error_code & e, std::size_t bytes_transferred)
         {
             handle_write_complete(e, bytes_transferred);
         });
         is_write_in_progress = true;
+        write_signaled = false;
+        output_data_length = 0;
+        output_buffer_index = ((++output_buffer_index) % output_buffers.size());
     }
 
     void stop()
@@ -730,7 +750,7 @@ private:
         {
             return;
         }
-
+        std::cerr<<__FUNCTION__ <<":" << schema << "://" << authority << std::endl;
         is_client_stopped = true;
         boost::system::error_code ignored_ec;
         client_socket.lowest_layer().close(ignored_ec);
@@ -788,6 +808,7 @@ private:
     boost::asio::ip::tcp::socket client_probe_socket;
     bool is_write_in_progress = false;
     bool is_client_stopped = false;
+    bool write_signaled = false;
 
     /// Buffer for incoming data.
     std::array<uint8_t, 16_k> input_buffer;
