@@ -60,7 +60,7 @@ public:
           dns_resolver(io_ctx),
           client_socket(io_ctx),
           client_probe_socket(io_ctx),
-          output_buffers(2, std::vector<uint8_t>(64 * 1024, 0)),
+          output_buffers(2, std::vector<uint8_t>(16 * 1024, 0)),
           connect_timer(io_ctx),
           delay_request_execution_timer(io_ctx),
           rps_timer(io_ctx),
@@ -270,9 +270,8 @@ public:
     {
         if (output_buffers[output_buffer_index].capacity() - output_data_length < length)
         {
-        std::cerr<<"output_buffer_index: "<<output_buffer_index<<", capacity: "<<output_buffers[output_buffer_index].capacity()
-                 <<", needed capacity: "<< output_data_length + length<<std::endl;
             output_buffers[output_buffer_index].reserve(output_data_length + length);
+            //return NGHTTP2_ERR_WOULDBLOCK;
         }
         std::memcpy(output_buffers[output_buffer_index].data() + output_data_length, data, length);
         output_data_length += length;
@@ -280,13 +279,8 @@ public:
     }
     virtual void signal_write()
     {
-        //write_signaled = true;
-
-        if (!is_write_in_progress)
-        {
-            io_context.post([this](){do_write();});
-            //do_write();
-        }
+        io_context.post([this](){handle_write_signal();});
+        //handle_write_signal();
     }
     virtual bool any_pending_data_to_write()
     {
@@ -643,7 +637,7 @@ private:
             return;
         }
         worker->free_client(this);
-        delete this;
+        //delete this;
         return;
     }
 
@@ -697,51 +691,47 @@ private:
             }
             return;
         }
-        
+
+        restart_timeout_timer();
+
         is_write_in_progress = false;
-        
+
         if (write_clear_callback)
         {
             auto func = std::move(write_clear_callback);
             func();
         }
-        
+
         do_write();
     }
 
+    void handle_write_signal()
+	{
+		session->on_write();
+		do_write();
+	}
+
+
     void do_write()
     {
-        if (is_write_in_progress || is_client_stopped)
+        if (is_write_in_progress || is_client_stopped || output_data_length <= 0)
         {
             return;
         }
-
-        //if (!write_signaled)
-        //{
-        //    return;
-        //}
-
-        session->on_write();
-        if (output_data_length <= 0)
-        {
-            return;
-        }
-
-        restart_timeout_timer();
 
         auto& buffer = output_buffers[output_buffer_index];
         auto length = output_data_length;
 
-        boost::asio::async_write(
+		is_write_in_progress = true;
+        output_data_length = 0;
+        output_buffer_index = ((++output_buffer_index) % output_buffers.size());
+
+		boost::asio::async_write(
             client_socket, boost::asio::buffer(buffer.data(), length),
             [this](const boost::system::error_code & e, std::size_t bytes_transferred)
         {
             handle_write_complete(e, bytes_transferred);
         });
-        is_write_in_progress = true;
-        write_signaled = false;
-        output_data_length = 0;
-        output_buffer_index = ((++output_buffer_index) % output_buffers.size());
     }
 
     void stop()
@@ -808,10 +798,9 @@ private:
     boost::asio::ip::tcp::socket client_probe_socket;
     bool is_write_in_progress = false;
     bool is_client_stopped = false;
-    bool write_signaled = false;
 
     /// Buffer for incoming data.
-    std::array<uint8_t, 16_k> input_buffer;
+    std::array<uint8_t, 8_k> input_buffer;
     std::vector<std::vector<uint8_t>> output_buffers;
     size_t output_data_length = 0;
     size_t output_buffer_index = 0;
