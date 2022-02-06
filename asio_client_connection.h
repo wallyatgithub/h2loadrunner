@@ -379,6 +379,9 @@ public:
         write_clear_callback = [this]()
         {
             disconnect();
+            worker->free_client(this);
+            delete this;
+            return false;
         };
     }
 
@@ -544,6 +547,7 @@ private:
         {
             disconnect();
             connect_to_host(schema, authority);
+            return true;
         };
         terminate_session();
     }
@@ -699,7 +703,11 @@ private:
         if (write_clear_callback)
         {
             auto func = std::move(write_clear_callback);
-            func();
+            auto write_allowed = func();
+            if (!write_allowed)
+            {
+                return;
+            }
         }
 
         do_write();
@@ -817,7 +825,7 @@ private:
     boost::asio::deadline_timer delayed_reconnect_timer;
 
 
-    std::function<void()> write_clear_callback;
+    std::function<bool(void)> write_clear_callback;
 };
 
 
