@@ -26,9 +26,9 @@ Worker::~Worker()
     ev_loop_destroy(loop);
 }
 
-std::unique_ptr<Client_Interface> Worker::create_new_client(size_t req_todo)
+std::shared_ptr<Client_Interface> Worker::create_new_client(size_t req_todo)
 {
-    return std::make_unique<Client>(next_client_id++, this, req_todo, (config));
+    return std::make_shared<Client>(next_client_id++, this, req_todo, (config));
 }
 
 void Worker::init_timers()

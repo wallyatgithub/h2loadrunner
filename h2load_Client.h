@@ -42,7 +42,7 @@ public:
     virtual void signal_write() ;
     virtual bool any_pending_data_to_write();
     virtual void start_conn_active_watcher();
-    virtual std::unique_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
+    virtual std::shared_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
                                                                  const std::string& dest_authority);
     virtual int connect_to_host(const std::string& schema, const std::string& authority);
     virtual void disconnect();

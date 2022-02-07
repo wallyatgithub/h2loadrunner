@@ -1812,9 +1812,9 @@ Client_Interface* Client_Interface::find_or_create_dest_client(Request_Data& req
         if (it == dest_clients.end())
         {
             auto new_client = create_dest_client(*request_to_send.schema, *request_to_send.authority);
+            worker->check_in_client(new_client);
             dest_clients[dest] = new_client.get();
             new_client->connect_to_host(new_client->schema, new_client->authority);
-            new_client.release();
         }
         return dest_clients[dest];
     }

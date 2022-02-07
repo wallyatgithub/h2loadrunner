@@ -16,7 +16,7 @@ namespace h2load
 
 
 Worker_Interface::Worker_Interface(uint32_t id, size_t req_todo, size_t nclients,
-               size_t rate, size_t max_samples, Config* config)
+                                   size_t rate, size_t max_samples, Config* config)
     : stats(req_todo, nclients),
       config(config),
       id(id),
@@ -103,6 +103,7 @@ void Worker_Interface::free_client(Client_Interface* deleted_client)
             return;
         }
     }
+    check_out_client(deleted_client);
 }
 
 void Worker_Interface::run()
@@ -124,10 +125,7 @@ void Worker_Interface::run()
                 std::cerr << "client could not connect to host" << std::endl;
                 client->fail();
             }
-            else
-            {
-                client.release();
-            }
+            check_in_client(client);
         }
     }
     else if (config->is_rate_mode())
@@ -150,7 +148,7 @@ void Worker_Interface::rate_period_timeout_handler()
     auto nclients_per_second = rate;
     auto conns_remaining = nclients - nconns_made;
     auto nclients = std::min(nclients_per_second, conns_remaining);
-    
+
     for (size_t i = 0; i < nclients; ++i)
     {
         auto req_todo = nreqs_per_client;
@@ -160,9 +158,9 @@ void Worker_Interface::rate_period_timeout_handler()
             --nreqs_rem;
         }
         auto client = create_new_client(req_todo);
-    
+
         ++nconns_made;
-    
+
         if (client->do_connect() != 0)
         {
             std::cerr << "client could not connect to host" << std::endl;
@@ -172,12 +170,9 @@ void Worker_Interface::rate_period_timeout_handler()
         {
             if (config->is_timing_based_mode())
             {
-                clients.push_back(client.release());
+                clients.push_back(client.get());
             }
-            else
-            {
-                client.release();
-            }
+            check_in_client(client);
         }
         report_rate_progress();
     }
@@ -225,7 +220,7 @@ void Worker_Interface::warmup_timeout_handler()
               << "." << std::endl;
     assert(stats.req_started == 0);
     assert(stats.req_done == 0);
-    
+
     for (auto client : clients)
     {
         if (client)
@@ -235,15 +230,15 @@ void Worker_Interface::warmup_timeout_handler()
             assert(client->req_inflight == 0);
             assert(client->req_started == 0);
             assert(client->req_done == 0);
-    
+
             client->record_client_start_time();
             client->clear_connect_times();
             client->record_connect_start_time();
         }
     }
-    
+
     current_phase = Phase::MAIN_DURATION;
-    
+
     start_duration_timer();
 }
 
@@ -298,6 +293,15 @@ void Worker_Interface::report_rate_progress()
 
     std::cerr << "progress: " << nconns_made * 100 / nclients
               << "% of clients started" << std::endl;
+}
+
+void Worker_Interface::check_in_client(std::shared_ptr<Client_Interface> client)
+{
+    managed_clients[client.get()] = client;
+}
+void Worker_Interface::check_out_client(Client_Interface* client)
+{
+    managed_clients.erase(client);
 }
 
 }

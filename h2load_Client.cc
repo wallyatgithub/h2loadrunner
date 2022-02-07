@@ -796,10 +796,10 @@ void Client::signal_write()
     ev_io_start(static_cast<Worker*>(worker)->loop, &wev);
 }
 
-std::unique_ptr<Client_Interface> Client::create_dest_client(const std::string& dst_sch,
+std::shared_ptr<Client_Interface> Client::create_dest_client(const std::string& dst_sch,
                                                              const std::string& dest_authority)
 {
-    auto new_client = std::make_unique<Client>(this->id, static_cast<Worker*>(worker), this->req_todo, this->config,
+    auto new_client = std::make_shared<Client>(this->id, static_cast<Worker*>(worker), this->req_todo, this->config,
                                                this, dst_sch, dest_authority);
     return new_client;
 }

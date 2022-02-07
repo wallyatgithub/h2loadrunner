@@ -167,7 +167,6 @@ void writecb(struct ev_loop* loop, ev_io* w, int revents)
         {
             client->fail();
             client->worker->free_client(client);
-            delete client;
             return;
         }
         return;
@@ -180,7 +179,6 @@ void writecb(struct ev_loop* loop, ev_io* w, int revents)
             return;
         }
         client->worker->free_client(client);
-        delete client;
     }
 }
 
@@ -199,7 +197,6 @@ void readcb(struct ev_loop* loop, ev_io* w, int revents)
             return;
         }
         client->worker->free_client(client);
-        delete client;
         return;
     }
     writecb(loop, &client->wev, revents);

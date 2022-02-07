@@ -42,7 +42,7 @@ public:
     virtual void stop_duration_timer();
     virtual void run_event_loop();
     virtual void start_graceful_stop_timer();
-    virtual std::unique_ptr<Client_Interface> create_new_client(size_t req_todo);
+    virtual std::shared_ptr<Client_Interface> create_new_client(size_t req_todo);
 
 
     void init_timers();

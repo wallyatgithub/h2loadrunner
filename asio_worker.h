@@ -24,9 +24,9 @@ public:
         io_context.run();
     }
 
-    virtual std::unique_ptr<Client_Interface> create_new_client(size_t req_todo)
+    virtual std::shared_ptr<Client_Interface> create_new_client(size_t req_todo)
     {
-        return std::make_unique<asio_client_connection>(io_context, next_client_id++, this, req_todo, (config));
+        return std::make_shared<asio_client_connection>(io_context, next_client_id++, this, req_todo, (config));
     }
 
 

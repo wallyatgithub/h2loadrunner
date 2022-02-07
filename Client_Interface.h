@@ -47,7 +47,7 @@ public:
     virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length) = 0;
     virtual void signal_write() = 0;
     virtual bool any_pending_data_to_write() = 0;
-    virtual std::unique_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
+    virtual std::shared_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
                                                                  const std::string& dest_authority) = 0;
 
 
