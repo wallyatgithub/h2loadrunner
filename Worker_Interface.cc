@@ -100,7 +100,7 @@ void Worker_Interface::free_client(Client_Interface* deleted_client)
             clients[index]->req_todo = clients[index]->req_done;
             stats.req_todo += clients[index]->req_todo;
             clients[index] = NULL;
-            return;
+            break;
         }
     }
     check_out_client(deleted_client);
