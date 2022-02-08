@@ -30,7 +30,6 @@ Client::Client(uint32_t id, Worker* wrker, size_t req_todo, Config* conf,
                const std::string& dest_authority)
     : Client_Interface(id, wrker, req_todo, conf, parent, dest_schema, dest_authority),
       wb(&static_cast<Worker*>(worker)->mcpool),
-      ssl(nullptr),
       next_addr(conf->addrs),
       current_addr(nullptr),
       ares_address(nullptr),
@@ -370,18 +369,6 @@ void Client::graceful_restart_connection()
     terminate_session();
 }
 
-void Client::report_tls_info()
-{
-    if (worker->id == 0 && !worker->tls_info_report_done)
-    {
-        worker->tls_info_report_done = true;
-        auto cipher = SSL_get_current_cipher(ssl);
-        std::cerr << "TLS Protocol: " << tls::get_tls_protocol(ssl) << "\n"
-                  << "Cipher: " << SSL_CIPHER_get_name(cipher) << std::endl;
-        print_server_tmp_key(ssl);
-    }
-}
-
 void Client::start_rps_timer()
 {
     rps_watcher.repeat = std::max(0.1, 1. / rps);
@@ -397,100 +384,6 @@ void Client::start_stream_timeout_timer()
 {
     stream_timeout_watcher.repeat = 0.01;
     ev_timer_again(static_cast<Worker*>(worker)->loop, &stream_timeout_watcher);
-}
-
-int Client::select_protocol_and_allocate_session()
-{
-    if (ssl)
-    {
-        report_tls_info();
-
-        const unsigned char* next_proto = nullptr;
-        unsigned int next_proto_len;
-
-#ifndef OPENSSL_NO_NEXTPROTONEG
-        SSL_get0_next_proto_negotiated(ssl, &next_proto, &next_proto_len);
-#endif // !OPENSSL_NO_NEXTPROTONEG
-#if OPENSSL_VERSION_NUMBER >= 0x10002000L
-        if (next_proto == nullptr)
-        {
-            SSL_get0_alpn_selected(ssl, &next_proto, &next_proto_len);
-        }
-#endif // OPENSSL_VERSION_NUMBER >= 0x10002000L
-
-        if (next_proto)
-        {
-            auto proto = StringRef {next_proto, next_proto_len};
-            if (util::check_h2_is_selected(proto))
-            {
-                session = std::make_unique<Http2Session>(this);
-            }
-            else if (util::streq(NGHTTP2_H1_1, proto))
-            {
-                session = std::make_unique<Http1Session>(this);
-            }
-
-            // Just assign next_proto to selected_proto anyway to show the
-            // negotiation result.
-            selected_proto = proto.str();
-        }
-        else
-        {
-            std::cerr << "No protocol negotiated. Fallback behaviour may be activated"
-                      << std::endl;
-
-            for (const auto& proto : config->npn_list)
-            {
-                if (util::streq(NGHTTP2_H1_1_ALPN, StringRef {proto}))
-                {
-                    std::cerr
-                            << "Server does not support NPN/ALPN. Falling back to HTTP/1.1."
-                            << std::endl;
-                    session = std::make_unique<Http1Session>(this);
-                    selected_proto = NGHTTP2_H1_1.str();
-                    break;
-                }
-            }
-        }
-
-        if (!selected_proto.empty())
-        {
-            print_app_info();
-        }
-
-        if (!session)
-        {
-            std::cerr
-                    << "No supported protocol was negotiated. Supported protocols were:"
-                    << std::endl;
-            for (const auto& proto : config->npn_list)
-            {
-                std::cerr << proto.substr(1) << std::endl;
-            }
-            disconnect();
-            return -1;
-        }
-    }
-    else
-    {
-        switch (config->no_tls_proto)
-        {
-            case Config::PROTO_HTTP2:
-                session = std::make_unique<Http2Session>(this);
-                selected_proto = NGHTTP2_CLEARTEXT_PROTO_VERSION_ID;
-                break;
-            case Config::PROTO_HTTP1_1:
-                session = std::make_unique<Http1Session>(this);
-                selected_proto = NGHTTP2_H1_1.str();
-                break;
-            default:
-                // unreachable
-                assert(0);
-        }
-        print_app_info();
-    }
-
-    return 0;
 }
 
 void Client::start_warmup_timer()

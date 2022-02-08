@@ -23,6 +23,7 @@ extern "C" {
 #include "template.h"
 #include "util.h"
 #include "config_schema.h"
+#include "tls.h"
 
 #include <nghttp2/asio_http2_server.h>
 
@@ -1608,4 +1609,144 @@ void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& co
     }
 }
 
+void load_ca_cert(SSL_CTX* ctx, const std::string& pem_content)
+{
+    std::stringstream strm;
+    strm << "/tmp/cacert" << ::getpid() << ".pem";
+    std::string fileName = strm.str();
+    std::ofstream tmpFile;
+    tmpFile.open(fileName);
+    tmpFile << pem_content << std::flush;
+    tmpFile.close();
+    if (!SSL_CTX_load_verify_locations(ctx, fileName.c_str(), NULL))
+    {
+        std::cerr << "SSL_CTX_load_verify_locations failed: " << get_tls_error_string() << std::endl;
+    }
+    std::remove(fileName.c_str());
+}
 
+void load_cert(SSL_CTX* ctx, const std::string& pem_content)
+{
+    std::stringstream strm;
+    strm << "/tmp/cert" << ::getpid() << ".pem";
+    std::string fileName = strm.str();
+    std::ofstream tmpFile;
+    tmpFile.open(fileName);
+    tmpFile << pem_content << std::flush;
+    tmpFile.close();
+    if (!SSL_CTX_use_certificate_chain_file(ctx, fileName.c_str()))
+    {
+        std::cerr << "SSL_CTX_use_certificate_chain_file failed" << get_tls_error_string() << std::endl;
+    }
+    std::remove(fileName.c_str());
+}
+
+void load_private_key(SSL_CTX* ctx, const std::string& pem_content)
+{
+    std::stringstream strm;
+    strm << "/tmp/priKey" << ::getpid() << ".pem";
+    std::string fileName = strm.str();
+    std::ofstream tmpFile;
+    tmpFile.open(fileName);
+    tmpFile << pem_content << std::flush;
+    tmpFile.close();
+    if (!SSL_CTX_use_PrivateKey_file(ctx, fileName.c_str(), SSL_FILETYPE_PEM))
+    {
+        std::cerr << "SSL_CTX_use_PrivateKey_file failed" << get_tls_error_string() << std::endl;
+    }
+    std::remove(fileName.c_str());
+}
+
+bool check_key_cert_consistency(SSL_CTX* ctx)
+{
+    if (SSL_CTX_check_private_key(ctx) != 1)
+    {
+        std::cerr << "SSL_CTX_check_private_key failed" << get_tls_error_string() << std::endl;
+        return false;
+    }
+    return true;
+}
+
+void set_cert_verification_mode(SSL_CTX* ctx, uint32_t certificate_verification_mode)
+{
+    int mode = SSL_VERIFY_NONE;
+    switch (certificate_verification_mode)
+    {
+        case 0:
+        {
+            mode = SSL_VERIFY_NONE;
+            break;
+        }
+        case 1:
+        {
+            mode = SSL_VERIFY_PEER;
+            break;
+        }
+        default:
+        {
+            mode = SSL_VERIFY_NONE;
+        }
+    }
+    SSL_CTX_set_verify(ctx, mode, NULL);
+}
+
+void setup_SSL_CTX(SSL_CTX * ssl_ctx, Config & config)
+{
+    auto ssl_opts = (SSL_OP_ALL & ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS) |
+                    SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION |
+                    SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION;
+
+    SSL_CTX_set_options(ssl_ctx, ssl_opts);
+    SSL_CTX_set_mode(ssl_ctx, SSL_MODE_AUTO_RETRY);
+    SSL_CTX_set_mode(ssl_ctx, SSL_MODE_RELEASE_BUFFERS);
+
+    if (config.json_config_schema.client_cert.size() && config.json_config_schema.private_key.size())
+    {
+        load_cert(ssl_ctx, config.json_config_schema.client_cert);
+        load_private_key(ssl_ctx, config.json_config_schema.private_key);
+        check_key_cert_consistency(ssl_ctx);
+    }
+    if (config.json_config_schema.ca_cert.size())
+    {
+        load_ca_cert(ssl_ctx, config.json_config_schema.ca_cert);
+    }
+
+    set_cert_verification_mode(ssl_ctx, config.json_config_schema.cert_verification_mode);
+
+    auto max_tls_version = nghttp2::tls::NGHTTP2_TLS_MAX_VERSION;
+    if (config.json_config_schema.max_tls_version == "TLSv1.2")
+    {
+        max_tls_version = TLS1_2_VERSION;
+    }
+
+    if (nghttp2::tls::ssl_ctx_set_proto_versions(
+            ssl_ctx, nghttp2::tls::NGHTTP2_TLS_MIN_VERSION,
+            max_tls_version) != 0)
+    {
+        std::cerr << "Could not set TLS versions" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    if (SSL_CTX_set_cipher_list(ssl_ctx, config.ciphers.c_str()) == 0)
+    {
+        std::cerr << "SSL_CTX_set_cipher_list with " << config.ciphers
+                  << " failed: " << ERR_error_string(ERR_get_error(), nullptr)
+                  << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+#ifndef OPENSSL_NO_NEXTPROTONEG
+    SSL_CTX_set_next_proto_select_cb(ssl_ctx, client_select_next_proto_cb,
+                                     &config);
+#endif // !OPENSSL_NO_NEXTPROTONEG
+
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+    std::vector<unsigned char> proto_list;
+    for (const auto& proto : config.npn_list)
+    {
+        std::copy_n(proto.c_str(), proto.size(), std::back_inserter(proto_list));
+    }
+
+    SSL_CTX_set_alpn_protos(ssl_ctx, proto_list.data(), proto_list.size());
+#endif // OPENSSL_VERSION_NUMBER >= 0x10002000L
+}

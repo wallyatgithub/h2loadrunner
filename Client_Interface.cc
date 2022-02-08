@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <string>
 
+#include "tls.h"
 #include "Client_Interface.h"
 #include "h2load_utils.h"
 
@@ -43,7 +44,8 @@ Client_Interface::Client_Interface(uint32_t id, Worker_Interface* wrker, size_t 
     authority(dest_authority),
     rps(conf->rps),
     this_client_id(),
-    rps_duration_started()
+    rps_duration_started(),
+    ssl(nullptr)
 {
     init_req_left();
 
@@ -1536,7 +1538,7 @@ int Client_Interface::connection_made()
     {
         while (requests_to_submit.size())
         {
-            // re-push to parent for to be scheduled immediately
+            // re-push to parent to be scheduled immediately
             parent_client->requests_to_submit.push_front(std::move(requests_to_submit.back()));
             requests_to_submit.pop_back();
             if (!rps_mode())
@@ -2004,6 +2006,112 @@ void Client_Interface::print_app_info()
     {
         worker->app_info_report_done = true;
         std::cerr << "Application protocol: " << selected_proto << std::endl;
+    }
+}
+
+int Client_Interface::select_protocol_and_allocate_session()
+{
+    if (ssl)
+    {
+        report_tls_info();
+
+        const unsigned char* next_proto = nullptr;
+        unsigned int next_proto_len;
+
+#ifndef OPENSSL_NO_NEXTPROTONEG
+        SSL_get0_next_proto_negotiated(ssl, &next_proto, &next_proto_len);
+#endif // !OPENSSL_NO_NEXTPROTONEG
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+        if (next_proto == nullptr)
+        {
+            SSL_get0_alpn_selected(ssl, &next_proto, &next_proto_len);
+        }
+#endif // OPENSSL_VERSION_NUMBER >= 0x10002000L
+
+        if (next_proto)
+        {
+            auto proto = StringRef {next_proto, next_proto_len};
+            if (util::check_h2_is_selected(proto))
+            {
+                session = std::make_unique<Http2Session>(this);
+            }
+            else if (util::streq(NGHTTP2_H1_1, proto))
+            {
+                session = std::make_unique<Http1Session>(this);
+            }
+
+            // Just assign next_proto to selected_proto anyway to show the
+            // negotiation result.
+            selected_proto = proto.str();
+        }
+        else
+        {
+            std::cerr << "No protocol negotiated. Fallback behaviour may be activated"
+                      << std::endl;
+
+            for (const auto& proto : config->npn_list)
+            {
+                if (util::streq(NGHTTP2_H1_1_ALPN, StringRef {proto}))
+                {
+                    std::cerr
+                            << "Server does not support NPN/ALPN. Falling back to HTTP/1.1."
+                            << std::endl;
+                    session = std::make_unique<Http1Session>(this);
+                    selected_proto = NGHTTP2_H1_1.str();
+                    break;
+                }
+            }
+        }
+
+        if (!selected_proto.empty())
+        {
+            print_app_info();
+        }
+
+        if (!session)
+        {
+            std::cerr
+                    << "No supported protocol was negotiated. Supported protocols were:"
+                    << std::endl;
+            for (const auto& proto : config->npn_list)
+            {
+                std::cerr << proto.substr(1) << std::endl;
+            }
+            disconnect();
+            return -1;
+        }
+    }
+    else
+    {
+        switch (config->no_tls_proto)
+        {
+            case Config::PROTO_HTTP2:
+                session = std::make_unique<Http2Session>(this);
+                selected_proto = NGHTTP2_CLEARTEXT_PROTO_VERSION_ID;
+                break;
+            case Config::PROTO_HTTP1_1:
+                session = std::make_unique<Http1Session>(this);
+                selected_proto = NGHTTP2_H1_1.str();
+                break;
+            default:
+                // unreachable
+                assert(0);
+        }
+        print_app_info();
+    }
+
+    return 0;
+}
+
+void Client_Interface::report_tls_info()
+{
+    if (worker->id == 0 && !worker->tls_info_report_done)
+    {
+        worker->tls_info_report_done = true;
+        auto cipher = SSL_get_current_cipher(ssl);
+        std::cerr << "TLS Protocol: " << tls::get_tls_protocol(ssl) << "\n"
+                  << "Cipher: " << SSL_CIPHER_get_name(cipher) << std::endl;
+        print_server_tmp_key(ssl);
     }
 }
 

@@ -46,7 +46,7 @@ class asio_client_connection
 public:
     asio_client_connection
     (
-        boost::asio::io_context& io_ctx,
+        boost::asio::io_service& io_ctx,
         uint32_t id,
         Worker_Interface* wrker,
         size_t req_todo,
@@ -70,7 +70,12 @@ public:
           stream_timeout_timer(io_ctx),
           timing_script_request_timeout_timer(io_ctx),
           connect_back_to_preferred_host_timer(io_ctx),
-          delayed_reconnect_timer(io_ctx)
+          delayed_reconnect_timer(io_ctx),
+          ssl_ctx(boost::asio::ssl::context::sslv23),
+          ssl_socket(io_ctx, ssl_ctx),
+          ssl_handshake_timer(io_ctx),
+          do_read_fn(&asio_client_connection::do_tcp_read),
+          do_write_fn(&asio_client_connection::do_tcp_write)
     {
         init_connection_targert();
     }
@@ -94,6 +99,18 @@ public:
             [this, self](const boost::system::error_code & ec)
         {
             handle_con_activity_timer_timeout(ec);
+        });
+    }
+
+    virtual void start_ssl_handshake_watcher()
+    {
+        auto self = this->shared_from_this();
+        ssl_handshake_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 * 2)));
+        ssl_handshake_timer.async_wait
+        (
+            [this, self](const boost::system::error_code & ec)
+        {
+            handle_ssl_handshake_timeout(ec);
         });
     }
 
@@ -251,34 +268,6 @@ public:
         io_context.post(task);
     }
 
-    virtual int select_protocol_and_allocate_session()
-    {
-        // TODO:
-        //if (ssl)
-        //{
-        //}
-        //else
-        {
-            switch (config->no_tls_proto)
-            {
-                case Config::PROTO_HTTP2:
-                    session = std::make_unique<Http2Session>(this);
-                    selected_proto = NGHTTP2_CLEARTEXT_PROTO_VERSION_ID;
-                    break;
-                case Config::PROTO_HTTP1_1:
-                    session = std::make_unique<Http1Session>(this);
-                    selected_proto = NGHTTP2_H1_1.str();
-                    break;
-                default:
-                    // unreachable
-                    assert(0);
-            }
-            print_app_info();
-        }
-
-        return 0;
-    }
-
     virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length)
     {
         if (output_buffers[output_buffer_index].capacity() - output_data_length < length)
@@ -349,6 +338,18 @@ public:
         else
         {
             port = vec[1];
+        }
+
+        if (schema == "https")
+        {
+            do_read_fn = &asio_client_connection::do_ssl_read;
+            do_write_fn = &asio_client_connection::do_ssl_write;
+            ssl = ssl_socket.native_handle();
+        }
+        else
+        {
+            do_read_fn = &asio_client_connection::do_tcp_read;
+            do_write_fn = &asio_client_connection::do_tcp_write;
         }
 
         boost::asio::ip::tcp::resolver::query query(vec[0], port);
@@ -534,6 +535,15 @@ private:
         start_stream_timeout_timer();
     }
 
+    void handle_ssl_handshake_timeout(const boost::system::error_code& ec)
+    {
+        if (!timer_common_check(ssl_handshake_timer, ec, &asio_client_connection::handle_ssl_handshake_timeout))
+        {
+            return;
+        }
+        stop();
+    }
+
     void handle_con_activity_timer_timeout(const boost::system::error_code& ec)
     {
         if (!timer_common_check(conn_activity_timer, ec, &asio_client_connection::handle_con_activity_timer_timeout))
@@ -610,15 +620,47 @@ private:
         }
     }
 
+    void start_async_handshake()
+    {
+        setup_SSL_CTX(ssl_ctx.native_handle(), *config);
+
+        auto self = this->shared_from_this();
+        ssl_socket.async_handshake(
+            boost::asio::ssl::stream_base::client,
+            [this, self](const boost::system::error_code & e)
+        {
+            if (e)
+            {
+                stop();
+            }
+            else
+            {
+                if (connected() != 0)
+                {
+                    handle_connection_error();
+                }
+            }
+        });
+    }
+
+    template<typename SOCKET>
     void on_connected_event(const boost::system::error_code& err,
-                            boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
+                            boost::asio::ip::tcp::resolver::iterator endpoint_iterator, SOCKET& socket)
     {
         static thread_local boost::asio::ip::tcp::resolver::iterator end_of_resolve_result;
         if (!err)
         {
-            if (connected() != 0)
+            if (schema != "https")
             {
-                handle_connection_error();
+                if (connected() != 0)
+                {
+                    handle_connection_error();
+                }
+            }
+            else
+            {
+                start_async_handshake();
+                start_ssl_handshake_watcher();
             }
         }
         else
@@ -627,14 +669,14 @@ private:
             if (endpoint_iterator != end_of_resolve_result)
             {
                 // The connection failed. Try the next endpoint in the list.
-                client_socket.close();
+                socket.lowest_layer().close();
                 boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
                 auto next_endpoint_iterator = ++endpoint_iterator;
                 auto self = this->shared_from_this();
-                client_socket.async_connect(endpoint,
-                                            [this, self, next_endpoint_iterator](const boost::system::error_code & err)
+                socket.lowest_layer().async_connect(endpoint,
+                                                    [this, self, next_endpoint_iterator, &socket](const boost::system::error_code & err)
                 {
-                    on_connected_event(err, next_endpoint_iterator);
+                    on_connected_event(err, next_endpoint_iterator, socket);
                 });
             }
             else
@@ -642,11 +684,6 @@ private:
                 handle_connection_error();
             }
         }
-    }
-
-    boost::asio::ip::tcp::socket& socket()
-    {
-        return client_socket;
     }
 
     void handle_connect_timeout(const boost::system::error_code& ec)
@@ -699,19 +736,35 @@ private:
         do_read();
     }
 
-    void do_read()
+    template<typename SOCKET>
+    void common_read(SOCKET& socket)
     {
         if (is_client_stopped)
         {
             return;
         }
         auto self = this->shared_from_this();
-        client_socket.async_read_some(
+        socket.async_read_some(
             boost::asio::buffer(input_buffer),
             [this, self](const boost::system::error_code & e, std::size_t bytes_transferred)
         {
             handle_read_complete(e, bytes_transferred);
         });
+    }
+
+    void do_tcp_read()
+    {
+        common_read(client_socket);
+    }
+
+    void do_ssl_read()
+    {
+        common_read(ssl_socket);
+    }
+
+    void do_read()
+    {
+        do_read_fn(*this);
     }
 
     void handle_write_complete(const boost::system::error_code& e, std::size_t bytes_transferred)
@@ -749,8 +802,8 @@ private:
         do_write();
     }
 
-
-    void do_write()
+    template<typename SOCKET>
+    void common_write(SOCKET& socket)
     {
         if (is_write_in_progress || is_client_stopped || output_data_length <= 0)
         {
@@ -766,11 +819,26 @@ private:
 
         auto self = this->shared_from_this();
         boost::asio::async_write(
-            client_socket, boost::asio::buffer(buffer.data(), length),
+            socket, boost::asio::buffer(buffer.data(), length),
             [this, self](const boost::system::error_code & e, std::size_t bytes_transferred)
         {
             handle_write_complete(e, bytes_transferred);
         });
+    }
+
+    void do_tcp_write()
+    {
+        common_write(client_socket);
+    }
+
+    void do_ssl_write()
+    {
+        common_write(ssl_socket);
+    }
+
+    void do_write()
+    {
+        do_write_fn(*this);
     }
 
     void stop()
@@ -795,21 +863,31 @@ private:
         delayed_reconnect_timer.cancel();
     }
 
+    template <typename SOCKET>
+    void start_async_connect(boost::asio::ip::tcp::resolver::iterator endpoint_iterator, SOCKET& socket)
+    {
+        boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
+        auto next_endpoint_iterator = ++endpoint_iterator;
+        auto self = this->shared_from_this();
+        socket.lowest_layer().async_connect(endpoint,
+                                            [this, self, next_endpoint_iterator, &socket](const boost::system::error_code & err)
+        {
+            on_connected_event(err, next_endpoint_iterator, socket);
+        });
+    }
     void on_resolve_result_event(const boost::system::error_code& err,
                                  boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
     {
         if (!err)
         {
-            // Attempt a connection to the first endpoint in the list. Each endpoint
-            // will be tried until we successfully establish a connection.
-            boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
-            auto next_endpoint_iterator = ++endpoint_iterator;
-            auto self = this->shared_from_this();
-            client_socket.lowest_layer().async_connect(endpoint,
-                                                       [this, self, next_endpoint_iterator](const boost::system::error_code & err)
+            if (schema != "https")
             {
-                on_connected_event(err, next_endpoint_iterator);
-            });
+                start_async_connect(endpoint_iterator, client_socket);
+            }
+            else
+            {
+                start_async_connect(endpoint_iterator, ssl_socket);
+            }
         }
         else
         {
@@ -839,10 +917,12 @@ private:
         }
     }
 
-    boost::asio::io_context& io_context;
+    boost::asio::io_service& io_context;
     boost::asio::ip::tcp::resolver dns_resolver;
     boost::asio::ip::tcp::socket client_socket;
     boost::asio::ip::tcp::socket client_probe_socket;
+    boost::asio::ssl::context ssl_ctx;
+    boost::asio::ssl::stream<boost::asio::ip::tcp::socket> ssl_socket;
     bool is_write_in_progress = false;
     bool is_client_stopped = false;
 
@@ -862,7 +942,8 @@ private:
     boost::asio::deadline_timer timing_script_request_timeout_timer;
     boost::asio::deadline_timer connect_back_to_preferred_host_timer;
     boost::asio::deadline_timer delayed_reconnect_timer;
-
+    boost::asio::deadline_timer ssl_handshake_timer;
+    std::function<void(asio_client_connection&)> do_read_fn, do_write_fn;
 
     std::function<bool(void)> write_clear_callback;
 };

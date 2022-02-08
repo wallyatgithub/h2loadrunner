@@ -56,7 +56,6 @@ public:
     virtual void start_connect_to_preferred_host_timer();
     virtual void start_timing_script_request_timeout_timer(double duration);
     virtual void stop_timing_script_request_timeout_timer();
-    virtual int select_protocol_and_allocate_session();
     virtual void stop_rps_timer();
     virtual void start_request_delay_execution_timer();
     virtual void conn_activity_timeout_handler();
@@ -72,8 +71,6 @@ public:
     virtual void start_delayed_reconnect_timer();
     virtual void probe_and_connect_to(const std::string& schema, const std::string& authority);
     virtual void setup_graceful_shutdown();
-
-    void report_tls_info();
 
     int do_read();
     int do_write();
@@ -109,7 +106,6 @@ public:
     ev_io rev;
     std::function<int(Client&)> readfn, writefn;
     std::function<int(Client&)> connectfn;
-    SSL* ssl;
     ev_timer request_timeout_watcher;
     addrinfo* next_addr;
     // Address for the current address.  When try_new_connection() is

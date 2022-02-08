@@ -10,6 +10,8 @@ extern "C" {
 #include "lualib.h"
 #include "lauxlib.h"
 }
+#include <openssl/ssl.h>
+
 #include "http2.h"
 
 
@@ -64,7 +66,6 @@ public:
     virtual void start_connect_to_preferred_host_timer() = 0;
     virtual void start_timing_script_request_timeout_timer(double duration) = 0;
     virtual void stop_timing_script_request_timeout_timer() = 0;
-    virtual int select_protocol_and_allocate_session() = 0;
     virtual void stop_rps_timer() = 0;
     virtual void start_request_delay_execution_timer() = 0;
     virtual void conn_activity_timeout_handler() = 0;
@@ -170,6 +171,8 @@ public:
     void enqueue_request(Request_Data& finished_request, Request_Data&& new_request);
     void inc_status_counter_and_validate_response(int32_t stream_id);
     bool should_reconnect_on_disconnect();
+    int select_protocol_and_allocate_session();
+    void report_tls_info();
 
 
     Worker_Interface* worker;
@@ -219,8 +222,8 @@ public:
     Unique_Id this_client_id;
     std::function<void()> write_clear_callback;
     std::vector<Runtime_Scenario_Data> runtime_scenario_data;
-
     time_point_in_seconds_double rps_duration_started;
+    SSL* ssl;
 };
 
 }

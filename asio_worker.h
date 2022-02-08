@@ -150,7 +150,7 @@ public:
 
 
 private:
-    boost::asio::io_context io_context;
+    boost::asio::io_service io_context;
 
     boost::asio::deadline_timer rate_mode_period_timer;
     boost::asio::deadline_timer warmup_timer;

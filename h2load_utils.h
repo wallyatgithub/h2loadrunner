@@ -178,4 +178,17 @@ void integrated_http2_server(std::stringstream& DatStream, h2load::Config& confi
 void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& config,
                                   const std::vector<std::unique_ptr<h2load::Worker_Interface>>& workers);
 
+void load_ca_cert(SSL_CTX* ctx, const std::string& pem_content);
+
+void load_cert(SSL_CTX* ctx, const std::string& pem_content);
+
+void load_private_key(SSL_CTX* ctx, const std::string& pem_content);
+
+bool check_key_cert_consistency(SSL_CTX* ctx);
+
+void set_cert_verification_mode(SSL_CTX* ctx, uint32_t certificate_verification_mode);
+
+void setup_SSL_CTX(SSL_CTX* ssl_ctx, h2load::Config& config);
+
+
 #endif
