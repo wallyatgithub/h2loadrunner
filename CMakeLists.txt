@@ -7,12 +7,18 @@ set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
 set(Boost_USE_STATIC_LIBS ON)
 
+#set (USE_LIBEV ON)
+
 add_subdirectory(third-party)
 
 find_package(OpenSSL 1.0.1)
 find_package(Boost 1.53.0 REQUIRED system thread)
-find_package(Libev 4.11)
 find_package(LuaJIT)
+
+if(DEFINED USE_LIBEV)
+find_package(Libev 4.11)
+endif()
+
 
 include(GNUInstallDirs)
 # Checks for header files.
@@ -40,6 +46,31 @@ set_source_files_properties(${cxx_sources} PROPERTIES
 #add_compile_options(-fsanitize=address)
 #add_link_options(-fsanitize=address)
 
+set(C_ARES_INCLUDE
+"."
+)
+
+if(DEFINED USE_LIBEV)
+
+set(C_ARES_INCLUDE
+  "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares"
+)
+
+set(H2LOAD_SOURCE_USING_LIBEV
+  h2load_Client.cc
+  h2load_Worker.cc
+)
+
+add_definitions(-DUSE_LIBEV=1)
+
+link_directories(
+${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib
+${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib64
+)
+
+endif()
+
 include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/"
   "${CMAKE_CURRENT_SOURCE_DIR}/includes"
@@ -47,15 +78,8 @@ include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/llhttp/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/StaticJSON/include"
   "${LUA_INCLUDE_DIR}"
-  "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/include"
-  "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares"
+  "${C_ARES_INCLUDE}"
   "${Boost_INCLUDE_DIRS}"
-)
-
-
-link_directories(
-${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib
-${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib64
 )
 
 link_libraries(
@@ -77,8 +101,7 @@ set(H2LOAD_SOURCES
   util.cc
   http2.cc h2load.cc
   h2load_utils.cc
-  h2load_Client.cc
-  h2load_Worker.cc
+  ${H2LOAD_SOURCE_USING_LIBEV}
   h2load_Config.cc
   h2load_Cookie.cc
   timegm.c
@@ -105,6 +128,9 @@ set(H2LOAD_SOURCES
 
 add_executable(h2loadrunner ${H2LOAD_SOURCES} $<TARGET_OBJECTS:llhttp>
   $<TARGET_OBJECTS:url-parser> $<TARGET_OBJECTS:staticjson>)
+
+if(DEFINED USE_LIBEV)
+
 target_link_libraries(h2loadrunner cares_static)
 
 target_include_directories(h2loadrunner PUBLIC 
@@ -112,6 +138,7 @@ target_include_directories(h2loadrunner PUBLIC
 "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares"
 )
 
+endif()
 
 install(TARGETS h2loadrunner
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")

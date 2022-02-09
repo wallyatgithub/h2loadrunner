@@ -34,8 +34,7 @@
 
 #include "h2load.h"
 #include "h2load_Config.h"
-#include "h2load_Client.h"
-#include "h2load_Worker.h"
+#include "Worker_Interface.h"
 #include "Client_Interface.h"
 
 

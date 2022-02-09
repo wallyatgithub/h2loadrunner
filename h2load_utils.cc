@@ -8,9 +8,13 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
+#ifdef USE_LIBEV
 extern "C" {
 #include <ares.h>
 }
+#include "h2load_Client.h"
+#endif
+
 extern "C" {
 #include "lua.h"
 #include "lualib.h"
@@ -28,12 +32,13 @@ extern "C" {
 #include <nghttp2/asio_http2_server.h>
 
 #include "h2load_utils.h"
-#include "h2load_Client.h"
+#include "Client_Interface.h"
 
 #include "asio_worker.h"
 
 
 using namespace h2load;
+
 
 std::unique_ptr<h2load::Worker_Interface> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
                                               size_t nreqs, size_t nclients,
@@ -60,7 +65,7 @@ std::unique_ptr<h2load::Worker_Interface> create_worker(uint32_t id, SSL_CTX* ss
                   << " total client(s). " << rate_report.str() << nreqs
                   << " total requests" << std::endl;
     }
-
+#ifndef USE_LIBEV
     if (config.is_rate_mode())
     {
         return std::make_unique<asio_worker>(id, nreqs, nclients, rate,
@@ -73,6 +78,20 @@ std::unique_ptr<h2load::Worker_Interface> create_worker(uint32_t id, SSL_CTX* ss
         return std::make_unique<asio_worker>(id, nreqs, nclients, nclients,
                                         max_samples, &config);
     }
+#else
+    if (config.is_rate_mode())
+    {
+        return std::make_unique<Worker>(id, ssl_ctx, nreqs, nclients, rate,
+                                        max_samples, &config);
+    }
+    else
+    {
+        // Here rate is same as client because the rate_timeout callback
+        // will be called only once
+        return std::make_unique<Worker>(id, ssl_ctx, nreqs, nclients, nclients,
+                                        max_samples, &config);
+    }
+#endif
 }
 
 int parse_header_table_size(uint32_t& dst, const char* opt,
@@ -148,6 +167,8 @@ void sampling_init(h2load::Sampling& smp, size_t max_samples)
     smp.n = 0;
     smp.max_samples = max_samples;
 }
+
+#ifdef USE_LIBEV
 
 void writecb(struct ev_loop* loop, ev_io* w, int revents)
 {
@@ -267,6 +288,122 @@ void client_request_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
     client->timing_script_timeout_handler();
 }
 
+int get_ev_loop_flags()
+{
+    if (ev_supported_backends() & ~ev_recommended_backends() & EVBACKEND_KQUEUE)
+    {
+        return ev_recommended_backends() | EVBACKEND_KQUEUE;
+    }
+
+    return 0;
+}
+
+void ping_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
+{
+    auto client = static_cast<Client*>(w->data);
+    client->submit_ping();
+}
+
+void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ares_addrinfo* res)
+{
+    Client* client = static_cast<Client*>(arg);
+
+    if (status == ARES_SUCCESS)
+    {
+        if (client->ares_address)
+        {
+            ares_freeaddrinfo(client->ares_address);
+        }
+        client->next_addr = nullptr;
+        client->current_addr = nullptr;
+        client->ares_address = res;
+        client->connect();
+        ares_freeaddrinfo(client->ares_address);
+        client->ares_address = nullptr;
+    }
+    else
+    {
+        client->fail();
+    }
+}
+
+void ares_io_cb(struct ev_loop* loop, struct ev_io* watcher, int revents)
+{
+    Client* client = static_cast<Client*>(watcher->data);
+    ares_process_fd(client->channel,
+                    revents & EV_READ ? watcher->fd : ARES_SOCKET_BAD,
+                    revents & EV_WRITE ? watcher->fd : ARES_SOCKET_BAD);
+}
+
+void reconnect_to_used_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
+{
+    auto client = static_cast<Client*>(w->data);
+    ev_timer_stop(loop, w);
+    client->reconnect_to_used_host();
+}
+
+void ares_addrinfo_query_callback_for_probe(void* arg, int status, int timeouts, struct ares_addrinfo* res)
+{
+    Client* client = static_cast<Client*>(arg);
+    if (status == ARES_SUCCESS)
+    {
+        client->probe_address(res);
+        ares_freeaddrinfo(res);
+    }
+}
+
+void connect_to_prefered_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
+{
+    auto client = static_cast<Client*>(w->data);
+    if (CLIENT_CONNECTED != client->state)
+    {
+        ev_timer_stop(loop, w); // reconnect will connect to preferred host first
+    }
+    else if (client->authority == client->preferred_authority && CLIENT_CONNECTED == client->state)
+    {
+        ev_timer_stop(loop, w); // already to preferred host, either attempt in progress, or connected
+    }
+    else // connected, but not to preferred host, so check if preferred host is up for connection
+    {
+        client->probe_and_connect_to(client->schema, client->preferred_authority);
+    }
+}
+
+void probe_writecb(struct ev_loop* loop, ev_io* w, int revents)
+{
+    auto client = static_cast<Client*>(w->data);
+    ev_io_stop(loop, w);
+    if (util::check_socket_connected(client->probe_skt_fd))
+    {
+        client->on_prefered_host_up();
+    }
+}
+
+void ares_socket_state_cb(void* data, int s, int read, int write)
+{
+    Client* client = static_cast<Client*>(data);
+    auto worker = static_cast<Worker*>(client->worker);
+    if (read != 0 || write != 0)
+    {
+        if (client->ares_io_watchers.find(s) == client->ares_io_watchers.end())
+        {
+            ev_io watcher;
+            watcher.data = client;
+            client->ares_io_watchers[s] = watcher;
+            ev_init(&client->ares_io_watchers[s], ares_io_cb);
+        }
+        ev_io_set(&client->ares_io_watchers[s], s, (read ? EV_READ : 0) | (write ? EV_WRITE : 0));
+        ev_io_start(worker->loop, &client->ares_io_watchers[s]);
+    }
+    else if (client->ares_io_watchers.find(s) != client->ares_io_watchers.end())
+    {
+        ev_io_stop(worker->loop, &client->ares_io_watchers[s]);
+        client->ares_io_watchers.erase(s);
+    }
+}
+
+#endif
+
 bool recorded(const std::chrono::steady_clock::time_point& t)
 {
     return std::chrono::steady_clock::duration::zero() != t.time_since_epoch();
@@ -340,16 +477,6 @@ void print_server_tmp_key(SSL* ssl)
             break;
     }
 #endif // OPENSSL_VERSION_NUMBER >= 0x10002000L
-}
-
-int get_ev_loop_flags()
-{
-    if (ev_supported_backends() & ~ev_recommended_backends() & EVBACKEND_KQUEUE)
-    {
-        return ev_recommended_backends() | EVBACKEND_KQUEUE;
-    }
-
-    return 0;
 }
 
 
@@ -792,67 +919,6 @@ std::string reassemble_str_with_variable(h2load::Config* config,
     return retStr;
 }
 
-void ping_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
-{
-    auto client = static_cast<Client*>(w->data);
-    client->submit_ping();
-}
-
-void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ares_addrinfo* res)
-{
-    Client* client = static_cast<Client*>(arg);
-
-    if (status == ARES_SUCCESS)
-    {
-        if (client->ares_address)
-        {
-            ares_freeaddrinfo(client->ares_address);
-        }
-        client->next_addr = nullptr;
-        client->current_addr = nullptr;
-        client->ares_address = res;
-        client->connect();
-        ares_freeaddrinfo(client->ares_address);
-        client->ares_address = nullptr;
-    }
-    else
-    {
-        client->fail();
-    }
-}
-
-void ares_io_cb(struct ev_loop* loop, struct ev_io* watcher, int revents)
-{
-    Client* client = static_cast<Client*>(watcher->data);
-    ares_process_fd(client->channel,
-                    revents & EV_READ ? watcher->fd : ARES_SOCKET_BAD,
-                    revents & EV_WRITE ? watcher->fd : ARES_SOCKET_BAD);
-}
-
-
-void ares_socket_state_cb(void* data, int s, int read, int write)
-{
-    Client* client = static_cast<Client*>(data);
-    auto worker = static_cast<Worker*>(client->worker);
-    if (read != 0 || write != 0)
-    {
-        if (client->ares_io_watchers.find(s) == client->ares_io_watchers.end())
-        {
-            ev_io watcher;
-            watcher.data = client;
-            client->ares_io_watchers[s] = watcher;
-            ev_init(&client->ares_io_watchers[s], ares_io_cb);
-        }
-        ev_io_set(&client->ares_io_watchers[s], s, (read ? EV_READ : 0) | (write ? EV_WRITE : 0));
-        ev_io_start(worker->loop, &client->ares_io_watchers[s]);
-    }
-    else if (client->ares_io_watchers.find(s) != client->ares_io_watchers.end())
-    {
-        ev_io_stop(worker->loop, &client->ares_io_watchers[s]);
-        client->ares_io_watchers.erase(s);
-    }
-}
-
 void normalize_request_templates(h2load::Config* config)
 {
     for (auto& scenario : config->json_config_schema.scenarios)
@@ -909,51 +975,6 @@ std::string get_tls_error_string()
         error_string += strm.str();
     }
     return error_string;
-}
-
-
-void reconnect_to_used_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
-{
-    auto client = static_cast<Client*>(w->data);
-    ev_timer_stop(loop, w);
-    client->reconnect_to_used_host();
-}
-
-void ares_addrinfo_query_callback_for_probe(void* arg, int status, int timeouts, struct ares_addrinfo* res)
-{
-    Client* client = static_cast<Client*>(arg);
-    if (status == ARES_SUCCESS)
-    {
-        client->probe_address(res);
-        ares_freeaddrinfo(res);
-    }
-}
-
-void connect_to_prefered_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
-{
-    auto client = static_cast<Client*>(w->data);
-    if (CLIENT_CONNECTED != client->state)
-    {
-        ev_timer_stop(loop, w); // reconnect will connect to preferred host first
-    }
-    else if (client->authority == client->preferred_authority && CLIENT_CONNECTED == client->state)
-    {
-        ev_timer_stop(loop, w); // already to preferred host, either attempt in progress, or connected
-    }
-    else // connected, but not to preferred host, so check if preferred host is up for connection
-    {
-        client->probe_and_connect_to(client->schema, client->preferred_authority);
-    }
-}
-
-void probe_writecb(struct ev_loop* loop, ev_io* w, int revents)
-{
-    auto client = static_cast<Client*>(w->data);
-    ev_io_stop(loop, w);
-    if (util::check_socket_connected(client->probe_skt_fd))
-    {
-        client->on_prefered_host_up();
-    }
 }
 
 void printBacktrace()

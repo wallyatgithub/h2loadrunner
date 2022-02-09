@@ -472,11 +472,11 @@ public:
     std::string ciphers;
     std::string no_tls_proto;
     uint32_t rate;
-    uint32_t rate_period;
-    uint64_t duration;
-    uint64_t warm_up_time;
-    uint64_t connection_active_timeout;
-    uint64_t connection_inactivity_timeout;
+    double rate_period;
+    double duration;
+    double warm_up_time;
+    double connection_active_timeout;
+    double connection_inactivity_timeout;
     std::string npn_list;
     uint64_t header_table_size;
     uint64_t encoder_header_table_size;
@@ -496,7 +496,7 @@ public:
     bool connection_retry_on_disconnect;
     std::vector<Load_Share_Host> load_share_hosts;
     bool connect_back_to_preferred_host;
-    uint32_t interval_to_send_ping;
+    double interval_to_send_ping;
     std::vector<Scenario> scenarios;
     uint32_t builtin_server_port;
     std::string failed_request_log_file;

@@ -9,6 +9,8 @@
 
 #include "tls.h"
 #include "Client_Interface.h"
+#include "Worker_Interface.h"
+
 #include "h2load_utils.h"
 
 

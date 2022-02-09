@@ -36,15 +36,15 @@ struct Config
     size_t connection_window_bits;
     // rate at which connections should be made
     size_t rate;
-    ev_tstamp rate_period;
+    double rate_period;
     // amount of time for main measurements in timing-based test
-    ev_tstamp duration;
+    double duration;
     // amount of time to wait before starting measurements in timing-based test
-    ev_tstamp warm_up_time;
+    double warm_up_time;
     // amount of time to wait for activity on a given connection
-    ev_tstamp conn_active_timeout;
+    double conn_active_timeout;
     // amount of time to wait after the last request is made on a connection
-    ev_tstamp conn_inactivity_timeout;
+    double conn_inactivity_timeout;
     enum { PROTO_HTTP2, PROTO_HTTP1_1 } no_tls_proto;
     uint32_t header_table_size;
     uint32_t encoder_header_table_size;

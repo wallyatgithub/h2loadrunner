@@ -85,7 +85,7 @@
     {
       "description":"Specifies the duration (in second) for timing-based benchmarking. The duration field and the rate field are mutually exclusive.",
       "default": 60,
-      "type":"integer"
+      "type":"number"
     },
     "total-requests":
     {
@@ -96,7 +96,7 @@
     "warm-up-time":
     {
       "description":"Specifies the time period (in second) before starting the actual measurements, in case of timing-based benchmarking. Needs non-zero value in duration field for warm-up-time field to work.",
-      "type":"integer"
+      "type":"number"
     },
     "max-concurrent-streams":
     {
@@ -116,7 +116,7 @@
     },
     "rate":
     {
-      "description":"Specifies a fixed rate at which connections are created. It must be a positive integer, representing the number of connections to be made per rate-period. The maximum number of connections to be made is given in clients field. This rate will be distributed among threads as evenly as possible. For example, with thread=2 and rate=4, each thread gets 2 connections per rate-period, until total number of connections specified in clients field is reached.  When the rate is 0, the program will run as it normally does, creating connections at whatever variable rate it wants. The duration field and the rate field are mutually exclusive.",
+      "description":"Specifies a fixed rate at which connections are created. If given, it must be a positive integer, representing the number of connections to be made per rate-period. The maximum number of connections to be made is given in clients field. This rate will be distributed among threads as evenly as possible. For example, with thread=2 and rate=4, each thread gets 2 connections per rate-period, until total number of connections specified in clients field is reached.  When the rate is 0, the program will run as it normally does, creating connections at whatever variable rate it wants. The duration field and the rate field are mutually exclusive.",
       "default": 0,
       "type":"integer"
     },
@@ -124,7 +124,7 @@
     {
       "description":"Specifies the time period between connection creating connections. The period must be a positive number, representing the length of the period in time. This option is ignored if the rate option is not used.",
       "default": 1,
-      "type":"integer"
+      "type":"number"
     },
     "stream-timeout":
     {
@@ -174,19 +174,19 @@
     },
     "connection-active-timeout":
     {
-      "description":"Specifies the maximum time (ms) that h2loadrunner is willing to keep a connection open, regardless of the activity on said connection. It must be a positive integer, specifying the amount of time to wait. When no timeout value is set (either active or inactive), the tool will keep a connection open indefinitely, waiting for a response.",
-      "type":"integer"
+      "description":"Specifies the maximum time (ms) that h2loadrunner is willing to keep a connection open, regardless of the activity on said connection. If given, it must be a positive integer, specifying the amount of time to wait. When no timeout value is set (either active or inactive), the tool will keep a connection open indefinitely, waiting for a response.",
+      "type":"number"
     },
     "connection-inactivity-timeout":
     {
-      "description":"Specifies the amount of time that h2loadrunner is willing to wait to see activity on a given connection. It must be a positive integer, specifying the amount of time to wait. When no timeout value is set (either active or inactive), the tool will keep a connection open indefinitely, waiting for a response.",
-      "type":"integer"
+      "description":"Specifies the amount of time that h2loadrunner is willing to wait to see activity on a given connection. If given, it must be a positive integer, specifying the amount of time to wait. When no timeout value is set (either active or inactive), the tool will keep a connection open indefinitely, waiting for a response.",
+      "type":"number"
     },
     "interval-between-ping-frames":
     {
       "description":"h2loadrunner can send ping frame to peer host to prevent the connection going idle, as a long idle connection might be taken down; this field specifies the max interval (in seconds) between 2 ping frames; if the connection comes out of idle state in less than this interval, next ping frame will not be sent; 0: h2loadrunner will not send ping frames even the connection is idle for long; note: this field is not applicable for http1.x connections",
       "default": 0,
-      "type":"integer"
+      "type":"number"
     },
     "npn-list":
     {

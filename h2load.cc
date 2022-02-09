@@ -66,9 +66,12 @@
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+
+#ifdef USE_LIBEV
 extern "C" {
 #include <ares.h>
 }
+#endif
 
 #include <nghttp2/nghttp2.h>
 
@@ -84,7 +87,9 @@ extern "C" {
 #include "template.h"
 #include "h2load_utils.h"
 #include "h2load_Config.h"
+#ifdef USE_LIBEV
 #include "h2load_Client.h"
+#endif
 #include "Worker_Interface.h"
 #include "h2load_stats.h"
 #include "staticjson/document.hpp"
@@ -375,6 +380,8 @@ Options:
 int main(int argc, char** argv)
 {
     tls::libssl_init();
+
+#ifdef USE_LIBEV
     auto status = ares_library_init(ARES_LIB_INIT_ALL);
     if (status != ARES_SUCCESS)
     {
@@ -382,6 +389,8 @@ int main(int argc, char** argv)
         exit(EXIT_FAILURE);
         return 1;
     }
+#endif
+
 #ifndef NOTHREADS
     tls::LibsslGlobalLock lock;
 #endif // NOTHREADS
@@ -1363,7 +1372,9 @@ time for request: )"
         close(config.log_fd);
     }
 
+#ifdef USE_LIBEV
     ares_library_cleanup();
+#endif
 
     return 0;
 }

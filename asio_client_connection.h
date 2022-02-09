@@ -31,7 +31,7 @@
 #include "h2load_http2_session.h"
 #include "h2load_http1_session.h"
 #include "h2load_utils.h"
-#include "h2load_Client.h"
+#include "Client_Interface.h"
 #include "h2load_Config.h"
 #include "h2load_stats.h"
 #include "config_schema.h"

@@ -8,11 +8,15 @@
 #include <sstream>
 #include <stdlib.h>
 
-#include <ev.h>
 #include <openssl/ssl.h>
+
+#ifdef USE_LIBEV
 extern "C" {
 #include <ares.h>
 }
+#include <ev.h>
+#endif
+
 
 #include "http2.h"
 #include "template.h"
@@ -20,7 +24,9 @@ extern "C" {
 
 #include "h2load.h"
 #include "h2load_Config.h"
+#ifdef USE_LIBEV
 #include "h2load_Worker.h"
+#endif
 #include "h2load_Cookie.h"
 #include "h2load_stats.h"
 
