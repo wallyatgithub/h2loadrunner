@@ -26,7 +26,7 @@ public:
 
     virtual std::shared_ptr<Client_Interface> create_new_client(size_t req_todo)
     {
-        return std::make_shared<asio_client_connection>(io_context, next_client_id++, this, req_todo, (config));
+        return std::make_shared<asio_client_connection>(io_context, next_client_id++, this, req_todo, (config), ssl_ctx);
     }
 
 
@@ -35,8 +35,10 @@ public:
         Worker_Interface(id, nreq_todo, nclients, rate, max_samples, config),
         rate_mode_period_timer(io_context),
         warmup_timer(io_context),
-        duration_timer(io_context)
+        duration_timer(io_context),
+        ssl_ctx(boost::asio::ssl::context::sslv23)
     {
+        setup_SSL_CTX(ssl_ctx.native_handle(), *config);
     }
 
     bool timer_common_check(boost::asio::deadline_timer& timer, const boost::system::error_code& ec, void (asio_worker::*handler)(const boost::system::error_code&))
@@ -155,6 +157,7 @@ private:
     boost::asio::deadline_timer rate_mode_period_timer;
     boost::asio::deadline_timer warmup_timer;
     boost::asio::deadline_timer duration_timer;
+    boost::asio::ssl::context ssl_ctx;
 
 
 };

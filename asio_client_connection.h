@@ -51,6 +51,7 @@ public:
         Worker_Interface* wrker,
         size_t req_todo,
         Config* conf,
+        boost::asio::ssl::context& ssl_context,
         Client_Interface* parent = nullptr,
         const std::string& dest_schema = "",
         const std::string& dest_authority = ""
@@ -71,8 +72,8 @@ public:
           timing_script_request_timeout_timer(io_ctx),
           connect_back_to_preferred_host_timer(io_ctx),
           delayed_reconnect_timer(io_ctx),
-          ssl_ctx(boost::asio::ssl::context::sslv23),
-          ssl_socket(io_ctx, ssl_ctx),
+          ssl_ctx(ssl_context),
+          ssl_socket(io_ctx, ssl_context),
           ssl_handshake_timer(io_ctx),
           do_read_fn(&asio_client_connection::do_tcp_read),
           do_write_fn(&asio_client_connection::do_tcp_write)
@@ -296,23 +297,10 @@ public:
     virtual std::shared_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
                                                                  const std::string& dest_authority)
     {
-        // TODO:
-        /*
-        if (dst_sch == "https")
-        {
-            auto new_client =
-                std::make_unique<asio_client_connection<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>>(io_context,
-                                                                                                                 ssl_context, this->id, worker, req_todo, config, this, dst_sch, dest_authority);
-            return new_client;
-        }
-        else
-        */
-        {
-            auto new_client =
-                std::make_shared<asio_client_connection>(io_context, this->id, worker,
-                                                         req_todo, config, this, dst_sch, dest_authority);
-            return new_client;
-        }
+        auto new_client =
+                        std::make_shared<asio_client_connection>(io_context, this->id, worker,
+                                                                 req_todo, config, ssl_ctx, this, dst_sch, dest_authority);
+        return new_client;
     }
 
     virtual void setup_connect_with_async_fqdn_lookup()
@@ -622,8 +610,6 @@ private:
 
     void start_async_handshake()
     {
-        setup_SSL_CTX(ssl_ctx.native_handle(), *config);
-
         auto self = this->shared_from_this();
         ssl_socket.async_handshake(
             boost::asio::ssl::stream_base::client,
@@ -635,6 +621,7 @@ private:
             }
             else
             {
+                ssl_handshake_timer.cancel();
                 if (connected() != 0)
                 {
                     handle_connection_error();
@@ -921,7 +908,7 @@ private:
     boost::asio::ip::tcp::resolver dns_resolver;
     boost::asio::ip::tcp::socket client_socket;
     boost::asio::ip::tcp::socket client_probe_socket;
-    boost::asio::ssl::context ssl_ctx;
+    boost::asio::ssl::context& ssl_ctx;
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket> ssl_socket;
     bool is_write_in_progress = false;
     bool is_client_stopped = false;
