@@ -2,6 +2,8 @@
 
 add_subdirectory(c-ares)
 
+find_path(RAPIDJSON_INCLUDE_DIR rapidjson/rapidjson.h)
+
 set(LIBLLHTTP_SOURCES
 llhttp/src/api.c
 llhttp/src/http.c
@@ -25,6 +27,7 @@ POSITION_INDEPENDENT_CODE ON)
 include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/"
   "${CMAKE_CURRENT_SOURCE_DIR}/StaticJSON/include"
+  "${RAPIDJSON_INCLUDE_DIR}"
 )
 
 set(LIBSTATICJSON_SOURCE

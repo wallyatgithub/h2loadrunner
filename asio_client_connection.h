@@ -93,11 +93,10 @@ public:
         {
             return;
         }
-        auto self = this->shared_from_this();
         conn_activity_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 * config->conn_active_timeout)));
         conn_activity_timer.async_wait
         (
-            [this, self](const boost::system::error_code & ec)
+            [this](const boost::system::error_code & ec)
         {
             handle_con_activity_timer_timeout(ec);
         });
@@ -105,11 +104,10 @@ public:
 
     virtual void start_ssl_handshake_watcher()
     {
-        auto self = this->shared_from_this();
         ssl_handshake_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 * 2)));
         ssl_handshake_timer.async_wait
         (
-            [this, self](const boost::system::error_code & ec)
+            [this](const boost::system::error_code & ec)
         {
             handle_ssl_handshake_timeout(ec);
         });
@@ -122,11 +120,10 @@ public:
             return;
         }
 
-        auto self = this->shared_from_this();
         conn_inactivity_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 * config->conn_inactivity_timeout)));
         conn_inactivity_timer.async_wait
         (
-            [this, self](const boost::system::error_code & ec)
+            [this](const boost::system::error_code & ec)
         {
             handle_con_activity_timer_timeout(ec);
         });
@@ -135,10 +132,10 @@ public:
     virtual void start_stream_timeout_timer()
     {
         stream_timeout_timer.expires_from_now(boost::posix_time::millisec(10));
-        auto self = this->shared_from_this();
+
         stream_timeout_timer.async_wait
         (
-            [this, self](const boost::system::error_code & ec)
+            [this](const boost::system::error_code & ec)
         {
             handle_stream_timeout_timer_timeout(ec);
         });
@@ -158,10 +155,9 @@ public:
     virtual void start_timing_script_request_timeout_timer(double duration)
     {
         timing_script_request_timeout_timer.expires_from_now(boost::posix_time::millisec((size_t)(duration * 1000)));
-        auto self = this->shared_from_this();
         timing_script_request_timeout_timer.async_wait
         (
-            [this, self](const boost::system::error_code & ec)
+            [this](const boost::system::error_code & ec)
         {
             handle_timing_script_request_timeout(ec);
         });
@@ -175,10 +171,9 @@ public:
     virtual void start_connect_timeout_timer()
     {
         connect_timer.expires_from_now(boost::posix_time::seconds(2));
-        auto self = this->shared_from_this();
         connect_timer.async_wait
         (
-            [this, self](const boost::system::error_code & ec)
+            [this](const boost::system::error_code & ec)
         {
             handle_connect_timeout(ec);
         });
@@ -192,10 +187,9 @@ public:
     virtual void start_connect_to_preferred_host_timer()
     {
         connect_back_to_preferred_host_timer.expires_from_now(boost::posix_time::millisec(1000));
-        auto self = this->shared_from_this();
         connect_back_to_preferred_host_timer.async_wait
         (
-            [this, self](const boost::system::error_code & ec)
+            [this](const boost::system::error_code & ec)
         {
             connect_to_prefered_host_timer_handler(ec);
         });
@@ -204,10 +198,9 @@ public:
     virtual void start_delayed_reconnect_timer()
     {
         delayed_reconnect_timer.expires_from_now(boost::posix_time::millisec(1000));
-        auto self = this->shared_from_this();
         delayed_reconnect_timer.async_wait
         (
-            [this, self](const boost::system::error_code & ec)
+            [this](const boost::system::error_code & ec)
         {
             handle_delayed_reconnect_timer_timeout(ec);
         });
@@ -261,8 +254,7 @@ public:
 
     virtual void feed_timing_script_request_timeout_timer()
     {
-        auto self = this->shared_from_this();
-        auto task = [this, self]()
+        auto task = [this]()
         {
             handle_con_activity_timer_timeout(boost::asio::error::timed_out);
         };
@@ -282,8 +274,7 @@ public:
     }
     virtual void signal_write()
     {
-        auto self = this->shared_from_this();
-        io_context.post([this, self]()
+        io_context.post([this]()
         {
             handle_write_signal();
         });
@@ -341,9 +332,8 @@ public:
         }
 
         boost::asio::ip::tcp::resolver::query query(vec[0], port);
-        auto self = this->shared_from_this();
         dns_resolver.async_resolve(query,
-                                   [this, self](const boost::system::error_code & err, boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
+                                   [this](const boost::system::error_code & err, boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
         {
             on_resolve_result_event(err, endpoint_iterator);
         });
@@ -376,9 +366,8 @@ public:
         }
 
         boost::asio::ip::tcp::resolver::query query(vec[0], port);
-        auto self = this->shared_from_this();
         dns_resolver.async_resolve(query,
-                                   [this, self](const boost::system::error_code & err, boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
+                                   [this](const boost::system::error_code & err, boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
         {
             on_probe_resolve_result_event(err, endpoint_iterator);
         });
@@ -389,7 +378,7 @@ public:
         write_clear_callback = [this]()
         {
             disconnect();
-            worker->free_client(this);
+            io_context.post([this](){worker->free_client(this);});
             return false;
         };
     }
@@ -402,12 +391,11 @@ private:
         {
             return;
         }
-        auto self = this->shared_from_this();
         ping_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 *
                                                                          config->json_config_schema.interval_to_send_ping)));
         ping_timer.async_wait
         (
-            [this, self](const boost::system::error_code & ec)
+            [this](const boost::system::error_code & ec)
         {
             handle_ping_timeout(ec);
         });
@@ -416,10 +404,9 @@ private:
     void restart_rps_timer()
     {
         rps_timer.expires_from_now(boost::posix_time::millisec(std::max(100, 1000 / (int)rps)));
-        auto self = this->shared_from_this();
         rps_timer.async_wait
         (
-            [this, self](const boost::system::error_code & ec)
+            [this](const boost::system::error_code & ec)
         {
             handle_rps_timer_timeout(ec);
         });
@@ -441,10 +428,9 @@ private:
         if (timer.expires_at() >
             boost::asio::deadline_timer::traits_type::now())
         {
-            auto self = this->shared_from_this();
             timer.async_wait
             (
-                [this, handler, self](const boost::system::error_code & ec)
+                [this, handler](const boost::system::error_code & ec)
             {
                 (this->*handler)(ec);
             });
@@ -577,10 +563,9 @@ private:
     virtual void start_request_delay_execution_timer()
     {
         delay_request_execution_timer.expires_from_now(boost::posix_time::millisec(10));
-        auto self = this->shared_from_this();
         delay_request_execution_timer.async_wait
         (
-            [this, self](const boost::system::error_code & ec)
+            [this](const boost::system::error_code & ec)
         {
             handle_request_execution_timer_timeout(ec);
         });
@@ -610,10 +595,9 @@ private:
 
     void start_async_handshake()
     {
-        auto self = this->shared_from_this();
         ssl_socket.async_handshake(
             boost::asio::ssl::stream_base::client,
-            [this, self](const boost::system::error_code & e)
+            [this](const boost::system::error_code & e)
         {
             if (e)
             {
@@ -659,9 +643,8 @@ private:
                 socket.lowest_layer().close();
                 boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
                 auto next_endpoint_iterator = ++endpoint_iterator;
-                auto self = this->shared_from_this();
                 socket.lowest_layer().async_connect(endpoint,
-                                                    [this, self, next_endpoint_iterator, &socket](const boost::system::error_code & err)
+                                                    [this, next_endpoint_iterator, &socket](const boost::system::error_code & err)
                 {
                     on_connected_event(err, next_endpoint_iterator, socket);
                 });
@@ -730,10 +713,9 @@ private:
         {
             return;
         }
-        auto self = this->shared_from_this();
         socket.async_read_some(
             boost::asio::buffer(input_buffer),
-            [this, self](const boost::system::error_code & e, std::size_t bytes_transferred)
+            [this](const boost::system::error_code & e, std::size_t bytes_transferred)
         {
             handle_read_complete(e, bytes_transferred);
         });
@@ -804,10 +786,9 @@ private:
         output_data_length = 0;
         output_buffer_index = ((++output_buffer_index) % output_buffers.size());
 
-        auto self = this->shared_from_this();
         boost::asio::async_write(
             socket, boost::asio::buffer(buffer.data(), length),
-            [this, self](const boost::system::error_code & e, std::size_t bytes_transferred)
+            [this](const boost::system::error_code & e, std::size_t bytes_transferred)
         {
             handle_write_complete(e, bytes_transferred);
         });
@@ -838,6 +819,7 @@ private:
         is_client_stopped = true;
         boost::system::error_code ignored_ec;
         client_socket.lowest_layer().close(ignored_ec);
+        ssl_socket.lowest_layer().close(ignored_ec);
         connect_timer.cancel();
         rps_timer.cancel();
         delay_request_execution_timer.cancel();
@@ -848,6 +830,7 @@ private:
         timing_script_request_timeout_timer.cancel();
         connect_back_to_preferred_host_timer.cancel();
         delayed_reconnect_timer.cancel();
+        ssl_handshake_timer.cancel();
     }
 
     template <typename SOCKET>
@@ -855,9 +838,8 @@ private:
     {
         boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
         auto next_endpoint_iterator = ++endpoint_iterator;
-        auto self = this->shared_from_this();
         socket.lowest_layer().async_connect(endpoint,
-                                            [this, self, next_endpoint_iterator, &socket](const boost::system::error_code & err)
+                                            [this, next_endpoint_iterator, &socket](const boost::system::error_code & err)
         {
             on_connected_event(err, next_endpoint_iterator, socket);
         });
@@ -891,9 +873,8 @@ private:
             // will be tried until we successfully establish a connection.
             boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
             auto next_endpoint_iterator = ++endpoint_iterator;
-            auto self = this->shared_from_this();
             client_probe_socket.lowest_layer().async_connect(endpoint,
-                                                             [this, self, next_endpoint_iterator](const boost::system::error_code & err)
+                                                             [this, next_endpoint_iterator](const boost::system::error_code & err)
             {
                 on_probe_connected_event(err, next_endpoint_iterator);
             });

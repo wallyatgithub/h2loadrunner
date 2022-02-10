@@ -19,6 +19,7 @@ if(DEFINED USE_LIBEV)
 find_package(Libev 4.11)
 endif()
 
+find_path(GETOPT_INCLUDE_DIR getopt.h)
 
 include(GNUInstallDirs)
 # Checks for header files.
@@ -71,6 +72,13 @@ ${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib64
 
 endif()
 
+#set (WIN32_BUILD ON)
+if(DEFINED WIN32_BUILD)
+add_definitions(-D_WIN32=1)
+add_definitions(-DNOMINMAX=1)
+endif()
+
+
 include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/"
   "${CMAKE_CURRENT_SOURCE_DIR}/includes"
@@ -80,6 +88,7 @@ include_directories(
   "${LUA_INCLUDE_DIR}"
   "${C_ARES_INCLUDE}"
   "${Boost_INCLUDE_DIRS}"
+  "${GETOPT_INCLUDE_DIR}"
 )
 
 link_libraries(
