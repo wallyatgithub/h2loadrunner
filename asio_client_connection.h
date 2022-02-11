@@ -268,7 +268,10 @@ public:
         }
         if (output_buffers[output_buffer_index].capacity() - output_data_length < length)
         {
+            std::vector<uint8_t> tempBuffer(output_data_length, 0);
+            std::memcpy(tempBuffer.data(), output_buffers[output_buffer_index].data(), output_data_length);
             output_buffers[output_buffer_index].reserve(output_data_length + length);
+            std::memcpy(output_buffers[output_buffer_index].data(), tempBuffer.data(), output_data_length);
         }
         std::memcpy(output_buffers[output_buffer_index].data() + output_data_length, data, length);
         output_data_length += length;
