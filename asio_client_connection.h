@@ -40,8 +40,7 @@ namespace h2load
 {
 
 class asio_client_connection
-    : public std::enable_shared_from_this<asio_client_connection>, public h2load::Client_Interface,
-      private boost::noncopyable
+    : public h2load::Client_Interface, private boost::noncopyable
 {
 public:
     asio_client_connection
@@ -263,10 +262,13 @@ public:
 
     virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length)
     {
+        if (output_data_length >= BACKOFF_WRITE_BUFFER_THRES)
+        {
+            return NGHTTP2_ERR_WOULDBLOCK;
+        }
         if (output_buffers[output_buffer_index].capacity() - output_data_length < length)
         {
             output_buffers[output_buffer_index].reserve(output_data_length + length);
-            //return NGHTTP2_ERR_WOULDBLOCK;
         }
         std::memcpy(output_buffers[output_buffer_index].data() + output_data_length, data, length);
         output_data_length += length;
@@ -278,7 +280,6 @@ public:
         {
             handle_write_signal();
         });
-        //handle_write_signal();
     }
     virtual bool any_pending_data_to_write()
     {
@@ -621,6 +622,7 @@ private:
         static thread_local boost::asio::ip::tcp::resolver::iterator end_of_resolve_result;
         if (!err)
         {
+            socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
             if (schema != "https")
             {
                 if (connected() != 0)
@@ -702,7 +704,6 @@ private:
         {
             return handle_connection_error();
         }
-
         do_read();
     }
 

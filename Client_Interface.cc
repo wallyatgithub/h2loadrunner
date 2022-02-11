@@ -3,7 +3,9 @@
 #include <regex>
 #include <algorithm>
 #include <cctype>
+#ifndef _WIN32
 #include <execinfo.h>
+#endif
 #include <iomanip>
 #include <string>
 

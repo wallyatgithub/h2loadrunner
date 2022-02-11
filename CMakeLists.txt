@@ -76,6 +76,7 @@ endif()
 if(DEFINED WIN32_BUILD)
 add_definitions(-D_WIN32=1)
 add_definitions(-DNOMINMAX=1)
+add_definitions(-D_WIN32_WINNT=0x0601)
 endif()
 
 
