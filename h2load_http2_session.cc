@@ -202,7 +202,7 @@ ssize_t buffer_read_callback(nghttp2_session* session, int32_t stream_id,
 {
     auto client = static_cast<Client_Interface*>(user_data);
     auto config = client->get_config();
-    auto request_map = client->requests_waiting_for_response();
+    auto& request_map = client->requests_waiting_for_response();
     auto request = request_map.find(stream_id);
     assert(request != request_map.end());
     std::string& stream_buffer = *(request_map[stream_id].req_payload);

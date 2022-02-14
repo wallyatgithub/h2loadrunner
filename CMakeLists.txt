@@ -44,8 +44,10 @@ file(GLOB cxx_sources *.cc)
 set_source_files_properties(${cxx_sources} PROPERTIES
   COMPILE_FLAGS "${WARNCXXFLAGS} ${CXX1XCXXFLAGS}")
 
-#add_compile_options(-fsanitize=address)
-#add_link_options(-fsanitize=address)
+if(DEFINED ADDRESS_SANITIZE)
+add_compile_options(-fsanitize=address)
+add_link_options(-fsanitize=address)
+endif()
 
 set(C_ARES_INCLUDE
 "."

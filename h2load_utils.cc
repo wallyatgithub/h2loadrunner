@@ -259,7 +259,6 @@ void rps_cb(struct ev_loop* loop, ev_timer* w, int revents)
 void stream_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
-    auto& session = client->session;
     client->reset_timeout_requests();
 }
 
