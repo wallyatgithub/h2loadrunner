@@ -29,8 +29,6 @@
 
 #ifndef _WIN32
 #  include <sys/uio.h>
-#else
-typedef SSIZE_T ssize_t;
 #endif // !_WIN32
 
 

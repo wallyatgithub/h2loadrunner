@@ -119,7 +119,7 @@ int parse_header_table_size(uint32_t& dst, const char* opt,
 }
 
 void read_script_from_file(std::istream& infile,
-                           std::vector<ev_tstamp>& timings,
+                           std::vector<double>& timings,
                            std::vector<std::string>& uris)
 {
     std::string script_line;

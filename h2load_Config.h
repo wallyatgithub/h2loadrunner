@@ -6,7 +6,9 @@
 #include <atomic>
 
 #include "http2.h"
+#ifdef USE_LIBEV
 #include <ev.h>
+#endif
 
 #include "config_schema.h"
 
@@ -17,7 +19,7 @@ struct Config
 {
     std::vector<std::vector<nghttp2_nv>> nva;
     std::vector<std::string> h1reqs;
-    std::vector<ev_tstamp> timings;
+    std::vector<double> timings;
     nghttp2::Headers custom_headers;
     std::string scheme;
     std::string host;
