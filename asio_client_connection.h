@@ -60,6 +60,7 @@ public:
           dns_resolver(io_ctx),
           client_socket(io_ctx),
           client_probe_socket(io_ctx),
+          input_buffer(16 * 1024, 0),
           output_buffers(2, std::vector<uint8_t>(16 * 1024, 0)),
           connect_timer(io_ctx),
           delay_request_execution_timer(io_ctx),
@@ -79,9 +80,10 @@ public:
     {
         init_connection_targert();
     }
+
     virtual ~asio_client_connection()
     {
-        std::cerr << "asio_client_connection deallocated: " << schema << "://" << authority << std::endl;
+        std::cerr << "deallocate connection: " << schema << "://" << authority << std::endl;
         disconnect();
         final_cleanup();
     }
@@ -242,6 +244,7 @@ public:
 
     virtual int connected()
     {
+        std::cerr << "===============connected to " << authority << "===============" << std::endl;
         is_client_stopped = false;
         do_read();
         if (connection_made() != 0)
@@ -262,10 +265,6 @@ public:
 
     virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length)
     {
-        if (output_data_length >= BACKOFF_WRITE_BUFFER_THRES)
-        {
-            return NGHTTP2_ERR_WOULDBLOCK;
-        }
         if (output_buffers[output_buffer_index].capacity() - output_data_length < length)
         {
             std::vector<uint8_t> tempBuffer(output_data_length, 0);
@@ -275,14 +274,19 @@ public:
         }
         std::memcpy(output_buffers[output_buffer_index].data() + output_data_length, data, length);
         output_data_length += length;
-        return output_data_length;
+        return length;
     }
     virtual void signal_write()
     {
-        io_context.post([this]()
+        if (!write_signaled)
         {
-            handle_write_signal();
-        });
+            io_context.post([this]()
+            {
+                handle_write_signal();
+                write_signaled = false;
+            });
+            write_signaled = true;
+        }
     }
     virtual bool any_pending_data_to_write()
     {
@@ -293,8 +297,8 @@ public:
                                                                  const std::string& dest_authority)
     {
         auto new_client =
-                        std::make_shared<asio_client_connection>(io_context, this->id, worker,
-                                                                 req_todo, config, ssl_ctx, this, dst_sch, dest_authority);
+            std::make_shared<asio_client_connection>(io_context, this->id, worker,
+                                                     req_todo, config, ssl_ctx, this, dst_sch, dest_authority);
         return new_client;
     }
 
@@ -382,7 +386,10 @@ public:
         write_clear_callback = [this]()
         {
             disconnect();
-            io_context.post([this](){worker->free_client(this);});
+            io_context.post([this]()
+            {
+                worker->free_client(this);
+            });
             return false;
         };
     }
@@ -449,7 +456,7 @@ private:
 
     virtual void conn_activity_timeout_handler()
     {
-        stop();
+        timeout();
     }
 
     virtual void handle_delayed_reconnect_timer_timeout(const boost::system::error_code& ec)
@@ -519,7 +526,7 @@ private:
         {
             return;
         }
-        stop();
+        handle_connection_error();
     }
 
     void handle_con_activity_timer_timeout(const boost::system::error_code& ec)
@@ -605,7 +612,7 @@ private:
         {
             if (e)
             {
-                stop();
+                handle_connection_error();
             }
             else
             {
@@ -644,7 +651,6 @@ private:
             std::cerr << __FUNCTION__ << " err: " << err << std::endl;
             if (endpoint_iterator != end_of_resolve_result)
             {
-                // The connection failed. Try the next endpoint in the list.
                 socket.lowest_layer().close();
                 boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
                 auto next_endpoint_iterator = ++endpoint_iterator;
@@ -671,12 +677,12 @@ private:
         {
             return;
         }
-        stop();
+        handle_connection_error();
     }
 
     void handle_connection_error()
     {
-        std::cerr << __FUNCTION__ << ":" << schema << "://" << authority << std::endl;
+        std::cerr << "connection error" << ": " << schema << "://" << authority << std::endl;
         fail();
         if (reconnect_to_alt_addr())
         {
@@ -686,18 +692,17 @@ private:
         return;
     }
 
-    void handle_read_complete(const boost::system::error_code& e, std::size_t bytes_transferred)
+    void handle_read_complete(const boost::system::error_code& e, const std::size_t bytes_transferred)
     {
         if (e)
         {
-            if (boost::asio::error::misc_errors::eof == e)
-            {
-                std::cerr << "EOF, remote disconnected: " << schema << "://" << authority << std::endl;
-            }
-
             if (e != boost::asio::error::operation_aborted)
             {
                 std::cerr << "read error_code:" << e << ", bytes_transferred:" << bytes_transferred << std::endl;
+                if (boost::asio::error::misc_errors::eof == e)
+                {
+                    std::cerr << "remote disconnected: " << schema << "://" << authority << std::endl;
+                }
                 return handle_connection_error();
             }
             return;
@@ -706,6 +711,10 @@ private:
         if (session->on_read(input_buffer.data(), bytes_transferred) != 0)
         {
             return handle_connection_error();
+        }
+        if (bytes_transferred >= input_buffer.size())
+        {
+            input_buffer.resize(2 * bytes_transferred);
         }
         do_read();
     }
@@ -771,7 +780,16 @@ private:
 
     void handle_write_signal()
     {
-        session->on_write();
+        for (;;)
+        {
+            auto output_data_length_before = output_data_length;
+            session->on_write();
+            auto bytes_to_write = output_data_length - output_data_length_before;
+            if (!bytes_to_write)
+            {
+                break;
+            }
+        }
         do_write();
     }
 
@@ -873,8 +891,6 @@ private:
     {
         if (!err)
         {
-            // Attempt a connection to the first endpoint in the list. Each endpoint
-            // will be tried until we successfully establish a connection.
             boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
             auto next_endpoint_iterator = ++endpoint_iterator;
             client_probe_socket.lowest_layer().async_connect(endpoint,
@@ -897,9 +913,9 @@ private:
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket> ssl_socket;
     bool is_write_in_progress = false;
     bool is_client_stopped = false;
+    bool write_signaled = false;
 
-    /// Buffer for incoming data.
-    std::array<uint8_t, 8_k> input_buffer;
+    std::vector<uint8_t> input_buffer;
     std::vector<std::vector<uint8_t>> output_buffers;
     size_t output_data_length = 0;
     size_t output_buffer_index = 0;

@@ -5,15 +5,15 @@
 
 # h2loadrunner 是一个用于HTTP 1.x / HTTP2的性能测试工具
   h2loadrunner既支持HTTP 1.x，也支持HTTP2。
-  
-  h2loadrunner是从nghttp2项目的h2load工具fork而来。
 
-  h2load本身基于libEv构建，借助libEv底层的epoll/kqueue等机制，h2load能够产生非常巨大的测试流量，并且在多核环境下，性能可以线性提升
-  
-  但是，h2load缺乏若干必要的功能，比如可变的URI和可变的payload，前后Request之间的关联，Request可编程，等等，使它无法作为一个生产力工具。
+  h2loadrunner最初是从nghttp2项目的h2load工具fork而来，并加入了许多有新功能
 
-  所以，h2loadrunner在h2load良好性能架构的基础上，加入了若干必备的功能，使得其能满足一个性能测试工具的基本要求。
-  
+  与h2load不一样的是，h2loadrunner基于Boost ASIO而不是Libev构建，以获得最佳的性能和最佳的可移植性
+
+  Libev的支持虽然还保留，但处于depricated状态，在不久的将来，Libev的支持可能会被移除
+
+  以下是h2loadrunner支持的新功能，这些功能在nghttp2项目的h2load工具中均不支持：
+
   1. 支持可变的URI和payload
   
   2. Stream 超时处理
@@ -35,10 +35,12 @@
   9. 支持在Request执行结束之后，延迟执行下一个Request，延迟时间可通过JSON配置
 
   10. 支持配置不同的status code，来判定统计结果中response是成功的还是失败的
-  
+
   11. 支持mTLS
-  
-  12. 支持建立并行的连接到负载均衡模式下的一组主机，并支持连接的failover和failback
+
+  12. 支持建立并行的连接到负载均衡模式下的一组主机
+
+  13. 连接的failover和failback
 
 
 # 如何编译构建目标可执行文件

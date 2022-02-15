@@ -5,43 +5,47 @@
 
 # h2loadrunner is an HTTP and HTTP2 benchmarking / load testing / performance testing tool
   h2loadrunner is a benchmarking tool supporting both HTTP 1.x and HTTP2.
-  
-  It was forked from the h2load utility of nghttp2,  yet with a number of powerful features added.
-  
-  Thanks to libEv (w/ epoll/poll/kqueue), like h2load, h2loadrunner can generate a very large amount of load with multi-core.
-  
-  Besides, h2loadrunner supports powerful features that are not present in h2load:
-  
+
+  h2loadrunner was initially forked from h2load utility of nghttp2 project, with a lof of powerful new features added.
+
+  Unlike h2load, h2loadrunner is built on Boost ASIO, instead of Libev, for best performance while with best portibility.
+
+  Libev support is still present in h2loadrunner, yet depricated, and might be completely removed in near future.
+
+  Here are the powerful new features supported by h2loadrunner while not present in h2load:
+
   1. Variable support in URI and message body.
-  
+
   2. Stream timeout handling.
-  
+
   3. Transaction support with specific resource header tracking.
-  
+
      Other types of resource tracking are to be added in the future, like, XPath for XML message body, Json pointer for Json message body, etc.
 
   4. Natively support Set-Cookie and Cookie headers, yet provides the flexibility of clearing Cookie before the execution of one request.
-  
+
      Cookies handling complies to https://tools.ietf.org/html/rfc6265
-  
+
   5. Lua script support.
      With lua script, user can customize every header and the payload of the request to be sent.
-  
+
   6. Both command line interface and JSON based configuration.
      With JSON configuration, user can build the test scenario with a GUI editor.
-     
+
   7. Dynamic report of the test, dynamic change of the RPS.
      h2loadrunner prints the test statistics every second; it also supports dynamic change of RPS.
-     
+
   8. Async dynamic connection establishment.
 
   9. Support delay between requests of the same scenario, with the delay interval configurable.
 
   10. Support configurable status code to determine if a response is successful in statistics report
-  
+
   11. mTLS support
-  
-  13. Parallel connections to multiple hosts in a load share pool, with connection failover and failback.
+
+  12. Parallel connections to multiple hosts in a load share pool
+
+  13. Connection failover and failback.
 
 # How to build
 
