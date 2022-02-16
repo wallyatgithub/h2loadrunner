@@ -70,7 +70,7 @@ template <size_t N> struct Memchunk
     }
     size_t left() const
     {
-        return std::end(buf) - last;
+        return buf.data() + N - last;
     }
     void reset()
     {

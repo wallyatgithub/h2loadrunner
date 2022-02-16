@@ -299,11 +299,18 @@ char* http_date(char* res, time_t t)
 {
     struct tm tms;
 
+#if defined(_MSC_VER)
+    auto err = gmtime_s(&tms, &t);
+    if (err)
+    {
+        return res;
+    }
+#else
     if (gmtime_r(&t, &tms) == nullptr)
     {
         return res;
     }
-
+#endif
     auto p = res;
 
     auto s = DAY_OF_WEEK[tms.tm_wday];
@@ -340,10 +347,18 @@ char* common_log_date(char* res, time_t t)
 {
     struct tm tms;
 
-    if (localtime_r(&t, &tms) == nullptr)
+#if defined(_MSC_VER)
+    auto err = localtime_s(&tms, &t);
+    if (err)
     {
         return res;
     }
+#else
+    if (localtime_r(&t, &tms) == nullptr)
+    {
+      return res;
+    }
+#endif
 
     auto p = res;
 
@@ -397,10 +412,18 @@ char* iso8601_date(char* res, int64_t ms)
     time_t sec = ms / 1000;
 
     tm tms;
-    if (localtime_r(&sec, &tms) == nullptr)
-    {
-        return res;
-    }
+#if defined(_MSC_VER)
+        auto err = localtime_s(&tms, &sec);
+        if (err)
+        {
+            return res;
+        }
+#else
+        if (localtime_r(&sec, &tms) == nullptr)
+        {
+          return res;
+        }
+#endif
 
     auto p = res;
 
@@ -478,17 +501,6 @@ time_t parse_http_date(const StringRef& s)
     }
     return nghttp2_timegm_without_yday(&tm);
 #endif // !_WIN32
-}
-
-time_t parse_openssl_asn1_time_print(const StringRef& s)
-{
-    tm tm{};
-    auto r = strptime(s.c_str(), "%b %d %H:%M:%S %Y GMT", &tm);
-    if (r == nullptr)
-    {
-        return 0;
-    }
-    return nghttp2_timegm_without_yday(&tm);
 }
 
 char upcase(char c)
@@ -1893,60 +1905,6 @@ std::mt19937 make_mt19937()
 {
     std::random_device rd;
     return std::mt19937(rd());
-}
-
-int daemonize(int nochdir, int noclose)
-{
-#if defined(__APPLE__)
-    pid_t pid;
-    pid = fork();
-    if (pid == -1)
-    {
-        return -1;
-    }
-    else if (pid > 0)
-    {
-        _exit(EXIT_SUCCESS);
-    }
-    if (setsid() == -1)
-    {
-        return -1;
-    }
-    pid = fork();
-    if (pid == -1)
-    {
-        return -1;
-    }
-    else if (pid > 0)
-    {
-        _exit(EXIT_SUCCESS);
-    }
-    if (nochdir == 0)
-    {
-        if (chdir("/") == -1)
-        {
-            return -1;
-        }
-    }
-    if (noclose == 0)
-    {
-        if (freopen("/dev/null", "r", stdin) == nullptr)
-        {
-            return -1;
-        }
-        if (freopen("/dev/null", "w", stdout) == nullptr)
-        {
-            return -1;
-        }
-        if (freopen("/dev/null", "w", stderr) == nullptr)
-        {
-            return -1;
-        }
-    }
-    return 0;
-#else  // !defined(__APPLE__)
-    return daemon(nochdir, noclose);
-#endif // !defined(__APPLE__)
 }
 
 } // namespace util

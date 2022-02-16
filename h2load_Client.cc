@@ -9,7 +9,12 @@
 #include <boost/asio/io_service.hpp>
 #include <boost/thread/thread.hpp>
 
+#ifdef USE_LIBEV
+extern "C" {
 #include <ares.h>
+}
+#include "memchunk.h"
+#endif
 
 #include "h2load.h"
 #include "h2load_Client.h"

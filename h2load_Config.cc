@@ -47,15 +47,15 @@ Config::Config()
       no_tls_proto(PROTO_HTTP2),
       header_table_size(4_k),
       encoder_header_table_size(4_k),
-      data_fd(-1),
-      log_fd(-1),
       port(0),
       default_port(0),
       connect_to_port(0),
       verbose(false),
       timing_script(false),
+#ifndef _WINDOWS
       base_uri_unix(false),
       unix_addr {},
+#endif
       rps(0.),
       //      req_variable_start(0),
       //      req_variable_end(0),
@@ -72,19 +72,16 @@ Config::~Config()
 {
     if (addrs)
     {
+#ifndef _WINDOWS
         if (base_uri_unix)
         {
             delete addrs;
         }
         else
+#endif
         {
             freeaddrinfo(addrs);
         }
-    }
-
-    if (data_fd != -1)
-    {
-        close(data_fd);
     }
 }
 

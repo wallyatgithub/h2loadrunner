@@ -231,7 +231,7 @@ int Http1Session::submit_request()
     client_->record_request_time(req_stat);
     client_->push_data_to_output_buffer(reinterpret_cast<const uint8_t*>(req.c_str()), req.size());
 
-    if (config->data_fd == -1 || config->data_length == 0)
+    if (config->data_length == 0)
     {
         // increment for next request
         stream_req_counter_ += 2;
@@ -300,16 +300,9 @@ int Http1Session::on_write()
         // family functions.
         std::array<uint8_t, 16_k> buf;
 
-        ssize_t nread;
-        while ((nread = pread(config->data_fd, buf.data(), buf.size(),
-                              req_stat->data_offset)) == -1 &&
-               errno == EINTR)
-            ;
-
-        if (nread == -1)
-        {
-            return -1;
-        }
+        auto size_left = config->payload_data.size() - req_stat->data_offset;
+        auto nread = size_left > 16_k ? 16_k : size_left;
+        std::memcpy(buf.data(), (uint8_t*)config->payload_data.c_str() + req_stat->data_offset, nread);
 
         req_stat->data_offset += nread;
 

@@ -341,41 +341,59 @@ void Client_Interface::timing_script_timeout_handler()
 
 void Client_Interface::brief_log_to_file(int32_t stream_id, bool success)
 {
-    if (worker->config->log_fd != -1)
+    if (!config->json_config_schema.log_file.size())
     {
-        auto req_stat = get_req_stat(stream_id);
-        if (!req_stat)
-        {
-            return;
-        }
-        auto start = std::chrono::duration_cast<std::chrono::microseconds>(
-                         req_stat->request_wall_time.time_since_epoch());
-        auto delta = std::chrono::duration_cast<std::chrono::microseconds>(
-                         req_stat->stream_close_time - req_stat->request_time);
-
-        std::array<uint8_t, 256> buf;
-        auto p = std::begin(buf);
-        p = util::utos(p, start.count());
-        *p++ = '\t';
-        if (success)
-        {
-            p = util::utos(p, req_stat->status);
-        }
-        else
-        {
-            *p++ = '-';
-            *p++ = '1';
-        }
-        *p++ = '\t';
-        p = util::utos(p, delta.count());
-        *p++ = '\n';
-
-        auto nwrite = static_cast<size_t>(std::distance(std::begin(buf), p));
-        assert(nwrite <= buf.size());
-        while (write(worker->config->log_fd, buf.data(), nwrite) == -1 &&
-               errno == EINTR)
-            ;
+        return;
     }
+    static boost::asio::io_service work_offload_io_service;
+    static boost::thread_group work_offload_thread_pool;
+    static boost::asio::io_service::work work(work_offload_io_service);
+    auto create_log_thread = []()
+    {
+        work_offload_thread_pool.create_thread(boost::bind(&boost::asio::io_service::run, &work_offload_io_service));
+        return true;
+    };
+    static bool dummy = create_log_thread();
+    static std::ofstream log_file(config->json_config_schema.log_file);
+
+    auto req_stat = get_req_stat(stream_id);
+    if (!req_stat)
+    {
+        return;
+    }
+    auto start = std::chrono::duration_cast<std::chrono::microseconds>(
+                     req_stat->request_wall_time.time_since_epoch());
+    auto delta = std::chrono::duration_cast<std::chrono::microseconds>(
+                     req_stat->stream_close_time - req_stat->request_time);
+
+    std::array<uint8_t, 256> buf;
+    auto p = std::begin(buf);
+    p = util::utos(p, start.count());
+    *p++ = '\t';
+    if (success)
+    {
+        p = util::utos(p, req_stat->status);
+    }
+    else
+    {
+        *p++ = '-';
+        *p++ = '1';
+    }
+    *p++ = '\t';
+    p = util::utos(p, delta.count());
+    *p++ = '\n';
+
+    auto nwrite = static_cast<size_t>(std::distance(std::begin(buf), p));
+    assert(nwrite <= buf.size());
+
+    auto log_func = [](const std::string & msg)
+    {
+        log_file << msg;
+    };
+    auto log_routine = std::bind(log_func, std::string((const char*)buf.data(), nwrite));
+
+    work_offload_io_service.post(log_routine);
+
 }
 
 void Client_Interface::init_req_left()

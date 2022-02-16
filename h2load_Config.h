@@ -50,10 +50,6 @@ struct Config
     enum { PROTO_HTTP2, PROTO_HTTP1_1 } no_tls_proto;
     uint32_t header_table_size;
     uint32_t encoder_header_table_size;
-    // file descriptor for upload data
-    int data_fd;
-    // file descriptor to write per-request stats to.
-    int log_fd;
     uint16_t port;
     uint16_t default_port;
     uint16_t connect_to_port;
@@ -62,9 +58,11 @@ struct Config
     std::string base_uri;
     // true if UNIX domain socket is used.  In this case, base_uri is
     // not used in usual way.
+#ifndef _WINDOWS
     bool base_uri_unix;
     // used when UNIX domain socket is used (base_uri_unix is true).
     sockaddr_un unix_addr;
+#endif
     // list of supported NPN/ALPN protocol strings in the order of
     // preference.
     std::vector<std::string> npn_list;
@@ -74,6 +72,7 @@ struct Config
     std::string rps_file;
     Config_Schema json_config_schema;
     std::vector<std::string> reqlines;
+    std::string payload_data;
 
     Config();
     ~Config();

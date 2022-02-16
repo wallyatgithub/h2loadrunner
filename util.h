@@ -211,11 +211,6 @@ char* iso8601_date(char* res, int64_t ms);
 
 time_t parse_http_date(const StringRef& s);
 
-// Parses time formatted as "MMM DD HH:MM:SS YYYY [GMT]" (e.g., Feb 3
-// 00:55:52 2015 GMT), which is specifically used by OpenSSL
-// ASN1_TIME_print().
-time_t parse_openssl_asn1_time_print(const StringRef& s);
-
 char upcase(char c);
 
 inline char lowcase(char c)
@@ -864,10 +859,6 @@ std::pair<StringRef, StringRef> split_hostport(const StringRef& hostport);
 
 // Returns new std::mt19937 object.
 std::mt19937 make_mt19937();
-
-// daemonize calls daemon(3).  If __APPLE__ is defined, it implements
-// daemon() using fork().
-int daemonize(int nochdir, int noclose);
 
 } // namespace util
 

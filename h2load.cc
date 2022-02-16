@@ -32,7 +32,7 @@
 #ifdef HAVE_NETINET_IN_H
 #  include <netinet/in.h>
 #endif // HAVE_NETINET_IN_H
-#include <netinet/tcp.h>
+
 #include <sys/stat.h>
 #ifdef HAVE_FCNTL_H
 #  include <fcntl.h>
@@ -45,8 +45,9 @@
 #ifdef HAVE_NETDB_H
 #  include <netdb.h>
 #endif // HAVE_NETDB_H
+#ifndef _WINDOWS
 #include <sys/un.h>
-
+#endif
 #include <cstdio>
 #include <cassert>
 #include <cstdlib>
@@ -75,7 +76,6 @@ extern "C" {
 
 #include <nghttp2/nghttp2.h>
 
-#include "memchunk.h"
 #include "template.h"
 #include "url-parser/url_parser.h"
 
@@ -396,7 +396,6 @@ int main(int argc, char** argv)
 #endif // NOTHREADS
 
     std::string datafile;
-    std::string logfile;
     bool nreqs_set_manually = false;
     while (1)
     {
@@ -577,8 +576,8 @@ int main(int argc, char** argv)
             {
                 auto arg = StringRef {optarg};
                 config.base_uri = "";
+#ifndef _WINDOWS
                 config.base_uri_unix = false;
-
                 if (util::istarts_with_l(arg, UNIX_PATH_PREFIX))
                 {
                     // UNIX domain socket path
@@ -604,7 +603,7 @@ int main(int argc, char** argv)
 
                     break;
                 }
-
+#endif
                 if (!parse_base_uri(arg, config))
                 {
                     std::cerr << "--base-uri: invalid base URI: " << arg << std::endl;
@@ -693,7 +692,7 @@ int main(int argc, char** argv)
                         break;
                     case 10:
                         // --log-file
-                        logfile = optarg;
+                        config.json_config_schema.log_file = optarg;
                         break;
                     case 11:
                     {
@@ -748,7 +747,6 @@ int main(int argc, char** argv)
                         post_process_json_config_schema(config);
 
                         populate_config_from_json(config);
-                        logfile = config.json_config_schema.log_file;
                     }
                     break;
                 }
@@ -948,36 +946,25 @@ int main(int argc, char** argv)
 
     if (!datafile.empty())
     {
-        config.data_fd = open(datafile.c_str(), O_RDONLY | O_BINARY);
-        if (config.data_fd == -1)
+        std::ifstream f(datafile);
+        if (f.good())
+        {
+            std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+            config.payload_data = content;
+            config.data_length = content.size();
+        }
+        else
         {
             std::cerr << "-d: Could not open file " << datafile << std::endl;
             exit(EXIT_FAILURE);
         }
-        struct stat data_stat;
-        if (fstat(config.data_fd, &data_stat) == -1)
-        {
-            std::cerr << "-d: Could not stat file " << datafile << std::endl;
-            exit(EXIT_FAILURE);
-        }
-        config.data_length = data_stat.st_size;
     }
 
-    if (!logfile.empty())
-    {
-        close(config.log_fd);
-        config.log_fd = open(logfile.c_str(), O_WRONLY | O_CREAT | O_APPEND,
-                             S_IRUSR | S_IWUSR | S_IRGRP);
-        if (config.log_fd == -1)
-        {
-            std::cerr << "--log-file: Could not open file " << logfile << std::endl;
-            exit(EXIT_FAILURE);
-        }
-    }
-
+#ifndef _WINDOWS
     struct sigaction act {};
     act.sa_handler = SIG_IGN;
     sigaction(SIGPIPE, &act, nullptr);
+#endif
 
     auto ssl_ctx = SSL_CTX_new(SSLv23_client_method());
     if (!ssl_ctx)
@@ -1001,7 +988,7 @@ int main(int argc, char** argv)
     {
         shared_nva.emplace_back(authority_header, config.host);
     }
-    shared_nva.emplace_back(method_header, config.data_fd == -1 ? "GET" : "POST");
+    shared_nva.emplace_back(method_header, config.data_length > 0 ? "POST": "GET");
     shared_nva.emplace_back("user-agent", user_agent);
 
     // list header fields that can be overridden.
@@ -1031,7 +1018,7 @@ int main(int argc, char** argv)
     }
 
     std::string content_length_str;
-    if (config.data_fd != -1)
+    if (config.data_length)
     {
         content_length_str = util::utos(config.data_length);
     }
@@ -1366,11 +1353,6 @@ time for request: )"
     print_extended_stats_summary(stats, config, workers);
 
     SSL_CTX_free(ssl_ctx);
-
-    if (config.log_fd != -1)
-    {
-        close(config.log_fd);
-    }
 
 #ifdef USE_LIBEV
     ares_library_cleanup();

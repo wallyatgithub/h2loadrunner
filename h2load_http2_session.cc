@@ -167,17 +167,10 @@ ssize_t file_read_callback(nghttp2_session* session, int32_t stream_id,
     auto client = static_cast<Client_Interface*>(user_data);
     auto req_stat = client->get_req_stat(stream_id);
     assert(req_stat);
-    ssize_t nread;
     auto config = client->get_config();
-    while ((nread = pread(config->data_fd, buf, length, req_stat->data_offset)) ==
-           -1 &&
-           errno == EINTR)
-        ;
-
-    if (nread == -1)
-    {
-        return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
-    }
+    auto size_left = config->payload_data.size() - req_stat->data_offset;
+    auto nread = size_left > length ? length : size_left;
+    std::memcpy(buf, (uint8_t*)config->payload_data.c_str() + req_stat->data_offset, nread);
 
     req_stat->data_offset += nread;
 
@@ -331,7 +324,7 @@ int Http2Session::submit_request()
 
     auto stream_id =
         nghttp2_submit_request(session_, nullptr, nva.data(), nva.size(),
-                               config->data_fd == -1 ? nullptr : &prd, nullptr);
+                               config->data_length ? &prd : nullptr, nullptr);
     if (stream_id < 0)
     {
         return -1;

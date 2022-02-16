@@ -24,7 +24,6 @@ extern "C" {
 }
 
 #include <fstream>
-#include <unistd.h>
 #include <fcntl.h>
 #include "template.h"
 #include "util.h"
@@ -705,6 +704,7 @@ process_time_stats(const std::vector<std::unique_ptr<h2load::Worker_Interface>>&
 
 void resolve_host(h2load::Config& config)
 {
+#ifndef _WINDOWS
     if (config.base_uri_unix)
     {
         auto res = std::make_unique<addrinfo>();
@@ -717,7 +717,7 @@ void resolve_host(h2load::Config& config)
         config.addrs = res.release();
         return;
     };
-
+#endif
     int rv;
     addrinfo hints {}, *res;
 
