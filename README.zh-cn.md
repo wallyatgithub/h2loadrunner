@@ -6,9 +6,9 @@
 # h2loadrunner 是一个用于HTTP 1.x / HTTP2的性能测试工具
   h2loadrunner既支持HTTP 1.x，也支持HTTP2。
 
-  h2loadrunner基于nghttp2项目的h2load工具构建。
+  h2loadrunner最初基于nghttp2项目的h2load工具构建。
   
-  之后，许多强大的新的功能被陆续加入，并且，h2loadrunner重新设计了执行框架，使之成为一个功能强大的、高性能的、跨平台的负载测试工具
+  后来，许多强大的新的功能被陆续加入，并且，h2loadrunner重新设计了执行框架，使之成为一个功能强大的、高性能的、跨平台的负载测试工具
 
   现在，与h2load不一样的是，h2loadrunner基于Boost ASIO而不是Libev构建，以获得最佳的性能和最佳的可移植性
 
