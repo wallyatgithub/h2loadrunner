@@ -6,13 +6,15 @@
 # h2loadrunner is an HTTP and HTTP2 benchmarking / load testing / performance testing tool
   h2loadrunner is a benchmarking tool supporting both HTTP 1.x and HTTP2.
 
-  h2loadrunner was initially forked from h2load utility of nghttp2 project, with a lof of powerful new features added.
+  h2loadrunner was initially created from h2load utility of the nghttp2 project.
+  
+  Post that, a lot of powerful new features have been added, and the framework is also re-designed, to make it a powerful, performant, cross platform load test tool.
 
-  Unlike h2load, h2loadrunner is built on Boost ASIO, instead of Libev, for best performance while with best portibility.
+  Now, unlike h2load, h2loadrunner is based on Boost ASIO instead of Libev, for best performance while with best portibility.
 
-  Libev support is still present in h2loadrunner, yet depricated, and might be completely removed in near future.
+  The legacy Libev support is still present in h2loadrunner, yet depricated, and might be removed in near future, as Libev is not functioning well on Windows.
 
-  Here are the powerful new features supported by h2loadrunner while not present in h2load:
+  Talking about the powerful new features of h2loadrunner, here are the powerful new features supported by h2loadrunner, while not present in h2load:
 
   1. Variable support in URI and message body.
 
@@ -46,8 +48,39 @@
   12. Parallel connections to multiple hosts in a load share pool
 
   13. Connection failover and failback.
+  
+  14. Native support of Linux and Windows platforms, with very high performance on both platform, thanks to Boost ASIO, for best leveraging the power of Linux epoll and Windows IOCP respectively.
 
-# How to build
+# How to build on Windows
+
+  cmake and visual C++ build tool need to be installed
+
+  vcpkg is also needed to build h2loadrunner on Windows
+  
+  These packages need to be installed with vcpkg:
+  
+    boost
+    getopt
+    openssl
+    luajit
+    nghttp2
+    rapidjson
+  
+  Next, download h2loadrunner source package with http or git
+  
+    cd h2loadrunner
+    
+    mkdir build
+    
+    cd build
+    
+    cmake ../ -DCMAKE_TOOLCHAIN_FILE=YOUR_VCPKG_PATH\scripts/buildsystems/vcpkg.cmake
+    
+    cmake --build ./ --config=Release
+  
+  h2loadrunner.exe will then be generated in Release folder
+
+# How to build on Linux
 
   These packages are required to build h2loadrunner (take Ubuntu for example):
   

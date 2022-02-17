@@ -6,13 +6,15 @@
 # h2loadrunner 是一个用于HTTP 1.x / HTTP2的性能测试工具
   h2loadrunner既支持HTTP 1.x，也支持HTTP2。
 
-  h2loadrunner最初是从nghttp2项目的h2load工具fork而来，并加入了许多有新功能
+  h2loadrunner基于nghttp2项目的h2load工具构建。
+  
+  之后，许多强大的新的功能被陆续加入，并且，h2loadrunner重新设计了执行框架，使之成为一个功能强大的、高性能的、跨平台的负载测试工具
 
-  与h2load不一样的是，h2loadrunner基于Boost ASIO而不是Libev构建，以获得最佳的性能和最佳的可移植性
+  现在，与h2load不一样的是，h2loadrunner基于Boost ASIO而不是Libev构建，以获得最佳的性能和最佳的可移植性
 
-  Libev的支持虽然还保留，但处于depricated状态，在不久的将来，Libev的支持可能会被移除
+  旧的Libev的支持虽然还保留，但因为Libev无法在Windows平台上高效工作，所以对Libev的支持已经处于depricated状态，在不久的将来，h2loadrunner可能会完全放弃对Libev的支持
 
-  以下是h2loadrunner支持的新功能，这些功能在nghttp2项目的h2load工具中均不支持：
+  说到h2loadrunner强大的新的功能，以下是h2loadrunner支持的新功能，这些功能在nghttp2项目的h2load工具中均不支持：
 
   1. 支持可变的URI和payload
   
@@ -42,10 +44,15 @@
 
   13. 连接的failover和failback
 
+  14. h2loadrunner原生支持Linux的Windows，在不同平台下，h2loadrunner均表现出强大的性能，这得益于Boost ASIO优秀的设计，可以充分利用Linux的epoll和Windows的IOCP的能力
 
-# 如何编译构建目标可执行文件
+# 如何在Windows下编译构建h2loadrunner.exe
 
-  https://github.com/wallyatgithub/h2loadrunner#how-to-build
+  https://github.com/wallyatgithub/h2loadrunner#how-to-build-on-windows
+
+# 如何在Linux下编译构建h2loadrunner
+
+  https://github.com/wallyatgithub/h2loadrunner#how-to-build-on-linux
 
 
 # 用法
