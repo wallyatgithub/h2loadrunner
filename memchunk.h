@@ -28,16 +28,16 @@
 #include "nghttp2_config.h"
 
 #include <limits.h>
-#ifdef _WIN32
+#ifdef _WINDOWS
 /* Structure for scatter/gather I/O.  */
 struct iovec
 {
     void* iov_base; /* Pointer to data.  */
     size_t iov_len; /* Length of data.  */
 };
-#else // !_WIN32
+#else
 #  include <sys/uio.h>
-#endif // !_WIN32
+#endif
 
 #include <cassert>
 #include <cstring>
@@ -63,7 +63,7 @@ namespace nghttp2
 template <size_t N> struct Memchunk
 {
     Memchunk(Memchunk* next_chunk)
-        : pos(std::begin(buf)), last(pos), knext(next_chunk), next(nullptr) {}
+        : pos(buf.data()), last(pos), knext(next_chunk), next(nullptr) {}
     size_t len() const
     {
         return last - pos;
@@ -74,7 +74,7 @@ template <size_t N> struct Memchunk
     }
     void reset()
     {
-        pos = last = std::begin(buf);
+        pos = last = buf.data();
     }
     std::array<uint8_t, N> buf;
     uint8_t* pos, *last;

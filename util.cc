@@ -61,6 +61,7 @@
 
 #include <openssl/evp.h>
 
+#include "nghttp2_config.h"
 #include <nghttp2/nghttp2.h>
 
 #include "ssl_compat.h"

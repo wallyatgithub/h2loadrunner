@@ -30,7 +30,9 @@
 #include <vector>
 #include "h2load_Cookie.h"
 #include "http2.h"
+#ifdef USE_LIBEV
 #include "memchunk.h"
+#endif
 #include "template.h"
 
 using namespace nghttp2;

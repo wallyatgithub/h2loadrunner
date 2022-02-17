@@ -25,8 +25,6 @@
 #ifndef H2LOAD_HTTP1_SESSION_H
 #define H2LOAD_HTTP1_SESSION_H
 
-#include <nghttp2/nghttp2.h>
-
 #include "h2load_session.h"
 #include "Client_Interface.h"
 #include "h2load_Config.h"
@@ -36,8 +34,6 @@
 
 namespace h2load
 {
-
-struct Client_Interface;
 
 class Http1Session : public Session
 {

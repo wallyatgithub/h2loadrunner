@@ -73,7 +73,7 @@ extern "C" {
 #include <ares.h>
 }
 #endif
-
+#include "nghttp2_config.h"
 #include <nghttp2/nghttp2.h>
 
 #include "template.h"

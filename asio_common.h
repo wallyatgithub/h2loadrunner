@@ -24,6 +24,9 @@
  */
 #ifndef ASIO_COMMON_H
 #define ASIO_COMMON_H
+#ifdef _WINDOWS
+#include <sdkddkver.h>
+#endif
 
 #include "nghttp2_config.h"
 

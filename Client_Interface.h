@@ -24,8 +24,8 @@ extern "C" {
 namespace h2load
 {
 
-class Config;
-class RequestStat;
+struct Config;
+struct RequestStat;
 class Worker_Interface;
 
 class Unique_Id

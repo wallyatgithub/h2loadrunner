@@ -1,6 +1,7 @@
 #include <algorithm>
+#include <numeric>
 #include <cctype>
-#ifndef _WIN32
+#ifndef _WINDOWS
 #include <execinfo.h>
 #endif
 #include <iomanip>
@@ -112,7 +113,7 @@ int parse_header_table_size(uint32_t& dst, const char* opt,
         return -1;
     }
 
-    dst = n;
+    dst = (int)n;
 
     return 0;
 }
@@ -964,14 +965,14 @@ std::string get_tls_error_string()
     const char*      file = 0, *data = 0;
     int             line = 0, flags = 0;
     std::string     error_string;
-    pthread_t       tid = pthread_self();
+    //pthread_t       tid = pthread_self();
 
     while ((error_code = ERR_get_error_line_data(&file, &line, &data, &flags)) != 0)
     {
         ERR_error_string_n(error_code, error_code_string,
                            sizeof(error_code_string));
         std::stringstream strm;
-        strm << "tid==" << tid << ":" << error_code_string << ":" << file << ":" << line << ":additional info...\"" << ((
+        strm << error_code_string << ":" << file << ":" << line << ":additional info...\"" << ((
                                                                                                                             flags & ERR_TXT_STRING) ? data : "") << "\"\n";
         error_string += strm.str();
     }
@@ -980,6 +981,7 @@ std::string get_tls_error_string()
 
 void printBacktrace()
 {
+#ifndef _WINDOWS
     void* buffer[64];
     int num = backtrace((void**) &buffer, 64);
     char** addresses = backtrace_symbols(buffer, num);
@@ -988,6 +990,7 @@ void printBacktrace()
         fprintf(stderr, "[%2d]: %s\n", i, addresses[i]);
     }
     free(addresses);
+#endif
 }
 
 uint64_t find_common_multiple(std::vector<size_t> input)

@@ -6,7 +6,9 @@
 #include <ev.h>
 #include <openssl/ssl.h>
 
+#ifdef USE_LIBEV
 #include "memchunk.h"
+#endif
 #include "h2load_stats.h"
 #include "h2load_Config.h"
 #include "Worker_Interface.h"

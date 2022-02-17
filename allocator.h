@@ -34,6 +34,7 @@
 
 #include <cassert>
 #include <utility>
+#include <cstring>
 
 #include "template.h"
 
@@ -180,7 +181,8 @@ struct BlockAllocator
         auto nalloclen = std::max(size + 1, alloclen * 2);
 
         auto res = alloc(nalloclen);
-        std::copy_n(p, alloclen, static_cast<uint8_t*>(res));
+        //std::copy_n(p, alloclen, static_cast<uint8_t*>(res));
+        std::memcpy(res, p, alloclen);
 
         return res;
     }

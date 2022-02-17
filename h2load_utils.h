@@ -15,12 +15,12 @@ extern "C" {
 #include <ares.h>
 }
 #include <ev.h>
+#include "memchunk.h"
 #endif
 
 
 #include "http2.h"
 #include "template.h"
-#include "memchunk.h"
 
 #include "h2load.h"
 #include "h2load_Config.h"

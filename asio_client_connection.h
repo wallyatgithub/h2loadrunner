@@ -22,9 +22,10 @@
 #include <string>
 #include <array>
 #include <cstring>
-
+#ifdef _WINDOWS
+#include <sdkddkver.h>
+#endif
 #include <boost/asio.hpp>
-#include <boost/bind.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/asio/ssl.hpp>
 
@@ -90,7 +91,7 @@ public:
 
     virtual void start_conn_active_watcher()
     {
-        if (!config->conn_active_timeout > 0.)
+        if (!(config->conn_active_timeout > 0.))
         {
             return;
         }
@@ -116,7 +117,7 @@ public:
 
     virtual void start_conn_inactivity_watcher()
     {
-        if (!config->conn_inactivity_timeout > 0.)
+        if (!(config->conn_inactivity_timeout > 0.))
         {
             return;
         }
@@ -398,7 +399,7 @@ private:
 
     void start_ping_watcher()
     {
-        if (!config->json_config_schema.interval_to_send_ping > 0.)
+        if (!(config->json_config_schema.interval_to_send_ping > 0.))
         {
             return;
         }

@@ -24,7 +24,9 @@
  */
 #ifndef NGHTTP2_CONFIG_H
 #define NGHTTP2_CONFIG_H
-
+#ifdef _WINDOWS
+#include <sdkddkver.h>
+#endif
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
 #endif // HAVE_CONFIG_H

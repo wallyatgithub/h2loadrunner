@@ -12,14 +12,14 @@ set(Boost_USE_STATIC_LIBS ON)
 add_subdirectory(third-party)
 
 find_package(OpenSSL 1.0.1)
-find_package(Boost 1.53.0 REQUIRED system thread)
+find_package(Boost 1.61.0 REQUIRED system thread)
 find_package(LuaJIT)
 
-if(DEFINED USE_LIBEV)
-find_package(Libev 4.11)
-endif()
-
 find_path(GETOPT_INCLUDE_DIR getopt.h)
+
+find_path(NGHTTP2_INCLUDE_DIR nghttp2/nghttp2.h)
+
+find_library(NGHTTP2_LIBRARY NAMES nghttp2)
 
 include(GNUInstallDirs)
 # Checks for header files.
@@ -87,16 +87,9 @@ if(NOT HAVE_DECL_INITGROUPS AND HAVE_UNISTD_H)
   endif()
 endif()
 
-file(GLOB c_sources *.c)
-set_source_files_properties(${c_sources} PROPERTIES
-  COMPILE_FLAGS "${WARNCFLAGS}")
-file(GLOB cxx_sources *.cc)
-set_source_files_properties(${cxx_sources} PROPERTIES
-  COMPILE_FLAGS "${WARNCXXFLAGS} ${CXX1XCXXFLAGS}")
-
 if(DEFINED ADDRESS_SANITIZE)
-add_compile_options(-fsanitize=address)
-add_link_options(-fsanitize=address)
+    add_compile_options(-fsanitize=address)
+    add_link_options(-fsanitize=address)
 endif()
 
 set(C_ARES_INCLUDE
@@ -104,31 +97,38 @@ set(C_ARES_INCLUDE
 )
 
 if(DEFINED USE_LIBEV)
+    find_package(Libev 4.11)
 
-set(C_ARES_INCLUDE
-  "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/include"
-  "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares"
-)
+    set(C_ARES_INCLUDE
+      "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/include"
+      "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares"
+    )
 
-set(H2LOAD_SOURCE_USING_LIBEV
-  h2load_Client.cc
-  h2load_Worker.cc
-)
+    set(H2LOAD_SOURCE_USING_LIBEV
+      h2load_Client.cc
+      h2load_Worker.cc
+    )
 
-add_definitions(-DUSE_LIBEV=1)
+    add_definitions(-DUSE_LIBEV=1)
 
-link_directories(
-${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib
-${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib64
-)
-
+    link_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib
+    ${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib64
+    )
 endif()
 
-#set (WIN32_BUILD ON)
-if(DEFINED WIN32_BUILD)
-add_definitions(-D_WIN32=1)
-add_definitions(-DNOMINMAX=1)
-add_definitions(-D_WIN32_WINNT=0x0601)
+if (NOT DEFINED LIBEV_INCLUDE_DIR)
+    set(LIBEV_INCLUDE_DIR
+    "."
+    )
+endif()
+
+IF(WIN32)
+    add_definitions(-DNOMINMAX=1)
+    #add_definitions(-D_WIN32_WINNT=${ver})
+    add_definitions(-DWIN32_LEAN_AND_MEAN)
+    add_definitions(-D_ITERATOR_DEBUG_LEVEL=0)
+    find_library(GETOPT_LIBRARY NAMES getopt)
 endif()
 
 
@@ -139,18 +139,20 @@ include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/llhttp/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/StaticJSON/include"
   "${LUA_INCLUDE_DIR}"
+  "${LIBEV_INCLUDE_DIR}"
   "${C_ARES_INCLUDE}"
   "${Boost_INCLUDE_DIRS}"
   "${GETOPT_INCLUDE_DIR}"
+  "${NGHTTP2_INCLUDE_DIR}"
 )
 
 link_libraries(
-  nghttp2
+  ${NGHTTP2_LIBRARY}
   ${LIBEV_LIBRARIES}
   ${OPENSSL_LIBRARIES}
-  pthread
   ${LUA_LIBRARIES}
   ${Boost_LIBRARIES}
+  ${GETOPT_LIBRARY}
 )
 
 set (CMAKE_INCLUDE_CURRENT_DIR ON)
@@ -192,14 +194,11 @@ add_executable(h2loadrunner ${H2LOAD_SOURCES} $<TARGET_OBJECTS:llhttp>
   $<TARGET_OBJECTS:url-parser> $<TARGET_OBJECTS:staticjson>)
 
 if(DEFINED USE_LIBEV)
-
-target_link_libraries(h2loadrunner cares_static)
-
-target_include_directories(h2loadrunner PUBLIC 
-"${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/include"
-"${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares"
-)
-
+    target_link_libraries(h2loadrunner cares_static)
+    target_include_directories(h2loadrunner PUBLIC 
+    "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares"
+    )
 endif()
 
 install(TARGETS h2loadrunner

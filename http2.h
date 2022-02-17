@@ -32,13 +32,15 @@
 #include <string>
 #include <vector>
 #include <array>
-
+#include "nghttp2_config.h"
 #include <nghttp2/nghttp2.h>
 
 #include "url-parser/url_parser.h"
 
 #include "util.h"
+#ifdef USE_LIBEV
 #include "memchunk.h"
+#endif
 #include "template.h"
 #include "allocator.h"
 #include "base64.h"
@@ -109,8 +111,6 @@ StringRef get_reason_phrase(unsigned int status_code);
 
 // Returns string version of |status_code|. (e.g., "404")
 StringRef stringify_status(BlockAllocator& balloc, unsigned int status_code);
-
-void capitalize(DefaultMemchunks* buf, const StringRef& s);
 
 // Returns true if |value| is LWS
 bool lws(const char* value);
@@ -251,15 +251,6 @@ void copy_headers_to_nva(std::vector<nghttp2_nv>& nva,
 void copy_headers_to_nva_nocopy(std::vector<nghttp2_nv>& nva,
                                 const HeaderRefs& headers, uint32_t flags);
 
-// Appends HTTP/1.1 style header lines to |buf| from headers in
-// |headers|.  |headers| must be indexed before this call (its
-// element's token field is assigned).  Certain headers, which
-// requires special handling (i.e. via and cookie), are not appended.
-// |flags| is one or more of HeaderBuildOp flags.  They tell function
-// that certain header fields should not be added.
-void build_http1_headers_from_headers(DefaultMemchunks* buf,
-                                      const HeaderRefs& headers,
-                                      uint32_t flags);
 
 // Return positive window_size_increment if WINDOW_UPDATE should be
 // sent for the stream |stream_id|. If |stream_id| == 0, this function

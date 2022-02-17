@@ -31,11 +31,14 @@
 #include <vector>
 #include <functional>
 #include <map>
+#ifdef _WINDOWS
+#include <sdkddkver.h>
+#endif
 
 #include <boost/system/error_code.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
-
+#include "nghttp2_config.h"
 #include <nghttp2/nghttp2.h>
 
 namespace nghttp2 {

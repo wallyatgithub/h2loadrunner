@@ -201,19 +201,19 @@ constexpr unsigned long long operator"" _g(unsigned long long g)
 // hours
 constexpr double operator"" _h(unsigned long long h)
 {
-    return h * 60 * 60;
+    return (double)h * 60 * 60;
 }
 
 // minutes
 constexpr double operator"" _min(unsigned long long min)
 {
-    return min * 60;
+    return (double)min * 60;
 }
 
 // seconds
 constexpr double operator"" _s(unsigned long long s)
 {
-    return s;
+    return (double)s;
 }
 
 // milliseconds

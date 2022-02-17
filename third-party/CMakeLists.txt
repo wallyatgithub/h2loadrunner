@@ -1,6 +1,12 @@
 
-
-add_subdirectory(c-ares)
+IF(WIN32)
+    add_definitions(-DNOMINMAX=1)
+    #add_definitions(-D_WIN32_WINNT=${ver})
+    add_definitions(-DWIN32_LEAN_AND_MEAN)
+    add_definitions(-D_ITERATOR_DEBUG_LEVEL=0)
+else()
+    add_subdirectory(c-ares)
+endif()
 
 find_path(RAPIDJSON_INCLUDE_DIR rapidjson/rapidjson.h)
 

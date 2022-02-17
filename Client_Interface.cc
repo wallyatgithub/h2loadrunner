@@ -1,9 +1,12 @@
+#ifdef _WINDOWS
+#include <sdkddkver.h>
+#endif
 #include <boost/asio/io_service.hpp>
 #include <boost/thread/thread.hpp>
 #include <regex>
 #include <algorithm>
 #include <cctype>
-#ifndef _WIN32
+#ifndef _WINDOWS
 #include <execinfo.h>
 #endif
 #include <iomanip>

@@ -1,8 +1,10 @@
 #ifndef ASIO_WORKER_H
 #define ASIO_WORKER_H
 
+#ifdef _WINDOWS
+#include <sdkddkver.h>
+#endif
 #include <boost/asio.hpp>
-#include <boost/bind.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/asio/ssl.hpp>
 
