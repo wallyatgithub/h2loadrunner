@@ -24,6 +24,8 @@
 #include <cstring>
 #ifdef _WINDOWS
 #include <sdkddkver.h>
+#include <WinError.h>
+#include <Winsock2.h>
 #endif
 #include <boost/asio.hpp>
 #include <boost/noncopyable.hpp>
@@ -245,7 +247,10 @@ public:
 
     virtual int connected()
     {
-        std::cerr << "===============connected to " << authority << "===============" << std::endl;
+        if (config->verbose)
+        {
+            std::cerr<<__FUNCTION__<<":"<<authority<<std::endl;
+        }
         is_client_stopped = false;
         do_read();
         if (connection_made() != 0)
@@ -310,6 +315,10 @@ public:
 
     virtual int connect_to_host(const std::string& dest_schema, const std::string& dest_authority)
     {
+        if (config->verbose)
+        {
+            std::cerr<<__FUNCTION__<<":"<<authority<<std::endl;
+        }
         std::string port;
         auto vec = tokenize_string(authority, ":");
         if (vec.size() == 1)
@@ -397,6 +406,31 @@ public:
 
 private:
 
+    bool is_error_due_to_aborted_operation(const boost::system::error_code& e)
+    {
+        if (config->verbose)
+        {
+            if (boost::asio::error::misc_errors::eof == e)
+            {
+                std::cerr << "EOF: remote disconnected: " << schema << "://" << authority << std::endl;
+            }
+        }
+        if (e == boost::asio::error::operation_aborted)
+        {
+            return true;
+        }
+#ifdef _WINDOWS
+        if ((e.value() == ERROR_CONNECTION_ABORTED)||
+            (e.value() == ERROR_REQUEST_ABORTED)||
+            (e.value() == WSA_E_CANCELLED)||
+            (e.value() == WSA_OPERATION_ABORTED))
+        {
+            return true;
+        }
+#endif
+        return false;
+    }
+
     void start_ping_watcher()
     {
         if (!(config->json_config_schema.interval_to_send_ping > 0.))
@@ -427,7 +461,7 @@ private:
     bool timer_common_check(boost::asio::deadline_timer& timer, const boost::system::error_code& ec,
                             void (asio_client_connection::*handler)(const boost::system::error_code&))
     {
-        if (boost::asio::error::operation_aborted == ec)
+        if (ec)
         {
             return false;
         }
@@ -630,6 +664,10 @@ private:
     void on_connected_event(const boost::system::error_code& err,
                             boost::asio::ip::tcp::resolver::iterator endpoint_iterator, SOCKET& socket)
     {
+        if (config->verbose)
+        {
+            std::cerr<<__FUNCTION__<<":"<<authority<<std::endl;
+        }
         static thread_local boost::asio::ip::tcp::resolver::iterator end_of_resolve_result;
         if (!err)
         {
@@ -649,7 +687,14 @@ private:
         }
         else
         {
-            std::cerr << __FUNCTION__ << " err: " << err << std::endl;
+            if (config->verbose)
+            {
+                std::cerr << __FUNCTION__ << " err: " << err << std::endl;
+            }
+            if (is_error_due_to_aborted_operation(err))
+            {
+                return;
+            }
             if (endpoint_iterator != end_of_resolve_result)
             {
                 socket.lowest_layer().close();
@@ -683,13 +728,26 @@ private:
 
     void handle_connection_error()
     {
-        std::cerr << "connection error" << ": " << schema << "://" << authority << std::endl;
-        fail();
-        if (reconnect_to_alt_addr())
+        if (config->verbose)
+        {
+            std::cerr << __FUNCTION__ << ": " << schema << "://" << authority << std::endl;
+        }
+        // for http1 reconnect
+        if (try_again_or_fail() == 0)
         {
             return;
         }
-        worker->free_client(this);
+
+        fail();
+        if (reconnect_to_alt_addr())
+        {
+            is_client_stopped = false;
+            return;
+        }
+        io_context.post([this]()
+        {
+            worker->free_client(this);
+        });
         return;
     }
 
@@ -697,15 +755,19 @@ private:
     {
         if (e)
         {
-            if (e != boost::asio::error::operation_aborted)
+            if (config->verbose)
             {
-                std::cerr << "read error_code:" << e << ", bytes_transferred:" << bytes_transferred << std::endl;
-                if (boost::asio::error::misc_errors::eof == e)
-                {
-                    std::cerr << "remote disconnected: " << schema << "://" << authority << std::endl;
-                }
+                std::cerr<<"read error code: "<<e<<", bytes_transferred: "<<bytes_transferred<<std::endl;
+            }
+            if (!is_error_due_to_aborted_operation(e))
+            {
                 return handle_connection_error();
             }
+            return;
+        }
+        if (!session)
+        {
+            // a read finish callback gets scheduled while a connection switch is ongoing, do nothing
             return;
         }
         restart_timeout_timer();
@@ -754,9 +816,12 @@ private:
     {
         if (e)
         {
-            if (e != boost::asio::error::operation_aborted)
+            if (!is_error_due_to_aborted_operation(e))
             {
-                std::cerr << "write error_code:" << e << ", bytes_transferred:" << bytes_transferred << std::endl;
+                if (config->verbose)
+                {
+                    std::cerr<<"write error code: "<<e<<", bytes_transferred: "<<bytes_transferred<<std::endl;
+                }
                 return handle_connection_error();
             }
             return;
@@ -781,6 +846,11 @@ private:
 
     void handle_write_signal()
     {
+        if (!session)
+        {
+            // a write signal is scheduled while connection switch is ongoing
+            return;
+        }
         for (;;)
         {
             auto output_data_length_before = output_data_length;
@@ -838,7 +908,6 @@ private:
         {
             return;
         }
-        std::cerr << __FUNCTION__ << ":" << schema << "://" << authority << std::endl;
         is_client_stopped = true;
         boost::system::error_code ignored_ec;
         client_socket.lowest_layer().close(ignored_ec);
@@ -870,6 +939,10 @@ private:
     void on_resolve_result_event(const boost::system::error_code& err,
                                  boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
     {
+        if (config->verbose)
+        {
+            std::cerr<<__FUNCTION__<<":"<<authority<<std::endl;
+        }
         if (!err)
         {
             if (schema != "https")

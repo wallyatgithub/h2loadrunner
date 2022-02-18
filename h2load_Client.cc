@@ -551,7 +551,6 @@ int Client::connected()
         std::cerr << "check_socket_connected failed" << std::endl;
         return ERR_CONNECT_FAIL;
     }
-    std::cerr << "===============connected to " << authority << "===============" << std::endl;
 
     ev_io_start(static_cast<Worker*>(worker)->loop, &rev);
     ev_io_stop(static_cast<Worker*>(worker)->loop, &wev);

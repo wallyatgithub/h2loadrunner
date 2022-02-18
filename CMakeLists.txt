@@ -12,7 +12,7 @@ set(Boost_USE_STATIC_LIBS ON)
 add_subdirectory(third-party)
 
 find_package(OpenSSL 1.0.1)
-find_package(Boost 1.61.0 REQUIRED system thread)
+find_package(Boost 1.53.0 REQUIRED system thread)
 find_package(LuaJIT)
 
 find_path(GETOPT_INCLUDE_DIR getopt.h)

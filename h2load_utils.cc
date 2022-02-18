@@ -362,7 +362,7 @@ void connect_to_prefered_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
     }
     else if (client->authority == client->preferred_authority && CLIENT_CONNECTED == client->state)
     {
-        ev_timer_stop(loop, w); // already to preferred host, either attempt in progress, or connected
+        ev_timer_stop(loop, w); // already connected to preferred host
     }
     else // connected, but not to preferred host, so check if preferred host is up for connection
     {

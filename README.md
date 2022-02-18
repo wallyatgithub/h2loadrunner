@@ -270,8 +270,8 @@
   
   h2loadrunner might not behave perfectly when dealing with http 1.0 servers, who will tear down the connection right after the response is sent.
   
-  So in case of an old http 1.0 server, h2loadrunner may not be able to reach the QPS/RPS at the exact number specified by --rps (or "request-per-second" field in Json).
-  
+  So in case of an old http 1.0 server, h2loadrunner may not be able to reach the rps at the exact number specified by --rps (or "request-per-second" field in Json).
+
   
 
 

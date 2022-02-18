@@ -30,7 +30,7 @@ bool Config::rps_enabled() const
 
 Config::Config()
     : ciphers(tls::DEFAULT_CIPHER_LIST),
-      data_length(-1),
+      data_length(0),
       addrs(nullptr),
       nreqs(1),
       nclients(1),

@@ -450,7 +450,6 @@ void Client_Interface::init_connection_targert()
         static std::vector<std::string> hosts = init_hosts();
         auto startIndex = this_client_id.my_id % hosts.size();
         authority = hosts[startIndex];
-        preferred_authority = authority;
         clear_default_addr_info();
         for (auto count = 0; count < hosts.size() - 1; count++)
         {
@@ -462,6 +461,7 @@ void Client_Interface::init_connection_targert()
 
         setup_connect_with_async_fqdn_lookup();
     }
+    preferred_authority = authority;
 }
 
 void Client_Interface::on_status_code(int32_t stream_id, uint16_t status)
@@ -639,7 +639,10 @@ int Client_Interface::try_again_or_fail()
             {
                 return 0;
             }
-            std::cerr << "client could not connect to host" << std::endl;
+            if (!is_test_finished())
+            {
+                std::cerr << "connect to host cannot be done:" << authority << std::endl;
+            }
         }
     }
 
@@ -1637,9 +1640,10 @@ int Client_Interface::connection_made()
         }
     }
     signal_write();
-
+    std::cerr << "===============connected to " << authority << "===============" << std::endl;
     if (authority != preferred_authority && config->json_config_schema.connect_back_to_preferred_host)
     {
+        std::cerr<<"current connected to: "<<authority<<", prefered connection to: "<<preferred_authority<<std::endl;
         start_connect_to_preferred_host_timer();
     }
 
