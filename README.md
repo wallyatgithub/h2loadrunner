@@ -53,36 +53,44 @@
 
 # How to build on Windows
 
-  cmake and visual C++ build tool need to be installed
+  cmake 3.20 or later, Visual Studio 2022 MSVC x86/x64 build tool, and windows 10 SDK need to be installed first
 
-  vcpkg is also needed to build h2loadrunner on Windows
+  vcpkg is also needed. Please follow https://vcpkg.io/en/getting-started.html to install and set up vcpkg
   
-  These packages need to be installed with vcpkg:
+  These dependency packages need to be installed to vcpkg:
   
-    boost
-    getopt
-    openssl
-    luajit
-    nghttp2
-    rapidjson
+    boost:x64-windows
+    getopt:x64-windows
+    openssl:x64-windows
+    luajit:x64-windows
+    nghttp2:x64-windows
+    rapidjson:x64-windows
   
-  Next, download h2loadrunner source package with http or git
+  Next, download h2loadrunner source with http or git, for example, h2loadrunner is downloaded to c:\tmp
   
-    cd h2loadrunner
+  Then, 
+  
+    Open "x64 Native Tools Command Prompt" from start menu
     
-    mkdir build
+    C:\tmp>cd h2loadrunner
     
-    cd build
+    C:\tmp\h2loadrunner>mkdir build
     
-    cmake ../ -DCMAKE_TOOLCHAIN_FILE=YOUR_VCPKG_PATH\scripts/buildsystems/vcpkg.cmake
+    C:\tmp\h2loadrunner>cd build
     
-    cmake --build ./ --config=Release
+    C:\tmp\h2loadrunner\build>cmake ../ -DCMAKE_TOOLCHAIN_FILE=_REPLACE_THIS_WITH_YOUR_VCPKG_PATH_\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
+    
+    Make sure to replace _REPLACE_THIS_WITH_YOUR_VCPKG_PATH_ with your actual vcpkg path.
+    
+    Opitonally, add -DVCPKG_TARGET_TRIPLET=x64-windows-static for x64 static link (dependency packages of x64-windows-static triplet should be installed to vcpkg)
+    
+    C:\tmp\h2loadrunner\build>cmake --build ./ --config=Release
   
-  h2loadrunner.exe will then be generated in Release folder
+  h2loadrunner.exe will then be generated
 
 # How to build on Linux
 
-  These packages are required to build h2loadrunner (take Ubuntu for example):
+  These packages are required to build h2loadrunner, take Ubuntu for example:
   
     libnghttp2-dev
     openssl
@@ -266,11 +274,11 @@
     
 # HTTP 1.x support
   
-  Although named as 'h2'loadrunner (which is derived from h2load obviously), h2loadrunner can also support http 1.1 test without any known problem so far.
+  Although named as 'h2'loadrunner (which is derived from h2load obviously), h2loadrunner can also support http 1.1 test without any problem.
   
-  h2loadrunner might not behave perfectly when dealing with http 1.0 servers, who will tear down the connection right after the response is sent.
+  h2loadrunner might not behave perfectly when testing http 1.0 servers, which will tear down the connection right after the response is sent.
   
-  So in case of an old http 1.0 server, h2loadrunner may not be able to reach the rps at the exact number specified by --rps (or "request-per-second" field in Json).
+  So in case of an old http 1.0 server, h2loadrunner may not be able to reach the exact rps number specified by --rps (or "request-per-second" field in Json configuration).
 
   
 

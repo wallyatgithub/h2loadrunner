@@ -1345,10 +1345,14 @@ time for request: )"
               << util::format_duration(ts.ttfb.mean) << "  " << std::setw(10)
               << util::format_duration(ts.ttfb.sd) << std::setw(9)
               << util::dtos(ts.ttfb.within_sd) << "%"
+              // this is misleading, comment it
+              /*
               << "\nreq/s           : " << std::setw(10) << ts.rps.min << "  "
               << std::setw(10) << ts.rps.max << "  " << std::setw(10)
               << ts.rps.mean << "  " << std::setw(10) << ts.rps.sd << std::setw(9)
-              << util::dtos(ts.rps.within_sd) << "%" << std::endl;
+              << util::dtos(ts.rps.within_sd) << "%"
+              */
+              << std::endl;
 
     print_extended_stats_summary(stats, config, workers);
 

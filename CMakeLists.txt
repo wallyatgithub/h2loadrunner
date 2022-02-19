@@ -127,10 +127,20 @@ IF(WIN32)
     add_definitions(-DNOMINMAX=1)
     #add_definitions(-D_WIN32_WINNT=${ver})
     add_definitions(-DWIN32_LEAN_AND_MEAN)
-    add_definitions(-D_ITERATOR_DEBUG_LEVEL=0)
+    #add_definitions(-D_ITERATOR_DEBUG_LEVEL=0)
     find_library(GETOPT_LIBRARY NAMES getopt)
 endif()
 
+
+if(VCPKG_TARGET_TRIPLET MATCHES "${__ARCH}-windows-static")
+    if(MSVC)
+        add_compile_options(
+            $<$<CONFIG:>:/MT>
+            $<$<CONFIG:Debug>:/MTd>
+            $<$<CONFIG:Release>:/MT>
+        )
+    endif()
+endif()
 
 include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/"

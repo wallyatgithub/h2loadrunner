@@ -2,7 +2,17 @@
 IF(WIN32)
     add_definitions(-DNOMINMAX=1)
     add_definitions(-DWIN32_LEAN_AND_MEAN)
-    add_definitions(-D_ITERATOR_DEBUG_LEVEL=0)
+    #add_definitions(-D_ITERATOR_DEBUG_LEVEL=0)
+endif()
+
+if(VCPKG_TARGET_TRIPLET MATCHES "${__ARCH}-windows-static")
+    if(MSVC)
+        add_compile_options(
+            $<$<CONFIG:>:/MT>
+            $<$<CONFIG:Debug>:/MTd>
+            $<$<CONFIG:Release>:/MT>
+        )
+    endif()
 endif()
 
 find_path(RAPIDJSON_INCLUDE_DIR rapidjson/rapidjson.h)
