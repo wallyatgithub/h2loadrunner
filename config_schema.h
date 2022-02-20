@@ -293,9 +293,16 @@ public:
         header_name = header_match.header;
         json_pointer = "";
         match_type = string_to_match_type[header_match.matchType];
-        if (REGEX_MATCH == match_type)
+        try
         {
-            reg_exp.assign(object, std::regex_constants::grep | std::regex_constants::optimize);
+            if (REGEX_MATCH == match_type)
+            {
+                reg_exp.assign(object, std::regex_constants::ECMAScript|std::regex_constants::optimize);
+            }
+        }
+        catch (std::regex_error e)
+        {
+            std::cerr<<"invalid reg exp: "<<object<<" "<<e.what()<<std::endl;
         }
     }
     Match_Rule(const Schema_Payload_Match& payload_match)
@@ -304,9 +311,16 @@ public:
         header_name = "";
         json_pointer = payload_match.jsonPointer;
         match_type = string_to_match_type[payload_match.matchType];
-        if (REGEX_MATCH == match_type)
+        try
         {
-            reg_exp.assign(object, std::regex_constants::grep | std::regex_constants::optimize);
+            if (REGEX_MATCH == match_type)
+            {
+                reg_exp.assign(object, std::regex_constants::ECMAScript|std::regex_constants::optimize);
+            }
+        }
+        catch (std::regex_error e)
+        {
+            std::cerr<<"invalid reg exp: "<<object<<" "<<e.what()<<std::endl;
         }
     }
 

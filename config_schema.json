@@ -386,7 +386,7 @@
                             "enum": ["EqualsTo", "StartsWith", "EndsWith", "Contains", "RegexMatch"]
                           },
                           "input":{
-                            "description": "Content used to run the matchType above against the received header value; i.e., received header value should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression in POSIX grep grammar, and it should match the entire target character sequence, i.e., the header value",
+                            "description": "Content used to run the matchType above against the received header value; i.e., received header value should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression in ECMAScript grammar, and it should match the entire target character sequence, i.e., the header value",
                             "default": "200",
                             "type":"string"
                           }
@@ -411,7 +411,7 @@
                             "enum": ["EqualsTo", "StartsWith", "EndsWith", "Contains", "RegexMatch"]
                           },
                           "input": {
-                            "description": "Content used to execute the matchType above against the value specified by the Json pointer above; the value specified by the Json pointer above should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression in POSIX grep grammar, and it should match the entire target character sequence, i.e., the value specified by the Json pointer",
+                            "description": "Content used to execute the matchType above against the value specified by the Json pointer above; the value specified by the Json pointer above should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression in ECMAScript grammar, and it should match the entire target character sequence, i.e., the value specified by the Json pointer",
                             "type":"string"
                           }
                         }
