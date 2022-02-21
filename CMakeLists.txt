@@ -21,6 +21,11 @@ find_path(NGHTTP2_INCLUDE_DIR nghttp2/nghttp2.h)
 
 find_library(NGHTTP2_LIBRARY NAMES nghttp2)
 
+if (DEFINED ALPINE_STATIC)
+     add_link_options(-static)
+     find_library(EXECINFO_LIBRARY execinfo)
+endif()
+
 include(GNUInstallDirs)
 # Checks for header files.
 # Checks for header files.
@@ -163,6 +168,7 @@ link_libraries(
   ${LUA_LIBRARIES}
   ${Boost_LIBRARIES}
   ${GETOPT_LIBRARY}
+  ${EXECINFO_LIBRARY}
 )
 
 set (CMAKE_INCLUDE_CURRENT_DIR ON)

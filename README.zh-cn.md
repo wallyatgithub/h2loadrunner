@@ -46,6 +46,34 @@
 
   14. h2loadrunner原生支持Linux的Windows，在不同平台下，h2loadrunner均表现出强大的性能，这得益于Boost ASIO优秀的设计，可以充分利用Linux的epoll和Windows的IOCP的能力
 
+# 如何快速尝试一下
+
+  从 https://github.com/wallyatgithub/maock/releases 下载预编译好的Linux或者Windows 10的Maock可执行文件的压缩包
+  
+  解压，然后运行:
+
+  ./maock ./maock.json # for linux
+  
+  or
+  
+  maock.exe maock.json # for windows 10
+  
+  Maock现在在8081端口监听，并且已经加载了预定义好的规则
+ 
+  从 https://github.com/wallyatgithub/h2loadrunner/releases 下载预编译好的Linux或者Windows 10的H2loadrunner可执行文件的压缩包
+  
+  解压，然后运行:
+  
+  ./h2loadrunner --config-file=./h2load.json # for linux
+  
+  or
+  
+  h2loadrunner.exe --config-file=h2load.json # for windows 10
+  
+  现在，H2loadrunner已经启动，并向127.0.0.1:8081的Maock建立了两条连接，每条连接的测试流量是每秒100个请求
+
+  请查看Maock和Hloadrunner的各自屏幕输出，来获得当前的流量统计信息
+
 # 如何在Windows下编译构建h2loadrunner.exe
 
   https://github.com/wallyatgithub/h2loadrunner#how-to-build-on-windows

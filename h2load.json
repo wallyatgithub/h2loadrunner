@@ -1,28 +1,28 @@
 {
   "schema": "http",
-  "host": "192.168.1.107",
-  "port": 8080,
-  "load-share-hosts":
+  "host": "127.0.0.1",
+  "port": 8081,
+  "_load-share-hosts":
   [
     {
-      "host": "172.29.22.171",
-      "port": 8081
+      "host": "127.0.0.1",
+      "port": 8082
     },
     {
-      "host": "172.29.22.171",
-      "port": 8082
+      "host": "127.0.0.1",
+      "port": 8083
     }
   ],
   "open-new-connection-based-on-authority-header": false,
-  "connection-retry": true,
+  "connection-retry": false,
   "switch-back-after-connection-retry": false,
   "threads": 1,
-  "clients": 1,
+  "clients": 2,
   "duration": 60,
   "total-requests": 1,
   "warm-up-time": 0,
   "max-concurrent-streams": 32,
-  "request-per-second": 10,
+  "request-per-second": 100,
   "request-per-second-feed-file": "",
   "rate": 0,
   "rate-period": 1,
@@ -42,7 +42,7 @@
   "encoder-header-table-size": 4096,
   "log-file": "",
   "failed-request-log-file": "failed.log",
-  "statistics-interval": 2,
+  "statistics-interval": 5,
   "window-bits": 30,
   "connection-window-bits": 30,
   "Scenarios": [
