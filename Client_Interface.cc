@@ -417,13 +417,22 @@ void Client_Interface::init_connection_targert()
     }
     if (authority.empty())
     {
+        auto host =
+            config->connect_to_host.empty() ? config->host : config->connect_to_host;
+        if (is_it_an_ipv6_address(host))
+        {
+            std::string buffer = "[";
+            buffer.append(host).append("]");
+            host = buffer;
+        }
+
         if (config->port != config->default_port)
         {
-            authority = config->host + ":" + util::utos(config->port);
+            authority = host + ":" + util::utos(config->port);
         }
         else
         {
-            authority = config->host;
+            authority = host;
         }
     }
 
@@ -433,12 +442,20 @@ void Client_Interface::init_connection_targert()
         auto init_hosts = [this]()
         {
             std::vector<std::string> hosts;
-            for (auto& host : config->json_config_schema.load_share_hosts)
+            for (auto& host_item : config->json_config_schema.load_share_hosts)
             {
-                hosts.push_back(host.host);
-                if (host.port)
+                std::string host = host_item.host;
+                if (is_it_an_ipv6_address(host))
                 {
-                    hosts.back().append(":").append(std::to_string(host.port));
+                    std::string buffer = "[";
+                    buffer.append(host).append("]");
+                    host = buffer;
+                }
+
+                hosts.push_back(host);
+                if (host_item.port)
+                {
+                    hosts.back().append(":").append(std::to_string(host_item.port));
                 }
             }
             if (std::find(std::begin(hosts), std::end(hosts), authority) == std::end(hosts))
@@ -748,7 +765,7 @@ void Client_Interface::cleanup_due_to_disconnect()
     {
         std::cerr << "===============disconnected from " << authority << "===============" << std::endl;
     }
-    
+
     record_client_end_time();
     streams.clear();
     session.reset();
@@ -1643,7 +1660,7 @@ int Client_Interface::connection_made()
     std::cerr << "===============connected to " << authority << "===============" << std::endl;
     if (authority != preferred_authority && config->json_config_schema.connect_back_to_preferred_host)
     {
-        std::cerr<<"current connected to: "<<authority<<", prefered connection to: "<<preferred_authority<<std::endl;
+        std::cerr << "current connected to: " << authority << ", prefered connection to: " << preferred_authority << std::endl;
         start_connect_to_preferred_host_timer();
     }
 
@@ -2143,5 +2160,41 @@ void Client_Interface::report_tls_info()
         print_server_tmp_key(ssl);
     }
 }
+
+bool Client_Interface::get_host_and_port_from_authority(const std::string& schema, const std::string& authority,
+                                                        std::string& host, std::string& port)
+{
+    http_parser_url u {};
+    if (http_parser_parse_url(authority.c_str(), authority.size(), true, &u) == 0 && util::has_uri_field(u, UF_HOST))
+    {
+        host = util::get_uri_field(authority.c_str(), u, UF_HOST).str();
+        if (util::has_uri_field(u, UF_PORT))
+        {
+            port = std::to_string(u.port);
+        }
+        else
+        {
+            if (schema == "https")
+            {
+                port = "443";
+            }
+            else
+            {
+                port = "80";
+            }
+        }
+    }
+    else
+    {
+        std::cerr << __FUNCTION__ << ": invalid authority:" << authority << std::endl;
+        return false;
+    }
+    if (host.size() && host[0] == '[' && host[host.size() - 1] == ']')
+    {
+        host = host.substr(1, host.size() - 2);
+    }
+    return true;
+}
+
 
 }

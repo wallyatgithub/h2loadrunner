@@ -39,8 +39,8 @@ namespace h2load
 class Client;
 }
 std::unique_ptr<h2load::Worker_Interface> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
-                                              size_t nreqs, size_t nclients,
-                                              size_t rate, size_t max_samples, h2load::Config& config);
+                                                        size_t nreqs, size_t nclients,
+                                                        size_t rate, size_t max_samples, h2load::Config& config);
 
 int parse_header_table_size(uint32_t& dst, const char* opt,
                             const char* optarg);
@@ -197,5 +197,5 @@ void set_cert_verification_mode(SSL_CTX* ctx, uint32_t certificate_verification_
 
 void setup_SSL_CTX(SSL_CTX* ssl_ctx, h2load::Config& config);
 
-
+bool is_it_an_ipv6_address(const std::string& address);
 #endif

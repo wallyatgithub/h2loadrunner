@@ -173,7 +173,8 @@ public:
     bool should_reconnect_on_disconnect();
     int select_protocol_and_allocate_session();
     void report_tls_info();
-
+    bool get_host_and_port_from_authority(const std::string& schema, const std::string& authority, std::string& host,
+                                          std::string& port);
 
     Worker_Interface* worker;
     ClientStat cstat;

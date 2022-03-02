@@ -277,17 +277,17 @@ void Client::restart_timeout_timer()
 
 void Client::setup_graceful_shutdown()
 {
-  auto write_clear_callback = [this]()
-  {
-      disconnect();
-  };
-  writefn = &Client::write_clear_with_callback;
+    auto write_clear_callback = [this]()
+    {
+        disconnect();
+    };
+    writefn = &Client::write_clear_with_callback;
 }
 
 void Client::disconnect()
 {
     cleanup_due_to_disconnect();
-    
+
     auto stop_timer_watcher = [this](ev_timer & watcher)
     {
         if (ev_is_active(&watcher))
@@ -705,28 +705,18 @@ int Client::resolve_fqdn_and_connect(const std::string& schema, const std::strin
                                      ares_addrinfo_callback callback)
 {
     std::string port;
-    auto vec = tokenize_string(authority, ":");
-    if (vec.size() == 1)
+    std::string host;
+    if (!get_host_and_port_from_authority(schema, authority, host, port))
     {
-        if (schema == "https")
-        {
-            port = "443";
-        }
-        else
-        {
-            port = "80";
-        }
+        return 1;
     }
-    else
-    {
-        port = vec[1];
-    }
+
     ares_addrinfo_hints hints;
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = 0;
     hints.ai_flags = AI_ADDRCONFIG;
-    ares_getaddrinfo(channel, vec[0].c_str(), port.c_str(), &hints, callback, this);
+    ares_getaddrinfo(channel, host.c_str(), port.c_str(), &hints, callback, this);
     return 0;
 }
 

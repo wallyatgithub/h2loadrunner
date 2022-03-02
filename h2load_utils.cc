@@ -43,8 +43,8 @@ using namespace h2load;
 
 
 std::unique_ptr<h2load::Worker_Interface> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
-                                              size_t nreqs, size_t nclients,
-                                              size_t rate, size_t max_samples, h2load::Config& config)
+                                                        size_t nreqs, size_t nclients,
+                                                        size_t rate, size_t max_samples, h2load::Config& config)
 {
     std::stringstream rate_report;
     if (config.is_rate_mode() && nclients > rate)
@@ -71,14 +71,14 @@ std::unique_ptr<h2load::Worker_Interface> create_worker(uint32_t id, SSL_CTX* ss
     if (config.is_rate_mode())
     {
         return std::make_unique<asio_worker>(id, nreqs, nclients, rate,
-                                        max_samples, &config);
+                                             max_samples, &config);
     }
     else
     {
         // Here rate is same as client because the rate_timeout callback
         // will be called only once
         return std::make_unique<asio_worker>(id, nreqs, nclients, nclients,
-                                        max_samples, &config);
+                                             max_samples, &config);
     }
 #else
     if (config.is_rate_mode())
@@ -973,7 +973,7 @@ std::string get_tls_error_string()
                            sizeof(error_code_string));
         std::stringstream strm;
         strm << error_code_string << ":" << file << ":" << line << ":additional info...\"" << ((
-                                                                                                                            flags & ERR_TXT_STRING) ? data : "") << "\"\n";
+                                                                                                   flags & ERR_TXT_STRING) ? data : "") << "\"\n";
         error_string += strm.str();
     }
     return error_string;
@@ -1337,6 +1337,22 @@ std::vector<std::vector<h2load::SDStat>>
 
 void post_process_json_config_schema(h2load::Config& config)
 {
+    if (config.json_config_schema.host.size() && config.json_config_schema.host[0] == '['
+        && config.json_config_schema.host[config.json_config_schema.host.size() - 1] == ']')
+    {
+        config.json_config_schema.host = config.json_config_schema.host.substr(1, config.json_config_schema.host.size() - 2);
+    }
+
+    for (auto& host_item : config.json_config_schema.load_share_hosts)
+    {
+        auto& host = host_item.host;
+        if (host.size() && host[0] == '[' && host[host.size() - 1] == ']')
+        {
+            host = host.substr(1, host.size() - 2);
+        }
+        util::inp_strlower(host);
+    }
+
     util::inp_strlower(config.json_config_schema.host);
     util::inp_strlower(config.json_config_schema.schema);
 
@@ -1715,7 +1731,7 @@ void set_cert_verification_mode(SSL_CTX* ctx, uint32_t certificate_verification_
     SSL_CTX_set_verify(ctx, mode, NULL);
 }
 
-void setup_SSL_CTX(SSL_CTX * ssl_ctx, Config & config)
+void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
 {
     auto ssl_opts = (SSL_OP_ALL & ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS) |
                     SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION |
@@ -1775,3 +1791,24 @@ void setup_SSL_CTX(SSL_CTX * ssl_ctx, Config & config)
     SSL_CTX_set_alpn_protos(ssl_ctx, proto_list.data(), proto_list.size());
 #endif // OPENSSL_VERSION_NUMBER >= 0x10002000L
 }
+
+bool is_it_an_ipv6_address(const std::string& address)
+{
+    struct addrinfo hint, *res = nullptr;
+    bool retCode = false;
+
+    memset(&hint, '\0', sizeof hint);
+    hint.ai_family = PF_UNSPEC;
+    hint.ai_flags = AI_NUMERICHOST;
+
+    if ((getaddrinfo(address.c_str(), nullptr, &hint, &res) == 0) && res)
+    {
+        if (res->ai_family == AF_INET6)
+        {
+            retCode = true;
+        }
+        freeaddrinfo(res);
+    }
+    return retCode;
+}
+

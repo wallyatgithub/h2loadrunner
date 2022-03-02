@@ -249,7 +249,7 @@ public:
     {
         if (config->verbose)
         {
-            std::cerr<<__FUNCTION__<<":"<<authority<<std::endl;
+            std::cerr << __FUNCTION__ << ":" << authority << std::endl;
         }
         is_client_stopped = false;
         do_read();
@@ -317,24 +317,14 @@ public:
     {
         if (config->verbose)
         {
-            std::cerr<<__FUNCTION__<<":"<<authority<<std::endl;
+            std::cerr << __FUNCTION__ << ":" << authority << std::endl;
         }
+
+        std::string host;
         std::string port;
-        auto vec = tokenize_string(authority, ":");
-        if (vec.size() == 1)
+        if (!get_host_and_port_from_authority(schema, authority, host, port))
         {
-            if (schema == "https")
-            {
-                port = "443";
-            }
-            else
-            {
-                port = "80";
-            }
-        }
-        else
-        {
-            port = vec[1];
+            exit(1);
         }
 
         if (schema == "https")
@@ -349,7 +339,7 @@ public:
             do_write_fn = &asio_client_connection::do_tcp_write;
         }
 
-        boost::asio::ip::tcp::resolver::query query(vec[0], port);
+        boost::asio::ip::tcp::resolver::query query(host, port);
         dns_resolver.async_resolve(query,
                                    [this](const boost::system::error_code & err, boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
         {
@@ -365,25 +355,14 @@ public:
 
     virtual void probe_and_connect_to(const std::string& schema, const std::string& authority)
     {
+        std::string host;
         std::string port;
-        auto vec = tokenize_string(authority, ":");
-        if (vec.size() == 1)
+        if (!get_host_and_port_from_authority(schema, authority, host, port))
         {
-            if (schema == "https")
-            {
-                port = "443";
-            }
-            else
-            {
-                port = "80";
-            }
-        }
-        else
-        {
-            port = vec[1];
+            return;
         }
 
-        boost::asio::ip::tcp::resolver::query query(vec[0], port);
+        boost::asio::ip::tcp::resolver::query query(host, port);
         dns_resolver.async_resolve(query,
                                    [this](const boost::system::error_code & err, boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
         {
@@ -420,9 +399,9 @@ private:
             return true;
         }
 #ifdef _WINDOWS
-        if ((e.value() == ERROR_CONNECTION_ABORTED)||
-            (e.value() == ERROR_REQUEST_ABORTED)||
-            (e.value() == WSA_E_CANCELLED)||
+        if ((e.value() == ERROR_CONNECTION_ABORTED) ||
+            (e.value() == ERROR_REQUEST_ABORTED) ||
+            (e.value() == WSA_E_CANCELLED) ||
             (e.value() == WSA_OPERATION_ABORTED))
         {
             return true;
@@ -666,7 +645,7 @@ private:
     {
         if (config->verbose)
         {
-            std::cerr<<__FUNCTION__<<":"<<authority<<std::endl;
+            std::cerr << __FUNCTION__ << ":" << authority << std::endl;
         }
         static thread_local boost::asio::ip::tcp::resolver::iterator end_of_resolve_result;
         if (!err)
@@ -757,7 +736,7 @@ private:
         {
             if (config->verbose)
             {
-                std::cerr<<"read error code: "<<e<<", bytes_transferred: "<<bytes_transferred<<std::endl;
+                std::cerr << "read error code: " << e << ", bytes_transferred: " << bytes_transferred << std::endl;
             }
             if (!is_error_due_to_aborted_operation(e))
             {
@@ -820,7 +799,7 @@ private:
             {
                 if (config->verbose)
                 {
-                    std::cerr<<"write error code: "<<e<<", bytes_transferred: "<<bytes_transferred<<std::endl;
+                    std::cerr << "write error code: " << e << ", bytes_transferred: " << bytes_transferred << std::endl;
                 }
                 return handle_connection_error();
             }
@@ -941,7 +920,7 @@ private:
     {
         if (config->verbose)
         {
-            std::cerr<<__FUNCTION__<<":"<<authority<<std::endl;
+            std::cerr << __FUNCTION__ << ":" << authority << std::endl;
         }
         if (!err)
         {
