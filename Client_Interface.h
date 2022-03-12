@@ -40,10 +40,11 @@ public:
 class Stream_Callback_Data
 {
 public:
-    int32_t stream_id;
+    int32_t stream_id = 0;
     std::function<void(void)> response_callback;
     std::string resp_payload;
     std::map<std::string, std::string, ci_less> resp_headers;
+    bool response_available = false;
 };
 
 using time_point_in_seconds_double =
@@ -189,6 +190,7 @@ public:
     void install_connected_callback(std::function<void(bool)> callback);
     void mark_stream_saved_for_user_callback(int32_t stream_id);
     void save_stream_data_for_user_callback(int32_t stream_id);
+    void receive_response_from_lua(int32_t stream_id, lua_State *L);
 
     Worker_Interface* worker;
     ClientStat cstat;
