@@ -235,8 +235,10 @@ int asio_client_connection::connected()
     do_read();
     if (connection_made() != 0)
     {
+        call_connected_callbacks(false);
         return -1;
     }
+    call_connected_callbacks(true);
     return 0;
 }
 
@@ -689,6 +691,7 @@ void asio_client_connection::handle_connection_error()
     {
         std::cerr << __FUNCTION__ << ": " << schema << "://" << authority << std::endl;
     }
+    call_connected_callbacks(false);
     // for http1 reconnect
     if (try_again_or_fail() == 0)
     {
@@ -937,4 +940,7 @@ void asio_client_connection::on_probe_resolve_result_event(const boost::system::
         std::cerr << "Error: " << err.message() << "\n";
     }
 }
+
+
+
 }

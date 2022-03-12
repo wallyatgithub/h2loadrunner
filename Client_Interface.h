@@ -36,6 +36,16 @@ public:
     Unique_Id();
 };
 
+
+class Stream_Callback_Data
+{
+public:
+    int32_t stream_id;
+    std::function<void(void)> response_callback;
+    std::string resp_payload;
+    std::map<std::string, std::string, ci_less> resp_headers;
+};
+
 using time_point_in_seconds_double =
     std::chrono::time_point<std::chrono::steady_clock, std::chrono::duration< double >>;
 
@@ -175,6 +185,10 @@ public:
     void report_tls_info();
     bool get_host_and_port_from_authority(const std::string& schema, const std::string& authority, std::string& host,
                                           std::string& port);
+    void call_connected_callbacks(bool success);
+    void install_connected_callback(std::function<void(bool)> callback);
+    void mark_stream_saved_for_user_callback(int32_t stream_id);
+    void save_stream_data_for_user_callback(int32_t stream_id);
 
     Worker_Interface* worker;
     ClientStat cstat;
@@ -225,6 +239,8 @@ public:
     std::vector<Runtime_Scenario_Data> runtime_scenario_data;
     time_point_in_seconds_double rps_duration_started;
     SSL* ssl;
+    std::vector<std::function<void(bool)>> connected_callbacks;
+    std::map<int32_t, Stream_Callback_Data> stream_user_callback_queue;
 };
 
 }

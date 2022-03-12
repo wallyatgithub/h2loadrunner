@@ -17,6 +17,7 @@
 
 #include <string>
 #include <array>
+#include <vector>
 #ifdef _WINDOWS
 #include <sdkddkver.h>
 #include <WinError.h>
@@ -114,6 +115,8 @@ public:
     virtual void probe_and_connect_to(const std::string& schema, const std::string& authority);
 
     virtual void setup_graceful_shutdown();
+
+    void install_connected_callback(std::function<void(bool)> callback);
 
 private:
 
@@ -231,7 +234,6 @@ private:
     std::function<void(asio_client_connection&)> do_read_fn, do_write_fn;
 
     std::function<bool(void)> write_clear_callback;
-    std::function<void(void)> connected_callback;
 };
 
 

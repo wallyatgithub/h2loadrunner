@@ -265,6 +265,7 @@ void stream_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 void client_connection_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
     auto client = static_cast<Client*>(w->data);
+    client->call_connected_callbacks(false);
     client->connection_timeout_handler();
 }
 

@@ -549,6 +549,7 @@ int Client::connected()
     if (!util::check_socket_connected(fd))
     {
         std::cerr << "check_socket_connected failed" << std::endl;
+        call_connected_callbacks(false);
         return ERR_CONNECT_FAIL;
     }
 
@@ -568,9 +569,10 @@ int Client::connected()
 
     if (connection_made() != 0)
     {
+        call_connected_callbacks(false);
         return -1;
     }
-
+    call_connected_callbacks(true);
     return 0;
 }
 

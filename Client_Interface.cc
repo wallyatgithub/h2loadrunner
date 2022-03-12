@@ -1453,6 +1453,8 @@ void Client_Interface::on_stream_close(int32_t stream_id, bool success, bool fin
 
     inc_status_counter_and_validate_response(stream_id);
 
+    save_stream_data_for_user_callback(stream_id);
+
     auto finished_request = requests_awaiting_response.find(stream_id);
 
     if (worker->current_phase == Phase::MAIN_DURATION ||
@@ -2196,5 +2198,49 @@ bool Client_Interface::get_host_and_port_from_authority(const std::string& schem
     return true;
 }
 
+void Client_Interface::call_connected_callbacks(bool success)
+{
+    for (auto& callback: connected_callbacks)
+    {
+        if (callback)
+        {
+            callback(success);
+        }
+    }
+    connected_callbacks.clear();
+}
+
+
+void Client_Interface::install_connected_callback(std::function<void(bool)> callback)
+{
+    connected_callbacks.push_back(callback);
+}
+
+void Client_Interface::mark_stream_saved_for_user_callback(int32_t stream_id)
+{
+    const size_t MAX_STREAM_SAVED_FOR_CALLBACK = 500;
+
+    if (stream_user_callback_queue.size() > MAX_STREAM_SAVED_FOR_CALLBACK)
+    {
+        stream_user_callback_queue.erase(stream_user_callback_queue.begin());
+    }
+    stream_user_callback_queue[stream_id].stream_id = stream_id;
+}
+
+void Client_Interface::save_stream_data_for_user_callback(int32_t stream_id)
+{
+    if (requests_awaiting_response.count(stream_id) && stream_user_callback_queue.count(stream_id))
+    {
+        if (stream_user_callback_queue[stream_id].response_callback)
+        {
+            stream_user_callback_queue[stream_id].response_callback();
+        }
+        else
+        {
+            stream_user_callback_queue[stream_id].resp_headers = requests_awaiting_response[stream_id].resp_headers;
+            stream_user_callback_queue[stream_id].resp_payload = requests_awaiting_response[stream_id].resp_payload;
+        }
+    }
+}
 
 }
