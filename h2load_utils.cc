@@ -704,6 +704,11 @@ process_time_stats(const std::vector<std::unique_ptr<h2load::Worker_Interface>>&
            };
 }
 
+bool is_null_destination(h2load::Config& config)
+{
+    return (!config.base_uri_unix && config.connect_to_host.empty() && config.host.empty());
+}
+
 void resolve_host(h2load::Config& config)
 {
 #ifndef _WINDOWS
@@ -1809,6 +1814,224 @@ bool is_it_an_ipv6_address(const std::string& address)
             retCode = true;
         }
         freeaddrinfo(res);
+    }
+    return retCode;
+}
+
+void load_and_run_lua_script(const std::string& lua_script)
+{
+    lua_State* L = lua_open();
+    luaL_openlibs(L);
+    lua_register(L, "lua_connect_to_uri", lua_connect_to_uri);
+    lua_register(L, "send_http_request", send_http_request);
+    lua_State* cL = lua_newthread(L);
+    luaL_loadstring(cL, lua_script.c_str());
+    auto retCode = lua_resume(cL, 0);
+    if (LUA_YIELD == retCode)
+    {
+        while (true)
+        {
+            sleep(1);
+        }
+    }
+}
+
+h2load::asio_worker* initialize_worker()
+
+{
+    static h2load::Config conf;
+    auto init_config = []()
+    {
+        Request request;
+        Scenario scenario;
+        scenario.requests.push_back(request);
+        conf.json_config_schema.scenarios.push_back(scenario);
+        conf.json_config_schema.connection_retry_on_disconnect = true;
+        return true;
+    };
+    static auto dummyCode = init_config();
+
+    static auto worker = std::make_unique<h2load::asio_worker>(0, 0xFFFFFFFF, 1, 0, 1000, &conf);
+    auto run_worker = [] (h2load::asio_worker* worker_ptr)
+    {
+        auto thread_func = [worker_ptr]()
+        {
+            worker_ptr->run_event_loop();
+        };
+        std::thread worker_thread(thread_func);
+        worker_thread.detach();
+        return true;
+    };
+    static boost::asio::io_service::work work(worker->get_io_context());
+    static auto retCode = run_worker(worker.get());
+    return worker.get();
+}
+
+int32_t connect_to(const std::string& uri, std::function<void(bool)> connected_callback)
+{
+    h2load::asio_worker* worker;
+    worker = initialize_worker();
+    http_parser_url u {};
+    if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0 ||
+        !util::has_uri_field(u, UF_SCHEMA) || !util::has_uri_field(u, UF_HOST))
+    {
+        return -1;
+    }
+    auto run_inside_worker = [uri, connected_callback, worker]()
+    {
+        http_parser_url u {};
+        if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0 ||
+            !util::has_uri_field(u, UF_SCHEMA) || !util::has_uri_field(u, UF_HOST))
+        {
+            return connected_callback(false);
+        }
+        std::string schema = util::get_uri_field(uri.c_str(), u, UF_SCHEMA).str();
+        std::string authority = util::get_uri_field(uri.c_str(), u, UF_HOST).str();
+        auto port = util::get_default_port(uri.c_str(), u);
+        if (util::has_uri_field(u, UF_PORT))
+        {
+            port = u.port;
+        }
+        authority.append(":").append(std::to_string(port));
+        auto client_id = worker->next_client_id;
+        std::string base_uri = schema;
+        base_uri.append("://").append(authority);
+        auto& clients = worker->get_client_pool();
+        if (clients.count(base_uri) == 0)
+        {
+            clients[base_uri] = worker->create_new_client(0xFFFFFFFF);
+            clients[base_uri]->install_connected_callback(connected_callback);
+            clients[base_uri]->connect_to_host(schema, authority);
+        }
+        else if (CLIENT_IDLE == clients[base_uri]->state)
+        {
+            clients[base_uri]->install_connected_callback(connected_callback);
+            clients[base_uri]->connect_to_host(schema, authority);
+        }
+        else if (CLIENT_CONNECTING == clients[base_uri]->state)
+        {
+            clients[base_uri]->install_connected_callback(connected_callback);
+        }
+        else
+        {
+            connected_callback(true);
+        }
+    };
+    worker->get_io_context().post(run_inside_worker);
+    return 0;
+}
+
+extern "C" int lua_connect_to_uri(lua_State *L)
+{
+    if (lua_type(L, -1) == LUA_TSTRING)
+    {
+        size_t len;
+        const char* str = lua_tolstring(L, -1, &len);
+        std::string base_uri(str, len);
+        std::cout<<"lua_connect_to_uri to: "<<base_uri<<std::endl;
+        lua_pop(L, 1);
+        auto connected_callback = [L](bool success)
+        {
+            lua_pushinteger(L, (!success));
+            lua_resume(L, 1);
+        };
+        if (connect_to(base_uri, connected_callback) == 0)
+        {
+            return lua_yield(L, 0);
+        }
+    }
+    return -1;
+}
+
+extern "C" int send_http_request(lua_State *L)
+{
+    auto retCode = 0;
+    std::string payload;
+    std::map<std::string, std::string, ci_less> headers;
+    static std::map<std::string, std::string, ci_less> dummyHeaders;
+    int top = lua_gettop(L);
+    for (int i = 0; i < top; i++)
+    {
+        switch (lua_type(L, -1))
+        {
+            case LUA_TSTRING:
+            {
+                size_t len;
+                const char* str = lua_tolstring(L, -1, &len);
+                payload.assign(str, len);
+                break;
+            }
+            case LUA_TTABLE:
+            {
+                lua_pushnil(L);
+                while (lua_next(L, -2) != 0)
+                {
+                    size_t len;
+                    /* uses 'key' (at index -2) and 'value' (at index -1) */
+                    if ((LUA_TSTRING != lua_type(L, -2)) || (LUA_TSTRING != lua_type(L, -1)))
+                    {
+                        std::cerr << __FUNCTION__<< ": invalid http header" << std::endl;
+                        retCode = -1;
+                        break;
+                    }
+                    const char* k = lua_tolstring(L, -2, &len);
+                    std::string key(k, len);
+                    const char* v = lua_tolstring(L, -1, &len);
+                    std::string value(v, len);
+                    //util::inp_strlower(key);
+                    headers[key] = value;
+                    /* removes 'value'; keeps 'key' for next iteration */
+                    lua_pop(L, 1);
+                }
+                break;
+            }
+            default:
+            {
+                std::cerr << __FUNCTION__<<": invalid parameter passed in" << std::endl;
+                retCode = -1;
+                break;
+            }
+        }
+        lua_pop(L, 1);
+    }
+    if (retCode == 0)
+    {
+        std::string schema = headers[scheme_header];
+        headers.erase(scheme_header);
+        std::string authority = headers[authority_header];
+        headers.erase(authority_header);
+        std::string method = headers[method_header];
+        headers.erase(method_header);
+        std::string path = headers[path_header];
+        headers.erase(path_header);
+        std::string base_uri = schema;
+        base_uri.append("://").append(authority);
+        h2load::asio_worker* worker;
+        worker = initialize_worker();
+
+        auto connected_callback = [payload, schema, authority, method, path, headers, worker, base_uri](bool success)
+        {
+            Request_Data request_to_send;
+            request_to_send.string_collection.emplace_back(payload);
+            request_to_send.req_payload = &(request_to_send.string_collection.back());
+            request_to_send.string_collection.emplace_back(method);
+            request_to_send.method = &(request_to_send.string_collection.back());
+            request_to_send.string_collection.emplace_back(path);
+            request_to_send.path = &(request_to_send.string_collection.back());
+            request_to_send.string_collection.emplace_back(authority);
+            request_to_send.authority = &(request_to_send.string_collection.back());
+            request_to_send.string_collection.emplace_back(schema);
+            request_to_send.schema = &(request_to_send.string_collection.back());
+            request_to_send.shadow_req_headers = std::move(headers);
+            request_to_send.req_headers = &dummyHeaders;
+            worker->get_client_pool()[base_uri]->requests_to_submit.emplace_back(std::move(request_to_send));
+            worker->get_client_pool()[base_uri]->submit_request();
+        };
+        if (connect_to(base_uri, connected_callback) != 0)
+        {
+            retCode = -1;
+            //return lua_yield(L, 0);
+        }
     }
     return retCode;
 }

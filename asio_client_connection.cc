@@ -299,12 +299,12 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
 {
     if (config->verbose)
     {
-        std::cerr << __FUNCTION__ << ":" << authority << std::endl;
+        std::cerr << __FUNCTION__ << ":" << dest_authority << std::endl;
     }
 
     std::string host;
     std::string port;
-    if (!get_host_and_port_from_authority(schema, authority, host, port))
+    if (!get_host_and_port_from_authority(dest_schema, dest_authority, host, port))
     {
         exit(1);
     }
@@ -330,6 +330,7 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
     start_connect_timeout_timer();
     schema = dest_schema;
     authority = dest_authority;
+    state = CLIENT_CONNECTING;
 
     return 0;
 

@@ -1453,7 +1453,7 @@ void Client_Interface::on_stream_close(int32_t stream_id, bool success, bool fin
 
     inc_status_counter_and_validate_response(stream_id);
 
-    save_stream_data_for_user_callback(stream_id);
+    process_stream_user_callback(stream_id);
 
     auto finished_request = requests_awaiting_response.find(stream_id);
 
@@ -1933,6 +1933,11 @@ Request_Data Client_Interface::prepare_first_request()
 
 int Client_Interface::submit_request()
 {
+    if (is_null_destination(*config) && requests_to_submit.empty())
+    {
+        return 0;
+    }
+
     if (!is_controller_client())
     {
         return parent_client->submit_request();
@@ -2227,7 +2232,7 @@ void Client_Interface::mark_stream_saved_for_user_callback(int32_t stream_id)
     stream_user_callback_queue[stream_id].stream_id = stream_id;
 }
 
-void Client_Interface::save_stream_data_for_user_callback(int32_t stream_id)
+void Client_Interface::process_stream_user_callback(int32_t stream_id)
 {
     if (requests_awaiting_response.count(stream_id) && stream_user_callback_queue.count(stream_id))
     {

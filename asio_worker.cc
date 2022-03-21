@@ -19,6 +19,11 @@ void asio_worker::run_event_loop()
     io_context.run();
 }
 
+boost::asio::io_service& asio_worker::get_io_context()
+{
+    return io_context;
+}
+
 std::shared_ptr<Client_Interface> asio_worker::create_new_client(size_t req_todo)
 {
     return std::make_shared<asio_client_connection>(io_context, next_client_id++, this, req_todo, (config), ssl_ctx);
@@ -144,6 +149,11 @@ void asio_worker::start_graceful_stop_timer()
     {
         handle_duration_timer_timeout(ec);
     });
+}
+
+std::map<std::string, std::shared_ptr<h2load::Client_Interface>>& asio_worker::get_client_pool()
+{
+    return client_pool;
 }
 
 

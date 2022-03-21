@@ -48,6 +48,10 @@ public:
 
     virtual void start_graceful_stop_timer();
 
+    boost::asio::io_service& get_io_context();
+
+    std::map<std::string, std::shared_ptr<h2load::Client_Interface>>& get_client_pool();
+
 
 private:
     boost::asio::io_service io_context;
@@ -55,7 +59,7 @@ private:
     boost::asio::deadline_timer warmup_timer;
     boost::asio::deadline_timer duration_timer;
     boost::asio::ssl::context ssl_ctx;
-
+    std::map<std::string, std::shared_ptr<h2load::Client_Interface>> client_pool;
 
 };
 

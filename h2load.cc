@@ -434,6 +434,7 @@ int main(int argc, char** argv)
             {"stream-timeout-interval-ms", required_argument, &flag, 23},
             {"rps-input-file", required_argument, &flag, 24},
             {"config-file", required_argument, &flag, 25},
+            {"script-file", required_argument, &flag, 26},
             {nullptr, 0, nullptr, 0}
         };
         int option_index = 0;
@@ -747,6 +748,15 @@ int main(int argc, char** argv)
                         post_process_json_config_schema(config);
 
                         populate_config_from_json(config);
+                    }
+                    break;
+                    case 26:
+                    {
+                        std::string script_file = optarg;
+                        std::ifstream buffer(script_file);
+                        std::string lua_script((std::istreambuf_iterator<char>(buffer)),
+                                                std::istreambuf_iterator<char>());
+                        load_and_run_lua_script(lua_script);
                     }
                     break;
                 }

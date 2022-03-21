@@ -27,6 +27,8 @@ extern "C" {
 #ifdef USE_LIBEV
 #include "h2load_Worker.h"
 #endif
+#include "asio_worker.h"
+
 #include "h2load_Cookie.h"
 #include "h2load_stats.h"
 
@@ -198,4 +200,17 @@ void set_cert_verification_mode(SSL_CTX* ctx, uint32_t certificate_verification_
 void setup_SSL_CTX(SSL_CTX* ssl_ctx, h2load::Config& config);
 
 bool is_it_an_ipv6_address(const std::string& address);
+
+extern "C" int lua_connect_to_uri(lua_State *L);
+
+extern "C" int send_http_request(lua_State *L);
+
+void load_and_run_lua_script(const std::string& lua_script);
+
+bool is_null_destination(h2load::Config& config);
+
+h2load::asio_worker* initialize_worker();
+
+int32_t connect_to(const std::string& uri, std::function<void(bool)> connected_callback);
+
 #endif

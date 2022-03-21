@@ -189,7 +189,7 @@ public:
     void call_connected_callbacks(bool success);
     void install_connected_callback(std::function<void(bool)> callback);
     void mark_stream_saved_for_user_callback(int32_t stream_id);
-    void save_stream_data_for_user_callback(int32_t stream_id);
+    void process_stream_user_callback(int32_t stream_id);
     void receive_response_from_lua(int32_t stream_id, lua_State *L);
 
     Worker_Interface* worker;
