@@ -52,8 +52,8 @@ Config::Config()
       connect_to_port(0),
       verbose(false),
       timing_script(false),
-#ifndef _WINDOWS
       base_uri_unix(false),
+#ifndef _WINDOWS
       unix_addr {},
 #endif
       rps(0.),

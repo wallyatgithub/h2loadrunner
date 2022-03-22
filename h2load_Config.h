@@ -58,8 +58,8 @@ struct Config
     std::string base_uri;
     // true if UNIX domain socket is used.  In this case, base_uri is
     // not used in usual way.
-#ifndef _WINDOWS
     bool base_uri_unix;
+#ifndef _WINDOWS
     // used when UNIX domain socket is used (base_uri_unix is true).
     sockaddr_un unix_addr;
 #endif

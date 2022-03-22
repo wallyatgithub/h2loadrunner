@@ -23,6 +23,9 @@ extern "C" {
 #include "lualib.h"
 #include "lauxlib.h"
 }
+#ifndef LUA_OK
+#define LUA_OK 0
+#endif
 
 #include <fstream>
 #include <fcntl.h>
@@ -1833,7 +1836,7 @@ void load_and_run_lua_script(const std::string& lua_script)
     {
         while (true)
         {
-            sleep(1);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
     }
     else 
