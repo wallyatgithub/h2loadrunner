@@ -1822,8 +1822,10 @@ void load_and_run_lua_script(const std::string& lua_script)
 {
     lua_State* L = lua_open();
     luaL_openlibs(L);
-    lua_register(L, "lua_connect_to_uri", lua_connect_to_uri);
+    lua_register(L, "make_connection", make_connection);
     lua_register(L, "send_http_request", send_http_request);
+    lua_register(L, "await_response", await_response);
+    lua_register(L, "send_http_request_and_await_response", send_http_request_and_await_response);
     lua_State* cL = lua_newthread(L);
     luaL_loadstring(cL, lua_script.c_str());
     auto retCode = lua_resume(cL, 0);
@@ -1834,10 +1836,17 @@ void load_and_run_lua_script(const std::string& lua_script)
             sleep(1);
         }
     }
+    else 
+    {
+        if (LUA_OK != retCode)
+        {
+            std::cerr<<"error loading lua script"<<std::endl;
+        }
+    }
+    exit(1);
 }
 
-h2load::asio_worker* initialize_worker()
-
+h2load::asio_worker* get_worker()
 {
     static h2load::Config conf;
     auto init_config = []()
@@ -1867,10 +1876,10 @@ h2load::asio_worker* initialize_worker()
     return worker.get();
 }
 
-int32_t connect_to(const std::string& uri, std::function<void(bool)> connected_callback)
+int32_t _make_connection(const std::string& uri, std::function<void(bool, h2load::Client_Interface*)> connected_callback)
 {
     h2load::asio_worker* worker;
-    worker = initialize_worker();
+    worker = get_worker();
     http_parser_url u {};
     if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0 ||
         !util::has_uri_field(u, UF_SCHEMA) || !util::has_uri_field(u, UF_HOST))
@@ -1883,7 +1892,7 @@ int32_t connect_to(const std::string& uri, std::function<void(bool)> connected_c
         if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0 ||
             !util::has_uri_field(u, UF_SCHEMA) || !util::has_uri_field(u, UF_HOST))
         {
-            return connected_callback(false);
+            return connected_callback(false, nullptr);
         }
         std::string schema = util::get_uri_field(uri.c_str(), u, UF_SCHEMA).str();
         std::string authority = util::get_uri_field(uri.c_str(), u, UF_HOST).str();
@@ -1901,6 +1910,7 @@ int32_t connect_to(const std::string& uri, std::function<void(bool)> connected_c
         {
             clients[base_uri] = worker->create_new_client(0xFFFFFFFF);
             clients[base_uri]->install_connected_callback(connected_callback);
+            clients[base_uri]->set_prefered_authority(authority);
             clients[base_uri]->connect_to_host(schema, authority);
         }
         else if (CLIENT_IDLE == clients[base_uri]->state)
@@ -1914,36 +1924,95 @@ int32_t connect_to(const std::string& uri, std::function<void(bool)> connected_c
         }
         else
         {
-            connected_callback(true);
+            connected_callback(true, clients[base_uri].get());
         }
     };
     worker->get_io_context().post(run_inside_worker);
     return 0;
 }
 
-extern "C" int lua_connect_to_uri(lua_State *L)
+extern "C" int make_connection(lua_State *L)
 {
     if (lua_type(L, -1) == LUA_TSTRING)
     {
         size_t len;
         const char* str = lua_tolstring(L, -1, &len);
         std::string base_uri(str, len);
-        std::cout<<"lua_connect_to_uri to: "<<base_uri<<std::endl;
         lua_pop(L, 1);
-        auto connected_callback = [L](bool success)
+        auto connected_callback = [L](bool success, h2load::Client_Interface* client)
         {
-            lua_pushinteger(L, (!success));
-            lua_resume(L, 1);
+            lua_pushinteger(L, success ? client->get_client_unique_id() : -1);
+            lua_resume_wrapper(L, 1);
         };
-        if (connect_to(base_uri, connected_callback) == 0)
+        if (_make_connection(base_uri, connected_callback) == 0)
         {
             return lua_yield(L, 0);
         }
     }
-    return -1;
+    return 0;
 }
 
 extern "C" int send_http_request(lua_State *L)
+{
+    auto request_sent = [L](int32_t stream_id, h2load::Client_Interface* client)
+    {
+        client->queue_stream_for_user_callback(stream_id);
+        lua_pushinteger(L, client->get_client_unique_id());
+        lua_pushinteger(L, stream_id);
+        lua_resume_wrapper(L, 2);
+    };
+    return _send_http_request(L, request_sent);
+}
+
+extern "C" int send_http_request_and_await_response(lua_State *L)
+{
+  auto request_sent = [L](int32_t stream_id, h2load::Client_Interface* client)
+  {
+      client->queue_stream_for_user_callback(stream_id);
+      client->pass_response_to_lua(stream_id, L);
+  };
+  return _send_http_request(L, request_sent);
+}
+
+extern "C" int await_response(lua_State *L)
+{
+    uint64_t client_unique_id = -1;
+    int32_t stream_id = -1;
+
+    int top = lua_gettop(L);
+    if (top == 2)
+    {
+        stream_id = lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        client_unique_id = lua_tointeger(L, -1);
+        lua_pop(L, 1);
+    }
+    if (client_unique_id >= 0 && stream_id > 0)
+    {
+        auto worker = get_worker();
+        auto& clients = worker->get_client_pool();
+        for (auto& client: clients)
+        {
+            if (client.second->get_client_unique_id() == client_unique_id)
+            {
+                if (client.second->pass_response_to_lua(stream_id, L))
+                {
+                   return lua_yield(L, 0);
+                }
+            }
+        }
+    }
+
+    lua_createtable(L, 0, 1);
+    lua_pushlstring(L, "", 0);
+    lua_pushlstring(L, "", 0);
+    lua_rawset(L, -3);
+    lua_pushlstring(L, "", 0);
+    return 2;
+}
+
+
+int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_Interface*)> request_sent_callback)
 {
     auto retCode = 0;
     std::string payload;
@@ -2007,11 +2076,16 @@ extern "C" int send_http_request(lua_State *L)
         std::string base_uri = schema;
         base_uri.append("://").append(authority);
         h2load::asio_worker* worker;
-        worker = initialize_worker();
+        worker = get_worker();
 
-        auto connected_callback = [payload, schema, authority, method, path, headers, worker, base_uri](bool success)
+        auto connected_callback = [payload, schema, authority, method, path, headers, request_sent_callback](bool success, h2load::Client_Interface* client)
         {
+            if (!success)
+            {
+                return;
+            }
             Request_Data request_to_send;
+            request_to_send.request_sent_callback = request_sent_callback;
             request_to_send.string_collection.emplace_back(payload);
             request_to_send.req_payload = &(request_to_send.string_collection.back());
             request_to_send.string_collection.emplace_back(method);
@@ -2024,15 +2098,28 @@ extern "C" int send_http_request(lua_State *L)
             request_to_send.schema = &(request_to_send.string_collection.back());
             request_to_send.shadow_req_headers = std::move(headers);
             request_to_send.req_headers = &dummyHeaders;
-            worker->get_client_pool()[base_uri]->requests_to_submit.emplace_back(std::move(request_to_send));
-            worker->get_client_pool()[base_uri]->submit_request();
+            client->requests_to_submit.emplace_back(std::move(request_to_send));
+            client->submit_request();
         };
-        if (connect_to(base_uri, connected_callback) != 0)
+        if (_make_connection(base_uri, connected_callback) != 0)
         {
             retCode = -1;
-            //return lua_yield(L, 0);
         }
     }
+    if (retCode == 0)
+    {
+        return lua_yield(L, 0);
+    }
     return retCode;
+}
+
+int lua_resume_wrapper (lua_State *L, int nargs)
+{
+    auto retCode = lua_resume(L, nargs);
+    if (LUA_OK == retCode)
+    {
+        //exit(0);
+    }
+    return 0;
 }
 

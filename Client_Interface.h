@@ -187,10 +187,12 @@ public:
     bool get_host_and_port_from_authority(const std::string& schema, const std::string& authority, std::string& host,
                                           std::string& port);
     void call_connected_callbacks(bool success);
-    void install_connected_callback(std::function<void(bool)> callback);
-    void mark_stream_saved_for_user_callback(int32_t stream_id);
+    void install_connected_callback(std::function<void(bool, h2load::Client_Interface*)> callback);
+    void queue_stream_for_user_callback(int32_t stream_id);
     void process_stream_user_callback(int32_t stream_id);
-    void receive_response_from_lua(int32_t stream_id, lua_State *L);
+    bool pass_response_to_lua(int32_t stream_id, lua_State *L);
+    uint64_t get_client_unique_id();
+    void set_prefered_authority(const std::string& authority);
 
     Worker_Interface* worker;
     ClientStat cstat;
@@ -241,7 +243,7 @@ public:
     std::vector<Runtime_Scenario_Data> runtime_scenario_data;
     time_point_in_seconds_double rps_duration_started;
     SSL* ssl;
-    std::vector<std::function<void(bool)>> connected_callbacks;
+    std::vector<std::function<void(bool, h2load::Client_Interface*)>> connected_callbacks;
     std::map<int32_t, Stream_Callback_Data> stream_user_callback_queue;
 };
 

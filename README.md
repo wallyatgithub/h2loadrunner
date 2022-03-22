@@ -31,8 +31,7 @@
   5. Lua script support.
      With lua script, user can customize every header and the payload of the request to be sent.
 
-  6. Both command line interface and JSON based configuration.
-     With JSON configuration, user can build the test scenario with a GUI editor.
+  6. JSON based configuration; user can build complex test scenarios with a simple GUI editor.
 
   7. Dynamic report of the test, dynamic change of the RPS.
      h2loadrunner prints the test statistics every second; it also supports dynamic change of RPS.

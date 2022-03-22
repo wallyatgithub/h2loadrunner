@@ -201,16 +201,25 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, h2load::Config& config);
 
 bool is_it_an_ipv6_address(const std::string& address);
 
-extern "C" int lua_connect_to_uri(lua_State *L);
+bool is_null_destination(h2load::Config& config);
+
+extern "C" int make_connection(lua_State *L);
 
 extern "C" int send_http_request(lua_State *L);
 
+extern "C" int send_http_request_and_await_response(lua_State *L);
+
+extern "C" int await_response(lua_State *L);
+
+int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_Interface*)> request_sent_callback);
+
 void load_and_run_lua_script(const std::string& lua_script);
 
-bool is_null_destination(h2load::Config& config);
+h2load::asio_worker* get_worker();
 
-h2load::asio_worker* initialize_worker();
+int32_t _make_connection(const std::string& uri, std::function<void(bool)> connected_callback);
 
-int32_t connect_to(const std::string& uri, std::function<void(bool)> connected_callback);
+int lua_resume_wrapper (lua_State *L, int nargs);
+
 
 #endif

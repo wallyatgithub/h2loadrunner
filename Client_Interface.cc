@@ -99,6 +99,11 @@ int Client_Interface::connect()
     return 0;
 }
 
+uint64_t Client_Interface::get_client_unique_id()
+{
+    return this_client_id.my_id;
+}
+
 uint64_t Client_Interface::get_total_pending_streams()
 {
     if (parent_client != nullptr)
@@ -478,6 +483,11 @@ void Client_Interface::init_connection_targert()
 
         setup_connect_with_async_fqdn_lookup();
     }
+    preferred_authority = authority;
+}
+
+void Client_Interface::set_prefered_authority(const std::string& authority)
+{
     preferred_authority = authority;
 }
 
@@ -1717,6 +1727,10 @@ void Client_Interface::on_request_start(int32_t stream_id)
         {
             scenario_index = request_data->second.scenario_index;
             request_index = request_data->second.curr_request_idx;
+            if (request_data->second.request_sent_callback)
+            {
+                request_data->second.request_sent_callback(stream_id, this);
+            }
         }
     }
 
@@ -2209,19 +2223,19 @@ void Client_Interface::call_connected_callbacks(bool success)
     {
         if (callback)
         {
-            callback(success);
+            callback(success, this);
         }
     }
     connected_callbacks.clear();
 }
 
 
-void Client_Interface::install_connected_callback(std::function<void(bool)> callback)
+void Client_Interface::install_connected_callback(std::function<void(bool, h2load::Client_Interface*)> callback)
 {
     connected_callbacks.push_back(callback);
 }
 
-void Client_Interface::mark_stream_saved_for_user_callback(int32_t stream_id)
+void Client_Interface::queue_stream_for_user_callback(int32_t stream_id)
 {
     const size_t MAX_STREAM_SAVED_FOR_CALLBACK = 500;
 
@@ -2236,50 +2250,48 @@ void Client_Interface::process_stream_user_callback(int32_t stream_id)
 {
     if (requests_awaiting_response.count(stream_id) && stream_user_callback_queue.count(stream_id))
     {
+        stream_user_callback_queue[stream_id].resp_headers = requests_awaiting_response[stream_id].resp_headers;
+        stream_user_callback_queue[stream_id].resp_payload = requests_awaiting_response[stream_id].resp_payload;
+        stream_user_callback_queue[stream_id].response_available = true;
         if (stream_user_callback_queue[stream_id].response_callback)
         {
             stream_user_callback_queue[stream_id].response_callback();
         }
-        else
-        {
-            stream_user_callback_queue[stream_id].resp_headers = requests_awaiting_response[stream_id].resp_headers;
-            stream_user_callback_queue[stream_id].resp_payload = requests_awaiting_response[stream_id].resp_payload;
-            stream_user_callback_queue[stream_id].response_available = true;
-        }
     }
 }
 
-void Client_Interface::receive_response_from_lua(int32_t stream_id, lua_State *L)
+bool Client_Interface::pass_response_to_lua(int32_t stream_id, lua_State *L)
 {
-    if (!stream_user_callback_queue.count(stream_id))
+    bool need_to_yield = false;
+    if (stream_user_callback_queue.count(stream_id))
     {
-        return;
-    }
-    auto pass_response_to_lua = [this, L, stream_id]()
-    {
-        lua_createtable(L, 0, stream_user_callback_queue[stream_id].resp_headers.size());
-        for (auto& header : stream_user_callback_queue[stream_id].resp_headers)
+        auto push_response_to_lua_stack = [this, L, stream_id]()
         {
-            lua_pushlstring(L, header.first.c_str(), header.first.size());
-            lua_pushlstring(L, header.second.c_str(), header.second.size());
-            lua_rawset(L, -3);
-        }
-        lua_pushlstring(L, stream_user_callback_queue[stream_id].resp_payload.c_str(), stream_user_callback_queue[stream_id].resp_payload.size());
-    };
-    if (stream_user_callback_queue[stream_id].response_available)
-    {
-        pass_response_to_lua();
-    }
-    else
-    {
-        auto callback = [pass_response_to_lua, L, this]()
-        {
-            pass_response_to_lua();
-            lua_resume(L, 2);
+            lua_createtable(L, 0, stream_user_callback_queue[stream_id].resp_headers.size());
+            for (auto& header : stream_user_callback_queue[stream_id].resp_headers)
+            {
+                lua_pushlstring(L, header.first.c_str(), header.first.size());
+                lua_pushlstring(L, header.second.c_str(), header.second.size());
+                lua_rawset(L, -3);
+            }
+            lua_pushlstring(L, stream_user_callback_queue[stream_id].resp_payload.c_str(), stream_user_callback_queue[stream_id].resp_payload.size());
         };
-        stream_user_callback_queue[stream_id].response_callback = callback;
-        lua_yield(L, 0);
+        if (stream_user_callback_queue[stream_id].response_available)
+        {
+            push_response_to_lua_stack();
+        }
+        else
+        {
+            auto callback = [push_response_to_lua_stack, L, this]()
+            {
+                push_response_to_lua_stack();
+                lua_resume_wrapper(L, 2);
+            };
+            stream_user_callback_queue[stream_id].response_callback = callback;
+            need_to_yield = true;
+        }
     }
+    return need_to_yield;
 }
 
 }

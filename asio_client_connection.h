@@ -116,8 +116,6 @@ public:
 
     virtual void setup_graceful_shutdown();
 
-    void install_connected_callback(std::function<void(bool)> callback);
-
 private:
 
     bool is_error_due_to_aborted_operation(const boost::system::error_code& e);
