@@ -1849,11 +1849,16 @@ int setup_parallel_test(lua_State *L)
             lua_State* cL = lua_newthread(L);
             lua_global_config.coroutine_to_worker_map[cL] = (i % lua_global_config.number_of_workers);
             luaL_loadstring(cL, lua_global_config.lua_script.c_str());
+            lua_global_config.coroutine_id_map[cL] = i;
             lua_resume_wrapper(cL, 0);
         }
         return lua_yield(L, 0);
     }
-    return 0;
+    else
+    {
+      lua_pushinteger(L, lua_global_config.coroutine_id_map[L]);
+      return 1;
+    }
 }
 
 int sleep_for_ms(lua_State *L)

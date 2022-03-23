@@ -245,6 +245,7 @@ struct Global_Config_For_Lua
     std::string lua_script;
     std::atomic<size_t> number_of_finished_coroutins;
     std::map<lua_State*, size_t> coroutine_to_worker_map;
+    std::map<lua_State*, size_t> coroutine_id_map;
 };
 
 #endif

@@ -1,6 +1,8 @@
 print("test.lua")
 
-setup_parallel_test(2, 4)
+local my_id = setup_parallel_test(2, 4)
+
+print ("my_id:", my_id)
 
 local client_id = make_connection("http://192.168.1.124:8080")
 
