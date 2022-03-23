@@ -203,23 +203,47 @@ bool is_it_an_ipv6_address(const std::string& address);
 
 bool is_null_destination(h2load::Config& config);
 
-extern "C" int make_connection(lua_State *L);
+extern "C"
+{
 
-extern "C" int send_http_request(lua_State *L);
+int make_connection(lua_State *L);
 
-extern "C" int send_http_request_and_await_response(lua_State *L);
+int send_http_request(lua_State *L);
 
-extern "C" int await_response(lua_State *L);
+int send_http_request_and_await_response(lua_State *L);
+
+int await_response(lua_State *L);
+
+int setup_parallel_test(lua_State *L);
+
+}
 
 int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_Interface*)> request_sent_callback);
 
 void load_and_run_lua_script(const std::string& lua_script);
 
-h2load::asio_worker* get_worker();
+h2load::asio_worker* get_worker(lua_State *L);
 
-int32_t _make_connection(const std::string& uri, std::function<void(bool)> connected_callback);
+int32_t _make_connection(lua_State *L, const std::string& uri, std::function<void(bool)> connected_callback);
 
 int lua_resume_wrapper (lua_State *L, int nargs);
 
+struct Global_Config_For_Lua
+{
+    explicit Global_Config_For_Lua():
+        number_of_lua_coroutines(1),
+        number_of_workers(1),
+        config_initialized(false),
+        number_of_finished_coroutins(0)
+    {
+    };
+
+    uint32_t number_of_lua_coroutines;
+    uint32_t number_of_workers;
+    bool config_initialized;
+    std::string lua_script;
+    std::atomic<size_t> number_of_finished_coroutins;
+    std::map<lua_State*, size_t> coroutine_to_worker_map;
+};
 
 #endif
