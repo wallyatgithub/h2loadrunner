@@ -44,3 +44,5 @@ local headers, body = send_http_request_and_await_response(request_headers_to_se
 
 print ("status code:", headers[":status"])
 print ("body:", body)
+
+sleep_for_ms(2000)

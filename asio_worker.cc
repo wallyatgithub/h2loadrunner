@@ -36,6 +36,7 @@ asio_worker::asio_worker(uint32_t id, size_t nreq_todo, size_t nclients,
     rate_mode_period_timer(io_context),
     warmup_timer(io_context),
     duration_timer(io_context),
+    tick_timer(io_context),
     ssl_ctx(boost::asio::ssl::context::sslv23)
 {
     setup_SSL_CTX(ssl_ctx.native_handle(), *config);
@@ -74,9 +75,30 @@ void asio_worker::start_rate_mode_period_timer()
     });
 }
 
+void asio_worker::start_tick_timer()
+{
+    tick_timer.expires_from_now(boost::posix_time::millisec(100));
+    tick_timer.async_wait
+    (
+        [this](const boost::system::error_code & ec)
+    {
+        handle_tick_timer_timeout(ec);
+    });
+}
+
 void asio_worker::stop_rate_mode_period_timer()
 {
     rate_mode_period_timer.cancel();
+}
+
+void asio_worker::handle_tick_timer_timeout(const boost::system::error_code & ec)
+{
+    if (!timer_common_check(tick_timer, ec, &asio_worker::handle_tick_timer_timeout))
+    {
+        return;
+    }
+    process_user_timers();
+    start_tick_timer();
 }
 
 void asio_worker::handle_rate_mode_period_timer_timeout(const boost::system::error_code& ec)
@@ -156,6 +178,29 @@ std::map<std::string, std::shared_ptr<h2load::Client_Interface>>& asio_worker::g
     return client_pool;
 }
 
+void asio_worker::enqueue_user_timer(uint64_t ms_to_expire, std::function<void(void)> callback)
+{
+    auto curr_timepoint = std::chrono::steady_clock::now();
+    std::chrono::milliseconds timeout_duration(ms_to_expire);
+    auto timeout_timepoint = curr_timepoint + timeout_duration;
+    user_timers.insert(std::make_pair(timeout_timepoint, callback));
+}
+
+void asio_worker::process_user_timers()
+{
+    if (user_timers.empty())
+    {
+        return;
+    }
+    std::chrono::steady_clock::time_point curr_timepoint = std::chrono::steady_clock::now();
+    auto stop_sign = user_timers.upper_bound(curr_timepoint);
+    auto iter = user_timers.begin();
+    while (iter != stop_sign)
+    {
+        iter->second();
+        iter = user_timers.erase(iter);
+    }
+}
 
 }
 

@@ -4,6 +4,8 @@
 #ifdef _WINDOWS
 #include <sdkddkver.h>
 #endif
+#include <chrono>
+
 #include <boost/asio.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/asio/ssl.hpp>
@@ -52,14 +54,24 @@ public:
 
     std::map<std::string, std::shared_ptr<h2load::Client_Interface>>& get_client_pool();
 
+    void enqueue_user_timer(uint64_t ms_to_expire, std::function<void(void)>);
+
+    void handle_tick_timer_timeout(const boost::system::error_code & ec);
+
+    void start_tick_timer();
 
 private:
+
+    void process_user_timers();
+
     boost::asio::io_service io_context;
     boost::asio::deadline_timer rate_mode_period_timer;
     boost::asio::deadline_timer warmup_timer;
     boost::asio::deadline_timer duration_timer;
+    boost::asio::deadline_timer tick_timer;
     boost::asio::ssl::context ssl_ctx;
     std::map<std::string, std::shared_ptr<h2load::Client_Interface>> client_pool;
+    std::multimap<std::chrono::steady_clock::time_point, std::function<void(void)>> user_timers;
 
 };
 

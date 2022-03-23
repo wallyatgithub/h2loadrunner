@@ -216,6 +216,7 @@ int await_response(lua_State *L);
 
 int setup_parallel_test(lua_State *L);
 
+int sleep_for_ms(lua_State *L);
 }
 
 int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_Interface*)> request_sent_callback);

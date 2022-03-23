@@ -1856,6 +1856,28 @@ int setup_parallel_test(lua_State *L)
     return 0;
 }
 
+int sleep_for_ms(lua_State *L)
+{
+    uint64_t ms_to_sleep = 0;
+    int top = lua_gettop(L);
+    if (top == 1)
+    {
+        ms_to_sleep = lua_tointeger(L, -1);
+        lua_pop(L, 1);
+    }
+    if (ms_to_sleep == 0)
+    {
+      return 0;
+    }
+
+    auto wakeup_me = [L]()
+    {
+        lua_resume_wrapper(L, 0);
+    };
+    get_worker(L)->enqueue_user_timer(ms_to_sleep, wakeup_me);
+    return lua_yield(L, 0);
+}
+
 void load_and_run_lua_script(const std::string& lua_script)
 {
     lua_State* L = lua_open();
@@ -1866,6 +1888,7 @@ void load_and_run_lua_script(const std::string& lua_script)
     lua_register(L, "await_response", await_response);
     lua_register(L, "send_http_request_and_await_response", send_http_request_and_await_response);
     lua_register(L, "setup_parallel_test", setup_parallel_test);
+    lua_register(L, "sleep_for_ms", sleep_for_ms);
     lua_State* cL = lua_newthread(L);
     luaL_loadstring(cL, lua_script.c_str());
     auto retCode = lua_resume_wrapper(cL, 0);
@@ -1926,7 +1949,13 @@ h2load::asio_worker* get_worker(lua_State *L)
         };
         for (int i = 0; i < workers.size(); i++)
         {
-            std::thread worker_thread(thread_func, workers[i].get());
+            auto worker_ptr = workers[i].get();
+            std::thread worker_thread(thread_func, worker_ptr);
+            auto start_user_timer_service = [worker_ptr]()
+            {
+                worker_ptr->start_tick_timer();
+            };
+            worker_ptr->get_io_context().post(start_user_timer_service);
             worker_thread.detach();
         }
         return true;
@@ -2176,7 +2205,7 @@ int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_
     return retCode;
 }
 
-int lua_resume_wrapper (lua_State *L, int nargs)
+int lua_resume_wrapper(lua_State *L, int nargs)
 {
     auto retCode = lua_resume(L, nargs);
     if (LUA_OK == retCode)
