@@ -86,6 +86,11 @@ void asio_worker::start_tick_timer()
     });
 }
 
+void asio_worker::stop_tick_timer()
+{
+    tick_timer.cancel();
+}
+
 void asio_worker::stop_rate_mode_period_timer()
 {
     rate_mode_period_timer.cancel();

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <numeric>
 #include <cctype>
+#include <mutex>
 #ifndef _WINDOWS
 #include <execinfo.h>
 #endif
@@ -1822,6 +1823,8 @@ bool is_it_an_ipv6_address(const std::string& address)
 }
 
 static Global_Config_For_Lua lua_global_config;
+std::mutex lua_global_config_mutex;
+
 
 int setup_parallel_test(lua_State *L)
 {
@@ -1844,13 +1847,34 @@ int setup_parallel_test(lua_State *L)
         lua_global_config.number_of_lua_coroutines = number_of_coroutines;
         lua_global_config.number_of_workers = number_of_workers;
         std::cerr<<"number of workers: "<<number_of_workers <<", nummber of coroutines: "<<number_of_coroutines<<std::endl;
+        for (int i = 0; i < number_of_workers; i++)
+        {
+            auto lua_state = create_new_lua_states();
+            lua_global_config.lua_states.push_back(lua_state);
+        }
         for (int i = 0; i < number_of_coroutines; i++)
         {
-            lua_State* cL = lua_newthread(L);
-            lua_global_config.coroutine_to_worker_map[cL] = (i % lua_global_config.number_of_workers);
-            luaL_loadstring(cL, lua_global_config.lua_script.c_str());
+            std::lock_guard<std::mutex> guard(lua_global_config_mutex);
+            auto worker_index = i % lua_global_config.number_of_workers;
+            auto parent_lua_state = lua_global_config.lua_states[worker_index];
+            if (!lua_checkstack(parent_lua_state, 1))
+            {
+                std::cerr<<"no enough space in stack"<<std::endl;
+                exit(1);
+            }
+            lua_State* cL = lua_newthread(parent_lua_state);
+            lua_global_config.coroutine_ref_map[cL] = luaL_ref(parent_lua_state, LUA_REGISTRYINDEX);
             lua_global_config.coroutine_id_map[cL] = i;
-            lua_resume_wrapper(cL, 0);
+            luaL_loadstring(cL, lua_global_config.lua_script.c_str());
+        }
+        for (auto& coroutine: lua_global_config.coroutine_id_map)
+        {
+            auto t = coroutine.first;
+            auto start_coroutine = [t]()
+            {
+                lua_resume_wrapper(t, 0);
+            };
+            get_worker(coroutine.first)->get_io_context().post(start_coroutine);
         }
         return lua_yield(L, 0);
     }
@@ -1883,10 +1907,9 @@ int sleep_for_ms(lua_State *L)
     return lua_yield(L, 0);
 }
 
-void load_and_run_lua_script(const std::string& lua_script)
+lua_State* create_new_lua_states()
 {
-    lua_State* L = lua_open();
-    lua_global_config.lua_script = lua_script;
+    lua_State* L = luaL_newstate();
     luaL_openlibs(L);
     lua_register(L, "make_connection", make_connection);
     lua_register(L, "send_http_request", send_http_request);
@@ -1894,9 +1917,28 @@ void load_and_run_lua_script(const std::string& lua_script)
     lua_register(L, "send_http_request_and_await_response", send_http_request_and_await_response);
     lua_register(L, "setup_parallel_test", setup_parallel_test);
     lua_register(L, "sleep_for_ms", sleep_for_ms);
-    lua_State* cL = lua_newthread(L);
-    luaL_loadstring(cL, lua_script.c_str());
-    auto retCode = lua_resume_wrapper(cL, 0);
+    return L;
+}
+
+void stop_workers()
+{
+    for (int i = 0; i < lua_global_config.workers.size(); i++)
+    {
+        auto worker_ptr = lua_global_config.workers[i].get();
+        auto stop_user_timer_service = [worker_ptr]()
+        {
+            worker_ptr->stop_tick_timer();
+        };
+        worker_ptr->get_io_context().post(stop_user_timer_service);
+    }
+}
+
+void load_and_run_lua_script(const std::string& lua_script)
+{
+    lua_global_config.lua_script = lua_script;
+    auto L = create_new_lua_states();
+    luaL_loadstring(L, lua_script.c_str());
+    auto retCode = lua_resume_wrapper(L, 0);
     if (LUA_YIELD == retCode)
     {
         while (lua_global_config.number_of_lua_coroutines > lua_global_config.number_of_finished_coroutins)
@@ -1905,7 +1947,7 @@ void load_and_run_lua_script(const std::string& lua_script)
         }
         std::cerr<<"all coroutines finished"<<std::endl;
     }
-    else 
+    else
     {
         if (LUA_OK != retCode)
         {
@@ -1913,6 +1955,7 @@ void load_and_run_lua_script(const std::string& lua_script)
         }
     }
     lua_close(L);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     exit(0);
 }
 
@@ -1930,17 +1973,15 @@ h2load::asio_worker* get_worker(lua_State *L)
     };
     static auto init_config_ret_code = init_config();
 
-    static std::vector<std::unique_ptr<h2load::asio_worker>> workers;
-    static std::vector<boost::asio::io_service::work> works;
     auto init_workers = []()
     {
         for (int i = 0; i < lua_global_config.number_of_workers; i++)
         {
-            workers.emplace_back(std::make_unique<h2load::asio_worker>(0, 0xFFFFFFFF, 1, 0, 1000, &conf));
+            lua_global_config.workers.emplace_back(std::make_unique<h2load::asio_worker>(0, 0xFFFFFFFF, 1, 0, 1000, &conf));
         }
-        for (int i = 0; i < workers.size(); i++)
+        for (int i = 0; i < lua_global_config.workers.size(); i++)
         {
-            works.emplace_back(workers[i]->get_io_context());
+            lua_global_config.works.emplace_back(lua_global_config.workers[i]->get_io_context());
         }
         return true;
     };
@@ -1952,9 +1993,9 @@ h2load::asio_worker* get_worker(lua_State *L)
         {
             worker_ptr->run_event_loop();
         };
-        for (int i = 0; i < workers.size(); i++)
+        for (int i = 0; i < lua_global_config.workers.size(); i++)
         {
-            auto worker_ptr = workers[i].get();
+            auto worker_ptr = lua_global_config.workers[i].get();
             std::thread worker_thread(thread_func, worker_ptr);
             auto start_user_timer_service = [worker_ptr]()
             {
@@ -1968,9 +2009,8 @@ h2load::asio_worker* get_worker(lua_State *L)
     static auto run_workers_ret_Code = run_workers();
 
     size_t worker_index =
-      lua_global_config.coroutine_to_worker_map.count(L) ? lua_global_config.coroutine_to_worker_map[L] : 0;
-
-    return workers[worker_index].get();
+      lua_global_config.coroutine_id_map.count(L) ? lua_global_config.coroutine_id_map[L]%lua_global_config.number_of_workers: 0;
+    return lua_global_config.workers[worker_index].get();
 }
 
 int32_t _make_connection(lua_State *L, const std::string& uri, std::function<void(bool, h2load::Client_Interface*)> connected_callback)
@@ -2215,7 +2255,16 @@ int lua_resume_wrapper(lua_State *L, int nargs)
     auto retCode = lua_resume(L, nargs);
     if (LUA_OK == retCode)
     {
-        lua_global_config.number_of_finished_coroutins++;
+      std::lock_guard<std::mutex> guard(lua_global_config_mutex);
+      lua_global_config.number_of_finished_coroutins++;
+      if (lua_global_config.coroutine_id_map.count(L))
+      {
+          auto worker_index = lua_global_config.coroutine_id_map[L] % lua_global_config.number_of_workers;
+          auto parent_lua_state = lua_global_config.lua_states[worker_index];
+          luaL_unref(parent_lua_state, LUA_REGISTRYINDEX, lua_global_config.coroutine_ref_map[L]);
+          lua_global_config.coroutine_ref_map.erase(L);
+          lua_gc(parent_lua_state, LUA_GCCOLLECT, 0);
+      }
     }
     return retCode;
 }

@@ -60,6 +60,8 @@ public:
 
     void start_tick_timer();
 
+    void stop_tick_timer();
+
 private:
 
     void process_user_timers();

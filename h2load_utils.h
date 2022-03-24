@@ -229,6 +229,12 @@ int32_t _make_connection(lua_State *L, const std::string& uri, std::function<voi
 
 int lua_resume_wrapper (lua_State *L, int nargs);
 
+void register_functions_to_lua(lua_State *L);
+
+lua_State* create_new_lua_states();
+
+void stop_workers();
+
 struct Global_Config_For_Lua
 {
     explicit Global_Config_For_Lua():
@@ -243,9 +249,13 @@ struct Global_Config_For_Lua
     uint32_t number_of_workers;
     bool config_initialized;
     std::string lua_script;
-    std::atomic<size_t> number_of_finished_coroutins;
+    size_t number_of_finished_coroutins;
     std::map<lua_State*, size_t> coroutine_to_worker_map;
     std::map<lua_State*, size_t> coroutine_id_map;
+    std::map<lua_State*, int> coroutine_ref_map;
+    std::vector<lua_State*> lua_states;
+    std::vector<std::unique_ptr<h2load::asio_worker>> workers;
+    std::vector<boost::asio::io_service::work> works;
 };
 
 #endif
