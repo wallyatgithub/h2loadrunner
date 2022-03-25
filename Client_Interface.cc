@@ -17,6 +17,7 @@
 #include "Worker_Interface.h"
 
 #include "h2load_utils.h"
+#include "h2load_lua.h"
 
 
 namespace h2load

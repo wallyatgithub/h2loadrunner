@@ -176,18 +176,7 @@ set (CMAKE_INCLUDE_CURRENT_DIR ON)
 add_definitions(-DHAVE_CONFIG_H)
 configure_file(cmakeconfig.h.in config.h)
 
-# h2load
-set(H2LOAD_SOURCES
-  util.cc
-  http2.cc h2load.cc
-  h2load_utils.cc
-  ${H2LOAD_SOURCE_USING_LIBEV}
-  h2load_Config.cc
-  h2load_Cookie.cc
-  timegm.c
-  tls.cc
-  h2load_http2_session.cc
-  h2load_http1_session.cc
+set(ASIO_SV_SOURCES
   asio_common.cc
   asio_io_service_pool.cc
   asio_server_http2.cc
@@ -202,10 +191,28 @@ set(H2LOAD_SOURCES
   asio_server_serve_mux.cc
   asio_server_request_handler.cc
   asio_server_tls_context.cc
+  #asio_util.cc
+)
+
+# h2load
+set(H2LOAD_SOURCES
+  util.cc
+  http2.cc
+  h2load.cc
+  h2load_utils.cc
+  h2load_Config.cc
+  h2load_Cookie.cc
+  timegm.c
+  tls.cc
+  h2load_http2_session.cc
+  h2load_http1_session.cc
   Client_Interface.cc
   Worker_Interface.cc
   asio_client_connection.cc
   asio_worker.cc
+  h2load_lua.cc
+  ${H2LOAD_SOURCE_USING_LIBEV}
+  ${ASIO_SV_SOURCES}
 )
 
 add_executable(h2loadrunner ${H2LOAD_SOURCES} $<TARGET_OBJECTS:llhttp>

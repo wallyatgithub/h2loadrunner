@@ -97,7 +97,7 @@ extern "C" {
 #include "rapidjson/schema.h"
 #include "rapidjson/prettywriter.h"
 #include "config_schema.h"
-
+#include "h2load_lua.h"
 
 
 #ifndef O_BINARY
@@ -358,6 +358,11 @@ Options:
               change of rps is needed.
   --config-file=<PATH>
               A JSON file specifying the configurations needed.
+  --script-file=<PATH>
+              A Lua script file to load and run. Configuration related
+              to host, Scenarioes in above config-file will be ignored
+              And the actual connection and request will be controlled
+              by the script.
   -v, --verbose
               Output debug information.
   --version   Display version information and exit.
@@ -396,6 +401,7 @@ int main(int argc, char** argv)
 #endif // NOTHREADS
 
     std::string datafile;
+    std::string script_file;
     bool nreqs_set_manually = false;
     while (1)
     {
@@ -752,11 +758,7 @@ int main(int argc, char** argv)
                     break;
                     case 26:
                     {
-                        std::string script_file = optarg;
-                        std::ifstream buffer(script_file);
-                        std::string lua_script((std::istreambuf_iterator<char>(buffer)),
-                                                std::istreambuf_iterator<char>());
-                        load_and_run_lua_script(lua_script);
+                        script_file = optarg;
                     }
                     break;
                 }
@@ -764,6 +766,15 @@ int main(int argc, char** argv)
             default:
                 break;
         }
+    }
+
+    if (script_file.size())
+    {
+        std::ifstream buffer(script_file);
+        std::string lua_script((std::istreambuf_iterator<char>(buffer)),
+                                std::istreambuf_iterator<char>());
+        load_and_run_lua_script(lua_script, config);
+        return 0;
     }
 
     if (argc == optind)

@@ -67,7 +67,7 @@ struct Config
     // preference.
     std::vector<std::string> npn_list;
     // The number of request per second for each client.
-    std::atomic<double> rps;
+    double rps;
     uint16_t stream_timeout_in_ms;
     std::string rps_file;
     Config_Schema json_config_schema;
