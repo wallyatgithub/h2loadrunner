@@ -1390,6 +1390,10 @@ void Client_Interface::on_rps_timer()
 {
     reset_timeout_requests();
     assert(!config->timing_script);
+    if (CLIENT_CONNECTED != state)
+    {
+        return;
+    }
 
     if (req_left == 0)
     {
