@@ -401,7 +401,7 @@ int main(int argc, char** argv)
 #endif // NOTHREADS
 
     std::string datafile;
-    std::string script_file;
+    std::vector<std::string> script_files;
     bool nreqs_set_manually = false;
     while (1)
     {
@@ -758,7 +758,8 @@ int main(int argc, char** argv)
                     break;
                     case 26:
                     {
-                        script_file = optarg;
+                        std::string script_file = optarg;
+                        script_files.push_back(script_file);
                     }
                     break;
                 }
@@ -768,12 +769,17 @@ int main(int argc, char** argv)
         }
     }
 
-    if (script_file.size())
+    if (script_files.size())
     {
-        std::ifstream buffer(script_file);
-        std::string lua_script((std::istreambuf_iterator<char>(buffer)),
-                                std::istreambuf_iterator<char>());
-        load_and_run_lua_script(lua_script, config);
+        std::vector<std::string> lua_scripts;
+        for (auto& script_file: script_files)
+        {
+            std::ifstream buffer(script_file);
+            std::string lua_script((std::istreambuf_iterator<char>(buffer)),
+                                    std::istreambuf_iterator<char>());
+            lua_scripts.push_back(lua_script);
+        }
+        load_and_run_lua_script(lua_scripts, config);
         return 0;
     }
 

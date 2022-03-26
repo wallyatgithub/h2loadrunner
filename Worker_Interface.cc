@@ -93,6 +93,10 @@ void Worker_Interface::stop_all_clients()
 
 void Worker_Interface::free_client(Client_Interface* deleted_client)
 {
+    if (!this)
+    {
+        return;
+    }
     for (size_t index = 0; index < clients.size(); index++)
     {
         if (clients[index] == deleted_client)
