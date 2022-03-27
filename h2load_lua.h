@@ -54,15 +54,17 @@ void stop_workers();
 struct Lua_Group_Config
 {
     explicit Lua_Group_Config():
-        number_of_lua_coroutines(1),
         number_of_workers(1),
+        number_of_client_to_same_host_in_one_worker(1),
+        number_of_lua_coroutines(1),
         config_initialized(false),
         number_of_finished_coroutins(0)
     {
     };
 
-    uint32_t number_of_lua_coroutines;
-    uint32_t number_of_workers;
+    size_t number_of_lua_coroutines;
+    size_t number_of_client_to_same_host_in_one_worker;
+    size_t number_of_workers;
     bool config_initialized;
     std::string lua_script;
     size_t number_of_finished_coroutins;

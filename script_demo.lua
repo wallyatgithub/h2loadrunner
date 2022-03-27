@@ -15,10 +15,8 @@ end
 --[[
 This is to set up the number of threads and coroutines
 First argument: number of OS threads
-Second argument: total number of Lua coroutines
-
-Within one thread, to the same host, only one connection exists
-Obviously, there are different connections to different hosts even within each thread
+Second argument: number of conections to the same host within one thread
+Third argument: total number of Lua coroutines
 
 Coroutine helps to increase concurrency
 You can send out 2 concurrent requests and await for responses from two different coroutines
@@ -33,7 +31,7 @@ For example, you can use this id to decide which user(s) each coroutine should u
 
 If this function is not called, thread number is 1, and the same is coroutine number
 --]]
-my_id = setup_parallel_test(1, 1)
+my_id = setup_parallel_test(1, 100, 10000)
 
 --[[
 Information purpose, not necessary
@@ -109,7 +107,7 @@ Information purpose, not necessary
 --[[
 This is to show how to send requests repeatedly while with a pause in between
 --]]
-for i=1,10 do
+for i=1,100 do
     request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:8080", [":method"]="PATCH", [":path"]="/nudm-uecm/test"}
     payload = "hello world again"
     headers, body = send_http_request_and_await_response(request_headers_to_send, payload)

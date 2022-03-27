@@ -11,6 +11,7 @@
 #endif
 #include <iomanip>
 #include <string>
+#include <random>
 
 #include "tls.h"
 #include "Client_Interface.h"
@@ -781,6 +782,30 @@ void Client_Interface::cleanup_due_to_disconnect()
     streams.clear();
     session.reset();
     state = CLIENT_IDLE;
+
+    for (auto& item: stream_user_callback_queue)
+    {
+        if (item.second.response_callback)
+        {
+            item.second.response_callback();
+        }
+    }
+    stream_user_callback_queue.clear();
+
+    for (auto& cbk: connected_callbacks)
+    {
+        cbk(false, this);
+    }
+    connected_callbacks.clear();
+
+    for (auto& req: requests_awaiting_response)
+    {
+        if (req.second.request_sent_callback)
+        {
+            req.second.request_sent_callback(-1, this);
+            auto dummy = std::move(req.second.request_sent_callback);
+        }
+    }
 }
 
 void Client_Interface::record_client_end_time()
@@ -1735,6 +1760,7 @@ void Client_Interface::on_request_start(int32_t stream_id)
             if (request_data->second.request_sent_callback)
             {
                 request_data->second.request_sent_callback(stream_id, this);
+                auto dummy = std::move(request_data->second.request_sent_callback);
             }
         }
     }
@@ -2300,9 +2326,6 @@ void Client_Interface::pass_response_to_lua(int32_t stream_id, lua_State *L)
     else
     {
         lua_createtable(L, 0, 1);
-        lua_pushliteral(L, "");
-        lua_pushliteral(L, "");
-        lua_rawset(L, -3);
         lua_pushlstring(L, "", 0);
         lua_resume_wrapper(L, 2);
     }

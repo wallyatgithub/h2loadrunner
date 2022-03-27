@@ -157,13 +157,16 @@ void setup_test_group(size_t group_id)
 
 int setup_parallel_test(lua_State *L)
 {
-    uint32_t number_of_coroutines = 0;
-    uint32_t number_of_workers = 0;
+    size_t number_of_coroutines = 0;
+    size_t number_of_client = 0;
+    size_t number_of_workers = 0;
 
     int top = lua_gettop(L);
-    if (top == 2)
+    if (top == 3)
     {
         number_of_coroutines = lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        number_of_client = lua_tointeger(L, -1);
         lua_pop(L, 1);
         number_of_workers = lua_tointeger(L, -1);
         lua_pop(L, 1);
@@ -176,6 +179,7 @@ int setup_parallel_test(lua_State *L)
     {
         lua_group_config.config_initialized = true;
         lua_group_config.number_of_lua_coroutines = number_of_coroutines;
+        lua_group_config.number_of_client_to_same_host_in_one_worker = number_of_client;
         lua_group_config.number_of_workers = number_of_workers;
         setup_test_group(group_id);
         return lua_yield(L, 0);
@@ -324,6 +328,7 @@ void init_workers(size_t group_id)
         conf.json_config_schema.private_key = lua_group_config.config_template.json_config_schema.private_key;
         conf.json_config_schema.cert_verification_mode = lua_group_config.config_template.json_config_schema.cert_verification_mode;
         conf.json_config_schema.max_tls_version = lua_group_config.config_template.json_config_schema.max_tls_version;
+        conf.json_config_schema.interval_to_send_ping = 5;
 
         Request request;
         Scenario scenario;
@@ -379,8 +384,9 @@ int32_t _make_connection(lua_State *L, const std::string& uri, std::function<voi
     {
         return -1;
     }
-
-    auto run_inside_worker = [uri, connected_callback, worker]()
+    auto group_id = get_lua_state_data(L).group_id;
+    auto clients_needed = get_lua_group_config(group_id).number_of_client_to_same_host_in_one_worker;
+    auto run_inside_worker = [uri, connected_callback, worker, clients_needed]()
     {
         http_parser_url u {};
         if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0 ||
@@ -400,25 +406,35 @@ int32_t _make_connection(lua_State *L, const std::string& uri, std::function<voi
         std::string base_uri = schema;
         base_uri.append("://").append(authority);
         auto& clients = worker->get_client_pool();
-        if (clients.count(base_uri) == 0)
+        if (clients[base_uri].size() < clients_needed)
         {
-            clients[base_uri] = worker->create_new_client(0xFFFFFFFF);
-            clients[base_uri]->install_connected_callback(connected_callback);
-            clients[base_uri]->set_prefered_authority(authority);
-            clients[base_uri]->connect_to_host(schema, authority);
-        }
-        else if (h2load::CLIENT_IDLE == clients[base_uri]->state)
-        {
-            clients[base_uri]->install_connected_callback(connected_callback);
-            clients[base_uri]->connect_to_host(schema, authority);
-        }
-        else if (h2load::CLIENT_CONNECTING == clients[base_uri]->state)
-        {
-            clients[base_uri]->install_connected_callback(connected_callback);
+            auto client = worker->create_new_client(0xFFFFFFFF);
+            clients[base_uri].push_back(client);
+            client->install_connected_callback(connected_callback);
+            client->set_prefered_authority(authority);
+            client->connect_to_host(schema, authority);
         }
         else
         {
-            connected_callback(true, clients[base_uri].get());
+            thread_local static std::random_device rand_dev;
+            thread_local static std::mt19937 generator(rand_dev());
+            thread_local static std::uniform_int_distribution<uint64_t>  distr(0, clients_needed - 1);
+            auto client_index = distr(generator);
+            auto client = clients[base_uri][client_index];
+
+            if (h2load::CLIENT_IDLE == client->state)
+            {
+                client->install_connected_callback(connected_callback);
+                client->connect_to_host(schema, authority);
+            }
+            else if (h2load::CLIENT_CONNECTING == client->state)
+            {
+                client->install_connected_callback(connected_callback);
+            }
+            else
+            {
+                connected_callback(true, client.get());
+            }
         }
     };
     worker->get_io_context().post(run_inside_worker);
@@ -530,18 +546,18 @@ int await_response(lua_State *L)
     auto run_inside_worker = [worker, client_unique_id, stream_id, L]()
     {
         auto& clients = worker->get_client_pool();
-        for (auto& client: clients)
+        for (auto& clients_to_same_host: clients)
         {
-            if (client.second->get_client_unique_id() == client_unique_id)
+            for (auto& client: clients_to_same_host.second)
             {
-                client.second->pass_response_to_lua(stream_id, L);
-                return;
+                if (client->get_client_unique_id() == client_unique_id)
+                {
+                    client->pass_response_to_lua(stream_id, L);
+                    return;
+                }
             }
         }
         lua_createtable(L, 0, 1);
-        lua_pushliteral(L, "");
-        lua_pushliteral(L, "");
-        lua_rawset(L, -3);
         lua_pushlstring(L, "", 0);
         lua_resume_wrapper(L, 2);
     };
@@ -554,9 +570,6 @@ int await_response(lua_State *L)
     else
     {
         lua_createtable(L, 0, 1);
-        lua_pushliteral(L, "");
-        lua_pushliteral(L, "");
-        lua_rawset(L, -3);
         lua_pushlstring(L, "", 0);
         return 2;
     }
