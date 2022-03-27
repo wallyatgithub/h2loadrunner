@@ -288,6 +288,15 @@ void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 }
 
+bool is_running_in_worker_thread(lua_State* L)
+{
+    auto& lua_group_config = get_lua_group_config(get_lua_state_data(L).group_id);
+    auto worker_thread = lua_group_config.workers[get_lua_state_data(L).worker_id];
+    auto curr_thread_id = std::this_thread::get_id();
+    auto worker_thread_id = worker_thread->get_thread_id();
+    return (curr_thread_id == worker_thread_id);
+}
+
 void init_workers(size_t group_id)
 {
     auto& lua_group_config = get_lua_group_config(group_id);
@@ -370,6 +379,7 @@ int32_t _make_connection(lua_State *L, const std::string& uri, std::function<voi
     {
         return -1;
     }
+
     auto run_inside_worker = [uri, connected_callback, worker]()
     {
         http_parser_url u {};
@@ -417,9 +427,8 @@ int32_t _make_connection(lua_State *L, const std::string& uri, std::function<voi
 
 int make_connection(lua_State *L)
 {
-    force_in_worker_thread_if_not_yet(L);
-
-    if (lua_type(L, -1) == LUA_TSTRING)
+    int top = lua_gettop(L);
+    if ((top == 1)&&(lua_type(L, -1) == LUA_TSTRING))
     {
         size_t len;
         const char* str = lua_tolstring(L, -1, &len);
@@ -436,13 +445,19 @@ int make_connection(lua_State *L)
             return lua_yield(L, 0);
         }
     }
-    return 0;
+    else
+    {
+        for (size_t i= 0; i < top; i++)
+        {
+            lua_pop(L, 1);
+        }
+    }
+    lua_pushinteger(L, -1);
+    return 1;
 }
 
 int send_http_request(lua_State *L)
 {
-    force_in_worker_thread_if_not_yet(L);
-
     auto request_sent = [L](int32_t stream_id, h2load::Client_Interface* client)
     {
         client->queue_stream_for_user_callback(stream_id);
@@ -455,8 +470,6 @@ int send_http_request(lua_State *L)
 
 int send_http_request_and_await_response(lua_State *L)
 {
-    force_in_worker_thread_if_not_yet(L);
-
     auto request_sent = [L](int32_t stream_id, h2load::Client_Interface* client)
     {
         client->queue_stream_for_user_callback(stream_id);
@@ -467,8 +480,6 @@ int send_http_request_and_await_response(lua_State *L)
 
 int sleep_for_ms(lua_State *L)
 {
-    force_in_worker_thread_if_not_yet(L);
-
     uint64_t ms_to_sleep = 0;
     int top = lua_gettop(L);
     if (top == 1)
@@ -484,14 +495,18 @@ int sleep_for_ms(lua_State *L)
     {
         lua_resume_wrapper(L, 0);
     };
-    get_worker(L)->enqueue_user_timer(ms_to_sleep, wakeup_me);
+
+    auto worker = get_worker(L);
+    auto run_in_worker = [worker, wakeup_me, ms_to_sleep]()
+    {
+        worker->enqueue_user_timer(ms_to_sleep, wakeup_me);
+    };
+    worker->get_io_context().post(run_in_worker);
     return lua_yield(L, 0);
 }
 
 int await_response(lua_State *L)
 {
-    force_in_worker_thread_if_not_yet(L);
-
     uint64_t client_unique_id = -1;
     int32_t stream_id = -1;
 
@@ -503,29 +518,48 @@ int await_response(lua_State *L)
         client_unique_id = lua_tointeger(L, -1);
         lua_pop(L, 1);
     }
-
-    if (client_unique_id >= 0 && stream_id > 0)
+    else
     {
-        auto worker = get_worker(L);
+        for (size_t i = 0; i < top; i++)
+        {
+            lua_pop(L, 1);
+        }
+    }
+    auto worker = get_worker(L);
+
+    auto run_inside_worker = [worker, client_unique_id, stream_id, L]()
+    {
         auto& clients = worker->get_client_pool();
         for (auto& client: clients)
         {
             if (client.second->get_client_unique_id() == client_unique_id)
             {
-                if (client.second->pass_response_to_lua(stream_id, L))
-                {
-                   return lua_yield(L, 0);
-                }
+                client.second->pass_response_to_lua(stream_id, L);
+                return;
             }
         }
-    }
+        lua_createtable(L, 0, 1);
+        lua_pushliteral(L, "");
+        lua_pushliteral(L, "");
+        lua_rawset(L, -3);
+        lua_pushlstring(L, "", 0);
+        lua_resume_wrapper(L, 2);
+    };
 
-    lua_createtable(L, 0, 1);
-    lua_pushliteral(L, "nil");
-    lua_pushliteral(L, "nil");
-    lua_rawset(L, -3);
-    lua_pushlstring(L, "", 0);
-    return 2;
+    if (client_unique_id >= 0 && stream_id > 0)
+    {
+        worker->get_io_context().post(run_inside_worker);
+        return lua_yield(L, 0);
+    }
+    else
+    {
+        lua_createtable(L, 0, 1);
+        lua_pushliteral(L, "");
+        lua_pushliteral(L, "");
+        lua_rawset(L, -3);
+        lua_pushlstring(L, "", 0);
+        return 2;
+    }
 }
 
 
@@ -628,7 +662,7 @@ int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_
     {
         return lua_yield(L, 0);
     }
-    return retCode;
+    return 0;
 }
 
 int lua_resume_wrapper(lua_State *L, int nargs)

@@ -1,5 +1,17 @@
 print("Test starts")
 
+
+function verify_response(response_header, response_payload)
+    if (response_header[":status"] == "404")
+    then
+        print ("response validation pass")
+    else
+        print ("response validation failed")
+        print ("status code:", headers[":status"])
+        print ("body:", body)
+    end
+end
+
 --[[
 This is to set up the number of threads and coroutines
 First argument: number of OS threads
@@ -21,7 +33,7 @@ For example, you can use this id to decide which user(s) each coroutine should u
 
 If this function is not called, thread number is 1, and the same is coroutine number
 --]]
---my_id = setup_parallel_test(1, 1)
+my_id = setup_parallel_test(1, 1)
 
 --[[
 Information purpose, not necessary
@@ -84,6 +96,8 @@ If the response is not yet available, it will block this coroutine until the res
 So obviously, there is no need to call sleep_for_ms before to wait for the response to be available
 --]]
 headers, body = await_response(client_id, stream_id)
+
+verify_response(headers, body)
 --[[
 Information purpose, not necessary
 --]]
@@ -95,14 +109,15 @@ Information purpose, not necessary
 --[[
 This is to show how to send requests repeatedly while with a pause in between
 --]]
-for i=1,200 do
+for i=1,10 do
     request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:8080", [":method"]="PATCH", [":path"]="/nudm-uecm/test"}
     payload = "hello world again"
-    send_http_request_and_await_response(request_headers_to_send, payload)
-    --sleep_for_ms(100)
+    headers, body = send_http_request_and_await_response(request_headers_to_send, payload)
+    sleep_for_ms(100)
     --print ("client_id:", client_id)
     --print ("stream_id:", stream_id)
 end
+verify_response(headers, body)
 --sleep_for_ms(1000)
 
 --[[
@@ -112,6 +127,7 @@ One the response is received, this coroutine is resumed and the response is retu
 --]]
 headers, body = send_http_request_and_await_response(request_headers_to_send, payload)
 
+verify_response(headers, body)
 --print ("status code:", headers[":status"])
 --print ("body:", body)
 
@@ -123,6 +139,9 @@ One the response is received, this coroutine is resumed and the response is retu
 request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:8080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
 payload = "hello world"
 headers, body = await_response(send_http_request(request_headers_to_send, payload))
+
+verify_response(headers, body)
+
 --print ("status code:", headers[":status"])
 --print ("body:", body)
 
@@ -137,5 +156,59 @@ function this_is_a_function()
 end
 
 headers, body = this_is_a_function()
-print ("status code:", headers[":status"])
-print ("body:", body)
+verify_response(headers, body)
+
+print ("robustness test")
+headers, body = await_response(-1, -1)
+if (body == "")
+then
+    print "test pass"
+else
+    print "test failed"
+end
+
+headers, body = await_response(99, 1)
+headers, body = await_response(-1, -1)
+if (body == "")
+then
+    print "test pass"
+else
+    print "test failed"
+end
+
+
+headers, body = await_response(0, 1)
+headers, body = await_response(-1, -1)
+if (body == "")
+then
+    print "test pass"
+else
+    print "test failed"
+end
+
+
+client_id = make_connection("://192.168.1.124:8080")
+if (client_id == -1)
+then
+    print "test pass"
+else
+    print "test failed"
+end
+
+request_headers_to_send = {[":authority"]="192.168.1.124:8080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
+payload = "hello world"
+client_id, stream_id = send_http_request(request_headers_to_send, payload)
+if (client_id == nil)
+then
+    print "test pass"
+else
+    print "test failed"
+end
+
+client_id, stream_id = send_http_request(-1, -1)
+if (client_id == nil)
+then
+    print "test pass"
+else
+    print "test failed"
+end

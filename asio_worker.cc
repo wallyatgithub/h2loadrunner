@@ -16,8 +16,15 @@ namespace h2load
 
 void asio_worker::run_event_loop()
 {
+    my_thread_id = std::this_thread::get_id();
     io_context.run();
 }
+
+std::thread::id asio_worker::get_thread_id()
+{
+    return my_thread_id;
+}
+
 
 boost::asio::io_service& asio_worker::get_io_context()
 {

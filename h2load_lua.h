@@ -98,10 +98,14 @@ void stop_workers(size_t number_of_groups);
 
 bool to_be_restarted_in_worker_thread(lua_State* L);
 
+bool is_running_in_worker_thread(lua_State* L);
+
+/*
 #define force_in_worker_thread_if_not_yet(L) \
 if (to_be_restarted_in_worker_thread(L)) \
 { \
     return lua_yield(L, 0); \
 }
+*/
 
 #endif

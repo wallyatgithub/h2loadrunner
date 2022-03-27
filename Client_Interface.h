@@ -190,7 +190,7 @@ public:
     void install_connected_callback(std::function<void(bool, h2load::Client_Interface*)> callback);
     void queue_stream_for_user_callback(int32_t stream_id);
     void process_stream_user_callback(int32_t stream_id);
-    bool pass_response_to_lua(int32_t stream_id, lua_State *L);
+    void pass_response_to_lua(int32_t stream_id, lua_State *L);
     uint64_t get_client_unique_id();
     void set_prefered_authority(const std::string& authority);
 

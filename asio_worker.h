@@ -62,6 +62,8 @@ public:
 
     void stop_tick_timer();
 
+    std::thread::id get_thread_id();
+
 private:
 
     void process_user_timers();
@@ -74,6 +76,7 @@ private:
     boost::asio::ssl::context ssl_ctx;
     std::map<std::string, std::shared_ptr<h2load::Client_Interface>> client_pool;
     std::multimap<std::chrono::steady_clock::time_point, std::function<void(void)>> user_timers;
+    std::thread::id my_thread_id;
 
 };
 

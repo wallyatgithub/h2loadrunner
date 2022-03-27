@@ -2265,9 +2265,8 @@ void Client_Interface::process_stream_user_callback(int32_t stream_id)
     }
 }
 
-bool Client_Interface::pass_response_to_lua(int32_t stream_id, lua_State *L)
+void Client_Interface::pass_response_to_lua(int32_t stream_id, lua_State *L)
 {
-    bool need_to_yield = false;
     if (stream_user_callback_queue.count(stream_id))
     {
         auto push_response_to_lua_stack = [this, L, stream_id]()
@@ -2280,10 +2279,13 @@ bool Client_Interface::pass_response_to_lua(int32_t stream_id, lua_State *L)
                 lua_rawset(L, -3);
             }
             lua_pushlstring(L, stream_user_callback_queue[stream_id].resp_payload.c_str(), stream_user_callback_queue[stream_id].resp_payload.size());
+            stream_user_callback_queue.erase(stream_id);
         };
+
         if (stream_user_callback_queue[stream_id].response_available)
         {
             push_response_to_lua_stack();
+            lua_resume_wrapper(L, 2);
         }
         else
         {
@@ -2293,10 +2295,17 @@ bool Client_Interface::pass_response_to_lua(int32_t stream_id, lua_State *L)
                 lua_resume_wrapper(L, 2);
             };
             stream_user_callback_queue[stream_id].response_callback = callback;
-            need_to_yield = true;
         }
     }
-    return need_to_yield;
+    else
+    {
+        lua_createtable(L, 0, 1);
+        lua_pushliteral(L, "");
+        lua_pushliteral(L, "");
+        lua_rawset(L, -3);
+        lua_pushlstring(L, "", 0);
+        lua_resume_wrapper(L, 2);
+    }
 }
 
 }
