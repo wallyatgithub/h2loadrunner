@@ -31,7 +31,7 @@ For example, you can use this id to decide which user(s) each coroutine should u
 
 If this function is not called, thread number is 1, and the same is coroutine number
 --]]
-my_id = setup_parallel_test(1, 100, 10000)
+my_id = setup_parallel_test(1, 1, 1)
 
 --[[
 Information purpose, not necessary
@@ -111,7 +111,7 @@ for i=1,100 do
     request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:8080", [":method"]="PATCH", [":path"]="/nudm-uecm/test"}
     payload = "hello world again"
     headers, body = send_http_request_and_await_response(request_headers_to_send, payload)
-    sleep_for_ms(100)
+    --sleep_for_ms(100)
     --print ("client_id:", client_id)
     --print ("stream_id:", stream_id)
 end

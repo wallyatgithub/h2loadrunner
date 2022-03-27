@@ -52,8 +52,6 @@ public:
 
     boost::asio::io_service& get_io_context();
 
-    std::map<std::string, std::vector<std::shared_ptr<h2load::Client_Interface>>>& get_client_pool();
-
     void enqueue_user_timer(uint64_t ms_to_expire, std::function<void(void)>);
 
     void handle_tick_timer_timeout(const boost::system::error_code & ec);
@@ -74,7 +72,6 @@ private:
     boost::asio::deadline_timer duration_timer;
     boost::asio::deadline_timer tick_timer;
     boost::asio::ssl::context ssl_ctx;
-    std::map<std::string, std::vector<std::shared_ptr<h2load::Client_Interface>>> client_pool;
     std::multimap<std::chrono::steady_clock::time_point, std::function<void(void)>> user_timers;
     std::thread::id my_thread_id;
 

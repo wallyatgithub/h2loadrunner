@@ -778,6 +778,12 @@ void Client_Interface::cleanup_due_to_disconnect()
         std::cerr << "===============disconnected from " << authority << "===============" << std::endl;
     }
 
+    worker->get_client_ids().erase(this->get_client_unique_id());
+    for (auto& client_set: worker->get_client_pool())
+    {
+        client_set.second.erase(this);
+    }
+
     record_client_end_time();
     streams.clear();
     session.reset();
@@ -991,7 +997,7 @@ void Client_Interface::terminate_sub_clients()
 
 bool Client_Interface::is_test_finished()
 {
-    if (0 == req_left || worker->current_phase == Phase::DURATION_OVER)
+    if (0 == req_left || worker->current_phase > Phase::MAIN_DURATION)
     {
         return true;
     }
@@ -1613,6 +1619,11 @@ int Client_Interface::connection_made()
         return ret;
     }
 
+    std::string base_uri = schema;
+    base_uri.append("://").append(authority);
+    worker->get_client_pool()[base_uri].insert(this);
+    worker->get_client_ids()[this->get_client_unique_id()] = this;
+
     state = CLIENT_CONNECTED;
 
     session->on_connect();
@@ -1700,7 +1711,9 @@ int Client_Interface::connection_made()
     }
     signal_write();
     std::cerr << "===============connected to " << authority << "===============" << std::endl;
-    if (authority != preferred_authority && config->json_config_schema.connect_back_to_preferred_host)
+    if (authority != preferred_authority &&
+        config->json_config_schema.connect_back_to_preferred_host &&
+        (!is_test_finished()))
     {
         std::cerr << "current connected to: " << authority << ", prefered connection to: " << preferred_authority << std::endl;
         start_connect_to_preferred_host_timer();

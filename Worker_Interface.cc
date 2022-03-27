@@ -80,6 +80,7 @@ Worker_Interface::~Worker_Interface()
 
 void Worker_Interface::stop_all_clients()
 {
+/*
     for (auto client : clients)
     {
         if (client && client->session)
@@ -87,6 +88,16 @@ void Worker_Interface::stop_all_clients()
             client->setup_graceful_shutdown();
             client->terminate_session();
             client->terminate_sub_clients();
+        }
+    }
+*/
+    // client_pool has all the connected clients, including sub client
+    for (auto& clients_set: client_pool)
+    {
+        for (auto& client: clients_set.second)
+        {
+            client->setup_graceful_shutdown();
+            client->terminate_session();
         }
     }
 }
@@ -303,9 +314,20 @@ void Worker_Interface::check_in_client(std::shared_ptr<Client_Interface> client)
 {
     managed_clients[client.get()] = client;
 }
+
 void Worker_Interface::check_out_client(Client_Interface* client)
 {
     managed_clients.erase(client);
+}
+
+std::map<std::string, std::set<Client_Interface*>>& Worker_Interface::get_client_pool()
+{
+    return client_pool;
+}
+
+std::map<size_t, Client_Interface*>& Worker_Interface::get_client_ids()
+{
+    return client_ids;
 }
 
 }

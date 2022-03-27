@@ -2,6 +2,7 @@
 #include <numeric>
 #include <cctype>
 #include <mutex>
+#include <iterator>
 
 #include <iomanip>
 #include <iostream>
@@ -212,6 +213,7 @@ void stop_workers(size_t number_of_groups)
         auto stop_user_timer_service = [worker_ptr]()
         {
             worker_ptr->stop_tick_timer();
+            worker_ptr->stop_all_clients();
         };
         worker_ptr->get_io_context().post(stop_user_timer_service);
         // use std::move to destroy work
@@ -289,6 +291,8 @@ void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load
         lua_close(L);
     }
     bootstrap_lua_states.clear();
+    stop_workers(number_of_groups);
+    // to let all workers clean up and quit
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 }
 
@@ -328,13 +332,13 @@ void init_workers(size_t group_id)
         conf.json_config_schema.private_key = lua_group_config.config_template.json_config_schema.private_key;
         conf.json_config_schema.cert_verification_mode = lua_group_config.config_template.json_config_schema.cert_verification_mode;
         conf.json_config_schema.max_tls_version = lua_group_config.config_template.json_config_schema.max_tls_version;
-        conf.json_config_schema.interval_to_send_ping = 5;
+        // conf.json_config_schema.interval_to_send_ping = 5;
+        // conf.json_config_schema.connection_retry_on_disconnect = true;
 
         Request request;
         Scenario scenario;
         scenario.requests.push_back(request);
         conf.json_config_schema.scenarios.push_back(scenario);
-        conf.json_config_schema.connection_retry_on_disconnect = true;
         return true;
     };
     static auto init_config_ret_code = init_config();
@@ -409,7 +413,9 @@ int32_t _make_connection(lua_State *L, const std::string& uri, std::function<voi
         if (clients[base_uri].size() < clients_needed)
         {
             auto client = worker->create_new_client(0xFFFFFFFF);
-            clients[base_uri].push_back(client);
+            worker->check_in_client(client);
+            // pre-mature insert to block excessive client creation during test start
+            clients[base_uri].insert(client.get());
             client->install_connected_callback(connected_callback);
             client->set_prefered_authority(authority);
             client->connect_to_host(schema, authority);
@@ -420,7 +426,9 @@ int32_t _make_connection(lua_State *L, const std::string& uri, std::function<voi
             thread_local static std::mt19937 generator(rand_dev());
             thread_local static std::uniform_int_distribution<uint64_t>  distr(0, clients_needed - 1);
             auto client_index = distr(generator);
-            auto client = clients[base_uri][client_index];
+            auto iter = clients[base_uri].begin();
+            std::advance(iter, client_index);
+            auto client = *iter;
 
             if (h2load::CLIENT_IDLE == client->state)
             {
@@ -433,7 +441,7 @@ int32_t _make_connection(lua_State *L, const std::string& uri, std::function<voi
             }
             else
             {
-                connected_callback(true, client.get());
+                connected_callback(true, client);
             }
         }
     };
@@ -545,17 +553,11 @@ int await_response(lua_State *L)
 
     auto run_inside_worker = [worker, client_unique_id, stream_id, L]()
     {
-        auto& clients = worker->get_client_pool();
-        for (auto& clients_to_same_host: clients)
+        auto client_iter = worker->get_client_ids().find(client_unique_id);
+        if (client_iter != worker->get_client_ids().end())
         {
-            for (auto& client: clients_to_same_host.second)
-            {
-                if (client->get_client_unique_id() == client_unique_id)
-                {
-                    client->pass_response_to_lua(stream_id, L);
-                    return;
-                }
-            }
+            client_iter->second->pass_response_to_lua(stream_id, L);
+            return;
         }
         lua_createtable(L, 0, 1);
         lua_pushlstring(L, "", 0);

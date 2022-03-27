@@ -176,7 +176,7 @@ enum ClientState { CLIENT_IDLE, CLIENT_CONNECTING, CLIENT_CONNECTED };
 // This type tells whether the client is in warmup phase or not or is over
 enum class Phase
 {
-    INITIAL_IDLE,  // Initial idle state before warm-up phase
+    INITIAL_IDLE = 0,  // Initial idle state before warm-up phase
     WARM_UP,       // Warm up phase when no measurements are done
     MAIN_DURATION, // Main measurement phase; if timing-based
     MAIN_DURATION_GRACEFUL_SHUTDOWN,

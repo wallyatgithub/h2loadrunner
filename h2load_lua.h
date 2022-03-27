@@ -49,8 +49,6 @@ void register_functions_to_lua(lua_State *L);
 
 void init_new_lua_state(lua_State* L);
 
-void stop_workers();
-
 struct Lua_Group_Config
 {
     explicit Lua_Group_Config():

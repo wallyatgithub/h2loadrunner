@@ -185,11 +185,6 @@ void asio_worker::start_graceful_stop_timer()
     });
 }
 
-std::map<std::string, std::vector<std::shared_ptr<h2load::Client_Interface>>>& asio_worker::get_client_pool()
-{
-    return client_pool;
-}
-
 void asio_worker::enqueue_user_timer(uint64_t ms_to_expire, std::function<void(void)> callback)
 {
     auto curr_timepoint = std::chrono::steady_clock::now();

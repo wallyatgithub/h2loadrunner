@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <map>
+#include <set>
 
 
 #ifdef USE_LIBEV
@@ -54,6 +55,9 @@ public:
     // This is only active when there is not a bounded number of requests
     // specified
 
+    std::map<std::string, std::set<Client_Interface*>> client_pool;
+    std::map<size_t, Client_Interface*> client_ids;
+
     Worker_Interface(uint32_t id, size_t nreq_todo, size_t nclients,
                      size_t rate, size_t max_samples, Config* config);
     virtual ~Worker_Interface();
@@ -82,6 +86,12 @@ public:
     void free_client(Client_Interface*);
     void check_in_client(std::shared_ptr<Client_Interface>);
     void check_out_client(Client_Interface*);
+
+    std::map<std::string, std::set<Client_Interface*>>& get_client_pool();
+
+    std::map<size_t, Client_Interface*>& get_client_ids();
+
+
 };
 
 }
