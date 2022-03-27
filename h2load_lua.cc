@@ -88,12 +88,37 @@ void start_test_group(size_t group_id)
         {
             for (auto L: lua_states_to_start_for_worker_x)
             {
+                get_lua_state_data(L).started_from_worker_thread = true;
                 lua_resume_wrapper(L, 0);
             }
         };
         lua_group_config.workers[worker_index]->get_io_context().post(start_lua_states);
     }
 }
+
+bool to_be_restarted_in_worker_thread(lua_State* L)
+{
+    if (get_lua_state_data(L).started_from_worker_thread)
+    {
+        return false;
+    }
+    else
+    {
+        auto group_id = get_lua_state_data(L).group_id;
+        auto& lua_group_config = get_lua_group_config(group_id);
+        auto worker_thread = get_worker(L);
+        lua_settop(L, 0);
+        luaL_loadstring(L, lua_group_config.lua_script.c_str());
+        auto restart_coroutine = [L]()
+        {
+            get_lua_state_data(L).started_from_worker_thread = true;
+            lua_resume_wrapper(L, 0);
+        };
+        get_worker(L)->get_io_context().post(restart_coroutine);
+        return true;
+    }
+}
+
 
 void setup_test_group(size_t group_id)
 {
@@ -107,6 +132,8 @@ void setup_test_group(size_t group_id)
         init_new_lua_state(lua_state.get());
         get_lua_state_data(lua_state.get()).group_id = group_id;
         get_lua_state_data(lua_state.get()).worker_id = 0;
+        get_lua_state_data(lua_state.get()).unique_id_within_group = lua_group_config.number_of_lua_coroutines;
+        get_lua_state_data(lua_state.get()).started_from_worker_thread = false;
         lua_group_config.lua_states_for_each_worker.push_back(lua_state);
     }
 
@@ -158,28 +185,6 @@ int setup_parallel_test(lua_State *L)
       lua_pushinteger(L, get_lua_state_data(L).unique_id_within_group);
       return 1;
     }
-}
-
-int sleep_for_ms(lua_State *L)
-{
-    uint64_t ms_to_sleep = 0;
-    int top = lua_gettop(L);
-    if (top == 1)
-    {
-        ms_to_sleep = lua_tointeger(L, -1);
-        lua_pop(L, 1);
-    }
-    if (ms_to_sleep == 0)
-    {
-      return 0;
-    }
-
-    auto wakeup_me = [L]()
-    {
-        lua_resume_wrapper(L, 0);
-    };
-    get_worker(L)->enqueue_user_timer(ms_to_sleep, wakeup_me);
-    return lua_yield(L, 0);
 }
 
 void init_new_lua_state(lua_State* L)
@@ -285,8 +290,12 @@ void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load
 
 void init_workers(size_t group_id)
 {
-    static h2load::Config conf;
     auto& lua_group_config = get_lua_group_config(group_id);
+    if (lua_group_config.workers.size())
+    {
+        return;
+    }
+    static h2load::Config conf;
     auto init_config = [&lua_group_config]()
     {
         conf.ciphers = lua_group_config.config_template.ciphers;
@@ -408,12 +417,15 @@ int32_t _make_connection(lua_State *L, const std::string& uri, std::function<voi
 
 int make_connection(lua_State *L)
 {
+    force_in_worker_thread_if_not_yet(L);
+
     if (lua_type(L, -1) == LUA_TSTRING)
     {
         size_t len;
         const char* str = lua_tolstring(L, -1, &len);
         std::string base_uri(str, len);
         lua_pop(L, 1);
+
         auto connected_callback = [L](bool success, h2load::Client_Interface* client)
         {
             lua_pushinteger(L, success ? client->get_client_unique_id() : -1);
@@ -429,6 +441,8 @@ int make_connection(lua_State *L)
 
 int send_http_request(lua_State *L)
 {
+    force_in_worker_thread_if_not_yet(L);
+
     auto request_sent = [L](int32_t stream_id, h2load::Client_Interface* client)
     {
         client->queue_stream_for_user_callback(stream_id);
@@ -441,16 +455,43 @@ int send_http_request(lua_State *L)
 
 int send_http_request_and_await_response(lua_State *L)
 {
-  auto request_sent = [L](int32_t stream_id, h2load::Client_Interface* client)
-  {
-      client->queue_stream_for_user_callback(stream_id);
-      client->pass_response_to_lua(stream_id, L);
-  };
-  return _send_http_request(L, request_sent);
+    force_in_worker_thread_if_not_yet(L);
+
+    auto request_sent = [L](int32_t stream_id, h2load::Client_Interface* client)
+    {
+        client->queue_stream_for_user_callback(stream_id);
+        client->pass_response_to_lua(stream_id, L);
+    };
+    return _send_http_request(L, request_sent);
+}
+
+int sleep_for_ms(lua_State *L)
+{
+    force_in_worker_thread_if_not_yet(L);
+
+    uint64_t ms_to_sleep = 0;
+    int top = lua_gettop(L);
+    if (top == 1)
+    {
+        ms_to_sleep = lua_tointeger(L, -1);
+        lua_pop(L, 1);
+    }
+    if (ms_to_sleep == 0)
+    {
+      return 0;
+    }
+    auto wakeup_me = [L]()
+    {
+        lua_resume_wrapper(L, 0);
+    };
+    get_worker(L)->enqueue_user_timer(ms_to_sleep, wakeup_me);
+    return lua_yield(L, 0);
 }
 
 int await_response(lua_State *L)
 {
+    force_in_worker_thread_if_not_yet(L);
+
     uint64_t client_unique_id = -1;
     int32_t stream_id = -1;
 
@@ -462,6 +503,7 @@ int await_response(lua_State *L)
         client_unique_id = lua_tointeger(L, -1);
         lua_pop(L, 1);
     }
+
     if (client_unique_id >= 0 && stream_id > 0)
     {
         auto worker = get_worker(L);
@@ -538,6 +580,7 @@ int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_
         }
         lua_pop(L, 1);
     }
+
     if (retCode == 0)
     {
         std::string schema = headers[h2load::scheme_header];

@@ -76,9 +76,10 @@ struct Lua_Group_Config
 
 struct Lua_State_Data
 {
-    size_t group_id;
-    size_t worker_id;
-    size_t unique_id_within_group;
+    size_t group_id = 0;
+    size_t worker_id = 0;
+    size_t unique_id_within_group = 0;
+    bool started_from_worker_thread = false;
 };
 
 Lua_Group_Config& get_lua_group_config(lua_State* L);
@@ -95,5 +96,12 @@ void init_workers(size_t group_id);
 
 void stop_workers(size_t number_of_groups);
 
+bool to_be_restarted_in_worker_thread(lua_State* L);
+
+#define force_in_worker_thread_if_not_yet(L) \
+if (to_be_restarted_in_worker_thread(L)) \
+{ \
+    return lua_yield(L, 0); \
+}
 
 #endif
