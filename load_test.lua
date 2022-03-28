@@ -1,4 +1,4 @@
-my_id = setup_parallel_test(2, 10, 5000)
+my_id = setup_parallel_test(2, 10, 10000)
 
 -- optional, better to have
 for i=1,10 do
@@ -6,7 +6,7 @@ for i=1,10 do
 end
 
 -- Do not let all coroutines start at the same time, to avoid load fluctuations
-sleep_for_ms((my_id%10)*100)
+sleep_for_ms((my_id%10)*100+100)
 
 for i=1,1000 do
     local x = time_since_epoch()
@@ -15,8 +15,8 @@ for i=1,1000 do
     send_http_request_and_await_response(request_headers_to_send, payload)
     -- validate the response if you want
     local y = time_since_epoch()
-    if (y - x < 1000)
+    if (y - x < 2000)
     then
-        sleep_for_ms(1000 - (y - x))
+        sleep_for_ms(2000 - (y - x))
     end
 end
