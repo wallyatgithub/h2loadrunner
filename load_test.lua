@@ -5,6 +5,8 @@ for i=1,10 do
     client_id = make_connection("http://192.168.1.124:8080")
 end
 
+-- Do not let all coroutines start at the same time, to avoid load fluctuations
+sleep_for_ms((my_id%10)*100)
 
 for i=1,1000 do
     local x = time_since_epoch()
