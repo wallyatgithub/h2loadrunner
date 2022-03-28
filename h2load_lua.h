@@ -33,6 +33,8 @@ int await_response(lua_State *L);
 int setup_parallel_test(lua_State *L);
 
 int sleep_for_ms(lua_State *L);
+
+int time_since_epoch(lua_State *L);
 }
 
 int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_Interface*)> request_sent_callback);
@@ -41,9 +43,15 @@ void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load
 
 h2load::asio_worker* get_worker(lua_State *L);
 
+/*
+ * return code:
+ * 0: successfully injected std::function to worker thread, thus the caller needs to yield
+ */
 int32_t _make_connection(lua_State *L, const std::string& uri, std::function<void(bool)> connected_callback);
 
 int lua_resume_wrapper (lua_State *L, int nargs);
+
+int lua_resume_if_yielded(lua_State *L, int nargs);
 
 void register_functions_to_lua(lua_State *L);
 

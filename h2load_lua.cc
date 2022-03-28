@@ -201,6 +201,7 @@ void init_new_lua_state(lua_State* L)
     lua_register(L, "send_http_request_and_await_response", send_http_request_and_await_response);
     lua_register(L, "setup_parallel_test", setup_parallel_test);
     lua_register(L, "sleep_for_ms", sleep_for_ms);
+    lua_register(L, "time_since_epoch", time_since_epoch);
 }
 
 
@@ -386,6 +387,8 @@ int32_t _make_connection(lua_State *L, const std::string& uri, std::function<voi
     if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0 ||
         !util::has_uri_field(u, UF_SCHEMA) || !util::has_uri_field(u, UF_HOST))
     {
+        std::cout<<"invalid uri:"<<uri<<std::endl;
+        connected_callback(false, nullptr);
         return -1;
     }
     auto group_id = get_lua_state_data(L).group_id;
@@ -451,43 +454,54 @@ int32_t _make_connection(lua_State *L, const std::string& uri, std::function<voi
 
 int make_connection(lua_State *L)
 {
-    int top = lua_gettop(L);
-    if ((top == 1)&&(lua_type(L, -1) == LUA_TSTRING))
+    auto connected_callback = [L](bool success, h2load::Client_Interface* client)
+    {
+        lua_pushinteger(L, success ? client->get_client_unique_id() : -1);
+        lua_resume_if_yielded(L, 1);
+    };
+
+    std::string base_uri;
+    if ((lua_gettop(L) == 1)&&(lua_type(L, -1) == LUA_TSTRING))
     {
         size_t len;
         const char* str = lua_tolstring(L, -1, &len);
-        std::string base_uri(str, len);
+        base_uri.assign(str, len);
         lua_pop(L, 1);
-
-        auto connected_callback = [L](bool success, h2load::Client_Interface* client)
-        {
-            lua_pushinteger(L, success ? client->get_client_unique_id() : -1);
-            lua_resume_wrapper(L, 1);
-        };
-        if (_make_connection(L, base_uri, connected_callback) == 0)
-        {
-            return lua_yield(L, 0);
-        }
     }
     else
     {
-        for (size_t i= 0; i < top; i++)
-        {
-            lua_pop(L, 1);
-        }
+        std::cerr<<"invalid argument: "<<__FUNCTION__<<std::endl;
     }
-    lua_pushinteger(L, -1);
-    return 1;
+    lua_settop(L, 0);
+
+    if (base_uri.size() && (_make_connection(L, base_uri, connected_callback) == 0))
+    {
+        return lua_yield(L, 0);
+    }
+
+    if (lua_gettop(L) == 0)
+    {
+        connected_callback(false, nullptr);
+    }
+    return lua_gettop(L);
 }
 
 int send_http_request(lua_State *L)
 {
     auto request_sent = [L](int32_t stream_id, h2load::Client_Interface* client)
     {
-        client->queue_stream_for_user_callback(stream_id);
-        lua_pushinteger(L, client->get_client_unique_id());
-        lua_pushinteger(L, stream_id);
-        lua_resume_wrapper(L, 2);
+        if (stream_id && client)
+        {
+            client->queue_stream_for_user_callback(stream_id);
+            lua_pushinteger(L, client->get_client_unique_id());
+            lua_pushinteger(L, stream_id);
+        }
+        else
+        {
+            lua_pushinteger(L, -1);
+            lua_pushinteger(L, -1);
+        }
+        lua_resume_if_yielded(L, 2);
     };
     return _send_http_request(L, request_sent);
 }
@@ -496,25 +510,47 @@ int send_http_request_and_await_response(lua_State *L)
 {
     auto request_sent = [L](int32_t stream_id, h2load::Client_Interface* client)
     {
-        client->queue_stream_for_user_callback(stream_id);
-        client->pass_response_to_lua(stream_id, L);
+        if (stream_id > 0 && client)
+        {
+            client->queue_stream_for_user_callback(stream_id);
+            client->pass_response_to_lua(stream_id, L);
+        }
+        else
+        {
+            lua_createtable(L, 0, 1);
+            lua_pushlstring(L, "", 0);
+            lua_resume_if_yielded(L, 2);
+        }
     };
     return _send_http_request(L, request_sent);
 }
 
+int time_since_epoch(lua_State *L)
+{
+    auto curr_time_point = std::chrono::steady_clock::now();
+    auto ms_since_epoch = std::chrono::duration_cast<std::chrono::milliseconds>(curr_time_point.time_since_epoch()).count();
+    lua_pushinteger(L, ms_since_epoch);
+    return 1;
+}
+
 int sleep_for_ms(lua_State *L)
 {
-    uint64_t ms_to_sleep = 0;
+    int64_t ms_to_sleep = 0;
+    std::string stack;
     int top = lua_gettop(L);
     if (top == 1)
     {
-        ms_to_sleep = lua_tointeger(L, -1);
+        ms_to_sleep = lua_tointeger(L, 1);
         lua_pop(L, 1);
     }
-    if (ms_to_sleep == 0)
+    lua_settop(L, 0);
+
+    if (ms_to_sleep <= 0)
     {
-      return 0;
+        std::cerr<<__FUNCTION__<<" invalid argument: "<<ms_to_sleep<<std::endl;
+        return 0;
     }
+
     auto wakeup_me = [L]()
     {
         lua_resume_wrapper(L, 0);
@@ -542,16 +578,11 @@ int await_response(lua_State *L)
         client_unique_id = lua_tointeger(L, -1);
         lua_pop(L, 1);
     }
-    else
-    {
-        for (size_t i = 0; i < top; i++)
-        {
-            lua_pop(L, 1);
-        }
-    }
+    lua_settop(L, 0);
+
     auto worker = get_worker(L);
 
-    auto run_inside_worker = [worker, client_unique_id, stream_id, L]()
+    auto retrieve_response_cb = [worker, client_unique_id, stream_id, L]()
     {
         auto client_iter = worker->get_client_ids().find(client_unique_id);
         if (client_iter != worker->get_client_ids().end())
@@ -561,26 +592,28 @@ int await_response(lua_State *L)
         }
         lua_createtable(L, 0, 1);
         lua_pushlstring(L, "", 0);
-        lua_resume_wrapper(L, 2);
+        lua_resume_if_yielded(L, 2);
     };
 
-    if (client_unique_id >= 0 && stream_id > 0)
+    bool argument_error = (client_unique_id < 0 || stream_id <= 0);
+    if (!argument_error)
     {
-        worker->get_io_context().post(run_inside_worker);
+        worker->get_io_context().post(retrieve_response_cb);
         return lua_yield(L, 0);
     }
-    else
+
+    if (lua_gettop(L) == 0)
     {
         lua_createtable(L, 0, 1);
         lua_pushlstring(L, "", 0);
-        return 2;
     }
+    return lua_gettop(L);
 }
 
 
 int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_Interface*)> request_sent_callback)
 {
-    auto retCode = 0;
+    auto argument_error = false;
     std::string payload;
     std::map<std::string, std::string, ci_less> headers;
     static std::map<std::string, std::string, ci_less> dummyHeaders;
@@ -606,7 +639,7 @@ int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_
                     if ((LUA_TSTRING != lua_type(L, -2)) || (LUA_TSTRING != lua_type(L, -1)))
                     {
                         std::cerr << __FUNCTION__<< ": invalid http header" << std::endl;
-                        retCode = -1;
+                        argument_error = true;
                         break;
                     }
                     const char* k = lua_tolstring(L, -2, &len);
@@ -623,14 +656,15 @@ int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_
             default:
             {
                 std::cerr << __FUNCTION__<<": invalid parameter passed in" << std::endl;
-                retCode = -1;
+                argument_error = true;
                 break;
             }
         }
         lua_pop(L, 1);
     }
+    lua_settop(L, 0);
 
-    if (retCode == 0)
+    if (!argument_error)
     {
         std::string schema = headers[h2load::scheme_header];
         headers.erase(h2load::scheme_header);
@@ -649,6 +683,7 @@ int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_
         {
             if (!success)
             {
+                request_sent_callback(-1, nullptr);
                 return;
             }
             h2load::Request_Data request_to_send;
@@ -668,16 +703,29 @@ int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_
             client->requests_to_submit.emplace_back(std::move(request_to_send));
             client->submit_request();
         };
-        if (_make_connection(L, base_uri, connected_callback) != 0)
+        if (_make_connection(L, base_uri, connected_callback) == 0)
         {
-            retCode = -1;
+            return lua_yield(L, 0);
         }
     }
-    if (retCode == 0)
+
+    if (lua_gettop(L) == 0)
     {
-        return lua_yield(L, 0);
+        request_sent_callback(-1, nullptr);
     }
-    return 0;
+    return lua_gettop(L);
+}
+
+int lua_resume_if_yielded(lua_State *L, int nargs)
+{
+    if (LUA_YIELD == lua_status(L))
+    {
+        return lua_resume_wrapper(L, nargs);
+    }
+    else
+    {
+        return nargs;
+    }
 }
 
 int lua_resume_wrapper(lua_State *L, int nargs)

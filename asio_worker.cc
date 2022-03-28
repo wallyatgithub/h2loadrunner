@@ -84,7 +84,7 @@ void asio_worker::start_rate_mode_period_timer()
 
 void asio_worker::start_tick_timer()
 {
-    tick_timer.expires_from_now(boost::posix_time::millisec(100));
+    tick_timer.expires_from_now(boost::posix_time::millisec(10));
     tick_timer.async_wait
     (
         [this](const boost::system::error_code & ec)

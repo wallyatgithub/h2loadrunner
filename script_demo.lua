@@ -88,6 +88,14 @@ This is to show how to sleep for some milli seconds, this will only block this L
 --sleep_for_ms(1000)
 
 --[[
+This is to show how to get the time in milliseconds since epoch
+Note: this epoch is not that 1970 one, it is just a certain timestamp that is in the past
+This function is not used to get the current date and time, instead, it is used to measure the duration.
+Call it before some operation, and call it again after that operation, then the duration is known
+--]]
+--time_since_epoch()
+
+--[[
 This is to show how to retrieve the response of a request sent before
 Pass client_id and stream_id to this function to retrieve the response
 If the response is not yet available, it will block this coroutine until the response is available.
@@ -156,7 +164,7 @@ end
 headers, body = this_is_a_function()
 verify_response(headers, body)
 
-print ("robustness test")
+print ("test await_response with incorrect argument")
 headers, body = await_response(-1, -1)
 if (body == "")
 then
@@ -165,8 +173,8 @@ else
     print "test failed"
 end
 
+print ("test await_response with non-existed client id")
 headers, body = await_response(99, 1)
-headers, body = await_response(-1, -1)
 if (body == "")
 then
     print "test pass"
@@ -174,9 +182,8 @@ else
     print "test failed"
 end
 
-
+print ("test await_response with stream id that is already gone")
 headers, body = await_response(0, 1)
-headers, body = await_response(-1, -1)
 if (body == "")
 then
     print "test pass"
@@ -184,7 +191,16 @@ else
     print "test failed"
 end
 
+print "test make connection with incorrect argument"
+client_id = make_connection(1)
+if (client_id == -1)
+then
+    print "test pass"
+else
+    print "test failed"
+end
 
+print "test make connection without schema"
 client_id = make_connection("://192.168.1.124:8080")
 if (client_id == -1)
 then
@@ -193,20 +209,98 @@ else
     print "test failed"
 end
 
-request_headers_to_send = {[":authority"]="192.168.1.124:8080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
-payload = "hello world"
-client_id, stream_id = send_http_request(request_headers_to_send, payload)
-if (client_id == nil)
+print "test make_connection to unreachable address"
+client_id = make_connection("http://192.168.1.124:18088")
+if (client_id == -1)
 then
     print "test pass"
 else
     print "test failed"
 end
 
+print "test send_http_request with incorrect argument"
 client_id, stream_id = send_http_request(-1, -1)
-if (client_id == nil)
+if (client_id == -1)
 then
     print "test pass"
 else
     print "test failed"
+    print ("client_id", client_id)
+end
+
+print "test send_http_request without schema"
+request_headers_to_send = {[":authority"]="192.168.1.124:8080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
+payload = "hello world"
+client_id, stream_id = send_http_request(request_headers_to_send, payload)
+if (client_id == -1)
+then
+    print "test pass"
+else
+    print "test failed"
+    print ("client_id", client_id)
+end
+
+print "test send_http_request to unreachable address"
+request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:28080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
+payload = "hello world"
+client_id, stream_id = send_http_request(request_headers_to_send, payload)
+if (client_id == -1)
+then
+    print "test pass"
+else
+    print "test failed"
+    print ("client_id", client_id)
+end
+
+print "test send_http_request_and_await_response with incorrect argument"
+headers, body = send_http_request_and_await_response(-1, -1)
+if (body == "")
+then
+    print "test pass"
+else
+    print "test failed"
+end
+
+print "test send_http_request_and_await_response without schema"
+request_headers_to_send = {[":authority"]="192.168.1.124:8080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
+payload = "hello world"
+headers, body = send_http_request_and_await_response(request_headers_to_send, payload)
+if (body == "")
+then
+    print "test pass"
+else
+    print "test failed"
+end
+
+print "test send_http_request_and_await_response with unreachable address"
+request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:8088", [":method"]="POST", [":path"]="/nudm-uecm/test"}
+payload = "hello world"
+headers, body = send_http_request_and_await_response(request_headers_to_send, payload)
+if (body == "")
+then
+    print "test pass"
+else
+    print "test failed"
+end
+
+print "test sleep_for_ms"
+before = os.time()
+sleep_for_ms(1000)
+after = os.time()
+if (after - before >= 1)
+then
+    print "test pass"
+else
+    print ("test failed", before, after);
+end
+
+print "test time_since_epoch"
+time_since_epoch_before = time_since_epoch()
+sleep_for_ms(1000)
+time_since_epoch_after = time_since_epoch()
+if (time_since_epoch_after - time_since_epoch_before >= 1000)
+then
+    print ("test pass", time_since_epoch_before, time_since_epoch_after)
+else
+    print ("test failed", time_since_epoch_before, time_since_epoch_after);
 end

@@ -798,11 +798,7 @@ void Client_Interface::cleanup_due_to_disconnect()
     }
     stream_user_callback_queue.clear();
 
-    for (auto& cbk: connected_callbacks)
-    {
-        cbk(false, this);
-    }
-    connected_callbacks.clear();
+    call_connected_callbacks(false);
 
     for (auto& req: requests_awaiting_response)
     {
@@ -812,6 +808,15 @@ void Client_Interface::cleanup_due_to_disconnect()
             auto dummy = std::move(req.second.request_sent_callback);
         }
     }
+
+    for (auto& req: requests_to_submit)
+    {
+        if (req.request_sent_callback)
+        {
+            req.request_sent_callback(-1, this);
+        }
+    }
+    requests_to_submit.clear();
 }
 
 void Client_Interface::record_client_end_time()
@@ -2324,14 +2329,14 @@ void Client_Interface::pass_response_to_lua(int32_t stream_id, lua_State *L)
         if (stream_user_callback_queue[stream_id].response_available)
         {
             push_response_to_lua_stack();
-            lua_resume_wrapper(L, 2);
+            lua_resume_if_yielded(L, 2);
         }
         else
         {
             auto callback = [push_response_to_lua_stack, L, this]()
             {
                 push_response_to_lua_stack();
-                lua_resume_wrapper(L, 2);
+                lua_resume_if_yielded(L, 2);
             };
             stream_user_callback_queue[stream_id].response_callback = callback;
         }
@@ -2340,7 +2345,7 @@ void Client_Interface::pass_response_to_lua(int32_t stream_id, lua_State *L)
     {
         lua_createtable(L, 0, 1);
         lua_pushlstring(L, "", 0);
-        lua_resume_wrapper(L, 2);
+        lua_resume_if_yielded(L, 2);
     }
 }
 
