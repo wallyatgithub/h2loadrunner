@@ -2,7 +2,7 @@
 local target_tps = 3000
 local duration_to_run_in_seconds = 600
 local coroutines = 3000
-local threads = 1
+local threads = 2
 local connections_per_thread = 10
 local number_of_requests_to_trigger_stats_output = 2 * target_tps
 
@@ -35,12 +35,12 @@ total_requests_sent_last_stats_interval = 0
 local stats_interval_begin = time_since_epoch()
 
 local function output_stats()
-    if ((my_id == 0) and (total_requests_sent - total_requests_sent_last_stats_interval) >= number_of_requests_to_trigger_stats_output)
+    if ((my_id < threads) and (total_requests_sent - total_requests_sent_last_stats_interval) >= number_of_requests_to_trigger_stats_output)
     then
         local stats_interval_end = time_since_epoch()
         local stats_duration_in_ms = stats_interval_end - stats_interval_begin
         local delta_requests_sent = total_requests_sent - total_requests_sent_last_stats_interval
-        print ("total sent: ", total_requests_sent, ", tps: ", (delta_requests_sent*1000)/stats_duration_in_ms, ", max_latency: ", max_latency, ", min_latency: ", min_latency)
+        print ("worker: ", my_id, ", total sent: ", total_requests_sent, ", tps: ", (delta_requests_sent*1000)/stats_duration_in_ms, ", max_latency: ", max_latency, ", min_latency: ", min_latency)
         
         max_latency = 0
         min_latency = 65536
