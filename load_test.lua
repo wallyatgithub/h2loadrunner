@@ -1,15 +1,15 @@
 -- The following parameters can be changed for different test purpose
-local target_tps = 3000
+local target_tps = 6000
 local duration_to_run_in_seconds = 600
 local coroutines = 3000
-local threads = 2
-local connections_per_thread = 10
-local number_of_requests_to_trigger_stats_output = 2 * target_tps
+local worker_threads = 2
+local connections_per_host_per_thread = 10
+local number_of_requests_per_worker_thread_to_trigger_one_stats_print = 1 * target_tps
 
-local my_id = setup_parallel_test(threads, connections_per_thread, coroutines)
+local my_id = setup_parallel_test(worker_threads, connections_per_host_per_thread, coroutines)
 
 -- optional, better to have
-for thread_index = 1,connections_per_thread do
+for thread_index = 1,connections_per_host_per_thread do
     client_id = make_connection("http://192.168.1.124:8080")
 end
 
@@ -35,7 +35,7 @@ total_requests_sent_last_stats_interval = 0
 local stats_interval_begin = time_since_epoch()
 
 local function output_stats()
-    if ((my_id < threads) and (total_requests_sent - total_requests_sent_last_stats_interval) >= number_of_requests_to_trigger_stats_output)
+    if ((my_id < worker_threads) and (total_requests_sent - total_requests_sent_last_stats_interval) >= number_of_requests_per_worker_thread_to_trigger_one_stats_print)
     then
         local stats_interval_end = time_since_epoch()
         local stats_duration_in_ms = stats_interval_end - stats_interval_begin
