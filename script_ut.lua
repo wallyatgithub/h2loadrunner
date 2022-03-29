@@ -31,7 +31,7 @@ For example, you can use this id to decide which user(s) each coroutine should u
 
 If this function is not called, thread number is 1, and the same is coroutine number
 --]]
-my_id = setup_parallel_test(1, 1, 1)
+local my_id = setup_parallel_test(1, 1, 1)
 
 --[[
 Information purpose, not necessary
@@ -41,7 +41,7 @@ print ("my_id:", my_id)
 --[[
 optional, this is to show how to make a connection beforehand
 --]]
-client_id = make_connection("http://192.168.1.124:8080")
+local client_id = make_connection("http://192.168.1.124:8080")
 --[[
 Information purpose, not necessary
 --]]
@@ -66,15 +66,15 @@ print ("client_id:", client_id)
 --[[
 this is to show how to prepare a request message, a table of headers and a payload
 --]]
-request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:8080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
-payload = "hello world"
+local request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:8080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
+local payload = "hello world"
 
 --[[
 This is to show how to send a request
 This function will return immediately and will not block the coroutine
 if no connection exists, a new connection will be made to send this request
 --]]
-client_id, stream_id = send_http_request(request_headers_to_send, payload)
+local client_id, stream_id = send_http_request(request_headers_to_send, payload)
 
 --[[
 Information purpose, not necessary
@@ -101,7 +101,7 @@ Pass client_id and stream_id to this function to retrieve the response
 If the response is not yet available, it will block this coroutine until the response is available.
 So obviously, there is no need to call sleep_for_ms before to wait for the response to be available
 --]]
-headers, body = await_response(client_id, stream_id)
+local headers, body = await_response(client_id, stream_id)
 
 verify_response(headers, body)
 --[[
@@ -117,13 +117,13 @@ This is to show how to send requests repeatedly while with a pause in between
 --]]
 for i=1,100 do
     request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:8080", [":method"]="PATCH", [":path"]="/nudm-uecm/test"}
-    payload = "hello world again"
-    headers, body = send_http_request_and_await_response(request_headers_to_send, payload)
+    local payload = "hello world again"
+    local headers, body = send_http_request_and_await_response(request_headers_to_send, payload)
     --sleep_for_ms(100)
     --print ("client_id:", client_id)
     --print ("stream_id:", stream_id)
 end
-verify_response(headers, body)
+
 --sleep_for_ms(1000)
 
 --[[
@@ -131,7 +131,7 @@ This is to show how send a request and wait for the response with one function
 This function will send out the request, and block this coroutine
 One the response is received, this coroutine is resumed and the response is returned
 --]]
-headers, body = send_http_request_and_await_response(request_headers_to_send, payload)
+local headers, body = send_http_request_and_await_response(request_headers_to_send, payload)
 
 verify_response(headers, body)
 --print ("status code:", headers[":status"])
@@ -142,9 +142,9 @@ This is to show another way to send a request and wait for the response
 This will send out the request, and block this coroutine
 One the response is received, this coroutine is resumed and the response is returned
 --]]
-request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:8080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
-payload = "hello world"
-headers, body = await_response(send_http_request(request_headers_to_send, payload))
+local request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:8080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
+local payload = "hello world"
+local headers, body = await_response(send_http_request(request_headers_to_send, payload))
 
 verify_response(headers, body)
 
@@ -161,11 +161,11 @@ function this_is_a_function()
     return send_http_request_and_await_response(request_headers_to_send, payload)
 end
 
-headers, body = this_is_a_function()
+local headers, body = this_is_a_function()
 verify_response(headers, body)
 
 print ("test await_response with incorrect argument")
-headers, body = await_response(-1, -1)
+local headers, body = await_response(-1, -1)
 if (body == "")
 then
     print "test pass"
@@ -174,7 +174,7 @@ else
 end
 
 print ("test await_response with non-existed client id")
-headers, body = await_response(99, 1)
+local headers, body = await_response(99, 1)
 if (body == "")
 then
     print "test pass"
@@ -183,7 +183,7 @@ else
 end
 
 print ("test await_response with stream id that is already gone")
-headers, body = await_response(0, 1)
+local headers, body = await_response(0, 1)
 if (body == "")
 then
     print "test pass"
@@ -192,7 +192,7 @@ else
 end
 
 print "test make connection with incorrect argument"
-client_id = make_connection(1)
+local client_id = make_connection(1)
 if (client_id == -1)
 then
     print "test pass"
@@ -201,7 +201,7 @@ else
 end
 
 print "test make connection without schema"
-client_id = make_connection("://192.168.1.124:8080")
+local client_id = make_connection("://192.168.1.124:8080")
 if (client_id == -1)
 then
     print "test pass"
@@ -210,7 +210,7 @@ else
 end
 
 print "test make_connection to unreachable address"
-client_id = make_connection("http://192.168.1.124:18088")
+local client_id = make_connection("http://192.168.1.124:18088")
 if (client_id == -1)
 then
     print "test pass"
@@ -219,7 +219,7 @@ else
 end
 
 print "test send_http_request with incorrect argument"
-client_id, stream_id = send_http_request(-1, -1)
+local client_id, stream_id = send_http_request(-1, -1)
 if (client_id == -1)
 then
     print "test pass"
@@ -229,9 +229,9 @@ else
 end
 
 print "test send_http_request without schema"
-request_headers_to_send = {[":authority"]="192.168.1.124:8080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
-payload = "hello world"
-client_id, stream_id = send_http_request(request_headers_to_send, payload)
+local request_headers_to_send = {[":authority"]="192.168.1.124:8080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
+local payload = "hello world"
+local client_id, stream_id = send_http_request(request_headers_to_send, payload)
 if (client_id == -1)
 then
     print "test pass"
@@ -241,9 +241,9 @@ else
 end
 
 print "test send_http_request to unreachable address"
-request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:28080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
-payload = "hello world"
-client_id, stream_id = send_http_request(request_headers_to_send, payload)
+local request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:28080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
+local payload = "hello world"
+local client_id, stream_id = send_http_request(request_headers_to_send, payload)
 if (client_id == -1)
 then
     print "test pass"
@@ -253,7 +253,7 @@ else
 end
 
 print "test send_http_request_and_await_response with incorrect argument"
-headers, body = send_http_request_and_await_response(-1, -1)
+local headers, body = send_http_request_and_await_response(-1, -1)
 if (body == "")
 then
     print "test pass"
@@ -262,9 +262,9 @@ else
 end
 
 print "test send_http_request_and_await_response without schema"
-request_headers_to_send = {[":authority"]="192.168.1.124:8080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
-payload = "hello world"
-headers, body = send_http_request_and_await_response(request_headers_to_send, payload)
+local request_headers_to_send = {[":authority"]="192.168.1.124:8080", [":method"]="POST", [":path"]="/nudm-uecm/test"}
+local payload = "hello world"
+local headers, body = send_http_request_and_await_response(request_headers_to_send, payload)
 if (body == "")
 then
     print "test pass"
@@ -273,9 +273,9 @@ else
 end
 
 print "test send_http_request_and_await_response with unreachable address"
-request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:8088", [":method"]="POST", [":path"]="/nudm-uecm/test"}
-payload = "hello world"
-headers, body = send_http_request_and_await_response(request_headers_to_send, payload)
+local request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:8088", [":method"]="POST", [":path"]="/nudm-uecm/test"}
+local payload = "hello world"
+local headers, body = send_http_request_and_await_response(request_headers_to_send, payload)
 if (body == "")
 then
     print "test pass"
@@ -284,9 +284,9 @@ else
 end
 
 print "test sleep_for_ms"
-before = os.time()
+local before = os.time()
 sleep_for_ms(1000)
-after = os.time()
+local after = os.time()
 if (after - before >= 1)
 then
     print "test pass"
@@ -295,9 +295,9 @@ else
 end
 
 print "test time_since_epoch"
-time_since_epoch_before = time_since_epoch()
+local time_since_epoch_before = time_since_epoch()
 sleep_for_ms(1000)
-time_since_epoch_after = time_since_epoch()
+local time_since_epoch_after = time_since_epoch()
 if (time_since_epoch_after - time_since_epoch_before >= 1000)
 then
     print ("test pass", time_since_epoch_before, time_since_epoch_after)
