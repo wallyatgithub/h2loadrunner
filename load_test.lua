@@ -1,8 +1,9 @@
 -- The following parameters can be changed for different test purpose
 local target_tps = 6000
+-- TPS each worker thread will take = target_tps/worker_threads
+local worker_threads = 2
 local duration_to_run_in_seconds = 600
 local coroutines = 3000
-local worker_threads = 2
 local connections_per_host_per_thread = 10
 local number_of_requests_per_worker_thread_to_trigger_one_stats_print = 1 * target_tps
 
