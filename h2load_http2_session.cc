@@ -198,26 +198,35 @@ ssize_t buffer_read_callback(nghttp2_session* session, int32_t stream_id,
     auto& request_map = client->requests_waiting_for_response();
     auto request = request_map.find(stream_id);
     assert(request != request_map.end());
-    std::string& stream_buffer = *(request_map[stream_id].req_payload);
+    std::string& stream_buffer = *(request->second.req_payload);
 
     if (config->verbose)
     {
         std::cout << "sending data:" << stream_buffer << std::endl;
     }
 
-    if (length >= stream_buffer.size())
+    if (request->second.req_payload_cursor < stream_buffer.size())
     {
-        memcpy(buf, stream_buffer.c_str(), stream_buffer.size());
-        *data_flags |= NGHTTP2_DATA_FLAG_EOF;
-        size_t buf_size = stream_buffer.size();
-        stream_buffer.clear();
-        return buf_size;
+        if (length >= (stream_buffer.size() - request->second.req_payload_cursor))
+        {
+            memcpy(buf, (stream_buffer.c_str() + request->second.req_payload_cursor),
+                        (stream_buffer.size() - request->second.req_payload_cursor));
+            *data_flags |= NGHTTP2_DATA_FLAG_EOF;
+            size_t buf_size = (stream_buffer.size() - request->second.req_payload_cursor);
+            request->second.req_payload_cursor = stream_buffer.size();
+            return buf_size;
+        }
+        else
+        {
+            memcpy(buf, stream_buffer.c_str(), length);
+            request->second.req_payload_cursor += length;
+            return length;
+        }
     }
     else
     {
-        memcpy(buf, stream_buffer.c_str(), length);
-        stream_buffer = stream_buffer.substr(length, std::string::npos);
-        return length;
+        *data_flags |= NGHTTP2_DATA_FLAG_EOF;
+        return 0;
     }
 }
 

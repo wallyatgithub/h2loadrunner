@@ -77,6 +77,7 @@ struct Request_Data
     std::string* path;
     uint64_t user_id;
     std::string* method;
+    size_t req_payload_cursor;
     std::map<std::string, std::string, ci_less>* req_headers;
     std::map<std::string, std::string, ci_less> shadow_req_headers;
     std::string resp_payload;
@@ -102,6 +103,7 @@ struct Request_Data
         delay_before_executing_next = 0;
         curr_request_idx = 0;
         scenario_index = 0;
+        req_payload_cursor = 0;
         string_collection.reserve(12); // (path, authority, method, schema, payload, xx) * 2
     };
 
