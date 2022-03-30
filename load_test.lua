@@ -1,50 +1,63 @@
 -- The following parameters can be changed for different test purpose
-local target_tps = 6000
--- TPS each worker thread will take = target_tps/worker_threads
-local worker_threads = 2
-local duration_to_run_in_seconds = 600
-local coroutines = 3000
-local connections_per_host_per_thread = 10
-local number_of_requests_per_worker_thread_to_trigger_one_stats_print = 1 * target_tps
 
-local my_id = setup_parallel_test(worker_threads, connections_per_host_per_thread, coroutines)
+local total_target_tps = 10000
+
+-- TPS each worker thread will take = (total_target_tps / number_of_worker_threads)
+local number_of_worker_threads = 4
+
+local duration_to_run_in_seconds = 600
+
+local connections_per_host_per_thread = 10
+
+-- each worker_thread will take (number_of_virtual_users / number_of_worker_threads) of virtual user
+local number_of_virtual_users = 24000
+
+local stats_output_interval_in_ms = 1000
+
+local my_id = setup_parallel_test(number_of_worker_threads, connections_per_host_per_thread, (number_of_virtual_users + number_of_worker_threads))
 
 -- optional, better to have
 for thread_index = 1,connections_per_host_per_thread do
-    client_id = make_connection("http://192.168.1.124:8080")
+    client_id = make_connection("http://10.67.34.200:8081")
 end
 
-local interval_in_ms_between_requests_for_every_coroutine = ((coroutines / target_tps) * 1000)
+local interval_in_ms_between_requests_for_every_virtual_user = ((number_of_virtual_users / total_target_tps) * 1000)
 
-local number_of_request_for_each_coroutine = ((duration_to_run_in_seconds * 1000) / interval_in_ms_between_requests_for_every_coroutine)
+local number_of_request_to_send_in_one_loop_of_virtual_user = 1
 
--- Do not let all coroutines start at the same time, to avoid load fluctuations
-sleep_for_ms((my_id / coroutines) * interval_in_ms_between_requests_for_every_coroutine + 100)
+local number_of_loops_for_each_virtual_user = ((duration_to_run_in_seconds * 1000) / (interval_in_ms_between_requests_for_every_virtual_user * number_of_request_to_send_in_one_loop_of_virtual_user))
 
--- this is global
+-- Do not let all virtual user start at the same time, to avoid load fluctuations
+sleep_for_ms((my_id / number_of_virtual_users) * interval_in_ms_between_requests_for_every_virtual_user + 100)
+
+-- the following global variables are shared among all number_of_virtual_users within one worker_thread
+-- 
 max_latency = 0
 
--- this is global
 min_latency = 65536
 
--- this is global
 total_requests_sent = 0
 
--- this is global, do not modify
 total_requests_sent_last_stats_interval = 0
+
+total_response_time_is_ms_within_one_stats_interval = 0
+
+total_number_of_connection_failures = 0
 
 local stats_interval_begin = time_since_epoch()
 
 local function output_stats()
-    if ((my_id < worker_threads) and (total_requests_sent - total_requests_sent_last_stats_interval) >= number_of_requests_per_worker_thread_to_trigger_one_stats_print)
-    then
+    for request_index = 1, (duration_to_run_in_seconds * 1000)/stats_output_interval_in_ms do
+        sleep_for_ms(stats_output_interval_in_ms)
         local stats_interval_end = time_since_epoch()
         local stats_duration_in_ms = stats_interval_end - stats_interval_begin
         local delta_requests_sent = total_requests_sent - total_requests_sent_last_stats_interval
-        print ("worker: ", my_id, ", total sent: ", total_requests_sent, ", tps: ", (delta_requests_sent*1000)/stats_duration_in_ms, ", max_latency: ", max_latency, ", min_latency: ", min_latency)
+        local avg_latency = total_response_time_is_ms_within_one_stats_interval / delta_requests_sent
+        print ("worker: ", my_id, ", total sent: ", total_requests_sent, ", tps: ", (delta_requests_sent*1000)/stats_duration_in_ms, ", max_latency: ", max_latency, ", min_latency: ", min_latency, ", average_latency: ", avg_latency)
         
         max_latency = 0
         min_latency = 65536
+        total_response_time_is_ms_within_one_stats_interval = 0
         total_requests_sent_last_stats_interval = total_requests_sent
         stats_interval_begin = stats_interval_end
     end
@@ -60,36 +73,42 @@ local function update_latency(latency)
     then
         min_latency = latency
     end
+    
+    total_response_time_is_ms_within_one_stats_interval = total_response_time_is_ms_within_one_stats_interval + latency
 end
 
 local function sleep_between_requests_if_necessary(latency)
-    if (latency < interval_in_ms_between_requests_for_every_coroutine)
+    local time_to_sleep = interval_in_ms_between_requests_for_every_virtual_user - latency
+    if (time_to_sleep > 1)
     then
-        sleep_for_ms(interval_in_ms_between_requests_for_every_coroutine - latency)
+        sleep_for_ms(time_to_sleep)
     end
 end
 
-for request_index = 1,number_of_request_for_each_coroutine do
-    local x = time_since_epoch()
+function generate_load()
+    for request_index = 1,number_of_loops_for_each_virtual_user do
+        local x = time_since_epoch()
 
-    local request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:8080", [":method"]="PATCH", [":path"]="/nudm-uecm/test"}
-    local payload = "hello world again"
-    send_http_request_and_await_response(request_headers_to_send, payload)
+        local request_headers_to_send = {[":scheme"]="http", [":authority"]="10.67.34.200:8081", [":method"]="PATCH", [":path"]="/nudm-uecm/test"}
+        local payload = "hello world again"
+        local response_header, response_payload, error_code = send_http_request_and_await_response(request_headers_to_send, payload)
+        if (error_code ~= -1)
+        -- validate the response further if you want
+        then
+            total_requests_sent = total_requests_sent + 1
+        end
+        local y = time_since_epoch()
+        local latency = y - x
+        update_latency(latency)
+        sleep_between_requests_if_necessary(latency)
 
-    total_requests_sent = total_requests_sent + 1
-
-    -- validate the response if you want
-
-    local y = time_since_epoch()
-    
-    local latency = y - x
-    
-    update_latency(latency)
-
-    output_stats()
-    
-    sleep_between_requests_if_necessary(latency)
-    
-    -- you can send more request here based on your scenario, make sure to update latency and output stats and to sleep to keep the tps
+        -- you can send more request here based on your scenario, make sure to update latency and call output_stats and to sleep to keep the tps
+    end
 end
 
+if (my_id < number_of_worker_threads)
+then
+    output_stats()
+else
+    generate_load()
+end

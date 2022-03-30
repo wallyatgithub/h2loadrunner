@@ -1374,6 +1374,7 @@ void post_process_json_config_schema(h2load::Config& config)
             }
         }
     };
+
     for (auto& scenario : config.json_config_schema.scenarios)
     {
         if (scenario.user_id_list_file.size())
@@ -1424,6 +1425,7 @@ void post_process_json_config_schema(h2load::Config& config)
                 if (http_parser_parse_url(request.uri.input.c_str(), request.uri.input.size(), 0, &u) != 0)
                 {
                     std::cerr << "invalid URI given: " << request.uri.input << std::endl;
+                    std::cerr << "Please check this request: " << std::endl << staticjson::to_pretty_json_string(request) << std::endl;
                     exit(EXIT_FAILURE);
                 }
                 request.path = get_reqline(request.uri.input.c_str(), u);
@@ -1487,6 +1489,10 @@ std::vector<std::vector<std::string>> read_csv_file(const std::string& csv_file_
     std::getline(infile, line); // remove first row which is column name;
     while (std::getline(infile, line))
     {
+        if (line.size() && line[line.size()-1] == '\r')
+        {
+           line = line.substr(0, line.size() - 1);
+        }
         std::vector<std::string> row;
         std::stringstream lineStream(line);
         std::string cell;

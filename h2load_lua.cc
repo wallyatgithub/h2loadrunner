@@ -259,7 +259,12 @@ void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load
         }
         else
         {
-            std::cerr<<"error running lua script:"<<std::endl<<lua_scripts[i]<<std::endl;
+            size_t len;
+            std::string error_str;
+            auto str_ptr = lua_tolstring(L, -2, &len);
+            error_str.assign(str_ptr, len);
+            lua_pop(L, 1);
+            std::cerr<<"error running lua script:"<<std::endl<<error_str<<std::endl<<lua_scripts[i]<<std::endl;
         }
     }
 
@@ -519,7 +524,8 @@ int send_http_request_and_await_response(lua_State *L)
         {
             lua_createtable(L, 0, 1);
             lua_pushlstring(L, "", 0);
-            lua_resume_if_yielded(L, 2);
+            lua_pushinteger(L, -1);
+            lua_resume_if_yielded(L, 3);
         }
     };
     return _send_http_request(L, request_sent);
@@ -547,7 +553,6 @@ int sleep_for_ms(lua_State *L)
 
     if (ms_to_sleep <= 0)
     {
-        std::cerr<<__FUNCTION__<<" invalid argument: "<<ms_to_sleep<<std::endl;
         return 0;
     }
 

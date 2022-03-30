@@ -789,14 +789,27 @@ void Client_Interface::cleanup_due_to_disconnect()
     session.reset();
     state = CLIENT_IDLE;
 
-    for (auto& item: stream_user_callback_queue)
+    auto iter = stream_user_callback_queue.begin();
+    while (iter != stream_user_callback_queue.end())
     {
-        if (item.second.response_callback)
+        auto cb_queue_size_before_cb = stream_user_callback_queue.size();
+        if (iter->second.response_callback)
         {
-            item.second.response_callback();
+            iter->second.response_callback();
+        }
+        auto cb_queue_size_after_cb = stream_user_callback_queue.size();
+
+        // iter cb function removed itself from the queue, proceed with the new begin()
+        if (cb_queue_size_before_cb - cb_queue_size_after_cb >= 1)
+        {
+            iter =  stream_user_callback_queue.begin();
+        }
+        else
+        {
+            // no removal done by iter cb, manually remove iter and proceed with next
+            iter = stream_user_callback_queue.erase(iter);
         }
     }
-    stream_user_callback_queue.clear();
 
     call_connected_callbacks(false);
 
@@ -1966,8 +1979,8 @@ Request_Data Client_Interface::prepare_first_request()
         if (controller->runtime_scenario_data[scenario_index].curr_req_variable_value >=
             controller->runtime_scenario_data[scenario_index].req_variable_value_end)
         {
-            std::cerr << "user id (variable_value) wrapped, start over from range start" << ", scenario index: " << scenario_index
-                      << std::endl;
+            //std::cerr << "user id (variable_value) wrapped, start over from range start" << ", scenario index: " << scenario_index
+            //          << std::endl;
             controller->runtime_scenario_data[scenario_index].curr_req_variable_value =
                 controller->runtime_scenario_data[scenario_index].req_variable_value_start;
         }
