@@ -136,7 +136,7 @@
     {
       "name": "amf-reg-dereg",
       "weight": 2,
-      "user-id-name-in-path-and-data": "-user-name",
+      "user-id-variable-in-path-and-data": "-user-name",
       "user-id-range-start": 0,
       "user-id-range-end": 100000000,
       "user-id-range-slicing": true,
