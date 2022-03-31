@@ -632,6 +632,11 @@ void asio_client_connection::on_connected_event(const boost::system::error_code&
     if (!err)
     {
         socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
+        boost::asio::socket_base::receive_buffer_size rcv_option(config->json_config_schema.skt_recv_buffer_size);
+        socket.lowest_layer().set_option(rcv_option);
+        boost::asio::socket_base::receive_buffer_size snd_option(config->json_config_schema.skt_send_buffer_size);
+        socket.lowest_layer().set_option(snd_option);
+
         if (schema != "https")
         {
             if (connected() != 0)
@@ -893,10 +898,6 @@ void asio_client_connection::start_async_connect(boost::asio::ip::tcp::resolver:
 {
     boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
     auto next_endpoint_iterator = ++endpoint_iterator;
-    boost::asio::socket_base::receive_buffer_size rcv_option(config->json_config_schema.skt_recv_buffer_size);
-    socket.lowest_layer().set_option(rcv_option);
-    boost::asio::socket_base::receive_buffer_size snd_option(config->json_config_schema.skt_send_buffer_size);
-    socket.lowest_layer().set_option(snd_option);
     socket.lowest_layer().async_connect(endpoint,
                                         [this, next_endpoint_iterator, &socket](const boost::system::error_code & err)
     {
