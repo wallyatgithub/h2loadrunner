@@ -245,6 +245,16 @@
       "default": 30,
       "type":"integer"
     },
+    "socket-receive-buffer-size":{
+      "description":"socket receive buffer size in bytes; default: 4M",
+      "default": 4194304,
+      "type":"integer"
+    },
+    "socket-send-buffer-size":{
+      "description":"socket send buffer size in bytes; default: 4M",
+      "default": 4194304,
+      "type":"integer"
+    },
     "Scenarios":
     {
       "description":"Array of scenarios, each scenario has a name, a weight, and a list of requests to be executed",

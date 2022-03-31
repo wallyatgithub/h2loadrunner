@@ -514,6 +514,8 @@ public:
     std::vector<Scenario> scenarios;
     uint32_t builtin_server_port;
     std::string failed_request_log_file;
+    uint64_t skt_recv_buffer_size;
+    uint64_t skt_send_buffer_size;
 
     explicit Config_Schema():
         schema("http"),
@@ -545,7 +547,9 @@ public:
         connection_retry_on_disconnect(false),
         connect_back_to_preferred_host(false),
         interval_to_send_ping(0),
-        builtin_server_port(8888)
+        builtin_server_port(8888),
+        skt_recv_buffer_size(4194304),
+        skt_send_buffer_size(4194304)
     {
     }
 
@@ -592,6 +596,8 @@ public:
         h->add_property("builtin-server-listening-port", &this->builtin_server_port, staticjson::Flags::Optional);
         h->add_property("failed-request-log-file", &this->failed_request_log_file, staticjson::Flags::Optional);
         h->add_property("statistics-file", &this->statistics_file, staticjson::Flags::Optional);
+        h->add_property("socket-receive-buffer-size", &this->skt_recv_buffer_size, staticjson::Flags::Optional);
+        h->add_property("socket-send-buffer-size", &this->skt_send_buffer_size, staticjson::Flags::Optional);
     }
 };
 
