@@ -1,9 +1,9 @@
 -- The following parameters can be changed for different test purpose
 
-local total_target_tps = 10000
+local total_target_tps = 12000
 
 -- TPS each worker thread will take = (total_target_tps / number_of_worker_threads)
-local number_of_worker_threads = 4
+local number_of_worker_threads = 8
 
 local duration_to_run_in_seconds = 600
 
@@ -18,7 +18,7 @@ local my_id = setup_parallel_test(number_of_worker_threads, connections_per_host
 
 -- optional, better to have
 for thread_index = 1,connections_per_host_per_thread do
-    client_id = make_connection("http://10.67.34.200:8081")
+    client_id = make_connection("http://192.168.1.124:8080")
 end
 
 local interval_in_ms_between_requests_for_every_virtual_user = ((number_of_virtual_users / total_target_tps) * 1000)
@@ -89,7 +89,7 @@ function generate_load()
     for request_index = 1,number_of_loops_for_each_virtual_user do
         local x = time_since_epoch()
 
-        local request_headers_to_send = {[":scheme"]="http", [":authority"]="10.67.34.200:8081", [":method"]="PATCH", [":path"]="/nudm-uecm/test"}
+        local request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:8080", [":method"]="PATCH", [":path"]="/nudm-uecm/test"}
         local payload = "hello world again"
         local response_header, response_payload, error_code = send_http_request_and_await_response(request_headers_to_send, payload)
         if (error_code ~= -1)

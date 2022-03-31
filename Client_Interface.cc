@@ -2318,6 +2318,7 @@ void Client_Interface::process_stream_user_callback(int32_t stream_id)
         if (stream_user_callback_queue[stream_id].response_callback)
         {
             stream_user_callback_queue[stream_id].response_callback();
+            stream_user_callback_queue.erase(stream_id);
         }
     }
 }
@@ -2336,13 +2337,13 @@ void Client_Interface::pass_response_to_lua(int32_t stream_id, lua_State *L)
                 lua_rawset(L, -3);
             }
             lua_pushlstring(L, stream_user_callback_queue[stream_id].resp_payload.c_str(), stream_user_callback_queue[stream_id].resp_payload.size());
-            stream_user_callback_queue.erase(stream_id);
         };
 
         if (stream_user_callback_queue[stream_id].response_available)
         {
             push_response_to_lua_stack();
             lua_resume_if_yielded(L, 2);
+            stream_user_callback_queue.erase(stream_id);
         }
         else
         {
