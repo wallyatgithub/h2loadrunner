@@ -35,87 +35,71 @@
 //
 #include "asio_io_service_pool.h"
 
-namespace nghttp2
-{
+namespace nghttp2 {
 
-namespace asio_http2
-{
+namespace asio_http2 {
 
-io_service_pool::io_service_pool(std::size_t pool_size) : next_io_service_(0)
-{
-    if (pool_size == 0)
-    {
-        throw std::runtime_error("io_service_pool size is 0");
-    }
+io_service_pool::io_service_pool(std::size_t pool_size) : next_io_service_(0) {
+  if (pool_size == 0) {
+    throw std::runtime_error("io_service_pool size is 0");
+  }
 
-    // Give all the io_services work to do so that their run() functions will not
-    // exit until they are explicitly stopped.
-    for (std::size_t i = 0; i < pool_size; ++i)
-    {
-        auto io_service = std::make_shared<boost::asio::io_service>();
-        auto work = std::make_shared<boost::asio::io_service::work>(*io_service);
-        io_services_.push_back(io_service);
-        work_.push_back(work);
-    }
+  // Give all the io_services work to do so that their run() functions will not
+  // exit until they are explicitly stopped.
+  for (std::size_t i = 0; i < pool_size; ++i) {
+    auto io_service = std::make_shared<boost::asio::io_service>();
+    auto work = std::make_shared<boost::asio::io_service::work>(*io_service);
+    io_services_.push_back(io_service);
+    work_.push_back(work);
+  }
 }
 
-void io_service_pool::run(bool asynchronous)
-{
-    // Create a pool of threads to run all of the io_services.
-    for (std::size_t i = 0; i < io_services_.size(); ++i)
-    {
-        futures_.push_back(std::async(std::launch::async,
-                                      (size_t(boost::asio::io_service::*)(void)) &
+void io_service_pool::run(bool asynchronous) {
+  // Create a pool of threads to run all of the io_services.
+  for (std::size_t i = 0; i < io_services_.size(); ++i) {
+    futures_.push_back(std::async(std::launch::async,
+                                  (size_t(boost::asio::io_service::*)(void)) &
                                       boost::asio::io_service::run,
-                                      io_services_[i]));
-    }
+                                  io_services_[i]));
+  }
 
-    if (!asynchronous)
-    {
-        join();
-    }
+  if (!asynchronous) {
+    join();
+  }
 }
 
-void io_service_pool::join()
-{
-    // Wait for all threads in the pool to exit.
-    for (auto& fut : futures_)
-    {
-        fut.get();
-    }
+void io_service_pool::join() {
+  // Wait for all threads in the pool to exit.
+  for (auto &fut : futures_) {
+    fut.get();
+  }
 }
 
-void io_service_pool::force_stop()
-{
-    // Explicitly stop all io_services.
-    for (auto& iosv : io_services_)
-    {
-        iosv->stop();
-    }
+void io_service_pool::force_stop() {
+  // Explicitly stop all io_services.
+  for (auto &iosv : io_services_) {
+    iosv->stop();
+  }
 }
 
-void io_service_pool::stop()
-{
-    // Destroy all work objects to signals end of work
-    work_.clear();
+void io_service_pool::stop() {
+  // Destroy all work objects to signals end of work
+  work_.clear();
 }
 
-boost::asio::io_service& io_service_pool::get_io_service()
-{
-    // Use a round-robin scheme to choose the next io_service to use.
-    auto& io_service = *io_services_[next_io_service_];
-    ++next_io_service_;
-    if (next_io_service_ == io_services_.size())
-    {
-        next_io_service_ = 0;
-    }
-    return io_service;
+boost::asio::io_service &io_service_pool::get_io_service() {
+  // Use a round-robin scheme to choose the next io_service to use.
+  auto &io_service = *io_services_[next_io_service_];
+  ++next_io_service_;
+  if (next_io_service_ == io_services_.size()) {
+    next_io_service_ = 0;
+  }
+  return io_service;
 }
 
-const std::vector<std::shared_ptr<boost::asio::io_service>>&
-                                                         io_service_pool::io_services() const
-{
-    return io_services_;
+const std::vector<std::shared_ptr<boost::asio::io_service>> &
+io_service_pool::io_services() const {
+  return io_services_;
 }
 
 } // namespace asio_http2

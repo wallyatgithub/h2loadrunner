@@ -1,0 +1,314 @@
+{
+  "$schema":"http://json-schema.org/draft-04/schema#",
+  "description":" h2server configuration",
+  "title":"h2server_configuration",
+  "type":"object",
+  "properties":{
+    "address":{
+      "description":"IP address",
+      "default": "0.0.0.0",
+      "type":"string"
+    },
+    "port":{
+      "description":"port, 80, 443 ,etc.",
+      "default": 80,
+      "type":"integer"
+    },
+    "threads":{
+      "description":"Number of concurrent worker threads. If 0 is given: thead number matches number of cores",
+      "default": 1,
+      "type":"integer"
+    },
+    "private-key-file":{
+      "description":"path to private key file",
+      "type":"string"
+    },
+    "cert-file":{
+      "description":"path to cert file",
+      "type":"string"
+    },
+    "caCert-file":{
+      "description":"path to CA cert file for client certificate verification, this is used when mTLS is enabled",
+      "type":"string"
+    },
+    "mTLS":{
+        "description": "true: enable mTLS, request and verify client certificate; false: do not request client certificate",
+        "default": false,
+        "type":"boolean"
+    },
+    "max-concurrent-streams":{
+      "description":"Value of SETTINGS_MAX_CONCURRENT_STREAMS in setting frame; default: 256",
+      "default": 256,
+      "type":"integer"
+    },
+    "header-table-size":
+    {
+      "description":"Specify decoder header table size.",
+      "default": 4096,
+      "type":"integer"
+    },
+    "encoder-header-table-size":
+    {
+      "description":"Specify encoder header table size. The decoder (server) specifies the maximum dynamic table size it accepts. Then the negotiated dynamic table size is the minimum of this option value and the value which server specified.",
+      "default": 4096,
+      "type":"integer"
+    },
+    "window-bits":
+    {
+      "description":"Sets the stream level initial window size to (2^window-bits)-1",
+      "default": 30,
+      "type":"integer"
+    },
+    "connection-window-bits":
+    {
+      "description":"Sets the connection level initial window size to (2^connection-window-bits)-1",
+      "default": 30,
+      "type":"integer"
+    },
+    "socket-receive-buffer-size":{
+      "description":"socket receive buffer size in bytes; default: 4M",
+      "default": 4194304,
+      "type":"integer"
+    },
+    "socket-send-buffer-size":{
+      "description":"socket send buffer size in bytes; default: 4M",
+      "default": 4194304,
+      "type":"integer"
+    },
+    "verbose":{
+        "description": "true: print debug trace; false: no debug print",
+        "default": false,
+        "type":"boolean"
+    },
+    "Service":{
+      "description":"service is a list of Request and the affiliated Response candidates. The Request specifies the pattern the incoming request message should have, and if the incoming request message matches the specified pattern, the response is generated from the associated Response candidates; if the incoming request can match more than one patterns, the pattern with more matching rules is chosen",
+      "type":"array",
+      "minItems":1,
+      "items": {
+        "type": "object",
+        "description":"A pair of Request and Responses",
+        "properties":{
+          "Request":{
+            "description": "Request specifies the desired pattern that a incoming request message should have, which includes a list of match rules of received headers, and optionally a list of match rules of Json payload; A Request is matched only if all the rules of the Request are all successfully matched",
+            "type":"object",
+            "properties":{
+              "name":{
+                "description":"name of the Request; this field is used for statistics output",
+                "type":"string"
+              },
+              "headers":{
+                "description": "Array of match rules to be executed against the received headers",
+                "type":"array",
+                "minItems":1,
+                "items": {
+                  "type": "object",
+                  "description": "Match rule to be executed against the value of one received header",
+                  "properties":{
+                    "header-name":{
+                      "description": "This field specifies the name of a received header; the value of this header is to be picked up to run the match",
+                      "default": ":path",
+                      "type":"string"
+                    },
+                    "matchType":{
+                      "type":"string",
+                      "description": "Type of match action",
+                      "default": "StartsWith",
+                      "enum": ["EqualsTo", "StartsWith", "EndsWith", "Contains", "RegexMatch"]
+                    },
+                    "input":{
+                      "description": "Input used to run the matchType above against the received header value; i.e., received header value should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression in POSIX grep grammar, and it should match the entire target character sequence, i.e., the header value",
+                      "default": "/",
+                      "type":"string"
+                    }
+                  }
+                }
+              },
+              "payload": {
+                "description": "Array of matches rules to be executed against the received Json payload",
+                "type":"array",
+                "minItems":0,
+                "items": {
+                  "type": "object",
+                  "description": "Match rule to be executed against a value in the received Json payload as specified by the Json pointer",
+                  "properties":{
+                    "JsonPointer": {
+                      "description": "A Json pointer to locate a value within the received Json payload",
+                      "type":"string"
+                    },
+                    "matchType": {
+                      "type":"string",
+                      "description": "Type of match action",
+                      "enum": ["EqualsTo", "StartsWith", "EndsWith", "Contains", "RegexMatch"]
+                    },
+                    "input": {
+                      "description": "Input used to execute the matchType above against the value specified by the Json pointer above; the value specified by the Json pointer above should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression in POSIX grep grammar, and it should match the entire target character sequence, i.e., the value specified by the Json pointer",
+                      "type":"string"
+                    }
+                  }
+                }
+              }
+            },
+            "required":[
+              "name",
+              "headers"
+            ]
+          },
+          "Responses": {
+            "type":"array",
+            "description": "A group of Response candidates affiliated to the matched Request; for each request message instance, only one response candidate will be selected to generate the actual response; how the response candidate is selected, is determined by the weight of each Response",
+            "minItems":1,
+            "items": {
+              "description": "One Response candidate",
+              "type":"object",
+              "properties":{
+                "name":{
+                  "description":"name of the Response candidate; this field is used for statistics output",
+                  "type":"string"
+                },
+                "weight":{
+                  "description": "weight of this Response candidate among all Responses candidates within this group; the chance for this Response candidate to be selected is: weight / total weight of all in this group",
+                  "type": "integer",
+                  "default": 100,
+                  "minimum": 0,
+                  "maximum": 65535
+                },
+                "throttle-ratio":{
+                  "description": "maock can throttle the outgoing response after it is selected. If this field is given a number larger than 0, maock will drop that number of responses out of every 100 responses; e.g., if 2.5 is given, maock will sliently consume 2.5% requests matched, without making any response",
+                  "default": 0,
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "status-code": {
+                  "description": "status-code",
+                  "default": 200,
+                  "type": "integer"
+                },
+                "payload": {
+                  "description": "response payload",
+                  "type":"object",
+                  "properties":{
+                    "msg-payload": {
+                      "description": "The actual message payload. The payload can optionally contain a placeholder (name specified below) that has multiple occurrences. For example: {'name': '$VAR', 'location': '$VAR', 'ID', '$VAR'}, here, $VAR is the placeholder. Each occurrence of $VAR would be replaced by an actual string as instructed by arguments field, in order of occurrance; no need to manually add Content-Length header in additonalHeaders field, as it would be generated based on the actual final length; however, Content-Type header should be provided by user manually in additonalHeaders field.",
+                      "type":"string"
+                    },
+                    "placeholder": {
+                      "description": "A string that is embeded in msg-payload above acting as placeholders, for example, $VAR",
+                      "type":"string"
+                    },
+                    "arguments": {
+                      "description": "A list of arguments. The result of first argument would replace the first placeholder occurrence in header, and the result of second argument would replace the second placeholder occurrence, and so on. The number of arguments here should match the number of placeholder occurrences above",
+                      "type":"array",
+                      "minItems":0,
+                      "items": {
+                        "type": "object",
+                        "description": "Each argument produces a string value; the source can be the value identified by a Json pointer to the payload of the corresponding request, or the value of a header in the corresponding request; refer to type-of-value field for more sources to generate the string value. An optional regex can be applied to extract a sub string out of the string value, and an optional sub string action specified by sub-string-start and sub-string-length can be applied as the last step, to get the desired portion, this is usually meaningful when the value is from Json pointer or header, it is obviously not making sense to cut the value which is already a single hex",
+                        "properties":{
+                          "type-of-value": {
+                            "description": "how to produce the value: JsonPointer means to find the value from the received Json payload with the Json pointer specified by value-identifier field; Header means the value of the request header, with header name specified by value-identifier field; RandomHex means to generate a random hex number, like A, B, C, 9, etc.; TimeStamp is to generate a timestamp in IMF-fixdate format, e.g.: Sun, 06 Nov 1994 08:49:37 GMT",
+                            "type":"string",
+                            "enum": ["JsonPointer", "Header", "RandomHex", "TimeStamp"]
+                          },
+                          "value-identifier":{
+                            "description": "Either a Json pointer, e.g., /name representing 'bill' in {'name': 'bill', 'location': office', 'ID', '123'}; or a header name which points to a header of the received request; this field is not used if type-of-value is neither JsonPointer nor Header",
+                            "type":"string"
+                          },
+                          "regex":{
+                            "description": "Regular expression in ECMAScript grammar, if given, it would be used to extract a sub string from the value.",
+                            "type":"string"
+                          },
+                          "sub-string-start":{
+                            "description": "the start position to pick up the sub string; default: 0, the start of the string",
+                            "default": 0,
+                            "type": "integer"
+                          },
+                          "sub-string-length":{
+                            "description": "the length of the sub-string, -1 means till the end of the whole string; so sub-string-start = 0, sub-string-length = -1, means the whole string is taken, with no sub-strinng operation done",
+                            "default": -1,
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "additonalHeaders":{
+                  "description": "additional headers to be returned.",
+                  "type": "array",
+                  "minItems":0,
+                  "items": {
+                    "type":"object",
+                    "properties":{
+                      "header": {
+                        "description": "Valid format for each header: a pair of strings with colon (:) in the middle; for example: Content-type: Application/json. The value part, which is after the colon, can optionally contain a placeholder (name specified below) that has multiple occurrences. For example: location:http://192.168.1.2.3.4/$VAR, here, $VAR is the placeholder. Each occurrence of $VAR would be replaced by an actual string as instructed by arguments field, in order of occurrance",
+                        "type":"string"
+                      },
+                      "placeholder": {
+                        "description": "A string that is embeded in header above acting as placeholders, for example, $VAR",
+                        "type":"string"
+                      },
+                      "arguments": {
+                        "description": "Each argument produces a string value; the source can be the value identified by a Json pointer to the payload of the corresponding request, or the value of a header in the corresponding request; the source can also be a random single hex number, e.g., A, or B, or 9, etc., and a chain of random hex argument can be used to generate a UUID. An optional regex can be used to extract a sub string from the source, and an optional sub string action specified by sub-string-start and sub-string-length can be applied as the last step, to get the desired portion, this is usually meaningful when the value is from Json pointer or header, it is obviously not making sense to cut the value which is already a single hex",
+                        "type":"array",
+                        "minItems":0,
+                        "items": {
+                          "type": "object",
+                          "description": "Each argument produces a string value; the source can be the value identified by a Json pointer to the payload of the corresponding request, or the value of a header in the corresponding request; refer to type-of-value field for more sources to generate the string value. An optional regex can be applied to extract a sub string out of the string value, and an optional substring action specified by sub-string-start and sub-string-length can be applied as the last step, to get the desired portion, this is usually meaningful when the value is from Json pointer or header, it is obviously not making sense to cut the value which is already a single hex",
+                          "properties":{
+                            "type-of-value": {
+                              "description": "how to produce the value: JsonPointer means to find the value from the received Json payload with the Json pointer specified by value-identifier field; Header means the value of the request header, with header name specified by value-identifier field; RandomHex means to generate a random hex number, like A, B, C, 9, etc.; TimeStamp is to generate a timestamp in IMF-fixdate format, e.g.: Sun, 06 Nov 1994 08:49:37 GMT",
+                              "type":"string",
+                              "enum": ["JsonPointer", "Header", "RandomHex", "TimeStamp"]
+                            },
+                            "value-identifier":{
+                              "description": "Either a Json pointer, e.g., /name representing 'bill' in {'name': 'bill', 'location': office', 'ID', '123'}; or a header name which points to a header of the received request; this field is not used if type-of-value is neither JsonPointer nor Header",
+                              "type":"string"
+                            },
+                            "regex":{
+                              "description": "Regular expression in ECMAScript grammar, if given, it would be used to extract a sub string from the value.",
+                              "type":"string"
+                            },
+                            "sub-string-start":{
+                              "description": "the start position to pick up the sub string; default: 0, the start of the string",
+                              "default": 0,
+                              "type": "integer"
+                            },
+                            "sub-string-length":{
+                              "description": "the length of the sub-string, -1 means till the end of the whole string; so sub-string-start = 0, sub-string-length = -1, means the whole string is taken, with no sub-strinng operation done",
+                              "default": -1,
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "luaScript": {
+                  "type":"string",
+                  "description": "lua script (or a filename containing the actual script) with a function named customize_response, handling 4 arguments: request_headers (a table), request_payload, response_headers (a table), response_payload; returning response_headers and response_payload. maock passes the matched request headers and payload, and the response headers and payload generated above, to this lua function, which can update the response headers and response payload, and maock will use the updated headers and payload for the response. Example script: function customize_response(request_header, request_payload, response_headers_to_send, response_payload_to_send) return response_headers_to_send, response_payload_to_send end"
+                },
+                "lua-offload":{
+                    "description": "Some blocking operation, such as file read/write, database query, etc., may be invoked in the luaScript, in this way, the worker thread may be blocked from processing incoming request efficiently. This field provides an option to offload the lua script to run in seperate threads, to avoid blocking the worker thread due to blocking operation. true: offload lua script to run in seperate threads; false: run lua script inside worker thread. Suggestion: enable this only if there is blocking operation in luaScript, as extra data copy and exchange between threads would cause higher cpu usage",
+                    "default": false,
+                    "type":"boolean"
+                }
+              },
+              "required":[
+                "name",
+                "status-code"
+              ]
+            }
+          }
+        },
+        "required":[
+           "Request",
+           "Responses"
+        ]
+      }
+    }
+  },
+  "required":[
+    "Service"
+  ]
+}

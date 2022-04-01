@@ -27,73 +27,62 @@
 #include "util.h"
 #include "http2.h"
 
-namespace nghttp2
-{
-namespace asio_http2
-{
-namespace server
-{
+namespace nghttp2 {
+namespace asio_http2 {
+namespace server {
 
-namespace
-{
-std::string create_html(int status_code)
-{
-    BlockAllocator balloc(1024, 1024);
-    std::string res;
-    res.reserve(512);
-    auto status_string = ::nghttp2::http2::stringify_status(balloc, status_code);
-    auto reason_phrase = ::nghttp2::http2::get_reason_phrase(status_code);
-    res += R"(<!DOCTYPE html><html lang="en"><title>)";
-    res += status_string;
-    res += ' ';
-    res += reason_phrase;
-    res += "</title><body><h1>";
-    res += status_string;
-    res += ' ';
-    res += reason_phrase;
-    res += "</h1></body></html>";
-    return res;
+namespace {
+std::string create_html(int status_code) {
+  BlockAllocator balloc(1024, 1024);
+  std::string res;
+  res.reserve(512);
+  auto status_string = ::nghttp2::http2::stringify_status(balloc, status_code);
+  auto reason_phrase = ::nghttp2::http2::get_reason_phrase(status_code);
+  res += R"(<!DOCTYPE html><html lang="en"><title>)";
+  res += status_string;
+  res += ' ';
+  res += reason_phrase;
+  res += "</title><body><h1>";
+  res += status_string;
+  res += ' ';
+  res += reason_phrase;
+  res += "</h1></body></html>";
+  return res;
 }
 } // namespace
 
-request_cb redirect_handler(int status_code, std::string uri)
-{
-    return [status_code, uri](const request & req, const response & res)
-    {
-        header_map h;
-        h.emplace("location", header_value{std::move(uri)});
-        std::string html;
-        if (req.method() == "GET")
-        {
-            html = create_html(status_code);
-        }
-        h.emplace("content-length", header_value{util::utos(html.size())});
+request_cb redirect_handler(int status_code, std::string uri) {
+  return [status_code, uri](const request &req, const response &res, uint64_t handler_id, int32_t stream_id) {
+    header_map h;
+    h.emplace("location", header_value{std::move(uri)});
+    std::string html;
+    if (req.method() == "GET") {
+      html = create_html(status_code);
+    }
+    h.emplace("content-length", header_value{util::utos(html.size())});
 
-        res.write_head(status_code, std::move(h));
-        res.end(std::move(html));
-    };
+    res.write_head(status_code, std::move(h));
+    res.end(std::move(html));
+  };
 }
 
-request_cb status_handler(int status_code)
-{
-    return [status_code](const request & req, const response & res)
-    {
-        if (!::nghttp2::http2::expect_response_body(status_code))
-        {
-            res.write_head(status_code);
-            res.end();
-            return;
-        }
-        // we supply content-length for HEAD request, but body will not be
-        // sent.
-        auto html = create_html(status_code);
-        header_map h;
-        h.emplace("content-length", header_value{util::utos(html.size())});
-        h.emplace("content-type", header_value{"text/html; charset=utf-8"});
+request_cb status_handler(int status_code) {
+  return [status_code](const request &req, const response &res, uint64_t handler_id, int32_t stream_id) {
+    if (!::nghttp2::http2::expect_response_body(status_code)) {
+      res.write_head(status_code);
+      res.end();
+      return;
+    }
+    // we supply content-length for HEAD request, but body will not be
+    // sent.
+    auto html = create_html(status_code);
+    header_map h;
+    h.emplace("content-length", header_value{util::utos(html.size())});
+    h.emplace("content-type", header_value{"text/html; charset=utf-8"});
 
-        res.write_head(status_code, std::move(h));
-        res.end(std::move(html));
-    };
+    res.write_head(status_code, std::move(h));
+    res.end(std::move(html));
+  };
 }
 
 } // namespace server

@@ -31,42 +31,38 @@
 
 #include "asio_server_serve_mux.h"
 
-namespace nghttp2
-{
+namespace nghttp2 {
 
-namespace asio_http2
-{
+namespace asio_http2 {
 
-namespace server
-{
+namespace server {
 
 class server;
 
-class http2_impl
-{
+class http2_impl {
 public:
-    http2_impl();
-    boost::system::error_code listen_and_serve(
-        boost::system::error_code& ec, boost::asio::ssl::context* tls_context,
-        const std::string& address, const std::string& port, bool asynchronous);
-    void num_threads(size_t num_threads);
-    void backlog(int backlog);
-    void tls_handshake_timeout(const boost::posix_time::time_duration& t);
-    void read_timeout(const boost::posix_time::time_duration& t);
-    bool handle(std::string pattern, request_cb cb);
-    void stop();
-    void join();
-    const std::vector<std::shared_ptr<boost::asio::io_service>>&
-                                                             io_services() const;
-    std::vector<int> ports() const;
+  http2_impl();
+  boost::system::error_code listen_and_serve(
+      boost::system::error_code &ec, boost::asio::ssl::context *tls_context,
+      const std::string &address, const std::string &port, bool asynchronous);
+  void num_threads(size_t num_threads);
+  void backlog(int backlog);
+  void tls_handshake_timeout(const boost::posix_time::time_duration &t);
+  void read_timeout(const boost::posix_time::time_duration &t);
+  bool handle(std::string pattern, request_cb cb);
+  void stop();
+  void join();
+  const std::vector<std::shared_ptr<boost::asio::io_service>> &
+  io_services() const;
+  std::vector<int> ports() const;
 
 private:
-    std::unique_ptr<server> server_;
-    std::size_t num_threads_;
-    int backlog_;
-    serve_mux mux_;
-    boost::posix_time::time_duration tls_handshake_timeout_;
-    boost::posix_time::time_duration read_timeout_;
+  std::unique_ptr<server> server_;
+  std::size_t num_threads_;
+  int backlog_;
+  serve_mux mux_;
+  boost::posix_time::time_duration tls_handshake_timeout_;
+  boost::posix_time::time_duration read_timeout_;
 };
 
 } // namespace server

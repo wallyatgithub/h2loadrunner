@@ -191,7 +191,7 @@ set(ASIO_SV_SOURCES
   asio_server_serve_mux.cc
   asio_server_request_handler.cc
   asio_server_tls_context.cc
-  #asio_util.cc
+  asio_util.cc
 )
 
 # h2load

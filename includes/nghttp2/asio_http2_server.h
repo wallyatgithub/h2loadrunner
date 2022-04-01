@@ -129,7 +129,7 @@ private:
 // received.  The life time of |request| and |response| objects end
 // when callback set by response::on_close() is called.  After that,
 // the application must not access to those objects.
-typedef std::function<void(const request &, const response &)> request_cb;
+typedef std::function<void(const request &, const response &, uint64_t, int32_t)> request_cb;
 
 class http2_impl;
 

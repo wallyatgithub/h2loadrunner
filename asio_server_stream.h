@@ -29,31 +29,27 @@
 
 #include <nghttp2/asio_http2_server.h>
 
-namespace nghttp2
-{
-namespace asio_http2
-{
-namespace server
-{
+namespace nghttp2 {
+namespace asio_http2 {
+namespace server {
 
 class http2_handler;
 
-class stream
-{
+class stream {
 public:
-    stream(http2_handler* h, int32_t stream_id);
+  stream(http2_handler *h, int32_t stream_id);
 
-    int32_t get_stream_id() const;
-    class request& request();
-    class response& response();
+  int32_t get_stream_id() const;
+  class request &request();
+  class response &response();
 
-    http2_handler* handler() const;
+  http2_handler *handler() const;
 
 private:
-    http2_handler* handler_;
-    class request request_;
-    class response response_;
-    int32_t stream_id_;
+  http2_handler *handler_;
+  class request request_;
+  class response response_;
+  int32_t stream_id_;
 };
 
 } // namespace server

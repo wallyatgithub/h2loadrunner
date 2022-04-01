@@ -30,52 +30,48 @@
 #include <nghttp2/asio_http2_server.h>
 #include <boost/asio/ip/tcp.hpp>
 
-namespace nghttp2
-{
-namespace asio_http2
-{
-namespace server
-{
+namespace nghttp2 {
+namespace asio_http2 {
+namespace server {
 
 class stream;
 
-class request_impl
-{
+class request_impl {
 public:
-    request_impl();
+  request_impl();
 
-    void header(header_map h);
-    const header_map& header() const;
-    header_map& header();
+  void header(header_map h);
+  const header_map &header() const;
+  header_map &header();
 
-    void method(std::string method);
-    const std::string& method() const;
+  void method(std::string method);
+  const std::string &method() const;
 
-    const uri_ref& uri() const;
-    uri_ref& uri();
+  const uri_ref &uri() const;
+  uri_ref &uri();
 
-    void on_data(data_cb cb);
+  void on_data(data_cb cb);
 
-    void stream(class stream* s);
-    void call_on_data(const uint8_t* data, std::size_t len);
+  void stream(class stream *s);
+  void call_on_data(const uint8_t *data, std::size_t len);
 
-    const boost::asio::ip::tcp::endpoint& remote_endpoint() const;
-    void remote_endpoint(boost::asio::ip::tcp::endpoint ep);
+  const boost::asio::ip::tcp::endpoint &remote_endpoint() const;
+  void remote_endpoint(boost::asio::ip::tcp::endpoint ep);
 
-    size_t header_buffer_size() const;
-    void update_header_buffer_size(size_t len);
-    std::string& payload();
-    const std::string& unmutable_payload() const;
+  size_t header_buffer_size() const;
+  void update_header_buffer_size(size_t len);
+  std::string& payload();
+  const std::string& unmutable_payload() const;
 
 private:
-    class stream* strm_;
-    header_map header_;
-    std::string method_;
-    uri_ref uri_;
-    data_cb on_data_cb_;
-    boost::asio::ip::tcp::endpoint remote_ep_;
-    size_t header_buffer_size_;
-    std::string payload_;
+  class stream *strm_;
+  header_map header_;
+  std::string method_;
+  uri_ref uri_;
+  data_cb on_data_cb_;
+  boost::asio::ip::tcp::endpoint remote_ep_;
+  size_t header_buffer_size_;
+  std::string payload_;
 };
 
 } // namespace server

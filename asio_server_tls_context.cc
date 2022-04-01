@@ -31,95 +31,84 @@
 #include "tls.h"
 #include "util.h"
 
-namespace nghttp2
-{
-namespace asio_http2
-{
-namespace server
-{
+namespace nghttp2 {
+namespace asio_http2 {
+namespace server {
 
 #ifndef OPENSSL_NO_NEXTPROTONEG
-namespace
-{
-std::vector<unsigned char>& get_alpn_token()
-{
-    static auto alpn_token = util::get_default_alpn();
-    return alpn_token;
+namespace {
+std::vector<unsigned char> &get_alpn_token() {
+  static auto alpn_token = util::get_default_alpn();
+  return alpn_token;
 }
 } // namespace
 #endif // !OPENSSL_NO_NEXTPROTONEG
 
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L
-namespace
-{
-int alpn_select_proto_cb(SSL* ssl, const unsigned char** out,
-                         unsigned char* outlen, const unsigned char* in,
-                         unsigned int inlen, void* arg)
-{
-    if (!util::select_h2(out, outlen, in, inlen))
-    {
-        return SSL_TLSEXT_ERR_NOACK;
-    }
-    return SSL_TLSEXT_ERR_OK;
+namespace {
+int alpn_select_proto_cb(SSL *ssl, const unsigned char **out,
+                         unsigned char *outlen, const unsigned char *in,
+                         unsigned int inlen, void *arg) {
+  if (!util::select_h2(out, outlen, in, inlen)) {
+    return SSL_TLSEXT_ERR_NOACK;
+  }
+  return SSL_TLSEXT_ERR_OK;
 }
 } // namespace
 #endif // OPENSSL_VERSION_NUMBER >= 0x10002000L
 
 boost::system::error_code
-configure_tls_context_easy(boost::system::error_code& ec,
-                           boost::asio::ssl::context& tls_context,
-                           bool mTLS)
-{
-    ec.clear();
+configure_tls_context_easy(boost::system::error_code &ec,
+                           boost::asio::ssl::context &tls_context,
+                           bool mTLS) {
+  ec.clear();
 
-    auto ctx = tls_context.native_handle();
+  auto ctx = tls_context.native_handle();
 
-    auto ssl_opts = (SSL_OP_ALL & ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS) |
-                    SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION |
-                    SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION |
-                    SSL_OP_SINGLE_ECDH_USE | SSL_OP_NO_TICKET |
-                    SSL_OP_CIPHER_SERVER_PREFERENCE;
+  auto ssl_opts = (SSL_OP_ALL & ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS) |
+                  SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION |
+                  SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION |
+                  SSL_OP_SINGLE_ECDH_USE | SSL_OP_NO_TICKET |
+                  SSL_OP_CIPHER_SERVER_PREFERENCE;
 
-    SSL_CTX_set_options(ctx, ssl_opts);
-    SSL_CTX_set_mode(ctx, SSL_MODE_AUTO_RETRY);
-    SSL_CTX_set_mode(ctx, SSL_MODE_RELEASE_BUFFERS);
-    if (mTLS)
-    {
-        SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
-    }
+  SSL_CTX_set_options(ctx, ssl_opts);
+  SSL_CTX_set_mode(ctx, SSL_MODE_AUTO_RETRY);
+  SSL_CTX_set_mode(ctx, SSL_MODE_RELEASE_BUFFERS);
+  if (mTLS)
+  {
+      SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+  }
 
-    SSL_CTX_set_cipher_list(ctx, tls::DEFAULT_CIPHER_LIST);
+  SSL_CTX_set_cipher_list(ctx, tls::DEFAULT_CIPHER_LIST);
 
 #ifndef OPENSSL_NO_EC
-    auto ecdh = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
-    if (ecdh)
-    {
-        SSL_CTX_set_tmp_ecdh(ctx, ecdh);
-        EC_KEY_free(ecdh);
-    }
+  auto ecdh = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+  if (ecdh) {
+    SSL_CTX_set_tmp_ecdh(ctx, ecdh);
+    EC_KEY_free(ecdh);
+  }
 #endif /* OPENSSL_NO_EC */
 
 #ifndef OPENSSL_NO_NEXTPROTONEG
-    SSL_CTX_set_next_protos_advertised_cb(
-        ctx,
-        [](SSL * s, const unsigned char** data, unsigned int* len, void* arg)
-    {
-        auto& token = get_alpn_token();
+  SSL_CTX_set_next_protos_advertised_cb(
+      ctx,
+      [](SSL *s, const unsigned char **data, unsigned int *len, void *arg) {
+        auto &token = get_alpn_token();
 
         *data = token.data();
         *len = token.size();
 
         return SSL_TLSEXT_ERR_OK;
-    },
-    nullptr);
+      },
+      nullptr);
 #endif // !OPENSSL_NO_NEXTPROTONEG
 
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L
-    // ALPN selection callback
-    SSL_CTX_set_alpn_select_cb(ctx, alpn_select_proto_cb, nullptr);
+  // ALPN selection callback
+  SSL_CTX_set_alpn_select_cb(ctx, alpn_select_proto_cb, nullptr);
 #endif // OPENSSL_VERSION_NUMBER >= 0x10002000L
 
-    return ec;
+  return ec;
 }
 
 } // namespace server

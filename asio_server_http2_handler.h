@@ -30,154 +30,151 @@
 #include <map>
 #include <functional>
 #include <string>
+#include <mutex>
 
 #include <boost/array.hpp>
 
 #include <nghttp2/asio_http2_server.h>
 
-namespace nghttp2
-{
-namespace asio_http2
-{
-namespace server
-{
+namespace nghttp2 {
+namespace asio_http2 {
+namespace server {
 
 class http2_handler;
 class stream;
 class serve_mux;
 
-struct callback_guard
-{
-    callback_guard(http2_handler& h);
-    ~callback_guard();
-    http2_handler& handler;
+struct callback_guard {
+  callback_guard(http2_handler &h);
+  ~callback_guard();
+  http2_handler &handler;
 };
 
 using connection_write = std::function<void(void)>;
 
-class http2_handler : public std::enable_shared_from_this<http2_handler>
-{
+class http2_handler : public std::enable_shared_from_this<http2_handler> {
 public:
-    http2_handler(boost::asio::io_service& io_service,
-                  boost::asio::ip::tcp::endpoint ep, connection_write writefun,
-                  serve_mux& mux);
+  http2_handler(boost::asio::io_service &io_service,
+                boost::asio::ip::tcp::endpoint ep, connection_write writefun,
+                serve_mux &mux);
 
-    ~http2_handler();
+  ~http2_handler();
 
-    int start();
+  int start();
 
-    stream* create_stream(int32_t stream_id);
-    void close_stream(int32_t stream_id);
-    stream* find_stream(int32_t stream_id);
+  stream *create_stream(int32_t stream_id);
+  void close_stream(int32_t stream_id);
+  stream *find_stream(int32_t stream_id);
 
-    void call_on_request(stream& s);
+  void call_on_request(stream &s);
 
-    bool should_stop() const;
+  bool should_stop() const;
 
-    int start_response(stream& s);
+  int start_response(stream &s);
 
-    int submit_trailer(stream& s, header_map h);
+  int submit_trailer(stream &s, header_map h);
 
-    void stream_error(int32_t stream_id, uint32_t error_code);
+  void stream_error(int32_t stream_id, uint32_t error_code);
 
-    void initiate_write();
+  void initiate_write();
 
-    void enter_callback();
-    void leave_callback();
+  void enter_callback();
+  void leave_callback();
 
-    void resume(stream& s);
+  void resume(stream &s);
 
-    response* push_promise(boost::system::error_code& ec, stream& s,
-                           std::string method, std::string raw_path_query,
-                           header_map h);
+  response *push_promise(boost::system::error_code &ec, stream &s,
+                         std::string method, std::string raw_path_query,
+                         header_map h);
 
-    void signal_write();
+  void signal_write();
 
-    boost::asio::io_service& io_service();
+  boost::asio::io_service &io_service();
 
-    const boost::asio::ip::tcp::endpoint& remote_endpoint();
+  const boost::asio::ip::tcp::endpoint &remote_endpoint();
 
-    const std::string& http_date();
+  const std::string &http_date();
+  static http2_handler* find_http2_handler(uint64_t handler_id);
+  static boost::asio::io_service* find_io_service(uint64_t handler_id);
 
-    template <size_t N>
-    int on_read(const boost::array<uint8_t, N>& buffer, std::size_t len)
-    {
-        callback_guard cg(*this);
+  uint64_t get_handler_id();
 
-        int rv;
+  template <size_t N>
+  int on_read(const boost::array<uint8_t, N> &buffer, std::size_t len) {
+    callback_guard cg(*this);
 
-        rv = nghttp2_session_mem_recv(session_, buffer.data(), len);
+    int rv;
 
-        if (rv < 0)
-        {
-            return -1;
-        }
+    rv = nghttp2_session_mem_recv(session_, buffer.data(), len);
 
-        return 0;
+    if (rv < 0) {
+      return -1;
     }
 
-    template <size_t N>
-    int on_write(boost::array<uint8_t, N>& buffer, std::size_t& len)
-    {
-        callback_guard cg(*this);
+    return 0;
+  }
 
-        len = 0;
+  template <size_t N>
+  int on_write(boost::array<uint8_t, N> &buffer, std::size_t &len) {
+    callback_guard cg(*this);
 
-        if (buf_)
-        {
-            std::copy_n(buf_, buflen_, std::begin(buffer));
+    len = 0;
 
-            len += buflen_;
+    if (buf_) {
+      std::copy_n(buf_, buflen_, std::begin(buffer));
 
-            buf_ = nullptr;
-            buflen_ = 0;
-        }
+      len += buflen_;
 
-        for (;;)
-        {
-            const uint8_t* data;
-            auto nread = nghttp2_session_mem_send(session_, &data);
-            if (nread < 0)
-            {
-                return -1;
-            }
-
-            if (nread == 0)
-            {
-                break;
-            }
-
-            if (len + nread > buffer.size())
-            {
-                buf_ = data;
-                buflen_ = nread;
-
-                break;
-            }
-
-            std::copy_n(data, nread, std::begin(buffer) + len);
-
-            len += nread;
-        }
-
-        return 0;
+      buf_ = nullptr;
+      buflen_ = 0;
     }
+
+    for (;;) {
+      const uint8_t *data;
+      auto nread = nghttp2_session_mem_send(session_, &data);
+      if (nread < 0) {
+        return -1;
+      }
+
+      if (nread == 0) {
+        break;
+      }
+
+      if (len + nread > buffer.size()) {
+        buf_ = data;
+        buflen_ = nread;
+
+        break;
+      }
+
+      std::copy_n(data, nread, std::begin(buffer) + len);
+
+      len += nread;
+    }
+
+    return 0;
+  }
 
 private:
-    std::map<int32_t, std::shared_ptr<stream>> streams_;
-    connection_write writefun_;
-    serve_mux& mux_;
-    boost::asio::io_service& io_service_;
-    boost::asio::ip::tcp::endpoint remote_ep_;
-    nghttp2_session* session_;
-    const uint8_t* buf_;
-    std::size_t buflen_;
-    bool inside_callback_;
-    // true if we have pending on_write call.  This avoids repeated call
-    // of io_service::post.
-    bool write_signaled_;
-    time_t tstamp_cached_;
-    std::string formatted_date_;
+  std::map<int32_t, std::shared_ptr<stream>> streams_;
+  connection_write writefun_;
+  serve_mux &mux_;
+  boost::asio::io_service &io_service_;
+  boost::asio::ip::tcp::endpoint remote_ep_;
+  nghttp2_session *session_;
+  const uint8_t *buf_;
+  std::size_t buflen_;
+  bool inside_callback_;
+  // true if we have pending on_write call.  This avoids repeated call
+  // of io_service::post.
+  bool write_signaled_;
+  time_t tstamp_cached_;
+  std::string formatted_date_;
+  static std::atomic<uint64_t> handler_unique_id;
+  static std::map<uint64_t, http2_handler*> alive_handlers;
+  static std::map<uint64_t, boost::asio::io_service*> handler_io_service;
+  static std::mutex handler_mutex;
+  uint64_t this_handler_id;
 };
 
 } // namespace server
