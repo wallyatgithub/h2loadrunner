@@ -16,22 +16,14 @@ local stats_output_interval_in_ms = 1000
 
 local my_id = setup_parallel_test(number_of_worker_threads, connections_per_host_per_thread, (number_of_virtual_users + number_of_worker_threads))
 
--- optional, better to have
-for thread_index = 1,connections_per_host_per_thread do
-    client_id = make_connection("http://192.168.1.124:8080")
-end
-
 local interval_in_ms_between_requests_for_every_virtual_user = ((number_of_virtual_users / total_target_tps) * 1000)
 
 local number_of_request_to_send_in_one_loop_of_virtual_user = 1
 
-local number_of_loops_for_each_virtual_user = ((duration_to_run_in_seconds * 1000) / (interval_in_ms_between_requests_for_every_virtual_user * number_of_request_to_send_in_one_loop_of_virtual_user))
-
--- Do not let all virtual user start at the same time, to avoid load fluctuations
-sleep_for_ms((my_id / number_of_virtual_users) * interval_in_ms_between_requests_for_every_virtual_user + 100)
+local number_of_loops_for_each_virtual_user = ((duration_to_run_in_seconds * 1000) / interval_in_ms_between_requests_for_every_virtual_user)
 
 -- the following global variables are shared among all number_of_virtual_users within one worker_thread
--- 
+--
 max_latency = 0
 
 min_latency = 65536
@@ -44,6 +36,9 @@ total_response_time_is_ms_within_one_stats_interval = 0
 
 total_number_of_connection_failures = 0
 
+-- Do not let all virtual user start at the same time, to avoid load fluctuations
+sleep_for_ms((my_id / number_of_virtual_users) * interval_in_ms_between_requests_for_every_virtual_user + 100)
+
 local stats_interval_begin = time_since_epoch()
 
 local function output_stats()
@@ -54,7 +49,7 @@ local function output_stats()
         local delta_requests_sent = total_requests_sent - total_requests_sent_last_stats_interval
         local avg_latency = total_response_time_is_ms_within_one_stats_interval / delta_requests_sent
         print ("worker: ", my_id, ", total sent: ", total_requests_sent, ", tps: ", (delta_requests_sent*1000)/stats_duration_in_ms, ", max_latency: ", max_latency, ", min_latency: ", min_latency, ", average_latency: ", avg_latency)
-        
+
         max_latency = 0
         min_latency = 65536
         total_response_time_is_ms_within_one_stats_interval = 0
@@ -68,12 +63,12 @@ local function update_latency(latency)
     then
         max_latency = latency
     end
-    
+
     if (latency < min_latency)
     then
         min_latency = latency
     end
-    
+
     total_response_time_is_ms_within_one_stats_interval = total_response_time_is_ms_within_one_stats_interval + latency
 end
 
@@ -86,23 +81,36 @@ local function sleep_between_requests_if_necessary(latency)
 end
 
 function generate_load()
+    local loop_count = 0;
     for request_index = 1,number_of_loops_for_each_virtual_user do
-        local x = time_since_epoch()
 
-        local request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.124:8080", [":method"]="PATCH", [":path"]="/nudm-uecm/test"}
-        local payload = "hello world again"
-        local response_header, response_payload, error_code = send_http_request_and_await_response(request_headers_to_send, payload)
-        if (error_code ~= -1)
-        -- validate the response further if you want
+        if ( loop_count % number_of_request_to_send_in_one_loop_of_virtual_user == 0)
         then
-            total_requests_sent = total_requests_sent + 1
-        end
-        local y = time_since_epoch()
-        local latency = y - x
-        update_latency(latency)
-        sleep_between_requests_if_necessary(latency)
 
-        -- you can send more request here based on your scenario, make sure to update latency and call output_stats and to sleep to keep the tps
+            local x = time_since_epoch()
+
+            local request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.107:8081", [":method"]="PATCH", [":path"]="/nudm-uecm/test"}
+            local payload = "hello world again"
+            local response_header, response_payload, error_code = send_http_request_and_await_response(request_headers_to_send, payload)
+            if (error_code ~= -1)
+            -- validate the response further if you want
+            then
+                total_requests_sent = total_requests_sent + 1
+            end
+            local y = time_since_epoch()
+            local latency = y - x
+            update_latency(latency)
+            sleep_between_requests_if_necessary(latency)
+
+        --[[
+         if ( loop_count % number_of_request_to_send_in_one_loop_of_virtual_user == 1)
+         then
+         bla bla bla
+        --]]
+        end
+
+        loop_count = loop_count + 1;
+
     end
 end
 
