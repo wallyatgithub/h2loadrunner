@@ -57,6 +57,11 @@ void register_functions_to_lua(lua_State *L);
 
 void init_new_lua_state(lua_State* L);
 
+struct Lua_State_Data
+{
+    size_t unique_id_within_group = 0;
+};
+
 struct Lua_Group_Config
 {
     explicit Lua_Group_Config():
@@ -77,26 +82,17 @@ struct Lua_Group_Config
     std::map<lua_State*, int> coroutine_references;
     std::vector<std::shared_ptr<lua_State>> lua_states_for_each_worker;
     std::vector<std::shared_ptr<h2load::asio_worker>> workers;
+    std::map<size_t, std::map<lua_State*, Lua_State_Data>> lua_state_data;
     std::vector<boost::asio::io_service::work> works;
     h2load::Config config_template;
     std::function<void()> group_start_entry;
 };
 
-struct Lua_State_Data
-{
-    size_t group_id = 0;
-    size_t worker_id = 0;
-    size_t unique_id_within_group = 0;
-    bool started_from_worker_thread = false;
-};
-
-Lua_Group_Config& get_lua_group_config(lua_State* L);
+Lua_Group_Config& get_lua_group_config(size_t group_id);
 
 std::mutex& get_lua_config_mutex(lua_State* L);
 
 Lua_State_Data& get_lua_state_data(lua_State* L);
-
-std::map<lua_State*, Lua_State_Data>& get_lua_state_data_repository();
 
 void setup_test_group(size_t group_id);
 
@@ -104,9 +100,17 @@ void init_workers(size_t group_id);
 
 void stop_workers(size_t number_of_groups);
 
-bool to_be_restarted_in_worker_thread(lua_State* L);
-
 bool is_running_in_worker_thread(lua_State* L);
+
+void set_group_id(lua_State* L, size_t group_id);
+
+void set_worker_index(lua_State* L, size_t worker_index);
+
+size_t get_group_id(lua_State* L);
+
+size_t get_worker_index(lua_State* L);
+
+
 
 /*
 #define force_in_worker_thread_if_not_yet(L) \

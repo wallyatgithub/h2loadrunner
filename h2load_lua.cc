@@ -29,15 +29,48 @@ extern "C" {
 #include "asio_worker.h"
 #include "h2load_lua.h"
 
-std::map<lua_State*, Lua_State_Data>& get_lua_state_data_repository()
+const static std::string worker_index_str = "worker_index";
+const static std::string group_index_str = "group_index";
+
+void set_group_id(lua_State* L, size_t group_id)
 {
-    static std::map<lua_State*, Lua_State_Data> lua_states_data;
-    return lua_states_data;
+    lua_pushlightuserdata(L, (void *)group_index_str.c_str());
+    lua_pushinteger(L, group_id);
+    lua_rawset(L, LUA_REGISTRYINDEX);
+}
+
+void set_worker_index(lua_State* L, size_t worker_index)
+{
+    lua_pushlightuserdata(L, (void *)worker_index_str.c_str());
+    lua_pushinteger(L, worker_index);
+    lua_rawset(L, LUA_REGISTRYINDEX);
+}
+
+size_t get_group_id(lua_State* L)
+{
+    auto top_before = lua_gettop(L);
+    lua_pushlightuserdata(L, (void *)group_index_str.c_str());
+    lua_gettable(L, LUA_REGISTRYINDEX);
+    auto group_id = lua_tonumber(L, -1);
+    lua_settop(L, top_before);
+    return group_id;
+}
+
+size_t get_worker_index(lua_State* L)
+{
+    auto top_before = lua_gettop(L);
+    lua_pushlightuserdata(L, (void *)worker_index_str.c_str());
+    lua_gettable(L, LUA_REGISTRYINDEX);
+    auto worker_index = lua_tonumber(L, -1);
+    lua_settop(L, top_before);
+    return worker_index;
 }
 
 Lua_State_Data& get_lua_state_data(lua_State* L)
 {
-    return get_lua_state_data_repository()[L];
+    auto group_id = get_group_id(L);
+    auto worker_id = get_worker_index(L);
+    return get_lua_group_config(group_id).lua_state_data[worker_id][L];
 }
 
 std::mutex& get_lua_group_config_mutex(size_t group_id)
@@ -76,7 +109,7 @@ void start_test_group(size_t group_id)
     for (auto& coroutine: lua_group_config.coroutine_references)
     {
         auto lua_state = coroutine.first;
-        work_id_to_lua_states[get_lua_state_data(lua_state).worker_id].push_back(lua_state);
+        work_id_to_lua_states[get_worker_index(lua_state)].push_back(lua_state);
     }
 
     init_workers(group_id);
@@ -89,37 +122,12 @@ void start_test_group(size_t group_id)
         {
             for (auto L: lua_states_to_start_for_worker_x)
             {
-                get_lua_state_data(L).started_from_worker_thread = true;
                 lua_resume_wrapper(L, 0);
             }
         };
         lua_group_config.workers[worker_index]->get_io_context().post(start_lua_states);
     }
 }
-
-bool to_be_restarted_in_worker_thread(lua_State* L)
-{
-    if (get_lua_state_data(L).started_from_worker_thread)
-    {
-        return false;
-    }
-    else
-    {
-        auto group_id = get_lua_state_data(L).group_id;
-        auto& lua_group_config = get_lua_group_config(group_id);
-        auto worker_thread = get_worker(L);
-        lua_settop(L, 0);
-        luaL_loadstring(L, lua_group_config.lua_script.c_str());
-        auto restart_coroutine = [L]()
-        {
-            get_lua_state_data(L).started_from_worker_thread = true;
-            lua_resume_wrapper(L, 0);
-        };
-        get_worker(L)->get_io_context().post(restart_coroutine);
-        return true;
-    }
-}
-
 
 void setup_test_group(size_t group_id)
 {
@@ -131,10 +139,9 @@ void setup_test_group(size_t group_id)
     {
         auto lua_state = std::shared_ptr<lua_State>(luaL_newstate(), &lua_close);
         init_new_lua_state(lua_state.get());
-        get_lua_state_data(lua_state.get()).group_id = group_id;
-        get_lua_state_data(lua_state.get()).worker_id = 0;
+        set_group_id(lua_state.get(), group_id);
+        set_worker_index(lua_state.get(), i);
         get_lua_state_data(lua_state.get()).unique_id_within_group = lua_group_config.number_of_lua_coroutines;
-        get_lua_state_data(lua_state.get()).started_from_worker_thread = false;
         lua_group_config.lua_states_for_each_worker.push_back(lua_state);
     }
 
@@ -148,8 +155,6 @@ void setup_test_group(size_t group_id)
             exit(1);
         }
         lua_State* cL = lua_newthread(parent_lua_state);
-        get_lua_state_data(cL).group_id = group_id;
-        get_lua_state_data(cL).worker_id = worker_index;
         get_lua_state_data(cL).unique_id_within_group = i;
         lua_group_config.coroutine_references[cL] = luaL_ref(parent_lua_state, LUA_REGISTRYINDEX);
         luaL_loadstring(cL, lua_group_config.lua_script.c_str());
@@ -172,7 +177,7 @@ int setup_parallel_test(lua_State *L)
         number_of_workers = lua_tointeger(L, -1);
         lua_pop(L, 1);
     }
-    auto group_id = get_lua_state_data(L).group_id;
+    auto group_id = get_group_id(L);
     auto& lua_group_config = get_lua_group_config(group_id);
     if ((number_of_coroutines > 0) &&
         (lua_group_config.config_initialized == false) &&
@@ -242,8 +247,8 @@ void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load
         lua_State* L = luaL_newstate();
         init_new_lua_state(L);
         bootstrap_lua_states.push_back(L);
-        get_lua_state_data(L).group_id = i;
-        get_lua_state_data(L).worker_id = 0;
+        set_group_id(L, i);
+        set_worker_index(L, 0);
         get_lua_state_data(L).unique_id_within_group = 0;
         luaL_loadstring(L, lua_scripts[i].c_str());
         // if setup_parallel_test is not called, meaning no new coroutine is created,
@@ -304,8 +309,8 @@ void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load
 
 bool is_running_in_worker_thread(lua_State* L)
 {
-    auto& lua_group_config = get_lua_group_config(get_lua_state_data(L).group_id);
-    auto worker_thread = lua_group_config.workers[get_lua_state_data(L).worker_id];
+    auto& lua_group_config = get_lua_group_config(get_group_id(L));
+    auto worker_thread = lua_group_config.workers[get_worker_index(L)];
     auto curr_thread_id = std::this_thread::get_id();
     auto worker_thread_id = worker_thread->get_thread_id();
     return (curr_thread_id == worker_thread_id);
@@ -377,12 +382,12 @@ void init_workers(size_t group_id)
 
 h2load::asio_worker* get_worker(lua_State *L)
 {
-    size_t group_id = get_lua_state_data(L).group_id;
+    size_t group_id = get_group_id(L);
     if (get_lua_group_config(group_id).workers.size() == 0)
     {
         init_workers(group_id);
     }
-    return get_lua_group_config(group_id).workers[get_lua_state_data(L).worker_id].get();
+    return get_lua_group_config(group_id).workers[get_worker_index(L)].get();
 }
 
 int32_t _make_connection(lua_State *L, const std::string& uri, std::function<void(bool, h2load::Client_Interface*)> connected_callback)
@@ -396,7 +401,7 @@ int32_t _make_connection(lua_State *L, const std::string& uri, std::function<voi
         connected_callback(false, nullptr);
         return -1;
     }
-    auto group_id = get_lua_state_data(L).group_id;
+    auto group_id = get_group_id(L);
     auto clients_needed = get_lua_group_config(group_id).number_of_client_to_same_host_in_one_worker;
     auto run_inside_worker = [uri, connected_callback, worker, clients_needed]()
     {
@@ -738,13 +743,13 @@ int lua_resume_wrapper(lua_State *L, int nargs)
     auto retCode = lua_resume(L, nargs);
     if (LUA_YIELD != retCode)
     {
-      auto group_id = get_lua_state_data(L).group_id;
+      auto group_id = get_group_id(L);
       std::lock_guard<std::mutex> guard(get_lua_group_config_mutex(group_id));
       auto& lua_group_config = get_lua_group_config(group_id);
       lua_group_config.number_of_finished_coroutins++;
       if (lua_group_config.coroutine_references.count(L))
       {
-          auto worker_index = get_lua_state_data(L).worker_id;
+          auto worker_index = get_worker_index(L);
           auto parent_lua_state = lua_group_config.lua_states_for_each_worker[worker_index].get();
           luaL_unref(parent_lua_state, LUA_REGISTRYINDEX, lua_group_config.coroutine_references[L]);
           lua_group_config.coroutine_references.erase(L);

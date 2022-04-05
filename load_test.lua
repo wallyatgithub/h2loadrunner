@@ -48,7 +48,8 @@ local function output_stats()
         local stats_duration_in_ms = stats_interval_end - stats_interval_begin
         local delta_requests_sent = total_requests_sent - total_requests_sent_last_stats_interval
         local avg_latency = total_response_time_is_ms_within_one_stats_interval / delta_requests_sent
-        print ("worker: ", my_id, ", total sent: ", total_requests_sent, ", tps: ", (delta_requests_sent*1000)/stats_duration_in_ms, ", max_latency: ", max_latency, ", min_latency: ", min_latency, ", average_latency: ", avg_latency)
+        output = string.format("worker: %d, total sent: %d, tps: %f, max_latency: %d, min_latency: %d, average_latency: %d", my_id, total_requests_sent, (delta_requests_sent*1000)/stats_duration_in_ms, max_latency, min_latency, avg_latency)
+        print (output)
 
         max_latency = 0
         min_latency = 65536
