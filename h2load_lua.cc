@@ -754,6 +754,7 @@ int lua_resume_wrapper(lua_State *L, int nargs)
           luaL_unref(parent_lua_state, LUA_REGISTRYINDEX, lua_group_config.coroutine_references[L]);
           lua_group_config.coroutine_references.erase(L);
           lua_gc(parent_lua_state, LUA_GCCOLLECT, 0);
+          lua_group_config.lua_state_data[worker_index].erase(L);
       }
     }
     return retCode;
