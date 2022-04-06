@@ -168,7 +168,7 @@ public:
         verbose(false),
         skt_recv_buffer_size(4 * 1024 * 1024),
         skt_send_buffer_size(4 * 1024 * 1024),
-        max_concurrent_streams(256),
+        max_concurrent_streams(2048),
         window_bits(30),
         connection_window_bits(30),
         header_table_size(4096),

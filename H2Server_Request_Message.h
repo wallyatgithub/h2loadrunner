@@ -18,10 +18,11 @@ class H2Server_Request_Message
 public:
     std::multimap<std::string, std::string> headers;
     rapidjson::Document  json_payload;
+    const std::string* json_payload_string;
     std::map<size_t, bool> match_result;
     H2Server_Request_Message(const nghttp2::asio_http2::server::request& req)
     {
-        json_payload.Parse(req.unmutable_payload().c_str());
+        json_payload_string = &(req.unmutable_payload());
         std::string path_header_name = ":path";
         std::string header_val = req.uri().path;
         if (req.uri().raw_query.size())
@@ -45,6 +46,14 @@ public:
             {
                 std::cout<<"header: "<<header.first<<", value: "<<header.second<<std::endl;
             }
+        }
+    }
+    void decode_json_if_not_yet()
+    {
+        if (json_payload_string)
+        {
+            json_payload.Parse(json_payload_string->c_str());
+            json_payload_string == nullptr;
         }
     }
 };

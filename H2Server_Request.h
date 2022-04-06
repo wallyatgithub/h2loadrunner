@@ -141,6 +141,7 @@ public:
             }
             else
             {
+                request.decode_json_if_not_yet();
                 matched = match(request.json_payload);
             }
             request.match_result[unique_id] = matched;
@@ -183,11 +184,6 @@ public:
 
 };
 
-using Request_Processor = std::function<bool(boost::asio::io_service*,
-                                             uint64_t,
-                                             int32_t,
-                                             const std::multimap<std::string, std::string>& req_headers,
-                                             const std::string&)>;
 
 class H2Server_Request
 {
@@ -195,7 +191,6 @@ public:
     std::set<Match_Rule> match_rules;
     std::string name;
     size_t request_index;
-    Request_Processor request_processor;
 
     H2Server_Request(const Schema_Request_Match& request_match, size_t index)
     {
@@ -210,21 +205,6 @@ public:
         }
         name = request_match.name;
         request_index = index;
-    }
-
-    void set_request_processor(Request_Processor req_proc)
-    {
-        request_processor = req_proc;
-    }
-
-    void clear_request_processor()
-    {
-        auto dummy = std::move(request_processor);
-    }
-
-    const Request_Processor& get_request_processor() const
-    {
-        return request_processor;
     }
 
     bool match(H2Server_Request_Message& request) const

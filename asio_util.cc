@@ -131,18 +131,16 @@ void update_response_with_lua(const H2Server_Response* matched_response,
                               std::string& req_payload,
                               std::map<std::string, std::string>& resp_headers,
                               std::string& resp_payload,
+                              boost::asio::io_service* ios,
                               uint64_t handler_id,
                               int32_t stream_id,
                               uint64_t& matchedResponsesSent)
 {
     matched_response->update_response_with_lua(req_headers, req_payload, resp_headers, resp_payload);
-
-    auto io_service = nghttp2::asio_http2::server::http2_handler::find_io_service(handler_id);
-    if (!io_service)
+    if (!ios)
     {
         return;
     }
-
     auto status_code = matched_response->status_code;
     if (resp_headers.count(status))
     {
@@ -157,7 +155,7 @@ void update_response_with_lua(const H2Server_Response* matched_response,
                                            stream_id,
                                            std::ref(matchedResponsesSent)
                                           );
-    io_service->post(send_response_routine);
+    ios->post(send_response_routine);
 };
 
 std::vector<H2Server>& get_H2Server_match_Instances()
@@ -229,8 +227,9 @@ void asio_svr_entry(const std::string& config_in_json, H2Server_Config_Schema& c
         nghttp2::asio_http2::server::http2 server;
 
         std::atomic<uint64_t> threadIndex(0);
-        std::vector<uint64_t> totalReqsReceived(num_threads, 0);
-        std::vector<std::vector<std::vector<ResponseStatistics>>> respStats;
+        static std::vector<uint64_t> totalReqsReceived(num_threads, 0);
+        static std::vector<uint64_t> totalUnMatchedResponses(num_threads, 0);
+        static std::vector<std::vector<std::vector<ResponseStatistics>>> respStats;
 
         for (size_t req_idx = 0; req_idx < config_schema.service.size(); req_idx++)
         {
@@ -242,8 +241,7 @@ void asio_svr_entry(const std::string& config_in_json, H2Server_Config_Schema& c
         server.num_threads(num_threads);
 
         server.handle("/", [&work_offload_io_service, &config_schema,
-                            &respStats, &threadIndex,
-                            &totalReqsReceived
+                            &threadIndex
                            ]
                             (const nghttp2::asio_http2::server::request& req,
                              const nghttp2::asio_http2::server::response& res,
@@ -261,6 +259,7 @@ void asio_svr_entry(const std::string& config_in_json, H2Server_Config_Schema& c
             };
             static thread_local auto store_io_service_ret_code = store_io_service_to_H2Server();
             static thread_local auto& reqReceived = totalReqsReceived[thread_index];
+            static thread_local auto& unMatchedresponses = totalUnMatchedResponses[thread_index];
             auto init_strand = [&work_offload_io_service]()
             {
                 std::map<const H2Server_Response*, boost::asio::io_service::strand> strands;
@@ -284,9 +283,9 @@ void asio_svr_entry(const std::string& config_in_json, H2Server_Config_Schema& c
             if (matched_request_index > -1)
             {
                 req_index = matched_request_index;
-                if (matched_service->first.get_request_processor())
+                if (matched_service->second.get_request_processor())
                 {
-                    matched_service->first.get_request_processor()(h2server.io_service,
+                    matched_service->second.get_request_processor()(h2server.io_service,
                                                                    handler_id,
                                                                    stream_id,
                                                                    msg.headers,
@@ -315,6 +314,7 @@ void asio_svr_entry(const std::string& config_in_json, H2Server_Config_Schema& c
                                                                 req.unmutable_payload(),
                                                                 response_headers,
                                                                 response_payload,
+                                                                h2server.io_service,
                                                                 handler_id,
                                                                 stream_id,
                                                                 std::ref(respStats[req_index][resp_index][thread_index].response_sent));
@@ -338,13 +338,14 @@ void asio_svr_entry(const std::string& config_in_json, H2Server_Config_Schema& c
             }
             else
             {
+                unMatchedresponses++;
                 res.write_head(404, {{"reason", {"no match found"}}});
                 res.end("no matched entry found\n");
             }
         });
 
         std::cout << "addr: " << addr << ", port: " << port << std::endl;
-        start_statistic_thread(totalReqsReceived, respStats, config_schema);
+        start_statistic_thread(totalReqsReceived, respStats, totalUnMatchedResponses, config_schema);
         if (config_schema.cert_file.size() && config_schema.private_key_file.size())
         {
             if (config_schema.verbose)
@@ -395,9 +396,10 @@ void asio_svr_entry(const std::string& config_in_json, H2Server_Config_Schema& c
 
 void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
                             std::vector<std::vector<std::vector<ResponseStatistics>>>& respStats,
+                            std::vector<uint64_t>& totalUnMatchedResponses,
                             H2Server_Config_Schema& config_schema)
 {
-    auto stats_func = [&totalReqsReceived, &respStats, &config_schema]()
+    auto stats_func = [&totalReqsReceived, &respStats, &totalUnMatchedResponses, &config_schema]()
     {
         std::vector<std::vector<uint64_t>> resp_sent_till_now;
         std::vector<std::vector<uint64_t>> resp_throttled_till_now;
@@ -409,6 +411,7 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
         uint64_t total_req_received_till_now = 0;
         uint64_t total_resp_sent_till_now = 0;
         uint64_t total_resp_throttled_till_now = 0;
+        uint64_t total_unmatched_responses_till_now = 0;
         uint64_t counter = 0;
 
         auto req_name_width = get_req_name_max_size(config_schema);
@@ -433,7 +436,10 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
             auto total_resp_sent_till_last = total_resp_sent_till_now;
             auto total_resp_throttled_till_last = total_resp_throttled_till_now;
 
+            auto total_unmatched_responses_till_last = total_unmatched_responses_till_now;
+
             total_req_received_till_now = std::accumulate(totalReqsReceived.begin(), totalReqsReceived.end(), 0);
+            total_unmatched_responses_till_now = std::accumulate(totalUnMatchedResponses.begin(), totalUnMatchedResponses.end(), 0);
             total_resp_sent_till_now = 0;
             total_resp_throttled_till_now = 0;
 
@@ -504,10 +510,9 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
 
             SStream <<     std::setw(req_name_width) << "UNMATCHED"
                     << "," << std::setw(resp_name_width) << "---"
-                    << "," << std::setw(req_name_width) << total_req_received_till_now - total_resp_sent_till_now -
-                    total_resp_throttled_till_now
+                    << "," << std::setw(req_name_width) << total_unmatched_responses_till_now
                     << "," << std::setw(req_name_width) << "---"
-                    << "," << std::setw(req_name_width) << ((delta_Req_Received - delta_Resp)*std::milli::den) / period_duration
+                    << "," << std::setw(req_name_width) << ((total_unmatched_responses_till_now - total_unmatched_responses_till_last)*std::milli::den) / period_duration
                     << "," << std::setw(req_name_width) << "---"
                     << std::endl;
             std::cout << SStream.str();
@@ -519,3 +524,19 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
     std::thread stats_thread(stats_func);
     stats_thread.detach();
 }
+
+
+void install_request_callback(const std::string& name, Request_Processor request_processor)
+{
+    for (auto& h2server: get_H2Server_match_Instances())
+    {
+        for (auto& service: h2server.services)
+        {
+            if (service.first.name == name)
+            {
+                service.second.set_request_processor(request_processor);
+            }
+        }
+    }
+}
+

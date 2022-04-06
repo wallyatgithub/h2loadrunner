@@ -37,8 +37,8 @@
         "type":"boolean"
     },
     "max-concurrent-streams":{
-      "description":"Value of SETTINGS_MAX_CONCURRENT_STREAMS in setting frame; default: 256",
-      "default": 256,
+      "description":"Value of SETTINGS_MAX_CONCURRENT_STREAMS in setting frame; default: 2048",
+      "default": 2048,
       "type":"integer"
     },
     "header-table-size":

@@ -7,59 +7,82 @@
 #include "H2Server_Request.h"
 #include "H2Server_Request_Message.h"
 
+using Request_Processor = std::function<bool(boost::asio::io_service*,
+                                             uint64_t,
+                                             int32_t,
+                                             const std::multimap<std::string, std::string>& req_headers,
+                                             const std::string&)>;
+
 class H2Server_Response_Group
 {
-  public:
-      std::vector<H2Server_Response> responses;
+public:
+    std::vector<H2Server_Response> responses;
 
-      void init_distribution_map_and_total_weight(const std::vector<Schema_Response_To_Return>& responses_schema)
+    void init_distribution_map_and_total_weight(const std::vector<Schema_Response_To_Return>& responses_schema)
+    {
+      uint64_t totalWeight = 0;
+      for (size_t index = 0; index < responses.size(); index++)
       {
-          uint64_t totalWeight = 0;
-          for (size_t index = 0; index < responses.size(); index++)
+          if (responses[index].weight)
           {
-              if (responses[index].weight)
-              {
-                  auto& resp = responses[index];
-                  totalWeight += responses[index].weight;
-                  distribution_map[totalWeight] = index;
-              }
+              auto& resp = responses[index];
+              totalWeight += responses[index].weight;
+              distribution_map[totalWeight] = index;
           }
-          total_weight = distribution_map.size() ? distribution_map.rbegin()->first : 1;
       }
-      H2Server_Response_Group(const std::vector<Schema_Response_To_Return>& responses_schema)
-      :generator((std::random_device())())
+      total_weight = distribution_map.size() ? distribution_map.rbegin()->first : 1;
+    }
+    H2Server_Response_Group(const std::vector<Schema_Response_To_Return>& responses_schema)
+    :generator((std::random_device())())
+    {
+      for (auto i = 0; i < responses_schema.size(); i++)
       {
-          for (auto i = 0; i < responses_schema.size(); i++)
-          {
-              responses.emplace_back(H2Server_Response(responses_schema[i], i));
-          }
+          responses.emplace_back(H2Server_Response(responses_schema[i], i));
+      }
 
-          init_distribution_map_and_total_weight(responses_schema);
-          distr.param(std::uniform_int_distribution<>::param_type(0, total_weight - 1));
-      }
-      size_t select_response()
+      init_distribution_map_and_total_weight(responses_schema);
+      distr.param(std::uniform_int_distribution<>::param_type(0, total_weight - 1));
+    }
+    size_t select_response()
+    {
+      size_t response_index = distribution_map.size() ? distribution_map.begin()->second : 0;
+      if (distribution_map.size() > 1)
       {
-          size_t response_index = distribution_map.size() ? distribution_map.begin()->second : 0;
-          if (distribution_map.size() > 1)
+          uint64_t randomNumber = distr(generator);
+          auto iter = distribution_map.upper_bound(randomNumber);
+          if (iter != distribution_map.end())
           {
-              uint64_t randomNumber = distr(generator);
-              auto iter = distribution_map.upper_bound(randomNumber);
-              if (iter != distribution_map.end())
-              {
-                  response_index = iter->second;
-              }
-              if (debug_mode)
-              {
-                  std::cout<<"randomNumber: " << randomNumber << ", response index: "<<response_index<<std::endl;
-              }
+              response_index = iter->second;
           }
-          return response_index;
+          if (debug_mode)
+          {
+              std::cout<<"randomNumber: " << randomNumber << ", response index: "<<response_index<<std::endl;
+          }
       }
+      return response_index;
+    }
+
+    void set_request_processor(Request_Processor req_proc)
+    {
+        request_processor = req_proc;
+    }
+
+    void clear_request_processor()
+    {
+        auto dummy = std::move(request_processor);
+    }
+
+    const Request_Processor& get_request_processor() const
+    {
+        return request_processor;
+    }
+
 private:
     std::map<uint64_t, size_t> distribution_map;
     uint64_t total_weight;
     std::mt19937_64 generator;
     std::uniform_int_distribution<int>  distr;
+    Request_Processor request_processor;
 };
 
 class H2Server_Service

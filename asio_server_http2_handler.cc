@@ -245,10 +245,9 @@ int on_frame_not_send_callback(nghttp2_session *session,
 }
 } // namespace
 
-std::atomic<uint64_t> http2_handler::handler_unique_id(0);
-std::map<uint64_t, http2_handler*> http2_handler::alive_handlers;
-std::mutex http2_handler::handler_mutex;
-std::map<uint64_t, boost::asio::io_service*> http2_handler::handler_io_service;
+thread_local std::atomic<uint64_t> http2_handler::handler_unique_id(0);
+thread_local std::map<uint64_t, http2_handler*> http2_handler::alive_handlers;
+thread_local std::map<uint64_t, boost::asio::io_service*> http2_handler::handler_io_service;
 
 
 
@@ -268,7 +267,6 @@ http2_handler::http2_handler(boost::asio::io_service &io_service,
       formatted_date_(util::http_date(tstamp_cached_)),
       this_handler_id(handler_unique_id++)
 {
-      std::lock_guard<std::mutex> guard(handler_mutex);
       alive_handlers[this_handler_id] = this;
       handler_io_service[this_handler_id] = &io_service_;
 }
@@ -280,14 +278,12 @@ http2_handler::~http2_handler() {
   }
 
   nghttp2_session_del(session_);
-  std::lock_guard<std::mutex> guard(handler_mutex);
   alive_handlers.erase(this_handler_id);
   handler_io_service.erase(this_handler_id);
 }
 
 http2_handler* http2_handler::find_http2_handler(uint64_t handler_id)
 {
-    std::lock_guard<std::mutex> guard(handler_mutex);
     auto it = alive_handlers.find(handler_id);
     if (it != alive_handlers.end())
     {
@@ -298,7 +294,6 @@ http2_handler* http2_handler::find_http2_handler(uint64_t handler_id)
 
 boost::asio::io_service* http2_handler::find_io_service(uint64_t handler_id)
 {
-    std::lock_guard<std::mutex> guard(handler_mutex);
     auto it = handler_io_service.find(handler_id);
     if (it != handler_io_service.end())
     {
