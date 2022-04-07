@@ -26,6 +26,7 @@
 #define ASIO_HTTP2_SERVER_H
 
 #include <nghttp2/asio_http2.h>
+#include "H2Server_Config_Schema.h"
 
 namespace nghttp2 {
 
@@ -135,7 +136,7 @@ class http2_impl;
 
 class http2 {
 public:
-  http2();
+  http2(const H2Server_Config_Schema& conf);
   ~http2();
 
   http2(http2 &&other) noexcept;

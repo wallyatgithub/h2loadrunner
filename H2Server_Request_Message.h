@@ -11,8 +11,6 @@
 #include "H2Server_Config_Schema.h"
 
 
-using namespace rapidjson;
-
 class H2Server_Request_Message
 {
 public:

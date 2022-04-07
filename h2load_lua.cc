@@ -28,6 +28,8 @@ extern "C" {
 
 #include "asio_worker.h"
 #include "h2load_lua.h"
+#include "asio_util.h"
+
 
 const static std::string worker_index_str = "worker_index";
 const static std::string group_index_str = "group_index";
@@ -760,4 +762,35 @@ int lua_resume_wrapper(lua_State *L, int nargs)
     return retCode;
 }
 
+H2Server_Config_Schema config_schema;
+
+int setup_server(lua_State *L)
+{
+    std::string config_file_name;
+    int top = lua_gettop(L);
+    for (int i = 0; i < top; i++)
+    {
+        switch (lua_type(L, -1))
+        {
+            case LUA_TSTRING:
+            {
+                size_t len;
+                const char* str = lua_tolstring(L, -1, &len);
+                config_file_name.assign(str, len);
+                break;
+            }
+            default:
+            {
+                std::cerr << __FUNCTION__<<": invalid parameter passed in" << std::endl;
+                break;
+            }
+        }
+        lua_pop(L, 1);
+    }
+    lua_settop(L, 0);
+
+    start_server(config_file_name, false);
+
+    return 0;
+}
 

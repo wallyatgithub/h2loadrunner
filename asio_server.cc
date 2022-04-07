@@ -47,10 +47,13 @@ namespace server {
 
 server::server(std::size_t io_service_pool_size,
                const boost::posix_time::time_duration &tls_handshake_timeout,
-               const boost::posix_time::time_duration &read_timeout)
+               const boost::posix_time::time_duration &read_timeout,
+               const H2Server_Config_Schema& conf)
     : io_service_pool_(io_service_pool_size),
       tls_handshake_timeout_(tls_handshake_timeout),
-      read_timeout_(read_timeout) {}
+      read_timeout_(read_timeout),
+      config(conf)
+      {}
 
 boost::system::error_code
 server::listen_and_serve(boost::system::error_code &ec,
@@ -141,14 +144,15 @@ void server::start_accept(boost::asio::ssl::context &tls_context,
         if (!e) {
           new_connection->socket().lowest_layer().set_option(
               tcp::no_delay(true));
-          boost::asio::socket_base::receive_buffer_size rcv_option(config_schema.skt_recv_buffer_size);
+          boost::asio::socket_base::receive_buffer_size rcv_option(config.skt_recv_buffer_size);
           new_connection->socket().lowest_layer().set_option(rcv_option);
-          boost::asio::socket_base::receive_buffer_size snd_option(config_schema.skt_send_buffer_size);
+          boost::asio::socket_base::receive_buffer_size snd_option(config.skt_send_buffer_size);
           new_connection->socket().lowest_layer().set_option(snd_option);
           new_connection->start_tls_handshake_deadline();
+          auto& conf = config;
           new_connection->socket().async_handshake(
               boost::asio::ssl::stream_base::server,
-              [new_connection](const boost::system::error_code &e) {
+              [new_connection, &conf](const boost::system::error_code &e) {
                 if (e) {
                   new_connection->stop();
                   return;
@@ -159,7 +163,7 @@ void server::start_accept(boost::asio::ssl::context &tls_context,
                   return;
                 }
 
-                new_connection->start();
+                new_connection->start(conf);
               });
         }
 
@@ -182,12 +186,12 @@ void server::start_accept(tcp::acceptor &acceptor, serve_mux &mux) {
                                     const boost::system::error_code &e) {
         if (!e) {
           new_connection->socket().set_option(tcp::no_delay(true));
-          boost::asio::socket_base::receive_buffer_size rcv_option(config_schema.skt_recv_buffer_size);
+          boost::asio::socket_base::receive_buffer_size rcv_option(config.skt_recv_buffer_size);
           new_connection->socket().set_option(rcv_option);
-          boost::asio::socket_base::receive_buffer_size snd_option(config_schema.skt_send_buffer_size);
+          boost::asio::socket_base::receive_buffer_size snd_option(config.skt_send_buffer_size);
           new_connection->socket().set_option(snd_option);
           new_connection->start_read_deadline();
-          new_connection->start();
+          new_connection->start(config);
         }
         if (acceptor.is_open()) {
           start_accept(acceptor, mux);

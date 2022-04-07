@@ -56,7 +56,8 @@ class http2_handler : public std::enable_shared_from_this<http2_handler> {
 public:
   http2_handler(boost::asio::io_service &io_service,
                 boost::asio::ip::tcp::endpoint ep, connection_write writefun,
-                serve_mux &mux);
+                serve_mux &mux,
+                const H2Server_Config_Schema& conf);
 
   ~http2_handler();
 
@@ -174,6 +175,7 @@ private:
   thread_local static std::map<uint64_t, http2_handler*> alive_handlers;
   thread_local static std::map<uint64_t, boost::asio::io_service*> handler_io_service;
   uint64_t this_handler_id;
+  const H2Server_Config_Schema& config;
 };
 
 } // namespace server

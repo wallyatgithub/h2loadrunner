@@ -826,29 +826,6 @@ void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
     }
 }
 
-std::vector<std::string> tokenize_string(const std::string& source, const std::string& delimeter)
-{
-    std::vector<std::string> retVec;
-    size_t start = 0;
-    size_t delimeter_len = delimeter.length();
-    if (!delimeter.empty())
-    {
-        size_t pos = source.find(delimeter, start);
-        while (pos != std::string::npos)
-        {
-            retVec.emplace_back(source.substr(start, (pos - start)));
-            start = pos + delimeter_len;
-            pos = source.find(delimeter, start);
-        }
-        retVec.emplace_back(source.substr(start, std::string::npos));
-    }
-    else
-    {
-        retVec.emplace_back(source);
-    }
-    return retVec;
-}
-
 void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config)
 {
     for (auto& scenario : config.json_config_schema.scenarios)
@@ -1537,8 +1514,9 @@ void integrated_http2_server(std::stringstream& dataStream, h2load::Config& conf
 {
     uint32_t serverPort = config.json_config_schema.builtin_server_port;
     std::cerr << "builtin server listening at port: " << serverPort << std::endl;
+    H2Server_Config_Schema config_schema;
 
-    nghttp2::asio_http2::server::http2 server;
+    nghttp2::asio_http2::server::http2 server(config_schema);
     boost::system::error_code ec;
     server.num_threads(1);
     server.handle("/stat", [&](const nghttp2::asio_http2::server::request & req,

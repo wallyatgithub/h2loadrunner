@@ -50,6 +50,7 @@
 #include "asio_server_serve_mux.h"
 #include "util.h"
 #include "template.h"
+#include "H2Server_Config_Schema.h"
 
 #if BOOST_VERSION >= 107000
 #  define GET_IO_SERVICE(s)                                                    \
@@ -85,14 +86,14 @@ public:
         stopped_(false) {}
 
   /// Start the first asynchronous operation for the connection.
-  void start() {
-    auto start_in_own_thread = [this]()
+  void start(const H2Server_Config_Schema& conf) {
+    auto start_in_own_thread = [this, &conf]()
     {
         boost::system::error_code ec;
 
         handler_ = std::make_shared<http2_handler>(
             GET_IO_SERVICE(socket_), socket_.lowest_layer().remote_endpoint(ec),
-            [this]() { do_write(); }, mux_);
+            [this]() { do_write(); }, mux_, conf);
         if (handler_->start() != 0) {
           stop();
           return;

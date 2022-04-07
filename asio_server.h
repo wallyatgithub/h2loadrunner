@@ -48,6 +48,7 @@
 #include <nghttp2/asio_http2_server.h>
 
 #include "asio_io_service_pool.h"
+#include "H2Server_Config_Schema.h"
 
 namespace nghttp2 {
 
@@ -65,7 +66,8 @@ class server : private boost::noncopyable {
 public:
   explicit server(std::size_t io_service_pool_size,
                   const boost::posix_time::time_duration &tls_handshake_timeout,
-                  const boost::posix_time::time_duration &read_timeout);
+                  const boost::posix_time::time_duration &read_timeout,
+                  const H2Server_Config_Schema& conf);
 
   boost::system::error_code
   listen_and_serve(boost::system::error_code &ec,
@@ -106,6 +108,7 @@ private:
 
   boost::posix_time::time_duration tls_handshake_timeout_;
   boost::posix_time::time_duration read_timeout_;
+  const H2Server_Config_Schema& config;
 };
 
 } // namespace server

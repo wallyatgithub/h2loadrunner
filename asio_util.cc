@@ -2,7 +2,6 @@
 
 
 bool debug_mode = false;
-H2Server_Config_Schema config_schema;
 
 
 void close_stream(uint64_t& handler_id, int32_t stream_id)
@@ -164,7 +163,7 @@ std::vector<H2Server>& get_H2Server_match_Instances()
     return H2Server_match_instances;
 }
 
-void init_H2Server_match_Instances(std::size_t number_of_instances, H2Server_Config_Schema& config_schema)
+void init_H2Server_match_Instances(std::size_t number_of_instances, const H2Server_Config_Schema& config_schema)
 {
     auto init_func = [number_of_instances, &config_schema]()
     {
@@ -177,29 +176,13 @@ void init_H2Server_match_Instances(std::size_t number_of_instances, H2Server_Con
     static auto ret_code = init_func();
 }
 
-void asio_svr_entry(const std::string& config_in_json, H2Server_Config_Schema& config_schema)
+void asio_svr_entry(const H2Server_Config_Schema& config_schema,
+                         std::vector<uint64_t>& totalReqsReceived,
+                         std::vector<uint64_t>& totalUnMatchedResponses,
+                         std::vector<std::vector<std::vector<ResponseStatistics>>>& respStats)
 {
     try
     {
-        staticjson::ParseStatus result;
-        if (!staticjson::from_json_string(config_in_json.c_str(), &config_schema, &result))
-        {
-            std::cout << "error reading config file:" << result.description() << std::endl;
-            exit(1);
-        }
-
-        if (config_schema.verbose)
-        {
-            std::cerr << "Configuration dump:" << std::endl << staticjson::to_pretty_json_string(config_schema)
-                      << std::endl;
-        }
-
-        H2Server h2server(config_schema); // sanity check to fail early
-
-        if (config_schema.verbose)
-        {
-            debug_mode = true;
-        }
 
         boost::asio::io_service work_offload_io_service;
         boost::thread_group work_offload_thread_pool;
@@ -209,39 +192,21 @@ void asio_svr_entry(const std::string& config_in_json, H2Server_Config_Schema& c
             work_offload_thread_pool.create_thread(boost::bind(&boost::asio::io_service::run, &work_offload_io_service));
         }
 
-        boost::system::error_code ec;
-
-        std::string addr = config_schema.address;
-        std::string port = std::to_string(config_schema.port);
         std::size_t num_threads = config_schema.threads;
-        if (!num_threads)
-        {
-            num_threads = std::thread::hardware_concurrency();
-        }
-        if (!num_threads)
-        {
-            num_threads = 1;
-        }
+
         init_H2Server_match_Instances(num_threads, config_schema);
 
-        nghttp2::asio_http2::server::http2 server;
+        nghttp2::asio_http2::server::http2 server(config_schema);
 
         std::atomic<uint64_t> threadIndex(0);
-        static std::vector<uint64_t> totalReqsReceived(num_threads, 0);
-        static std::vector<uint64_t> totalUnMatchedResponses(num_threads, 0);
-        static std::vector<std::vector<std::vector<ResponseStatistics>>> respStats;
-
-        for (size_t req_idx = 0; req_idx < config_schema.service.size(); req_idx++)
-        {
-            std::vector<std::vector<ResponseStatistics>> perServiceStats(config_schema.service[req_idx].responses.size(),
-                                                                         std::vector<ResponseStatistics>(num_threads));
-            respStats.push_back(perServiceStats);
-        }
 
         server.num_threads(num_threads);
 
         server.handle("/", [&work_offload_io_service, &config_schema,
-                            &threadIndex
+                            &threadIndex,
+                            &totalReqsReceived,
+                            &totalUnMatchedResponses,
+                            &respStats
                            ]
                             (const nghttp2::asio_http2::server::request& req,
                              const nghttp2::asio_http2::server::response& res,
@@ -344,8 +309,11 @@ void asio_svr_entry(const std::string& config_in_json, H2Server_Config_Schema& c
             }
         });
 
+        std::string addr = config_schema.address;
+        std::string port = std::to_string(config_schema.port);
         std::cout << "addr: " << addr << ", port: " << port << std::endl;
-        start_statistic_thread(totalReqsReceived, respStats, totalUnMatchedResponses, config_schema);
+
+        boost::system::error_code ec;
         if (config_schema.cert_file.size() && config_schema.private_key_file.size())
         {
             if (config_schema.verbose)
@@ -356,7 +324,8 @@ void asio_svr_entry(const std::string& config_in_json, H2Server_Config_Schema& c
             boost::asio::ssl::context tls(boost::asio::ssl::context::sslv23);
             tls.use_private_key_file(config_schema.private_key_file, boost::asio::ssl::context::pem);
             tls.use_certificate_chain_file(config_schema.cert_file);
-            if (config_schema.enable_mTLS)
+            bool enable_mTLS = config_schema.enable_mTLS;
+            if (enable_mTLS)
             {
                 if (config_schema.verbose)
                 {
@@ -369,11 +338,11 @@ void asio_svr_entry(const std::string& config_in_json, H2Server_Config_Schema& c
                 else
                 {
                     std::cerr << "mTLS enabled, but no CA cert file given, mTLS is thus disabled" << std::endl;
-                    config_schema.enable_mTLS = false;
+                    enable_mTLS = false;
                 }
             }
 
-            nghttp2::asio_http2::server::configure_tls_context_easy(ec, tls, config_schema.enable_mTLS);
+            nghttp2::asio_http2::server::configure_tls_context_easy(ec, tls, enable_mTLS);
 
             if (server.listen_and_serve(ec, tls, addr, port))
             {
@@ -525,6 +494,54 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
     stats_thread.detach();
 }
 
+void start_server(const std::string& config_file_name, bool start_stats_thread)
+{
+    std::ifstream buffer(config_file_name);
+    std::string jsonStr((std::istreambuf_iterator<char>(buffer)), std::istreambuf_iterator<char>());
+
+    staticjson::ParseStatus result;
+    if (!staticjson::from_json_string(jsonStr.c_str(), &config_schema, &result))
+    {
+        std::cout << "error reading config file:" << result.description() << std::endl;
+        exit(1);
+    }
+
+    if (config_schema.verbose)
+    {
+        std::cerr << "Configuration dump:" << std::endl << staticjson::to_pretty_json_string(config_schema)
+                  << std::endl;
+        debug_mode = true;
+    }
+
+    H2Server h2server(config_schema); // sanity check to fail early
+
+    std::size_t num_threads = config_schema.threads;
+    if (!num_threads)
+    {
+        num_threads = std::thread::hardware_concurrency();
+    }
+    if (!num_threads)
+    {
+        num_threads = 1;
+    }
+    config_schema.threads = num_threads;
+
+    static std::vector<uint64_t> totalReqsReceived(num_threads, 0);
+    static std::vector<uint64_t> totalUnMatchedResponses(num_threads, 0);
+    static std::vector<std::vector<std::vector<ResponseStatistics>>> respStats;
+    for (size_t req_idx = 0; req_idx < config_schema.service.size(); req_idx++)
+    {
+        std::vector<std::vector<ResponseStatistics>> perServiceStats(config_schema.service[req_idx].responses.size(),
+                                                                     std::vector<ResponseStatistics>(num_threads));
+        respStats.push_back(perServiceStats);
+    }
+    if (start_stats_thread)
+    {
+        start_statistic_thread(totalReqsReceived, respStats, totalUnMatchedResponses, config_schema);
+    }
+
+    asio_svr_entry(config_schema, totalReqsReceived, totalUnMatchedResponses, respStats);
+}
 
 void install_request_callback(const std::string& name, Request_Processor request_processor)
 {

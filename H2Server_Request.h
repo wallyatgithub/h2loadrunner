@@ -15,8 +15,24 @@
 #include "H2Server_Response.h"
 #include "H2Server_Request_Message.h"
 
-
-using namespace rapidjson;
+struct ci_less
+{
+    // case-independent (ci) compare_less binary function
+    struct nocase_compare
+    {
+        bool operator()(const unsigned char& c1, const unsigned char& c2) const
+        {
+            return tolower(c1) < tolower(c2);
+        }
+    };
+    bool operator()(const std::string& s1, const std::string& s2) const
+    {
+        return std::lexicographical_compare
+               (s1.begin(), s1.end(),     // source range
+                s2.begin(), s2.end(),     // dest range
+                nocase_compare());   // comparison
+    }
+};
 
 class Match_Rule
 {
@@ -146,6 +162,33 @@ public:
             }
             request.match_result[unique_id] = matched;
             return matched;
+        }
+    }
+
+    bool match_header(const std::map<std::string, std::string, ci_less>& response_headers) const
+    {
+        auto it = response_headers.find(header_name);
+        if (it != response_headers.end())
+        {
+            return match(it->second, match_type, object);
+        }
+        return false;
+    }
+
+    bool match_json_doc(const rapidjson::Document& d) const
+    {
+        return match(getValueFromJsonPtr(d, json_pointer), match_type, object);
+    }
+
+    bool match(const std::map<std::string, std::string, ci_less>& response_headers, const rapidjson::Document& d)
+    {
+        if (header_name.size())
+        {
+            return match_header(response_headers);
+        }
+        else
+        {
+            return match_json_doc(d);
         }
     }
 

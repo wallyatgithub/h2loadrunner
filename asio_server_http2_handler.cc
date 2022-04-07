@@ -253,7 +253,8 @@ thread_local std::map<uint64_t, boost::asio::io_service*> http2_handler::handler
 
 http2_handler::http2_handler(boost::asio::io_service &io_service,
                              boost::asio::ip::tcp::endpoint ep,
-                             connection_write writefun, serve_mux &mux)
+                             connection_write writefun, serve_mux &mux,
+                             const H2Server_Config_Schema& conf)
     : writefun_(writefun),
       mux_(mux),
       io_service_(io_service),
@@ -265,7 +266,8 @@ http2_handler::http2_handler(boost::asio::io_service &io_service,
       write_signaled_(false),
       tstamp_cached_(time(nullptr)),
       formatted_date_(util::http_date(tstamp_cached_)),
-      this_handler_id(handler_unique_id++)
+      this_handler_id(handler_unique_id++),
+      config(conf)
 {
       alive_handlers[this_handler_id] = this;
       handler_io_service[this_handler_id] = &io_service_;
@@ -346,10 +348,10 @@ int http2_handler::start() {
 
   rv = nghttp2_option_new(&opt);
   assert(rv == 0);
-  if (config_schema.encoder_header_table_size != NGHTTP2_DEFAULT_HEADER_TABLE_SIZE)
+  if (config.encoder_header_table_size != NGHTTP2_DEFAULT_HEADER_TABLE_SIZE)
   {
       nghttp2_option_set_max_deflate_dynamic_table_size(
-          opt, config_schema.encoder_header_table_size);
+          opt, config.encoder_header_table_size);
   }
 
   rv = nghttp2_session_server_new2(&session_, callbacks, this, opt);
@@ -360,27 +362,27 @@ int http2_handler::start() {
     return -1;
   }
 
-  nghttp2_settings_entry ent{NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, config_schema.max_concurrent_streams};
+  nghttp2_settings_entry ent{NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, config.max_concurrent_streams};
 
   std::array<nghttp2_settings_entry, 3> iv;
   size_t niv = 2;
   iv[0].settings_id = NGHTTP2_SETTINGS_INITIAL_WINDOW_SIZE;
-  iv[0].value = (1 << config_schema.window_bits) - 1;
+  iv[0].value = (1 << config.window_bits) - 1;
 
   iv[1].settings_id = NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS;
-  iv[1].value = config_schema.max_concurrent_streams;
+  iv[1].value = config.max_concurrent_streams;
 
-  if (config_schema.header_table_size != NGHTTP2_DEFAULT_HEADER_TABLE_SIZE)
+  if (config.header_table_size != NGHTTP2_DEFAULT_HEADER_TABLE_SIZE)
   {
       iv[niv].settings_id = NGHTTP2_SETTINGS_HEADER_TABLE_SIZE;
-      iv[niv].value = config_schema.header_table_size;
+      iv[niv].value = config.header_table_size;
       ++niv;
   }
 
   nghttp2_submit_settings(session_, NGHTTP2_FLAG_NONE, iv.data(), niv);
 
   nghttp2_session_set_local_window_size(session_, NGHTTP2_FLAG_NONE, 0,
-                                        (1 << config_schema.connection_window_bits) - 1);
+                                        (1 << config.connection_window_bits) - 1);
 
   return 0;
 }

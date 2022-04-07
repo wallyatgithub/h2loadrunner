@@ -30,6 +30,7 @@
 #include <nghttp2/asio_http2_server.h>
 
 #include "asio_server_serve_mux.h"
+#include "H2Server_Config_Schema.h"
 
 namespace nghttp2 {
 
@@ -41,7 +42,7 @@ class server;
 
 class http2_impl {
 public:
-  http2_impl();
+  http2_impl(const H2Server_Config_Schema& conf);
   boost::system::error_code listen_and_serve(
       boost::system::error_code &ec, boost::asio::ssl::context *tls_context,
       const std::string &address, const std::string &port, bool asynchronous);
@@ -63,6 +64,7 @@ private:
   serve_mux mux_;
   boost::posix_time::time_duration tls_handshake_timeout_;
   boost::posix_time::time_duration read_timeout_;
+  const H2Server_Config_Schema& config;
 };
 
 } // namespace server

@@ -37,17 +37,18 @@ namespace asio_http2 {
 
 namespace server {
 
-http2_impl::http2_impl()
+http2_impl::http2_impl(const H2Server_Config_Schema& conf)
     : num_threads_(1),
       backlog_(-1),
       tls_handshake_timeout_(boost::posix_time::seconds(60)),
-      read_timeout_(boost::posix_time::seconds(60)) {}
+      read_timeout_(boost::posix_time::seconds(60)),
+      config(conf){}
 
 boost::system::error_code http2_impl::listen_and_serve(
     boost::system::error_code &ec, boost::asio::ssl::context *tls_context,
     const std::string &address, const std::string &port, bool asynchronous) {
   server_.reset(
-      new server(num_threads_, tls_handshake_timeout_, read_timeout_));
+      new server(num_threads_, tls_handshake_timeout_, read_timeout_, config));
   return server_->listen_and_serve(ec, tls_context, address, port, backlog_,
                                    mux_, asynchronous);
 }

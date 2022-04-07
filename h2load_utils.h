@@ -97,8 +97,6 @@ void insert_customized_headers_to_Json_scenarios(h2load::Config& config);
 
 void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config);
 
-std::vector<std::string> tokenize_string(const std::string& source, const std::string& delimeter);
-
 std::string reassemble_str_with_variable(h2load::Config* config,
                                          size_t scenario_index,
                                          size_t request_index,
