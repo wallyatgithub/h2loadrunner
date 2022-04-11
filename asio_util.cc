@@ -157,10 +157,10 @@ void update_response_with_lua(const H2Server_Response* matched_response,
     ios->post(send_response_routine);
 };
 
-std::vector<H2Server>& get_H2Server_match_Instances()
+std::vector<H2Server>& get_H2Server_match_Instances(std::thread::id thread_id)
 {
-    static std::vector<H2Server> H2Server_match_instances;
-    return H2Server_match_instances;
+    static std::map<std::thread::id, std::vector<H2Server>> H2Server_match_instances;
+    return H2Server_match_instances[thread_id];
 }
 
 void init_H2Server_match_Instances(std::size_t number_of_instances, const H2Server_Config_Schema& config_schema)
@@ -169,7 +169,7 @@ void init_H2Server_match_Instances(std::size_t number_of_instances, const H2Serv
     {
         for (size_t i = 0; i < number_of_instances; i++)
         {
-            get_H2Server_match_Instances().emplace_back(config_schema);
+            get_H2Server_match_Instances(std::this_thread::get_id()).emplace_back(config_schema);
         };
         return true;
     };
@@ -194,9 +194,15 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
 
         std::size_t num_threads = config_schema.threads;
 
+        auto bootstrap_thread_id = std::this_thread::get_id();
+        std::stringstream ss;
+        ss << std::hash<std::thread::id>()(bootstrap_thread_id);
+
         init_H2Server_match_Instances(num_threads, config_schema);
 
         nghttp2::asio_http2::server::http2 server(config_schema);
+
+        get_h2_server_instance(ss.str())->second = &server;
 
         std::atomic<uint64_t> threadIndex(0);
 
@@ -206,7 +212,8 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
                             &threadIndex,
                             &totalReqsReceived,
                             &totalUnMatchedResponses,
-                            &respStats
+                            &respStats,
+                            bootstrap_thread_id
                            ]
                             (const nghttp2::asio_http2::server::request& req,
                              const nghttp2::asio_http2::server::response& res,
@@ -215,7 +222,7 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
         {
 
             static thread_local auto thread_index = threadIndex++;
-            static thread_local H2Server& h2server = get_H2Server_match_Instances()[thread_index];
+            static thread_local H2Server& h2server = get_H2Server_match_Instances(bootstrap_thread_id)[thread_index];
             auto store_io_service_to_H2Server = [handler_id]()
             {
                 auto my_io_service = nghttp2::asio_http2::server::http2_handler::find_io_service(handler_id);
@@ -543,9 +550,10 @@ void start_server(const std::string& config_file_name, bool start_stats_thread)
     asio_svr_entry(config_schema, totalReqsReceived, totalUnMatchedResponses, respStats);
 }
 
-void install_request_callback(const std::string& name, Request_Processor request_processor)
+void install_request_callback(std::thread::id thread_id, const std::string& name, Request_Processor request_processor)
+
 {
-    for (auto& h2server: get_H2Server_match_Instances())
+    for (auto& h2server: get_H2Server_match_Instances(thread_id))
     {
         for (auto& service: h2server.services)
         {
@@ -556,4 +564,26 @@ void install_request_callback(const std::string& name, Request_Processor request
         }
     }
 }
+
+std::map<std::string, nghttp2::asio_http2::server::http2*>::iterator get_h2_server_instance(const std::string& thread_id)
+{
+    static std::map<std::string, nghttp2::asio_http2::server::http2*> h2_servers;
+    static std::mutex map_mutex;
+    if (h2_servers.count(thread_id) == 0)
+    {
+        std::lock_guard<std::mutex> guard(map_mutex);
+        auto dummy = h2_servers[thread_id];
+    }
+    return h2_servers.find(thread_id);
+}
+
+void stop_server(const std::string& thread_id)
+{
+    auto server = get_h2_server_instance(thread_id);
+    if (server->second)
+    {
+        server->second->stop();
+    }
+}
+
 

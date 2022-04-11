@@ -764,7 +764,7 @@ int lua_resume_wrapper(lua_State *L, int nargs)
 
 H2Server_Config_Schema config_schema;
 
-int setup_server(lua_State *L)
+int run_server(lua_State *L)
 {
     std::string config_file_name;
     int top = lua_gettop(L);
@@ -789,8 +789,28 @@ int setup_server(lua_State *L)
     }
     lua_settop(L, 0);
 
-    start_server(config_file_name, false);
+    std::thread serverThread(start_server, config_file_name, false);
+    auto bootstrap_thread_id = serverThread.get_id();
+    std::stringstream ss;
+    ss<<std::hash<std::thread::id>()(bootstrap_thread_id);
+    lua_pushlstring(L, ss.str().c_str(), ss.str().size());
+    serverThread.detach();
+    return 1;
+}
 
+int stop_server(lua_State *L)
+{
+    int top = lua_gettop(L);
+    if ((top == 1) && lua_type(L, -1) == LUA_TSTRING)
+    {
+        size_t len;
+        const char* str = lua_tolstring(L, -1, &len);
+        std::string server_thread_hash;
+        server_thread_hash.assign(str, len);
+        stop_server(server_thread_hash);
+    }
+    lua_settop(L, 0);
     return 0;
 }
+
 
