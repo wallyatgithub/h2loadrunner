@@ -70,13 +70,13 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
                          std::vector<uint64_t>& totalUnMatchedResponses,
                          std::vector<std::vector<std::vector<ResponseStatistics>>>& respStats);
 
-std::vector<H2Server>& get_H2Server_match_Instances(std::thread::id thread_id);
+std::vector<H2Server>& get_H2Server_match_Instances(const std::string& thread_id);
 
 std::map<std::string, nghttp2::asio_http2::server::http2*>::iterator get_h2_server_instance(const std::string& thread_id);
 
-void init_H2Server_match_Instances(std::size_t number_of_instances, const std::string& config_schema);
+bool init_H2Server_match_Instances(std::size_t number_of_instances, const std::string& config_schema);
 
-void install_request_callback(std::thread::id thread_id, const std::string& name, Request_Processor request_processor);
+void install_request_callback(const std::string& thread_id, const std::string& name, Request_Processor request_processor);
 
 /* this will block */
 void start_server(const std::string& config_file_name, bool start_stats_thread);

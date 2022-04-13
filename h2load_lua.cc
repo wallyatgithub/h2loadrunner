@@ -10,6 +10,7 @@
 #include <string>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#include <boost/asio.hpp>
 
 extern "C" {
 #include "lua.h"
@@ -108,10 +109,13 @@ void start_test_group(size_t group_id)
         return;
     }
     std::map<size_t, std::vector<lua_State*>> work_id_to_lua_states;
-    for (auto& coroutine: lua_group_config.coroutine_references)
+    for (auto& vec: lua_group_config.coroutine_references)
     {
-        auto lua_state = coroutine.first;
-        work_id_to_lua_states[get_worker_index(lua_state)].push_back(lua_state);
+        for (auto& coroutine: vec)
+        {
+            auto lua_state = coroutine.first;
+            work_id_to_lua_states[get_worker_index(lua_state)].push_back(lua_state);
+        }
     }
 
     init_workers(group_id);
@@ -145,6 +149,8 @@ void setup_test_group(size_t group_id)
         set_worker_index(lua_state.get(), i);
         get_lua_state_data(lua_state.get()).unique_id_within_group = lua_group_config.number_of_lua_coroutines;
         lua_group_config.lua_states_for_each_worker.push_back(lua_state);
+        std::map<lua_State*, int> coroutine_reference_map;
+        lua_group_config.coroutine_references.push_back(coroutine_reference_map);
     }
 
     for (int i = 0; i < lua_group_config.number_of_lua_coroutines; i++)
@@ -158,7 +164,7 @@ void setup_test_group(size_t group_id)
         }
         lua_State* cL = lua_newthread(parent_lua_state);
         get_lua_state_data(cL).unique_id_within_group = i;
-        lua_group_config.coroutine_references[cL] = luaL_ref(parent_lua_state, LUA_REGISTRYINDEX);
+        lua_group_config.coroutine_references[worker_index][cL] = luaL_ref(parent_lua_state, LUA_REGISTRYINDEX);
         luaL_loadstring(cL, lua_group_config.lua_script.c_str());
     }
 }
@@ -748,13 +754,13 @@ int lua_resume_wrapper(lua_State *L, int nargs)
       auto group_id = get_group_id(L);
       std::lock_guard<std::mutex> guard(get_lua_group_config_mutex(group_id));
       auto& lua_group_config = get_lua_group_config(group_id);
+      auto worker_index = get_worker_index(L);
       lua_group_config.number_of_finished_coroutins++;
-      if (lua_group_config.coroutine_references.count(L))
+      if (lua_group_config.coroutine_references[worker_index].count(L))
       {
-          auto worker_index = get_worker_index(L);
           auto parent_lua_state = lua_group_config.lua_states_for_each_worker[worker_index].get();
-          luaL_unref(parent_lua_state, LUA_REGISTRYINDEX, lua_group_config.coroutine_references[L]);
-          lua_group_config.coroutine_references.erase(L);
+          luaL_unref(parent_lua_state, LUA_REGISTRYINDEX, lua_group_config.coroutine_references[worker_index][L]);
+          lua_group_config.coroutine_references[worker_index].erase(L);
           lua_gc(parent_lua_state, LUA_GCCOLLECT, 0);
           lua_group_config.lua_state_data[worker_index].erase(L);
       }
@@ -813,4 +819,72 @@ int stop_server(lua_State *L)
     return 0;
 }
 
+int register_service(lua_State *L)
+{
+    std::string service_name;
+    std::string lua_function_name;
+    if ((lua_gettop(L) == 2))
+    {
+        size_t len;
+        const char* str = lua_tolstring(L, -1, &len);
+        lua_pop(L, 1);
+        std::string server_thread_hash;
+        lua_function_name.assign(str, len);
+        str = lua_tolstring(L, -1, &len);
+        service_name.assign(str, len);
+        lua_pop(L, 1);
+    }
+    lua_settop(L, 0);
+
+    std::string& lua_script_to_load = get_lua_group_config(get_group_id(L)).lua_script;
+    auto req_processor = [L, lua_script_to_load, lua_function_name](boost::asio::io_service* ios,
+                                                                    uint64_t handler_id,
+                                                                    int32_t stream_id,
+                                                                    const std::multimap<std::string, std::string>& req_headers,
+                                                                    const std::string& payload)
+    {
+        auto& lua_group_config = get_lua_group_config(get_group_id(L));
+        lua_State* cL = lua_newthread(L);
+        lua_group_config.coroutine_references[get_worker_index(L)][cL] = luaL_ref(L, LUA_REGISTRYINDEX);
+        luaL_loadstring(cL, lua_group_config.lua_script.c_str());
+        lua_getglobal(cL, lua_function_name.c_str());
+        if (lua_isfunction(cL, -1))
+        {
+            lua_createtable(cL, 0, 3);
+            lua_pushlstring(cL, "ios", 3);
+            lua_pushlightuserdata(cL, ios);
+            lua_rawset(cL, -3);
+            lua_pushlstring(cL, "hid", 3);
+            lua_pushinteger(cL, handler_id);
+            lua_rawset(cL, -3);
+            lua_pushlstring(cL, "sid", 3);
+            lua_pushinteger(cL, stream_id);
+            lua_rawset(cL, -3);
+
+            std::map<std::string, std::string> headers;
+            for (auto& header : req_headers)
+            {
+                if (headers.count(header.first))
+                {
+                    headers[header.first].append(";").append(header.second);
+                }
+                else
+                {
+                    headers[header.first] = header.second;
+                }
+            }
+            lua_createtable(cL, 0, headers.size());
+            for (auto& header : headers)
+            {
+                lua_pushlstring(cL, header.first.c_str(), header.first.size());
+                lua_pushlstring(cL, header.second.c_str(), header.second.size());
+                lua_rawset(cL, -3);
+            }
+
+            lua_pushlstring(cL, payload.c_str(), payload.size());
+            lua_pcall(L, 3, LUA_MULTRET, 0);
+        }
+    };
+    return 0;
+}
 

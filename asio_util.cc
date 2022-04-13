@@ -157,23 +157,31 @@ void update_response_with_lua(const H2Server_Response* matched_response,
     ios->post(send_response_routine);
 };
 
-std::vector<H2Server>& get_H2Server_match_Instances(std::thread::id thread_id)
+std::vector<H2Server>& get_H2Server_match_Instances(const std::string& thread_id)
 {
-    static std::map<std::thread::id, std::vector<H2Server>> H2Server_match_instances;
+    static std::map<std::string, std::vector<H2Server>> H2Server_match_instances;
+    static std::mutex map_mutex;
+    if (H2Server_match_instances.count(thread_id) == 0)
+    {
+        std::lock_guard<std::mutex> guard(map_mutex);
+        auto& dummy = H2Server_match_instances[thread_id];
+    }
     return H2Server_match_instances[thread_id];
 }
 
-void init_H2Server_match_Instances(std::size_t number_of_instances, const H2Server_Config_Schema& config_schema)
+bool init_H2Server_match_Instances(std::size_t number_of_instances, const H2Server_Config_Schema& config_schema)
 {
-    auto init_func = [number_of_instances, &config_schema]()
+    std::stringstream ss;
+    ss << std::hash<std::thread::id>()(std::this_thread::get_id());
+    auto& match_instances = get_H2Server_match_Instances(ss.str());
+    if (match_instances.empty())
     {
         for (size_t i = 0; i < number_of_instances; i++)
         {
-            get_H2Server_match_Instances(std::this_thread::get_id()).emplace_back(config_schema);
-        };
-        return true;
-    };
-    static auto ret_code = init_func();
+            match_instances.emplace_back(config_schema);
+        }
+    }
+    return true;
 }
 
 void asio_svr_entry(const H2Server_Config_Schema& config_schema,
@@ -194,9 +202,10 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
 
         std::size_t num_threads = config_schema.threads;
 
-        auto bootstrap_thread_id = std::this_thread::get_id();
+        auto this_thread_id = std::this_thread::get_id();
         std::stringstream ss;
-        ss << std::hash<std::thread::id>()(bootstrap_thread_id);
+        ss << std::hash<std::thread::id>()(this_thread_id);
+        auto bootstrap_thread_id = ss.str();
 
         init_H2Server_match_Instances(num_threads, config_schema);
 
@@ -550,8 +559,7 @@ void start_server(const std::string& config_file_name, bool start_stats_thread)
     asio_svr_entry(config_schema, totalReqsReceived, totalUnMatchedResponses, respStats);
 }
 
-void install_request_callback(std::thread::id thread_id, const std::string& name, Request_Processor request_processor)
-
+void install_request_callback(const std::string& thread_id, const std::string& name, Request_Processor request_processor)
 {
     for (auto& h2server: get_H2Server_match_Instances(thread_id))
     {
@@ -572,7 +580,7 @@ std::map<std::string, nghttp2::asio_http2::server::http2*>::iterator get_h2_serv
     if (h2_servers.count(thread_id) == 0)
     {
         std::lock_guard<std::mutex> guard(map_mutex);
-        auto dummy = h2_servers[thread_id];
+        auto& dummy = h2_servers[thread_id];
     }
     return h2_servers.find(thread_id);
 }

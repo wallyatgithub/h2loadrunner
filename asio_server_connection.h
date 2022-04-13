@@ -134,6 +134,9 @@ public:
   }
 
   void do_read() {
+    if (stopped_) {
+        return;
+    }
     auto self = this->shared_from_this();
 
     deadline_.expires_from_now(read_timeout_);
@@ -170,6 +173,10 @@ public:
   }
 
   void do_write() {
+    if (stopped_) {
+        return;
+    }
+
     auto self = this->shared_from_this();
 
     if (writing_) {

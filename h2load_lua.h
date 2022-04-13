@@ -40,6 +40,8 @@ int run_server(lua_State *L);
 
 int stop_server(lua_State *L);
 
+int register_service(lua_State *L);
+
 }
 
 int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_Interface*)> request_sent_callback);
@@ -84,7 +86,7 @@ struct Lua_Group_Config
     bool config_initialized;
     std::string lua_script;
     size_t number_of_finished_coroutins;
-    std::map<lua_State*, int> coroutine_references;
+    std::vector<std::map<lua_State*, int>> coroutine_references;
     std::vector<std::shared_ptr<lua_State>> lua_states_for_each_worker;
     std::vector<std::shared_ptr<h2load::asio_worker>> workers;
     std::map<size_t, std::map<lua_State*, Lua_State_Data>> lua_state_data;
