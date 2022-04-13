@@ -882,7 +882,7 @@ int register_service(lua_State *L)
             }
 
             lua_pushlstring(cL, payload.c_str(), payload.size());
-            lua_pcall(L, 3, LUA_MULTRET, 0);
+            lua_pcall(cL, 3, LUA_MULTRET, 0);
         }
     };
     return 0;
