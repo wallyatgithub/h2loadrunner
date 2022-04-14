@@ -559,9 +559,9 @@ void start_server(const std::string& config_file_name, bool start_stats_thread)
     asio_svr_entry(config_schema, totalReqsReceived, totalUnMatchedResponses, respStats);
 }
 
-void install_request_callback(const std::string& thread_id, const std::string& name, Request_Processor request_processor)
+void install_request_callback(const std::string& thread_id_hash, const std::string& name, Request_Processor request_processor)
 {
-    for (auto& h2server: get_H2Server_match_Instances(thread_id))
+    for (auto& h2server: get_H2Server_match_Instances(thread_id_hash))
     {
         for (auto& service: h2server.services)
         {

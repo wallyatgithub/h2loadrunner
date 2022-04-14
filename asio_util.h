@@ -76,7 +76,7 @@ std::map<std::string, nghttp2::asio_http2::server::http2*>::iterator get_h2_serv
 
 bool init_H2Server_match_Instances(std::size_t number_of_instances, const std::string& config_schema);
 
-void install_request_callback(const std::string& thread_id, const std::string& name, Request_Processor request_processor);
+void install_request_callback(const std::string& thread_id_hash, const std::string& name, Request_Processor request_processor);
 
 /* this will block */
 void start_server(const std::string& config_file_name, bool start_stats_thread);

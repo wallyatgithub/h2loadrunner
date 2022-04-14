@@ -821,70 +821,158 @@ int stop_server(lua_State *L)
 
 int register_service(lua_State *L)
 {
-    std::string service_name;
     std::string lua_function_name;
+    std::string service_name;
+    std::string server_thread_hash;
     if ((lua_gettop(L) == 2))
     {
         size_t len;
         const char* str = lua_tolstring(L, -1, &len);
         lua_pop(L, 1);
-        std::string server_thread_hash;
         lua_function_name.assign(str, len);
         str = lua_tolstring(L, -1, &len);
         service_name.assign(str, len);
         lua_pop(L, 1);
+        server_thread_hash.assign(str, len);
     }
     lua_settop(L, 0);
-
-    std::string& lua_script_to_load = get_lua_group_config(get_group_id(L)).lua_script;
-    auto req_processor = [L, lua_script_to_load, lua_function_name](boost::asio::io_service* ios,
-                                                                    uint64_t handler_id,
-                                                                    int32_t stream_id,
-                                                                    const std::multimap<std::string, std::string>& req_headers,
-                                                                    const std::string& payload)
+    if (service_name.empty() || lua_function_name.empty())
     {
-        auto& lua_group_config = get_lua_group_config(get_group_id(L));
-        lua_State* cL = lua_newthread(L);
-        lua_group_config.coroutine_references[get_worker_index(L)][cL] = luaL_ref(L, LUA_REGISTRYINDEX);
-        luaL_loadstring(cL, lua_group_config.lua_script.c_str());
-        lua_getglobal(cL, lua_function_name.c_str());
-        if (lua_isfunction(cL, -1))
+        return 0;
+    }
+
+    auto req_processor = [L, lua_function_name](boost::asio::io_service* ios,
+                                                uint64_t handler_id,
+                                                int32_t stream_id,
+                                                const std::multimap<std::string, std::string>& req_headers,
+                                                const std::string& payload)
+    {
+        auto run_in_worker = [L, lua_function_name,
+                              ios, handler_id, stream_id, req_headers,
+                              payload]()
         {
-            lua_createtable(cL, 0, 3);
-            lua_pushlstring(cL, "ios", 3);
-            lua_pushlightuserdata(cL, ios);
-            lua_rawset(cL, -3);
-            lua_pushlstring(cL, "hid", 3);
-            lua_pushinteger(cL, handler_id);
-            lua_rawset(cL, -3);
-            lua_pushlstring(cL, "sid", 3);
-            lua_pushinteger(cL, stream_id);
-            lua_rawset(cL, -3);
-
-            std::map<std::string, std::string> headers;
-            for (auto& header : req_headers)
+            auto& lua_group_config = get_lua_group_config(get_group_id(L));
+            std::string& lua_script_to_load = lua_group_config.lua_script;
+            lua_State* cL = lua_newthread(L);
+            lua_group_config.coroutine_references[get_worker_index(L)][cL] = luaL_ref(L, LUA_REGISTRYINDEX);
+            luaL_loadstring(cL, lua_group_config.lua_script.c_str());
+            lua_getglobal(cL, lua_function_name.c_str());
+            if (lua_isfunction(cL, -1))
             {
-                if (headers.count(header.first))
-                {
-                    headers[header.first].append(";").append(header.second);
-                }
-                else
-                {
-                    headers[header.first] = header.second;
-                }
-            }
-            lua_createtable(cL, 0, headers.size());
-            for (auto& header : headers)
-            {
-                lua_pushlstring(cL, header.first.c_str(), header.first.size());
-                lua_pushlstring(cL, header.second.c_str(), header.second.size());
+                lua_createtable(cL, 0, 3);
+                lua_pushlstring(cL, "ios", 3);
+                lua_pushlightuserdata(cL, ios);
                 lua_rawset(cL, -3);
-            }
+                lua_pushlstring(cL, "hid", 3);
+                lua_pushinteger(cL, handler_id);
+                lua_rawset(cL, -3);
+                lua_pushlstring(cL, "sid", 3);
+                lua_pushinteger(cL, stream_id);
+                lua_rawset(cL, -3);
 
-            lua_pushlstring(cL, payload.c_str(), payload.size());
-            lua_pcall(cL, 3, LUA_MULTRET, 0);
-        }
+                std::map<std::string, std::string> headers;
+                for (auto& header : req_headers)
+                {
+                    if (headers.count(header.first))
+                    {
+                        headers[header.first].append(";").append(header.second);
+                    }
+                    else
+                    {
+                        headers[header.first] = header.second;
+                    }
+                }
+                lua_createtable(cL, 0, headers.size());
+                for (auto& header : headers)
+                {
+                    lua_pushlstring(cL, header.first.c_str(), header.first.size());
+                    lua_pushlstring(cL, header.second.c_str(), header.second.size());
+                    lua_rawset(cL, -3);
+                }
+                lua_pushlstring(cL, payload.c_str(), payload.size());
+                lua_pcall(cL, 3, LUA_MULTRET, 0);
+            }
+        };
+        auto worker = get_worker(L);
+        worker->get_io_context().post(run_in_worker);
+        return true;
     };
+    install_request_callback(server_thread_hash, service_name, req_processor);
+    return 0;
+}
+
+int send_response(lua_State *L)
+{
+    std::string payload;
+    std::map<std::string, std::string> response_headers;
+    boost::asio::io_service* ios = nullptr;
+    uint64_t handler_id = 0;
+    int32_t stream_id = 0;
+    int top = lua_gettop(L);
+    for (int i = 0; i < top; i++)
+    {
+        switch (lua_type(L, -1))
+        {
+            case LUA_TSTRING:
+            {
+                size_t len;
+                const char* str = lua_tolstring(L, -1, &len);
+                payload.assign(str, len);
+                break;
+            }
+            case LUA_TTABLE:
+            {
+                lua_pushnil(L);
+                while (lua_next(L, -2) != 0)
+                {
+                    size_t len;
+                    /* uses 'key' (at index -2) and 'value' (at index -1) */
+                    const char* k = lua_tolstring(L, -2, &len);
+                    std::string key(k, len);
+
+                    if (LUA_TSTRING == lua_type(L, -1))
+                    {
+                        const char* v = lua_tolstring(L, -1, &len);
+                        std::string value(v, len);
+                        //util::inp_strlower(key);
+                        response_headers[key] = value;
+                    }
+                    else if (LUA_TLIGHTUSERDATA == lua_type(L, -1))
+                    {
+                        ios = static_cast<boost::asio::io_service*>(lua_touserdata(L, -1));
+                    }
+                    else if (LUA_TNUMBER == lua_type(L, -1))
+                    {
+                        if (key == "hid")
+                        {
+                            handler_id = lua_tointeger(L, -1);
+                        }
+                        else if (key == "sid")
+                        {
+                            stream_id= lua_tointeger(L, -1);
+                        }
+                        else
+                        {
+                            std::cout<<"invalid key:"<<key<<std::endl;;
+                        }
+                    }
+                    else
+                    {
+                        std::cout<<"invalid value:"<<lua_type(L, -1)<<std::endl;;
+                    }
+                    /* removes 'value'; keeps 'key' for next iteration */
+                    lua_pop(L, 1);
+                }
+                break;
+            }
+            default:
+            {
+                std::cout<<"unexpected argument passed in"<<std::endl;;
+            }
+        }
+        lua_pop(L, 1);
+    }
+    send_response_from_another_thread(ios, handler_id, stream_id, response_headers, payload);
     return 0;
 }
 
