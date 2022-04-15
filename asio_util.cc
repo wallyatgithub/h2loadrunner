@@ -563,12 +563,23 @@ void install_request_callback(const std::string& thread_id_hash, const std::stri
 {
     for (auto& h2server: get_H2Server_match_Instances(thread_id_hash))
     {
-        for (auto& service: h2server.services)
+        auto func = [name, request_processor, &h2server]()
         {
-            if (service.first.name == name)
+            for (auto& service: h2server.services)
             {
-                service.second.set_request_processor(request_processor);
+                if (service.first.name == name)
+                {
+                    service.second.set_request_processor(request_processor);
+                }
             }
+        };
+        if (h2server.io_service)
+        {
+            h2server.io_service->post(func);
+        }
+        else
+        {
+            func();
         }
     }
 }
