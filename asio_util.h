@@ -68,7 +68,8 @@ void update_response_with_lua(const H2Server_Response* matched_response,
 void asio_svr_entry(const H2Server_Config_Schema& config_schema,
                          std::vector<uint64_t>& totalReqsReceived,
                          std::vector<uint64_t>& totalUnMatchedResponses,
-                         std::vector<std::vector<std::vector<ResponseStatistics>>>& respStats);
+                         std::vector<std::vector<std::vector<ResponseStatistics>>>& respStats,
+                         std::function<void(void)> init_complete_callback);
 
 std::vector<H2Server>& get_H2Server_match_Instances(const std::string& thread_id);
 
@@ -76,10 +77,10 @@ std::map<std::string, nghttp2::asio_http2::server::http2*>::iterator get_h2_serv
 
 bool init_H2Server_match_Instances(std::size_t number_of_instances, const std::string& config_schema);
 
-void install_request_callback(const std::string& thread_id_hash, const std::string& name, Request_Processor request_processor);
+void install_request_callback(const std::string& thread_id, const std::string& name, Request_Processor request_processor);
 
 /* this will block */
-void start_server(const std::string& config_file_name, bool start_stats_thread);
+void start_server(const std::string& config_file_name, bool start_stats_thread, std::function<void(void)> init_complete_callback);
 
 void stop_server(const std::string& thread_id);
 

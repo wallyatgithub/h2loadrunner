@@ -172,7 +172,7 @@ std::vector<H2Server>& get_H2Server_match_Instances(const std::string& thread_id
 bool init_H2Server_match_Instances(std::size_t number_of_instances, const H2Server_Config_Schema& config_schema)
 {
     std::stringstream ss;
-    ss << std::hash<std::thread::id>()(std::this_thread::get_id());
+    ss << std::this_thread::get_id();
     auto& match_instances = get_H2Server_match_Instances(ss.str());
     if (match_instances.empty())
     {
@@ -187,7 +187,8 @@ bool init_H2Server_match_Instances(std::size_t number_of_instances, const H2Serv
 void asio_svr_entry(const H2Server_Config_Schema& config_schema,
                          std::vector<uint64_t>& totalReqsReceived,
                          std::vector<uint64_t>& totalUnMatchedResponses,
-                         std::vector<std::vector<std::vector<ResponseStatistics>>>& respStats)
+                         std::vector<std::vector<std::vector<ResponseStatistics>>>& respStats,
+                         std::function<void(void)> init_complete_callback)
 {
     try
     {
@@ -202,12 +203,12 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
 
         std::size_t num_threads = config_schema.threads;
 
+        init_H2Server_match_Instances(num_threads, config_schema);
+
         auto this_thread_id = std::this_thread::get_id();
         std::stringstream ss;
-        ss << std::hash<std::thread::id>()(this_thread_id);
+        ss << this_thread_id;
         auto bootstrap_thread_id = ss.str();
-
-        init_H2Server_match_Instances(num_threads, config_schema);
 
         nghttp2::asio_http2::server::http2 server(config_schema);
 
@@ -360,6 +361,8 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
 
             nghttp2::asio_http2::server::configure_tls_context_easy(ec, tls, enable_mTLS);
 
+            init_complete_callback();
+
             if (server.listen_and_serve(ec, tls, addr, port))
             {
                 std::cerr << "error: " << ec.message() << std::endl;
@@ -367,6 +370,8 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
         }
         else
         {
+            init_complete_callback();
+
             if (server.listen_and_serve(ec, addr, port))
             {
                 std::cerr << "error: " << ec.message() << std::endl;
@@ -510,7 +515,7 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
     stats_thread.detach();
 }
 
-void start_server(const std::string& config_file_name, bool start_stats_thread)
+void start_server(const std::string& config_file_name, bool start_stats_thread, std::function<void(void)> init_complete_callback)
 {
     std::ifstream buffer(config_file_name);
     std::string jsonStr((std::istreambuf_iterator<char>(buffer)), std::istreambuf_iterator<char>());
@@ -556,26 +561,28 @@ void start_server(const std::string& config_file_name, bool start_stats_thread)
         start_statistic_thread(totalReqsReceived, respStats, totalUnMatchedResponses, config_schema);
     }
 
-    asio_svr_entry(config_schema, totalReqsReceived, totalUnMatchedResponses, respStats);
+    asio_svr_entry(config_schema, totalReqsReceived, totalUnMatchedResponses, respStats, init_complete_callback);
 }
 
-void install_request_callback(const std::string& thread_id_hash, const std::string& name, Request_Processor request_processor)
+void install_request_callback(const std::string& thread_id, const std::string& name, Request_Processor request_processor)
 {
-    for (auto& h2server: get_H2Server_match_Instances(thread_id_hash))
+    auto& vec = get_H2Server_match_Instances(thread_id);
+    for (size_t i = 0; i < vec.size(); i++)
     {
-        auto func = [name, request_processor, &h2server]()
+        auto h2server = &vec[i];
+        auto func = [name, request_processor, h2server]()
         {
-            for (auto& service: h2server.services)
+            for (auto service = h2server->services.begin(); service != h2server->services.end(); service++)
             {
-                if (service.first.name == name)
+                if (service->first.name == name)
                 {
-                    service.second.set_request_processor(request_processor);
+                    service->second.set_request_processor(request_processor);
                 }
             }
         };
-        if (h2server.io_service)
+        if (h2server->io_service)
         {
-            h2server.io_service->post(func);
+            h2server->io_service->post(func);
         }
         else
         {

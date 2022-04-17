@@ -36,13 +36,15 @@ int sleep_for_ms(lua_State *L);
 
 int time_since_epoch(lua_State *L);
 
-int run_server(lua_State *L);
+int start_server(lua_State *L);
 
 int stop_server(lua_State *L);
 
-int register_service(lua_State *L);
+int register_service_handler(lua_State *L);
 
 int send_response(lua_State *L);
+
+int wait_for_message(lua_State *L);
 
 }
 
@@ -80,6 +82,7 @@ struct Lua_Group_Config
         config_initialized(false),
         number_of_finished_coroutins(0)
     {
+        coroutine_references.resize(number_of_workers);
     };
 
     size_t number_of_lua_coroutines;
@@ -119,7 +122,9 @@ size_t get_group_id(lua_State* L);
 
 size_t get_worker_index(lua_State* L);
 
+void set_server_id(lua_State* L, std::string server_id);
 
+std::string get_server_id(lua_State* L);
 
 /*
 #define force_in_worker_thread_if_not_yet(L) \

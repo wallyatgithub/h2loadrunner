@@ -5,7 +5,7 @@ local total_target_tps = 12000
 -- TPS each worker thread will take = (total_target_tps / number_of_worker_threads)
 local number_of_worker_threads = 8
 
-local duration_to_run_in_seconds = 600
+local duration_to_run_in_seconds = 60
 
 local connections_per_host_per_thread = 10
 
