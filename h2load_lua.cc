@@ -960,29 +960,9 @@ int register_service_handler(lua_State *L)
             worker->get_io_context().post(run_in_worker);
             return true;
         };
-
-        auto h2server = &vec[index];
-        auto func = [service_name, request_processor, h2server]()
-        {
-            for (auto service = h2server->services.begin(); service != h2server->services.end(); service++)
-            {
-                if (service->first.name == service_name)
-                {
-                    service->second.set_request_processor(request_processor);
-                }
-            }
-        };
-        if (h2server->io_service)
-        {
-            h2server->io_service->post(func);
-        }
-        else
-        {
-            func();
-        }
+        install_request_callback(server_thread_hash, index, service_name, request_processor);
     }
 
-    //install_request_callback(server_thread_hash, service_name, req_processor);
     return 0;
 }
 

@@ -564,30 +564,31 @@ void start_server(const std::string& config_file_name, bool start_stats_thread, 
     asio_svr_entry(config_schema, totalReqsReceived, totalUnMatchedResponses, respStats, init_complete_callback);
 }
 
-void install_request_callback(const std::string& thread_id, const std::string& name, Request_Processor request_processor)
+void install_request_callback(const std::string& bootstrap_thread_id, size_t server_thread_index, const std::string& name, Request_Processor request_processor)
 {
-    auto& vec = get_H2Server_match_Instances(thread_id);
-    for (size_t i = 0; i < vec.size(); i++)
+    auto& vec = get_H2Server_match_Instances(bootstrap_thread_id);
+    if (server_thread_index >= vec.size())
     {
-        auto h2server = &vec[i];
-        auto func = [name, request_processor, h2server]()
+        return;
+    }
+    auto h2server = &vec[server_thread_index];
+    auto func = [name, request_processor, h2server]()
+    {
+        for (auto service = h2server->services.begin(); service != h2server->services.end(); service++)
         {
-            for (auto service = h2server->services.begin(); service != h2server->services.end(); service++)
+            if (service->first.name == name)
             {
-                if (service->first.name == name)
-                {
-                    service->second.set_request_processor(request_processor);
-                }
+                service->second.set_request_processor(request_processor);
             }
-        };
-        if (h2server->io_service)
-        {
-            h2server->io_service->post(func);
         }
-        else
-        {
-            func();
-        }
+    };
+    if (h2server->io_service)
+    {
+        h2server->io_service->post(func);
+    }
+    else
+    {
+        func();
     }
 }
 
