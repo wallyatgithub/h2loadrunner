@@ -126,6 +126,10 @@ void set_server_id(lua_State* L, std::string server_id);
 
 std::string get_server_id(lua_State* L);
 
+void set_inactive(lua_State* L);
+
+bool is_inactive(lua_State* L);
+
 /*
 #define force_in_worker_thread_if_not_yet(L) \
 if (to_be_restarted_in_worker_thread(L)) \

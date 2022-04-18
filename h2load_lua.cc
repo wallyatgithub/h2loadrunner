@@ -36,6 +36,7 @@ extern "C" {
 const static std::string worker_index_str = "worker_index";
 const static std::string group_index_str = "group_index";
 const static std::string server_id_str = "server_id";
+const static std::string inactive_state = "inactive_state";
 
 
 void set_group_id(lua_State* L, size_t group_id)
@@ -92,6 +93,23 @@ std::string get_server_id(lua_State* L)
     return server_id;
 }
 
+void set_inactive(lua_State* L)
+{
+    lua_pushlightuserdata(L, (void *)inactive_state.c_str());
+    lua_pushboolean(L, 1);
+    lua_rawset(L, LUA_REGISTRYINDEX);
+}
+
+bool is_inactive(lua_State* L)
+{
+    auto top_before = lua_gettop(L);
+    lua_pushlightuserdata(L, (void *)inactive_state.c_str());
+    lua_gettable(L, LUA_REGISTRYINDEX);
+    auto inactive = lua_toboolean(L, -1);
+    lua_settop(L, top_before);
+    return inactive;
+}
+
 Lua_State_Data& get_lua_state_data(lua_State* L)
 {
     auto group_id = get_group_id(L);
@@ -127,6 +145,7 @@ Lua_Group_Config& get_lua_group_config(size_t group_id)
 void start_test_group(size_t group_id)
 {
     auto& lua_group_config = get_lua_group_config(group_id);
+
     if (lua_group_config.coroutine_references.empty())
     {
         return;
@@ -149,7 +168,10 @@ void start_test_group(size_t group_id)
         {
             for (auto L: lua_states_to_start_for_worker_x)
             {
-                lua_resume_wrapper(L, 0);
+                if (!is_inactive(L))
+                {
+                    lua_resume_wrapper(L, 0);
+                }
             }
         };
         lua_group_config.workers[worker_index]->get_io_context().post(start_lua_states);
@@ -175,6 +197,10 @@ void setup_test_group(size_t group_id)
         lua_group_config.coroutine_references.push_back(coroutine_reference_map);
     }
     init_workers(group_id);
+    if (get_server_id(lua_group_config.lua_states_for_each_worker[0].get()).size())
+    {
+        return;
+    }
 
     for (int i = 0; i < lua_group_config.number_of_lua_coroutines; i++)
     {
@@ -826,6 +852,11 @@ int start_server(lua_State *L)
     }
     lua_settop(L, 0);
 
+    if (is_inactive(L))
+    {
+        return 0;
+    }
+
     std::promise<void> ready_promise;
 
     auto thread_func = [config_file_name, &ready_promise]()
@@ -882,6 +913,11 @@ int register_service_handler(lua_State *L)
         lua_pop(L, 1);
     }
     lua_settop(L, 0);
+    if (is_inactive(L))
+    {
+        return 0;
+    }
+
     if (service_name.empty() || lua_function_name.empty())
     {
         return 0;
@@ -897,6 +933,14 @@ int register_service_handler(lua_State *L)
         lua_group_config.number_of_client_to_same_host_in_one_worker = 1; // TODO:
         lua_group_config.number_of_workers = vec.size();
         setup_test_group(group_id);
+
+        // TODO:
+        for (size_t index = 0; index < lua_group_config.lua_states_for_each_worker.size(); index++)
+        {
+            lua_State* parent_lua_state = lua_group_config.lua_states_for_each_worker[index].get();
+            set_inactive(parent_lua_state);
+            luaL_dostring(parent_lua_state, lua_group_config.lua_script.c_str());
+        }
     }
 
     for (size_t index = 0; index < lua_group_config.number_of_workers; index++)
@@ -918,7 +962,7 @@ int register_service_handler(lua_State *L)
                 std::string& lua_script_to_load = lua_group_config.lua_script;
                 lua_State* cL = lua_newthread(parent_lua_state);
                 lua_group_config.coroutine_references[get_worker_index(parent_lua_state)][cL] = luaL_ref(parent_lua_state, LUA_REGISTRYINDEX);
-                luaL_loadstring(cL, lua_group_config.lua_script.c_str());
+                //luaL_dostring(cL, lua_group_config.lua_script.c_str());
                 lua_getglobal(cL, lua_function_name.c_str());
                 if (lua_isfunction(cL, -1))
                 {
