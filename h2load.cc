@@ -1242,6 +1242,8 @@ int main(int argc, char** argv)
     std::thread serverThread(integrated_http2_server, std::ref(dataStream), std::ref(config));
     serverThread.detach();
 
+    process_delayed_scenario(config);
+
     for (auto& fut : futures)
     {
         fut.get();

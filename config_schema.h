@@ -92,6 +92,7 @@ public:
     std::string variable_name_in_path_and_data;
     std::string user_id_list_file;
     std::vector<std::vector<std::string>> user_ids;
+    uint32_t interval_to_wait_before_start;
     uint64_t variable_range_start;
     uint64_t variable_range_end;
     bool variable_range_slicing;
@@ -106,6 +107,7 @@ public:
         h->add_property("user-id-range-start", &this->variable_range_start, staticjson::Flags::Optional);
         h->add_property("user-id-range-end", &this->variable_range_end, staticjson::Flags::Optional);
         h->add_property("user-id-range-slicing", &this->variable_range_slicing, staticjson::Flags::Optional);
+        h->add_property("interval-to-wait-before-start", &this->interval_to_wait_before_start, staticjson::Flags::Optional);
         h->add_property("Requests", &this->requests);
     }
     explicit Scenario():
@@ -113,7 +115,8 @@ public:
         variable_range_start(0),
         variable_range_end(0),
         variable_range_slicing(false),
-        weight(100)
+        weight(100),
+        interval_to_wait_before_start(0)
     {
     }
 };
@@ -175,6 +178,7 @@ public:
     std::string failed_request_log_file;
     uint64_t skt_recv_buffer_size;
     uint64_t skt_send_buffer_size;
+    uint64_t config_update_sequence_number;
 
     explicit Config_Schema():
         schema("http"),
@@ -208,7 +212,8 @@ public:
         interval_to_send_ping(0),
         builtin_server_port(8888),
         skt_recv_buffer_size(4194304),
-        skt_send_buffer_size(4194304)
+        skt_send_buffer_size(4194304),
+        config_update_sequence_number(0)
     {
     }
 

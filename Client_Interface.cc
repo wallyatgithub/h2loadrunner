@@ -1200,12 +1200,20 @@ size_t Client_Interface::get_index_of_next_scenario_to_run()
         }
         return schedule_map;
     };
-
+    static thread_local auto seq_no = config->json_config_schema.config_update_sequence_number;
     static thread_local auto schedule_map = init_schedule_map(config, find_common_multiple(init_size_vec(config)));
     static thread_local auto total_weight = (schedule_map.rbegin()->first);
     static thread_local std::random_device                  randDev;
     static thread_local std::mt19937_64                     generator(randDev());
     static thread_local std::uniform_int_distribution<int>  distr(0, total_weight - 1);
+
+    if (seq_no != config->json_config_schema.config_update_sequence_number)
+    {
+        seq_no = config->json_config_schema.config_update_sequence_number;
+        schedule_map = init_schedule_map(config, find_common_multiple(init_size_vec(config)));
+        total_weight = (schedule_map.rbegin()->first);
+        distr.param(std::uniform_int_distribution<>::param_type(0, total_weight - 1));
+    }
 
     size_t scenario_index = 0;
     uint64_t randomNumber = distr(generator);

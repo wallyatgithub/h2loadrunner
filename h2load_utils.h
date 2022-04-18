@@ -201,4 +201,6 @@ bool is_it_an_ipv6_address(const std::string& address);
 
 bool is_null_destination(h2load::Config& config);
 
+void process_delayed_scenario(h2load::Config& config);
+
 #endif

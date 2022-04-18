@@ -1804,3 +1804,62 @@ bool is_it_an_ipv6_address(const std::string& address)
     return retCode;
 }
 
+void process_delayed_scenario(h2load::Config& config)
+{
+    std::map<size_t, std::pair<uint32_t, uint32_t>> delayed_scenarios;
+
+    for (size_t index = 0; index < config.json_config_schema.scenarios.size(); index++)
+    {
+        Scenario& scenario = config.json_config_schema.scenarios[index];
+        if (scenario.interval_to_wait_before_start)
+        {
+            delayed_scenarios.insert(std::make_pair(index, std::make_pair(scenario.interval_to_wait_before_start, scenario.weight)));
+            scenario.weight = 0;
+        }
+    }
+
+    if (delayed_scenarios.size())
+    {
+        std::chrono::steady_clock::time_point process_start_time_point = std::chrono::steady_clock::now();
+        auto config_ptr = &config;
+        auto update_scenario = [config_ptr, process_start_time_point](std::map<size_t, std::pair<uint32_t, uint32_t>> sce)
+        {
+            auto ms_since_start = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - process_start_time_point).count();
+            auto it = sce.begin();
+            while(it != sce.end())
+            {
+                if (it->second.first <= ms_since_start)
+                {
+                    config_ptr->json_config_schema.scenarios[it->first].weight = it->second.second;
+                    it = sce.erase(it);
+                    config_ptr->json_config_schema.config_update_sequence_number++;
+                }
+                else
+                {
+                    ++it;
+                }
+            }
+            if (sce.empty())
+            {
+                return false;
+            }
+            else
+            {
+                return true;
+            }
+        };
+
+        auto thread_body = [update_scenario, delayed_scenarios]()
+        {
+            while (update_scenario(delayed_scenarios))
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        };
+        std::thread update_weight(thread_body);
+        update_weight.detach();
+    }
+}
+
+
+

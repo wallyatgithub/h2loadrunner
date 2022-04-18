@@ -280,6 +280,12 @@
             "maximum": 65535,
             "type":"integer"
           },
+          "interval-to-wait-before-start":
+          {
+            "description":"interval (in milliseconds) to wait before this scenario can be scheduled to run; before this interval is over, the weight of this scenario is considered zero; granularity: 100ms",
+            "default": 0,
+            "type":"integer"
+          }
           "user-id-variable-in-path-and-data":
           {
             "description":"Specifies the variable name in uri path and payload, which is considered as a user id, and is to be replaced with an actual value specified by next fields.",
@@ -431,7 +437,7 @@
                 },
                 "delay-before-executing-next":
                 {
-                  "description":"miliseconds to delay before executing the next request within the same scenario; granularity: 10ms, i.e., setting 115ms delay would cause an actual delay of 120ms",
+                  "description":"milliseconds to delay before executing the next request within the same scenario; granularity: 10ms, i.e., setting 115ms delay would cause an actual delay of 120ms",
                   "default": 0,
                   "type":"integer"
                 }
