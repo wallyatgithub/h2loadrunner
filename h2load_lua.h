@@ -130,6 +130,8 @@ void set_inactive(lua_State* L);
 
 bool is_inactive(lua_State* L);
 
+bool is_test_finished(size_t number_of_test_groups);
+
 /*
 #define force_in_worker_thread_if_not_yet(L) \
 if (to_be_restarted_in_worker_thread(L)) \

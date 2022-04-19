@@ -1822,7 +1822,7 @@ void process_delayed_scenario(h2load::Config& config)
     {
         std::chrono::steady_clock::time_point process_start_time_point = std::chrono::steady_clock::now();
         auto config_ptr = &config;
-        auto update_scenario = [config_ptr, process_start_time_point](std::map<size_t, std::pair<uint32_t, uint32_t>> sce)
+        auto update_scenario = [config_ptr, process_start_time_point](std::map<size_t, std::pair<uint32_t, uint32_t>>& sce)
         {
             auto ms_since_start = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - process_start_time_point).count();
             auto it = sce.begin();
@@ -1851,7 +1851,8 @@ void process_delayed_scenario(h2load::Config& config)
 
         auto thread_body = [update_scenario, delayed_scenarios]()
         {
-            while (update_scenario(delayed_scenarios))
+            auto delayed_scenarios_local_copy = delayed_scenarios;
+            while (update_scenario(delayed_scenarios_local_copy))
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }

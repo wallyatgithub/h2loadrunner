@@ -168,10 +168,7 @@ void start_test_group(size_t group_id)
         {
             for (auto L: lua_states_to_start_for_worker_x)
             {
-                if (!is_inactive(L))
-                {
-                    lua_resume_wrapper(L, 0);
-                }
+                lua_resume_wrapper(L, 0);
             }
         };
         lua_group_config.workers[worker_index]->get_io_context().post(start_lua_states);
@@ -184,7 +181,6 @@ void setup_test_group(size_t group_id)
     std::cerr << "number of workers: " << lua_group_config.number_of_workers
               << ", nummber of coroutines: " << lua_group_config.number_of_lua_coroutines<<std::endl;
     // create one main state for each worker
-    lua_group_config.coroutine_references.clear();
     for (int i = 0; i < lua_group_config.number_of_workers; i++)
     {
         auto lua_state = std::shared_ptr<lua_State>(luaL_newstate(), &lua_close);
@@ -197,10 +193,6 @@ void setup_test_group(size_t group_id)
         lua_group_config.coroutine_references.push_back(coroutine_reference_map);
     }
     init_workers(group_id);
-    if (get_server_id(lua_group_config.lua_states_for_each_worker[0].get()).size())
-    {
-        return;
-    }
 
     for (int i = 0; i < lua_group_config.number_of_lua_coroutines; i++)
     {
@@ -289,6 +281,36 @@ void stop_workers(size_t number_of_groups)
     }
 }
 
+bool is_test_finished(size_t number_of_test_groups)
+{
+    auto all_coroutines_finished = [](size_t group_id)
+    {
+        auto& lua_group_config = get_lua_group_config(group_id);
+        return (lua_group_config.number_of_lua_coroutines == lua_group_config.number_of_finished_coroutins);
+    };
+
+    auto server_stopped = [](size_t group_id)
+    {
+        for (auto& l: get_lua_group_config(group_id).lua_states_for_each_worker)
+        {
+            if (get_server_id(l.get()).size())
+            {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    for (int i = 0; i < number_of_test_groups; i++)
+    {
+        if (!all_coroutines_finished(i) || !server_stopped(i))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 
 void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load::Config& config)
 {
@@ -343,22 +365,11 @@ void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load
         start_test_group(i);
     }
     size_t number_of_groups = lua_scripts.size();
-    auto all_coroutines_finished = [number_of_groups]()
-    {
-        size_t total_number_coroutines = 0;
-        size_t total_number_finished = 0;
-        for (int i = 0; i < number_of_groups; i++)
-        {
-            total_number_coroutines += get_lua_group_config(i).number_of_lua_coroutines;
-            total_number_finished += get_lua_group_config(i).number_of_finished_coroutins;
-        }
-        return (total_number_coroutines == total_number_finished);
-    };
-    while (!all_coroutines_finished())
+    while (!is_test_finished(number_of_groups))
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
-    std::cerr<<"all coroutines finished"<<std::endl;
+    std::cerr<<"test finished"<<std::endl;
     for (auto& L: bootstrap_lua_states)
     {
         lua_close(L);
@@ -613,7 +624,7 @@ int sleep_for_ms(lua_State *L)
     int top = lua_gettop(L);
     if (top == 1)
     {
-        ms_to_sleep = lua_tointeger(L, 1);
+        ms_to_sleep = lua_tointeger(L, -1);
         lua_pop(L, 1);
     }
     lua_settop(L, 0);
@@ -854,7 +865,9 @@ int start_server(lua_State *L)
 
     if (is_inactive(L))
     {
-        return 0;
+        std::string server_id = get_server_id(L);
+        lua_pushlstring(L, server_id.c_str(), server_id.size());
+        return 1;
     }
 
     std::promise<void> ready_promise;
@@ -891,6 +904,11 @@ int stop_server(lua_State *L)
     }
     lua_settop(L, 0);
     set_server_id(L, "");
+    auto group_id = get_group_id(L);
+    for (auto& l: get_lua_group_config(group_id).lua_states_for_each_worker)
+    {
+        set_server_id(l.get(), "");
+    }
     return 0;
 }
 
@@ -899,6 +917,12 @@ int register_service_handler(lua_State *L)
     std::string lua_function_name;
     std::string service_name;
     std::string server_thread_hash;
+    size_t number_of_client = 1;
+    if ((lua_gettop(L) == 4))
+    {
+        number_of_client = lua_tointeger(L, -1);
+        lua_pop(L, 1);
+    }
     if ((lua_gettop(L) == 3))
     {
         size_t len;
@@ -929,8 +953,8 @@ int register_service_handler(lua_State *L)
     if (!lua_group_config.config_initialized)
     {
         lua_group_config.config_initialized = true;
-        lua_group_config.number_of_lua_coroutines = 1;
-        lua_group_config.number_of_client_to_same_host_in_one_worker = 1; // TODO:
+        lua_group_config.number_of_lua_coroutines = 0;
+        lua_group_config.number_of_client_to_same_host_in_one_worker = number_of_client;
         lua_group_config.number_of_workers = vec.size();
         setup_test_group(group_id);
 
@@ -939,6 +963,7 @@ int register_service_handler(lua_State *L)
         {
             lua_State* parent_lua_state = lua_group_config.lua_states_for_each_worker[index].get();
             set_inactive(parent_lua_state);
+            set_server_id(parent_lua_state, server_id);
             luaL_dostring(parent_lua_state, lua_group_config.lua_script.c_str());
         }
     }
