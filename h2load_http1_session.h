@@ -26,7 +26,7 @@
 #define H2LOAD_HTTP1_SESSION_H
 
 #include "h2load_session.h"
-#include "Client_Interface.h"
+#include "base_client.h"
 #include "h2load_Config.h"
 #include "h2load_stats.h"
 
@@ -38,7 +38,7 @@ namespace h2load
 class Http1Session : public Session
 {
 public:
-    Http1Session(Client_Interface* client);
+    Http1Session(base_client* client);
     virtual ~Http1Session();
     virtual void on_connect();
     virtual int submit_request();
@@ -46,7 +46,7 @@ public:
     virtual int on_write();
     virtual void terminate();
     virtual size_t max_concurrent_streams();
-    Client_Interface* get_client();
+    base_client* get_client();
     int _submit_request();
     int _on_write();
     int32_t stream_req_counter_;
@@ -56,7 +56,7 @@ public:
     std::map<int32_t, Request_Data>& request_map;
 
 private:
-    Client_Interface* client_;
+    base_client* client_;
     llhttp_t htp_;
     bool complete_;
 };

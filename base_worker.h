@@ -1,5 +1,5 @@
-#ifndef WORKER_INTERFACE_H
-#define WORKER_INTERFACE_H
+#ifndef BASE_WORKER_H
+#define BASE_WORKER_H
 
 
 #include <vector>
@@ -12,7 +12,7 @@
 #endif
 #include "h2load_stats.h"
 #include "h2load_Config.h"
-#include "Client_Interface.h"
+#include "base_client.h"
 
 
 #include <memory>
@@ -22,7 +22,7 @@
 namespace h2load
 {
 
-class Worker_Interface
+class base_worker
 {
 public:
     Stats stats;
@@ -50,17 +50,17 @@ public:
     // worker
     Phase current_phase;
     // We need to keep track of the clients in order to stop them when needed
-    std::vector<Client_Interface*> clients;
-    std::map<Client_Interface*, std::shared_ptr<Client_Interface>> managed_clients;
+    std::vector<base_client*> clients;
+    std::map<base_client*, std::shared_ptr<base_client>> managed_clients;
     // This is only active when there is not a bounded number of requests
     // specified
 
-    std::map<std::string, std::set<Client_Interface*>> client_pool;
-    std::map<size_t, Client_Interface*> client_ids;
+    std::map<std::string, std::set<base_client*>> client_pool;
+    std::map<size_t, base_client*> client_ids;
 
-    Worker_Interface(uint32_t id, size_t nreq_todo, size_t nclients,
+    base_worker(uint32_t id, size_t nreq_todo, size_t nclients,
                      size_t rate, size_t max_samples, Config* config);
-    virtual ~Worker_Interface();
+    virtual ~base_worker();
 
     virtual void start_rate_mode_period_timer() = 0;
     virtual void start_warmup_timer() = 0;
@@ -69,7 +69,7 @@ public:
     virtual void stop_warmup_timer() = 0;
     virtual void stop_duration_timer() = 0;
     virtual void run_event_loop() = 0;
-    virtual std::shared_ptr<Client_Interface> create_new_client(size_t req_todo) = 0;
+    virtual std::shared_ptr<base_client> create_new_client(size_t req_todo) = 0;
     virtual void start_graceful_stop_timer() = 0;
 
     void rate_period_timeout_handler();
@@ -83,13 +83,13 @@ public:
     // This function calls the destructors of all the clients.
     void stop_all_clients();
     // This function frees a client from the list of clients for this Worker.
-    void free_client(Client_Interface*);
-    void check_in_client(std::shared_ptr<Client_Interface>);
-    void check_out_client(Client_Interface*);
+    void free_client(base_client*);
+    void check_in_client(std::shared_ptr<base_client>);
+    void check_out_client(base_client*);
 
-    std::map<std::string, std::set<Client_Interface*>>& get_client_pool();
+    std::map<std::string, std::set<base_client*>>& get_client_pool();
 
-    std::map<size_t, Client_Interface*>& get_client_ids();
+    std::map<size_t, base_client*>& get_client_ids();
 
 
 };

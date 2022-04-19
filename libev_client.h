@@ -18,31 +18,31 @@ extern "C" {
 #include "template.h"
 
 #include "h2load_Config.h"
-#include "h2load_Worker.h"
+#include "libev_worker.h"
 #include "h2load_session.h"
 #include "h2load_stats.h"
 #include "h2load_Cookie.h"
 #include "h2load_utils.h"
-#include "Client_Interface.h"
+#include "base_client.h"
 
 
 namespace h2load
 {
 
-class Client: public Client_Interface
+class libev_client: public base_client
 {
 public:
     enum { ERR_CONNECT_FAIL = -100 };
 
-    Client(uint32_t id, Worker* wrker, size_t req_todo, Config* conf,
-           Client* parent = nullptr, const std::string& dest_schema = "",
+    libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Config* conf,
+           libev_client* parent = nullptr, const std::string& dest_schema = "",
            const std::string& dest_authority = "");
-    virtual ~Client();
+    virtual ~libev_client();
     virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length);
     virtual void signal_write() ;
     virtual bool any_pending_data_to_write();
     virtual void start_conn_active_watcher();
-    virtual std::shared_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
+    virtual std::shared_ptr<base_client> create_dest_client(const std::string& dst_sch,
                                                                  const std::string& dest_authority);
     virtual int connect_to_host(const std::string& schema, const std::string& authority);
     virtual void disconnect();
@@ -104,8 +104,8 @@ public:
     DefaultMemchunks wb;
     ev_io wev;
     ev_io rev;
-    std::function<int(Client&)> readfn, writefn;
-    std::function<int(Client&)> connectfn;
+    std::function<int(libev_client&)> readfn, writefn;
+    std::function<int(libev_client&)> connectfn;
     ev_timer request_timeout_watcher;
     addrinfo* next_addr;
     // Address for the current address.  When try_new_connection() is
@@ -138,9 +138,9 @@ public:
 class Submit_Requet_Wrapper
 {
 public:
-    Client* client;
+    libev_client* client;
 
-    Submit_Requet_Wrapper(Client* this_client, Client* next_client)
+    Submit_Requet_Wrapper(libev_client* this_client, libev_client* next_client)
     {
         if (next_client != this_client && next_client)
         {

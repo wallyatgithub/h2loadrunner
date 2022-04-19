@@ -30,7 +30,7 @@
 #include "h2load_http2_session.h"
 #include "h2load_http1_session.h"
 #include "h2load_utils.h"
-#include "Client_Interface.h"
+#include "base_client.h"
 #include "h2load_Config.h"
 #include "h2load_stats.h"
 #include "config_schema.h"
@@ -39,18 +39,18 @@ namespace h2load
 {
 
 class asio_client_connection
-    : public h2load::Client_Interface, private boost::noncopyable
+    : public h2load::base_client, private boost::noncopyable
 {
 public:
     asio_client_connection
     (
         boost::asio::io_service& io_ctx,
         uint32_t id,
-        Worker_Interface* wrker,
+        base_worker* wrker,
         size_t req_todo,
         Config* conf,
         boost::asio::ssl::context& ssl_context,
-        Client_Interface* parent = nullptr,
+        base_client* parent = nullptr,
         const std::string& dest_schema = "",
         const std::string& dest_authority = ""
     );
@@ -105,7 +105,7 @@ public:
 
     virtual bool any_pending_data_to_write();
 
-    virtual std::shared_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
+    virtual std::shared_ptr<base_client> create_dest_client(const std::string& dst_sch,
                                                                  const std::string& dest_authority);
 
     virtual void setup_connect_with_async_fqdn_lookup();

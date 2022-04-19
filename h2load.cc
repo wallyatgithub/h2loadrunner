@@ -88,9 +88,9 @@ extern "C" {
 #include "h2load_utils.h"
 #include "h2load_Config.h"
 #ifdef USE_LIBEV
-#include "h2load_Client.h"
+#include "libev_client.h"
 #endif
-#include "Worker_Interface.h"
+#include "base_worker.h"
 #include "h2load_stats.h"
 #include "staticjson/document.hpp"
 #include "staticjson/staticjson.hpp"
@@ -1143,7 +1143,7 @@ int main(int argc, char** argv)
 
     std::cerr << "starting benchmark..." << std::endl;
 
-    std::vector<std::unique_ptr<Worker_Interface>> workers;
+    std::vector<std::unique_ptr<base_worker>> workers;
     workers.reserve(config.nthreads);
 
 #ifndef NOTHREADS

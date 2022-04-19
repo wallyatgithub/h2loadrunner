@@ -29,8 +29,8 @@
 
 #include "h2load.h"
 #include "h2load_Config.h"
-#include "Client_Interface.h"
-#include "Worker_Interface.h"
+#include "base_client.h"
+#include "base_worker.h"
 
 #include "util.h"
 #include "template.h"
@@ -188,7 +188,7 @@ constexpr llhttp_settings_t htp_hooks =
 };
 } // namespace
 
-Http1Session::Http1Session(Client_Interface* client)
+Http1Session::Http1Session(base_client* client)
     : stream_req_counter_(1),
       stream_resp_counter_(1),
       client_(client),
@@ -450,7 +450,7 @@ void Http1Session::terminate()
     complete_ = true;
 }
 
-Client_Interface* Http1Session::get_client()
+base_client* Http1Session::get_client()
 {
     return client_;
 }

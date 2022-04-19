@@ -1,8 +1,8 @@
 #include "h2load.h"
 #include "h2load_utils.h"
-#include "Worker_Interface.h"
+#include "base_worker.h"
 #include "h2load_Config.h"
-#include "Client_Interface.h"
+#include "base_client.h"
 
 
 
@@ -15,7 +15,7 @@ namespace h2load
 {
 
 
-Worker_Interface::Worker_Interface(uint32_t id, size_t req_todo, size_t nclients,
+base_worker::base_worker(uint32_t id, size_t req_todo, size_t nclients,
                                    size_t rate, size_t max_samples, Config* config)
     : stats(req_todo, nclients),
       config(config),
@@ -74,11 +74,11 @@ Worker_Interface::Worker_Interface(uint32_t id, size_t req_todo, size_t nclients
     }
 }
 
-Worker_Interface::~Worker_Interface()
+base_worker::~base_worker()
 {
 }
 
-void Worker_Interface::stop_all_clients()
+void base_worker::stop_all_clients()
 {
 /*
     for (auto client : clients)
@@ -102,7 +102,7 @@ void Worker_Interface::stop_all_clients()
     }
 }
 
-void Worker_Interface::free_client(Client_Interface* deleted_client)
+void base_worker::free_client(base_client* deleted_client)
 {
     if (!this)
     {
@@ -121,7 +121,7 @@ void Worker_Interface::free_client(Client_Interface* deleted_client)
     check_out_client(deleted_client);
 }
 
-void Worker_Interface::run()
+void base_worker::run()
 {
     if (!config->is_rate_mode() && !config->is_timing_based_mode())
     {
@@ -158,7 +158,7 @@ void Worker_Interface::run()
     run_event_loop();
 }
 
-void Worker_Interface::rate_period_timeout_handler()
+void base_worker::rate_period_timeout_handler()
 {
     auto nclients_per_second = rate;
     auto conns_remaining = nclients - nconns_made;
@@ -208,7 +208,7 @@ void Worker_Interface::rate_period_timeout_handler()
         }
     }
 }
-void Worker_Interface::duration_timeout_handler()
+void base_worker::duration_timeout_handler()
 {
     if (current_phase == Phase::MAIN_DURATION && config->json_config_schema.scenarios.size())
     {
@@ -227,7 +227,7 @@ void Worker_Interface::duration_timeout_handler()
     }
 }
 
-void Worker_Interface::warmup_timeout_handler()
+void base_worker::warmup_timeout_handler()
 {
     std::cerr << "Warm-up phase is over for thread #" << id << "."
               << std::endl;
@@ -277,17 +277,17 @@ void sample(Sampling& smp, Stats& stats, Stat* s)
 }
 } // namespace
 
-void Worker_Interface::sample_req_stat(RequestStat* req_stat)
+void base_worker::sample_req_stat(RequestStat* req_stat)
 {
     sample(request_times_smp, stats.req_stats, req_stat);
 }
 
-void Worker_Interface::sample_client_stat(ClientStat* cstat)
+void base_worker::sample_client_stat(ClientStat* cstat)
 {
     sample(client_smp, stats.client_stats, cstat);
 }
 
-void Worker_Interface::report_progress()
+void base_worker::report_progress()
 {
     if (id != 0 || config->is_rate_mode() || stats.req_done % progress_interval ||
         config->is_timing_based_mode())
@@ -299,7 +299,7 @@ void Worker_Interface::report_progress()
               << std::endl;
 }
 
-void Worker_Interface::report_rate_progress()
+void base_worker::report_rate_progress()
 {
     if (id != 0 || nconns_made % progress_interval)
     {
@@ -310,22 +310,22 @@ void Worker_Interface::report_rate_progress()
               << "% of clients started" << std::endl;
 }
 
-void Worker_Interface::check_in_client(std::shared_ptr<Client_Interface> client)
+void base_worker::check_in_client(std::shared_ptr<base_client> client)
 {
     managed_clients[client.get()] = client;
 }
 
-void Worker_Interface::check_out_client(Client_Interface* client)
+void base_worker::check_out_client(base_client* client)
 {
     managed_clients.erase(client);
 }
 
-std::map<std::string, std::set<Client_Interface*>>& Worker_Interface::get_client_pool()
+std::map<std::string, std::set<base_client*>>& base_worker::get_client_pool()
 {
     return client_pool;
 }
 
-std::map<size_t, Client_Interface*>& Worker_Interface::get_client_ids()
+std::map<size_t, base_client*>& base_worker::get_client_ids()
 {
     return client_ids;
 }

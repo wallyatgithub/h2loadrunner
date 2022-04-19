@@ -10,12 +10,12 @@
 #include <boost/noncopyable.hpp>
 #include <boost/asio/ssl.hpp>
 
-#include "Worker_Interface.h"
+#include "base_worker.h"
 
 namespace h2load
 {
 
-class asio_worker: public std::enable_shared_from_this<asio_worker>, public h2load::Worker_Interface,
+class asio_worker: public std::enable_shared_from_this<asio_worker>, public h2load::base_worker,
     private boost::noncopyable
 {
 public:
@@ -25,7 +25,7 @@ public:
 
     virtual void run_event_loop();
 
-    virtual std::shared_ptr<Client_Interface> create_new_client(size_t req_todo);
+    virtual std::shared_ptr<base_client> create_new_client(size_t req_todo);
 
     bool timer_common_check(boost::asio::deadline_timer & timer, const boost::system::error_code & ec,
                             void (asio_worker:: * handler)(const boost::system::error_code&));

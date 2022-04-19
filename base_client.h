@@ -1,5 +1,5 @@
-#ifndef CLIENT_INTERFACE_H
-#define CLIENT_INTERFACE_H
+#ifndef BASE_CLIENT_H
+#define BASE_CLIENT_H
 
 #include <map>
 #include <string>
@@ -17,7 +17,7 @@ extern "C" {
 
 #include "config_schema.h"
 #include "h2load_stats.h"
-//#include "Worker_Interface.h"
+//#include "base_worker.h"
 #include "h2load_session.h"
 #include "h2load.h"
 
@@ -26,7 +26,7 @@ namespace h2load
 
 struct Config;
 struct RequestStat;
-class Worker_Interface;
+class base_worker;
 
 class Unique_Id
 {
@@ -50,17 +50,17 @@ public:
 using time_point_in_seconds_double =
     std::chrono::time_point<std::chrono::steady_clock, std::chrono::duration< double >>;
 
-class Client_Interface
+class base_client
 {
 public:
-    Client_Interface(uint32_t id, Worker_Interface* wrker, size_t req_todo, Config* conf,
-                     Client_Interface* parent = nullptr, const std::string& dest_schema = "",
+    base_client(uint32_t id, base_worker* wrker, size_t req_todo, Config* conf,
+                     base_client* parent = nullptr, const std::string& dest_schema = "",
                      const std::string& dest_authority = "");
-    virtual ~Client_Interface() {}
+    virtual ~base_client() {}
     virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length) = 0;
     virtual void signal_write() = 0;
     virtual bool any_pending_data_to_write() = 0;
-    virtual std::shared_ptr<Client_Interface> create_dest_client(const std::string& dst_sch,
+    virtual std::shared_ptr<base_client> create_dest_client(const std::string& dst_sch,
                                                                  const std::string& dest_authority) = 0;
 
 
@@ -140,8 +140,8 @@ public:
     Stats& get_stats();
 
     uint64_t get_total_pending_streams();
-    Client_Interface* get_controller_client();
-    Client_Interface* find_or_create_dest_client(Request_Data& request_to_send);
+    base_client* get_controller_client();
+    base_client* find_or_create_dest_client(Request_Data& request_to_send);
     bool is_controller_client();
     int submit_request();
     Request_Data prepare_first_request();
@@ -187,14 +187,14 @@ public:
     bool get_host_and_port_from_authority(const std::string& schema, const std::string& authority, std::string& host,
                                           std::string& port);
     void call_connected_callbacks(bool success);
-    void install_connected_callback(std::function<void(bool, h2load::Client_Interface*)> callback);
+    void install_connected_callback(std::function<void(bool, h2load::base_client*)> callback);
     void queue_stream_for_user_callback(int32_t stream_id);
     void process_stream_user_callback(int32_t stream_id);
     void pass_response_to_lua(int32_t stream_id, lua_State *L);
     uint64_t get_client_unique_id();
     void set_prefered_authority(const std::string& authority);
 
-    Worker_Interface* worker;
+    base_worker* worker;
     ClientStat cstat;
     std::multimap<std::chrono::steady_clock::time_point, int32_t> stream_timestamp;
     std::unordered_map<int32_t, Stream> streams;
@@ -230,8 +230,8 @@ public:
     std::multimap<std::chrono::steady_clock::time_point, Request_Data> delayed_requests_to_submit;
     std::map<int32_t, Request_Data> requests_awaiting_response;
     std::vector<std::vector<lua_State*>> lua_states;
-    std::map<std::string, Client_Interface*> dest_clients;
-    Client_Interface* parent_client;
+    std::map<std::string, base_client*> dest_clients;
+    base_client* parent_client;
     std::string schema;
     std::string authority;
     std::string preferred_authority;
@@ -243,7 +243,7 @@ public:
     std::vector<Runtime_Scenario_Data> runtime_scenario_data;
     time_point_in_seconds_double rps_duration_started;
     SSL* ssl;
-    std::vector<std::function<void(bool, h2load::Client_Interface*)>> connected_callbacks;
+    std::vector<std::function<void(bool, h2load::base_client*)>> connected_callbacks;
     std::map<int32_t, Stream_Callback_Data> stream_user_callback_queue;
 };
 

@@ -110,8 +110,8 @@ if(DEFINED USE_LIBEV)
     )
 
     set(H2LOAD_SOURCE_USING_LIBEV
-      h2load_Client.cc
-      h2load_Worker.cc
+      libev_client.cc
+      libev_worker.cc
     )
 
     add_definitions(-DUSE_LIBEV=1)
@@ -206,8 +206,8 @@ set(H2LOAD_SOURCES
   tls.cc
   h2load_http2_session.cc
   h2load_http1_session.cc
-  Client_Interface.cc
-  Worker_Interface.cc
+  base_client.cc
+  base_worker.cc
   asio_client_connection.cc
   asio_worker.cc
   h2load_lua.cc

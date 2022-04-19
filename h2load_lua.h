@@ -48,7 +48,7 @@ int wait_for_message(lua_State *L);
 
 }
 
-int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_Interface*)> request_sent_callback);
+int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::base_client*)> request_sent_callback);
 
 void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load::Config& config);
 

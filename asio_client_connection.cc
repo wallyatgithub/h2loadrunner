@@ -16,12 +16,12 @@
 #include "h2load_http2_session.h"
 #include "h2load_http1_session.h"
 #include "h2load_utils.h"
-#include "Client_Interface.h"
+#include "base_client.h"
 #include "h2load_Config.h"
 #include "h2load_stats.h"
 #include "config_schema.h"
 #include "asio_client_connection.h"
-#include "Worker_Interface.h"
+#include "base_worker.h"
 
 namespace h2load
 {
@@ -30,15 +30,15 @@ asio_client_connection::asio_client_connection
 (
     boost::asio::io_service& io_ctx,
     uint32_t id,
-    Worker_Interface* wrker,
+    base_worker* wrker,
     size_t req_todo,
     Config* conf,
     boost::asio::ssl::context& ssl_context,
-    Client_Interface* parent,
+    base_client* parent,
     const std::string& dest_schema,
     const std::string& dest_authority
 )
-    : Client_Interface(id, wrker, req_todo, conf, parent, dest_schema, dest_authority),
+    : base_client(id, wrker, req_todo, conf, parent, dest_schema, dest_authority),
       io_context(io_ctx),
       dns_resolver(io_ctx),
       client_socket(io_ctx),
@@ -281,7 +281,7 @@ bool asio_client_connection::any_pending_data_to_write()
     return (output_data_length > 0);
 }
 
-std::shared_ptr<Client_Interface> asio_client_connection::create_dest_client(const std::string& dst_sch,
+std::shared_ptr<base_client> asio_client_connection::create_dest_client(const std::string& dst_sch,
                                                                              const std::string& dest_authority)
 {
     auto new_client =

@@ -14,8 +14,8 @@
 #include <random>
 
 #include "tls.h"
-#include "Client_Interface.h"
-#include "Worker_Interface.h"
+#include "base_client.h"
+#include "base_worker.h"
 
 #include "h2load_utils.h"
 #include "h2load_lua.h"
@@ -30,8 +30,8 @@ Unique_Id::Unique_Id()
     my_id = client_unique_id++;
 }
 
-Client_Interface::Client_Interface(uint32_t id, Worker_Interface* wrker, size_t req_todo, Config* conf,
-                                   Client_Interface* parent, const std::string& dest_schema,
+base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Config* conf,
+                                   base_client* parent, const std::string& dest_schema,
                                    const std::string& dest_authority):
     worker(wrker),
     cstat(),
@@ -66,7 +66,7 @@ Client_Interface::Client_Interface(uint32_t id, Worker_Interface* wrker, size_t 
 
 }
 
-int Client_Interface::connect()
+int base_client::connect()
 {
     if (is_test_finished())
     {
@@ -101,12 +101,12 @@ int Client_Interface::connect()
     return 0;
 }
 
-uint64_t Client_Interface::get_client_unique_id()
+uint64_t base_client::get_client_unique_id()
 {
     return this_client_id.my_id;
 }
 
-uint64_t Client_Interface::get_total_pending_streams()
+uint64_t base_client::get_total_pending_streams()
 {
     if (parent_client != nullptr)
     {
@@ -123,12 +123,12 @@ uint64_t Client_Interface::get_total_pending_streams()
     }
 }
 
-void Client_Interface::try_new_connection()
+void base_client::try_new_connection()
 {
     new_connection_requested = true;
 }
 
-void Client_Interface::record_ttfb()
+void base_client::record_ttfb()
 {
     if (recorded(cstat.ttfb))
     {
@@ -138,7 +138,7 @@ void Client_Interface::record_ttfb()
     cstat.ttfb = std::chrono::steady_clock::now();
 }
 
-void Client_Interface::log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req,
+void base_client::log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req,
                                           int32_t stream_id)
 {
     if (config.json_config_schema.failed_request_log_file.empty())
@@ -189,7 +189,7 @@ void Client_Interface::log_failed_request(const h2load::Config& config, const h2
     work_offload_io_service.post(log_routine);
 }
 
-bool Client_Interface::validate_response_with_lua(lua_State* L, const Request_Data& finished_request)
+bool base_client::validate_response_with_lua(lua_State* L, const Request_Data& finished_request)
 {
     lua_getglobal(L, validate_response);
     bool retCode = true;
@@ -233,7 +233,7 @@ bool Client_Interface::validate_response_with_lua(lua_State* L, const Request_Da
     return retCode;
 }
 
-void Client_Interface::record_stream_close_time(int32_t stream_id)
+void base_client::record_stream_close_time(int32_t stream_id)
 {
     auto req_stat = get_req_stat(stream_id);
     if (!req_stat)
@@ -243,7 +243,7 @@ void Client_Interface::record_stream_close_time(int32_t stream_id)
     req_stat->stream_close_time = std::chrono::steady_clock::now();
 }
 
-void Client_Interface::connection_timeout_handler()
+void base_client::connection_timeout_handler()
 {
     stop_connect_timeout_timer();
     fail();
@@ -251,7 +251,7 @@ void Client_Interface::connection_timeout_handler()
     //ev_break (EV_A_ EVBREAK_ALL);
 }
 
-void Client_Interface::reconnect_to_used_host()
+void base_client::reconnect_to_used_host()
 {
     if (CLIENT_CONNECTED == state)
     {
@@ -271,7 +271,7 @@ void Client_Interface::reconnect_to_used_host()
     }
 }
 
-bool Client_Interface::reconnect_to_alt_addr()
+bool base_client::reconnect_to_alt_addr()
 {
     if (CLIENT_CONNECTED == state)
     {
@@ -302,7 +302,7 @@ bool Client_Interface::reconnect_to_alt_addr()
     return false;
 }
 
-void Client_Interface::timing_script_timeout_handler()
+void base_client::timing_script_timeout_handler()
 {
     reset_timeout_requests();
 
@@ -349,7 +349,7 @@ void Client_Interface::timing_script_timeout_handler()
     start_timing_script_request_timeout_timer(duration);
 }
 
-void Client_Interface::brief_log_to_file(int32_t stream_id, bool success)
+void base_client::brief_log_to_file(int32_t stream_id, bool success)
 {
     if (!config->json_config_schema.log_file.size())
     {
@@ -406,7 +406,7 @@ void Client_Interface::brief_log_to_file(int32_t stream_id, bool success)
 
 }
 
-void Client_Interface::init_req_left()
+void base_client::init_req_left()
 {
     if (req_todo == 0)   // this means infinite number of requests are to be made
     {
@@ -416,7 +416,7 @@ void Client_Interface::init_req_left()
     }
 }
 
-void Client_Interface::init_connection_targert()
+void base_client::init_connection_targert()
 {
     if (schema.empty())
     {
@@ -488,12 +488,12 @@ void Client_Interface::init_connection_targert()
     preferred_authority = authority;
 }
 
-void Client_Interface::set_prefered_authority(const std::string& authority)
+void base_client::set_prefered_authority(const std::string& authority)
 {
     preferred_authority = authority;
 }
 
-void Client_Interface::on_status_code(int32_t stream_id, uint16_t status)
+void base_client::on_status_code(int32_t stream_id, uint16_t status)
 {
     auto request_data = requests_awaiting_response.find(stream_id);
     if (request_data != requests_awaiting_response.end())
@@ -509,7 +509,7 @@ void Client_Interface::on_status_code(int32_t stream_id, uint16_t status)
     }
 }
 
-void Client_Interface::enqueue_request(Request_Data& finished_request, Request_Data&& new_request)
+void base_client::enqueue_request(Request_Data& finished_request, Request_Data&& new_request)
 {
     auto client = this->parent_client ? this->parent_client : this;
     if (!finished_request.delay_before_executing_next)
@@ -525,7 +525,7 @@ void Client_Interface::enqueue_request(Request_Data& finished_request, Request_D
     }
 }
 
-bool Client_Interface::should_reconnect_on_disconnect()
+bool base_client::should_reconnect_on_disconnect()
 {
     if (!is_test_finished())
     {
@@ -541,7 +541,7 @@ bool Client_Interface::should_reconnect_on_disconnect()
     return false;
 }
 
-void Client_Interface::inc_status_counter_and_validate_response(int32_t stream_id)
+void base_client::inc_status_counter_and_validate_response(int32_t stream_id)
 {
     uint16_t status = 0;
     auto itr = streams.find(stream_id);
@@ -642,7 +642,7 @@ void Client_Interface::inc_status_counter_and_validate_response(int32_t stream_i
 }
 
 
-int Client_Interface::try_again_or_fail()
+int base_client::try_again_or_fail()
 {
     disconnect();
 
@@ -680,14 +680,14 @@ int Client_Interface::try_again_or_fail()
     return -1;
 }
 
-void Client_Interface::fail()
+void base_client::fail()
 {
     disconnect();
 
     process_abandoned_streams();
 }
 
-void Client_Interface::timeout()
+void base_client::timeout()
 {
     if (should_reconnect_on_disconnect())
     {
@@ -699,7 +699,7 @@ void Client_Interface::timeout()
     disconnect();
 }
 
-void Client_Interface::process_abandoned_streams()
+void base_client::process_abandoned_streams()
 {
     if (worker->current_phase != Phase::MAIN_DURATION)
     {
@@ -720,25 +720,25 @@ void Client_Interface::process_abandoned_streams()
     req_inflight = 0;
 }
 
-void Client_Interface::record_connect_start_time()
+void base_client::record_connect_start_time()
 {
     cstat.connect_start_time = std::chrono::steady_clock::now();
 }
 
-void Client_Interface::record_connect_time()
+void base_client::record_connect_time()
 {
     cstat.connect_time = std::chrono::steady_clock::now();
 }
 
 
-void Client_Interface::clear_connect_times()
+void base_client::clear_connect_times()
 {
     cstat.connect_start_time = std::chrono::steady_clock::time_point();
     cstat.connect_time = std::chrono::steady_clock::time_point();
     cstat.ttfb = std::chrono::steady_clock::time_point();
 }
 
-void Client_Interface::record_client_start_time()
+void base_client::record_client_start_time()
 {
     // Record start time only once at the very first connection is going
     // to be made.
@@ -750,7 +750,7 @@ void Client_Interface::record_client_start_time()
     cstat.client_start_time = std::chrono::steady_clock::now();
 }
 
-void Client_Interface::final_cleanup()
+void base_client::final_cleanup()
 {
     worker->sample_client_stat(&cstat);
     ++worker->client_smp.n;
@@ -771,7 +771,7 @@ void Client_Interface::final_cleanup()
     }
 }
 
-void Client_Interface::cleanup_due_to_disconnect()
+void base_client::cleanup_due_to_disconnect()
 {
     if (CLIENT_CONNECTED == state)
     {
@@ -832,14 +832,14 @@ void Client_Interface::cleanup_due_to_disconnect()
     requests_to_submit.clear();
 }
 
-void Client_Interface::record_client_end_time()
+void base_client::record_client_end_time()
 {
     // Unlike client_start_time, we overwrite client_end_time.  This
     // handles multiple connect/disconnect for HTTP/1.1 benchmark.
     cstat.client_end_time = std::chrono::steady_clock::now();
 }
 
-bool Client_Interface::prepare_next_request(Request_Data& finished_request)
+bool base_client::prepare_next_request(Request_Data& finished_request)
 {
     size_t scenario_index = finished_request.scenario_index;
     Scenario& scenario = config->json_config_schema.scenarios[scenario_index];
@@ -950,7 +950,7 @@ bool Client_Interface::prepare_next_request(Request_Data& finished_request)
     return true;
 }
 
-void Client_Interface::update_content_length(Request_Data& data)
+void base_client::update_content_length(Request_Data& data)
 {
     if (data.req_payload->size())
     {
@@ -960,7 +960,7 @@ void Client_Interface::update_content_length(Request_Data& data)
     }
 }
 
-void Client_Interface::parse_and_save_cookies(Request_Data& finished_request)
+void base_client::parse_and_save_cookies(Request_Data& finished_request)
 {
     if (finished_request.resp_headers.find("Set-Cookie") != finished_request.resp_headers.end())
     {
@@ -977,7 +977,7 @@ void Client_Interface::parse_and_save_cookies(Request_Data& finished_request)
 }
 
 
-void Client_Interface::populate_request_from_config_template(Request_Data& new_request,
+void base_client::populate_request_from_config_template(Request_Data& new_request,
                                                              size_t scenario_index,
                                                              size_t index_in_config_template)
 {
@@ -996,13 +996,13 @@ void Client_Interface::populate_request_from_config_template(Request_Data& new_r
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
 }
 
-void Client_Interface::move_cookies_to_new_request(Request_Data& finished_request, Request_Data& new_request)
+void base_client::move_cookies_to_new_request(Request_Data& finished_request, Request_Data& new_request)
 {
     new_request.saved_cookies.swap(finished_request.saved_cookies);
 }
 
 
-void Client_Interface::terminate_sub_clients()
+void base_client::terminate_sub_clients()
 {
     for (auto& sub_client : dest_clients)
     {
@@ -1013,7 +1013,7 @@ void Client_Interface::terminate_sub_clients()
     }
 }
 
-bool Client_Interface::is_test_finished()
+bool base_client::is_test_finished()
 {
     if (0 == req_left || worker->current_phase > Phase::MAIN_DURATION)
     {
@@ -1026,7 +1026,7 @@ bool Client_Interface::is_test_finished()
 }
 
 
-void Client_Interface::update_this_in_dest_client_map()
+void base_client::update_this_in_dest_client_map()
 {
     auto& clients = parent_client ? parent_client->dest_clients : dest_clients;
     for (auto it = clients.begin(); it != clients.end();)
@@ -1046,7 +1046,7 @@ void Client_Interface::update_this_in_dest_client_map()
     clients[dest] = this;
 }
 
-void Client_Interface::init_lua_states()
+void base_client::init_lua_states()
 {
     for (auto scenario_index = 0; scenario_index < config->json_config_schema.scenarios.size(); scenario_index++)
     {
@@ -1068,7 +1068,7 @@ void Client_Interface::init_lua_states()
 }
 
 
-void Client_Interface::slice_user_id()
+void base_client::slice_user_id()
 {
     if (config->nclients > 1 && (is_controller_client()))
     {
@@ -1139,12 +1139,12 @@ void Client_Interface::slice_user_id()
 }
 
 
-bool Client_Interface::rps_mode()
+bool base_client::rps_mode()
 {
     return (rps > 0.0);
 }
 
-void Client_Interface::update_scenario_based_stats(size_t scenario_index, size_t request_index, bool success,
+void base_client::update_scenario_based_stats(size_t scenario_index, size_t request_index, bool success,
                                                    bool status_success)
 {
     if (worker->scenario_stats.size() == 0)
@@ -1173,7 +1173,7 @@ void Client_Interface::update_scenario_based_stats(size_t scenario_index, size_t
 }
 
 
-size_t Client_Interface::get_index_of_next_scenario_to_run()
+size_t base_client::get_index_of_next_scenario_to_run()
 {
     if (config->json_config_schema.scenarios.size() <= 1)
     {
@@ -1226,13 +1226,13 @@ size_t Client_Interface::get_index_of_next_scenario_to_run()
 
 }
 
-void Client_Interface::submit_ping()
+void base_client::submit_ping()
 {
     session->submit_ping();
     signal_write();
 }
 
-void Client_Interface::produce_request_cookie_header(Request_Data& req_to_be_sent)
+void base_client::produce_request_cookie_header(Request_Data& req_to_be_sent)
 {
     if (req_to_be_sent.saved_cookies.empty())
     {
@@ -1283,7 +1283,7 @@ void Client_Interface::produce_request_cookie_header(Request_Data& req_to_be_sen
     }
 }
 
-bool Client_Interface::update_request_with_lua(lua_State* L, const Request_Data& finished_request,
+bool base_client::update_request_with_lua(lua_State* L, const Request_Data& finished_request,
                                                Request_Data& request_to_send)
 {
     lua_getglobal(L, make_request);
@@ -1404,14 +1404,14 @@ bool Client_Interface::update_request_with_lua(lua_State* L, const Request_Data&
 }
 
 
-void Client_Interface::terminate_session()
+void base_client::terminate_session()
 {
     session->terminate();
     // http1 session needs writecb to tear down session.
     signal_write();
 }
 
-void Client_Interface::reset_timeout_requests()
+void base_client::reset_timeout_requests()
 {
     if (stream_timestamp.empty())
     {
@@ -1443,7 +1443,7 @@ void Client_Interface::reset_timeout_requests()
     }
 }
 
-void Client_Interface::on_rps_timer()
+void base_client::on_rps_timer()
 {
     reset_timeout_requests();
     assert(!config->timing_script);
@@ -1496,7 +1496,7 @@ void Client_Interface::on_rps_timer()
     }
     // client->signal_write(); // submit_request already calls signal_write()
 }
-void Client_Interface::process_timedout_streams()
+void base_client::process_timedout_streams()
 {
     if (worker->current_phase != Phase::MAIN_DURATION)
     {
@@ -1517,7 +1517,7 @@ void Client_Interface::process_timedout_streams()
     process_abandoned_streams();
 }
 
-void Client_Interface::on_stream_close(int32_t stream_id, bool success, bool final)
+void base_client::on_stream_close(int32_t stream_id, bool success, bool final)
 {
     record_stream_close_time(stream_id);
 
@@ -1622,7 +1622,7 @@ void Client_Interface::on_stream_close(int32_t stream_id, bool success, bool fin
     }
 }
 
-void Client_Interface::on_prefered_host_up()
+void base_client::on_prefered_host_up()
 {
     std::cerr << "preferred host is up: " << preferred_authority << std::endl;
     if (authority != preferred_authority && state == CLIENT_CONNECTED)
@@ -1635,7 +1635,7 @@ void Client_Interface::on_prefered_host_up()
     }
 }
 
-int Client_Interface::connection_made()
+int base_client::connection_made()
 {
     stop_connect_timeout_timer();
 
@@ -1748,7 +1748,7 @@ int Client_Interface::connection_made()
     return 0;
 }
 
-void Client_Interface::on_data_chunk(int32_t stream_id, const uint8_t* data, size_t len)
+void base_client::on_data_chunk(int32_t stream_id, const uint8_t* data, size_t len)
 {
     auto request = requests_awaiting_response.find(stream_id);
     if (request != requests_awaiting_response.end())
@@ -1762,7 +1762,7 @@ void Client_Interface::on_data_chunk(int32_t stream_id, const uint8_t* data, siz
     }
 }
 
-void Client_Interface::resume_delayed_request_execution()
+void base_client::resume_delayed_request_execution()
 {
     std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
     auto barrier = delayed_requests_to_submit.upper_bound(curr_time_point);
@@ -1774,7 +1774,7 @@ void Client_Interface::resume_delayed_request_execution()
     }
 }
 
-RequestStat* Client_Interface::get_req_stat(int32_t stream_id)
+RequestStat* base_client::get_req_stat(int32_t stream_id)
 {
     auto it = streams.find(stream_id);
     if (it == std::end(streams))
@@ -1785,7 +1785,7 @@ RequestStat* Client_Interface::get_req_stat(int32_t stream_id)
     return &(*it).second.req_stat;
 }
 
-void Client_Interface::on_request_start(int32_t stream_id)
+void base_client::on_request_start(int32_t stream_id)
 {
     size_t scenario_index = 0;
     size_t request_index = 0;
@@ -1815,13 +1815,13 @@ void Client_Interface::on_request_start(int32_t stream_id)
     stream_timestamp.insert(std::make_pair(curr_timepoint, stream_id));
 }
 
-void Client_Interface::record_request_time(RequestStat* req_stat)
+void base_client::record_request_time(RequestStat* req_stat)
 {
     req_stat->request_time = std::chrono::steady_clock::now();
     req_stat->request_wall_time = std::chrono::system_clock::now();
 }
 
-Request_Data Client_Interface::get_request_to_submit()
+Request_Data base_client::get_request_to_submit()
 {
     if (!requests_to_submit.empty())
     {
@@ -1838,7 +1838,7 @@ Request_Data Client_Interface::get_request_to_submit()
     }
 }
 
-void Client_Interface::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
+void base_client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
                                  const uint8_t* value, size_t valuelen)
 {
     auto itr = streams.find(stream_id);
@@ -1894,45 +1894,45 @@ void Client_Interface::on_header(int32_t stream_id, const uint8_t* name, size_t 
     }
 }
 
-Config* Client_Interface::get_config()
+Config* base_client::get_config()
 {
     return config;
 }
-Stats& Client_Interface::get_stats()
+Stats& base_client::get_stats()
 {
     return worker->stats;
 }
 
 
-Client_Interface* Client_Interface::get_controller_client()
+base_client* base_client::get_controller_client()
 {
     return parent_client;
 }
 
-size_t& Client_Interface::get_current_req_index()
+size_t& base_client::get_current_req_index()
 {
     return reqidx;
 }
 
-std::map<int32_t, Request_Data>& Client_Interface::requests_waiting_for_response()
+std::map<int32_t, Request_Data>& base_client::requests_waiting_for_response()
 {
     return requests_awaiting_response;
 }
 
-bool Client_Interface::is_final()
+bool base_client::is_final()
 {
     return final;
 }
-void Client_Interface::set_final(bool val)
+void base_client::set_final(bool val)
 {
     final = val;
 }
-size_t Client_Interface::get_req_left()
+size_t base_client::get_req_left()
 {
     return req_left;
 }
 
-Client_Interface* Client_Interface::find_or_create_dest_client(Request_Data& request_to_send)
+base_client* base_client::find_or_create_dest_client(Request_Data& request_to_send)
 {
     if (!config->json_config_schema.open_new_connection_based_on_authority_header)
     {
@@ -1959,12 +1959,12 @@ Client_Interface* Client_Interface::find_or_create_dest_client(Request_Data& req
 }
 
 
-bool Client_Interface::is_controller_client()
+bool base_client::is_controller_client()
 {
     return (parent_client == nullptr);
 }
 
-Request_Data Client_Interface::prepare_first_request()
+Request_Data base_client::prepare_first_request()
 {
     auto controller = parent_client ? parent_client : this;
 
@@ -2015,7 +2015,7 @@ Request_Data Client_Interface::prepare_first_request()
     return new_request;
 }
 
-int Client_Interface::submit_request()
+int base_client::submit_request()
 {
     if (is_null_destination(*config) && requests_to_submit.empty())
     {
@@ -2105,7 +2105,7 @@ int Client_Interface::submit_request()
     return 0;
 }
 
-void Client_Interface::process_request_failure(int errCode)
+void base_client::process_request_failure(int errCode)
 {
     if (worker->current_phase != Phase::MAIN_DURATION)
     {
@@ -2137,7 +2137,7 @@ void Client_Interface::process_request_failure(int errCode)
               << std::endl;
 }
 
-void Client_Interface::print_app_info()
+void base_client::print_app_info()
 {
     if (worker->id == 0 && !worker->app_info_report_done)
     {
@@ -2146,7 +2146,7 @@ void Client_Interface::print_app_info()
     }
 }
 
-int Client_Interface::select_protocol_and_allocate_session()
+int base_client::select_protocol_and_allocate_session()
 {
     if (ssl)
     {
@@ -2240,7 +2240,7 @@ int Client_Interface::select_protocol_and_allocate_session()
     return 0;
 }
 
-void Client_Interface::report_tls_info()
+void base_client::report_tls_info()
 {
     if (worker->id == 0 && !worker->tls_info_report_done)
     {
@@ -2252,7 +2252,7 @@ void Client_Interface::report_tls_info()
     }
 }
 
-bool Client_Interface::get_host_and_port_from_authority(const std::string& schema, const std::string& authority,
+bool base_client::get_host_and_port_from_authority(const std::string& schema, const std::string& authority,
                                                         std::string& host, std::string& port)
 {
     http_parser_url u {};
@@ -2287,7 +2287,7 @@ bool Client_Interface::get_host_and_port_from_authority(const std::string& schem
     return true;
 }
 
-void Client_Interface::call_connected_callbacks(bool success)
+void base_client::call_connected_callbacks(bool success)
 {
     for (auto& callback: connected_callbacks)
     {
@@ -2300,12 +2300,12 @@ void Client_Interface::call_connected_callbacks(bool success)
 }
 
 
-void Client_Interface::install_connected_callback(std::function<void(bool, h2load::Client_Interface*)> callback)
+void base_client::install_connected_callback(std::function<void(bool, h2load::base_client*)> callback)
 {
     connected_callbacks.push_back(callback);
 }
 
-void Client_Interface::queue_stream_for_user_callback(int32_t stream_id)
+void base_client::queue_stream_for_user_callback(int32_t stream_id)
 {
     const size_t MAX_STREAM_SAVED_FOR_CALLBACK = 500;
 
@@ -2316,7 +2316,7 @@ void Client_Interface::queue_stream_for_user_callback(int32_t stream_id)
     stream_user_callback_queue[stream_id].stream_id = stream_id;
 }
 
-void Client_Interface::process_stream_user_callback(int32_t stream_id)
+void base_client::process_stream_user_callback(int32_t stream_id)
 {
     if (requests_awaiting_response.count(stream_id) && stream_user_callback_queue.count(stream_id))
     {
@@ -2331,7 +2331,7 @@ void Client_Interface::process_stream_user_callback(int32_t stream_id)
     }
 }
 
-void Client_Interface::pass_response_to_lua(int32_t stream_id, lua_State *L)
+void base_client::pass_response_to_lua(int32_t stream_id, lua_State *L)
 {
     if (stream_user_callback_queue.count(stream_id))
     {

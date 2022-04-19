@@ -34,8 +34,8 @@
 
 #include "h2load.h"
 #include "h2load_Config.h"
-#include "Worker_Interface.h"
-#include "Client_Interface.h"
+#include "base_worker.h"
+#include "base_client.h"
 
 
 #include "util.h"
@@ -46,7 +46,7 @@ using namespace nghttp2;
 namespace h2load
 {
 
-Http2Session::Http2Session(Client_Interface* client)
+Http2Session::Http2Session(base_client* client)
     : client_(client),
     session_(nullptr),
     curr_stream_id(0),
@@ -69,7 +69,7 @@ int on_header_callback(nghttp2_session* session, const nghttp2_frame* frame,
                        const uint8_t* value, size_t valuelen, uint8_t flags,
                        void* user_data)
 {
-    auto client = static_cast<Client_Interface*>(user_data);
+    auto client = static_cast<base_client*>(user_data);
     if (frame->hd.type != NGHTTP2_HEADERS ||
         frame->headers.cat != NGHTTP2_HCAT_RESPONSE)
     {
@@ -96,7 +96,7 @@ namespace
 int on_frame_recv_callback(nghttp2_session* session, const nghttp2_frame* frame,
                            void* user_data)
 {
-    auto client = static_cast<Client_Interface*>(user_data);
+    auto client = static_cast<base_client*>(user_data);
     if (frame->hd.type != NGHTTP2_HEADERS ||
         frame->headers.cat != NGHTTP2_HCAT_RESPONSE)
     {
@@ -119,7 +119,7 @@ int on_data_chunk_recv_callback(nghttp2_session* session, uint8_t flags,
                                 int32_t stream_id, const uint8_t* data,
                                 size_t len, void* user_data)
 {
-    auto client = static_cast<Client_Interface*>(user_data);
+    auto client = static_cast<base_client*>(user_data);
     client->on_data_chunk(stream_id, data, len);
     client->record_ttfb();
     client->get_stats().bytes_body += len;
@@ -132,7 +132,7 @@ namespace
 int on_stream_close_callback(nghttp2_session* session, int32_t stream_id,
                              uint32_t error_code, void* user_data)
 {
-    auto client = static_cast<Client_Interface*>(user_data);
+    auto client = static_cast<base_client*>(user_data);
     client->on_stream_close(stream_id, error_code == NGHTTP2_NO_ERROR);
     return 0;
 }
@@ -149,7 +149,7 @@ int before_frame_send_callback(nghttp2_session* session,
         return 0;
     }
 
-    auto client = static_cast<Client_Interface*>(user_data);
+    auto client = static_cast<base_client*>(user_data);
     auto req_stat = client->get_req_stat(frame->hd.stream_id);
     assert(req_stat);
     client->record_request_time(req_stat);
@@ -164,7 +164,7 @@ ssize_t file_read_callback(nghttp2_session* session, int32_t stream_id,
                            uint8_t* buf, size_t length, uint32_t* data_flags,
                            nghttp2_data_source* source, void* user_data)
 {
-    auto client = static_cast<Client_Interface*>(user_data);
+    auto client = static_cast<base_client*>(user_data);
     auto req_stat = client->get_req_stat(stream_id);
     assert(req_stat);
     auto config = client->get_config();
@@ -193,7 +193,7 @@ ssize_t buffer_read_callback(nghttp2_session* session, int32_t stream_id,
                              uint8_t* buf, size_t length, uint32_t* data_flags,
                              nghttp2_data_source* source, void* user_data)
 {
-    auto client = static_cast<Client_Interface*>(user_data);
+    auto client = static_cast<base_client*>(user_data);
     auto config = client->get_config();
     auto& request_map = client->requests_waiting_for_response();
     auto request = request_map.find(stream_id);
@@ -235,7 +235,7 @@ namespace
 ssize_t send_callback(nghttp2_session* session, const uint8_t* data,
                       size_t length, int flags, void* user_data)
 {
-    auto client = static_cast<Client_Interface*>(user_data);
+    auto client = static_cast<base_client*>(user_data);
 
     return client->push_data_to_output_buffer(data, length);
 }

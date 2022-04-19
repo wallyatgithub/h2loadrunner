@@ -17,9 +17,9 @@ extern "C" {
 #endif
 
 #include "h2load.h"
-#include "h2load_Client.h"
+#include "libev_client.h"
 #include "h2load_Config.h"
-#include "h2load_Worker.h"
+#include "libev_worker.h"
 #include "h2load_Cookie.h"
 
 
@@ -30,17 +30,17 @@ namespace h2load
 {
 
 
-Client::Client(uint32_t id, Worker* wrker, size_t req_todo, Config* conf,
-               Client* parent, const std::string& dest_schema,
+libev_client::libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Config* conf,
+               libev_client* parent, const std::string& dest_schema,
                const std::string& dest_authority)
-    : Client_Interface(id, wrker, req_todo, conf, parent, dest_schema, dest_authority),
-      wb(&static_cast<Worker*>(worker)->mcpool),
+    : base_client(id, wrker, req_todo, conf, parent, dest_schema, dest_authority),
+      wb(&static_cast<libev_worker*>(worker)->mcpool),
       next_addr(conf->addrs),
       current_addr(nullptr),
       ares_address(nullptr),
       fd(-1),
       probe_skt_fd(-1),
-      connectfn(&Client::connect)
+      connectfn(&libev_client::connect)
 {
 
     ev_io_init(&wev, writecb, 0, EV_WRITE);
@@ -60,7 +60,7 @@ Client::Client(uint32_t id, Worker* wrker, size_t req_todo, Config* conf,
     init_connection_targert();
 }
 
-void Client::init_ares()
+void libev_client::init_ares()
 {
     struct ares_options options;
     options.sock_state_cb = ares_socket_state_cb;
@@ -74,7 +74,7 @@ void Client::init_ares()
     }
 }
 
-void Client::init_timer_watchers()
+void libev_client::init_timer_watchers()
 {
     ev_timer_init(&conn_inactivity_watcher, conn_activity_timeout_cb, 0.,
                   config->conn_inactivity_timeout);
@@ -110,7 +110,7 @@ void Client::init_timer_watchers()
 
 }
 
-Client::~Client()
+libev_client::~libev_client()
 {
     disconnect();
 
@@ -124,17 +124,17 @@ Client::~Client()
     ares_freeaddrinfo(ares_address);
 }
 
-int Client::do_read()
+int libev_client::do_read()
 {
     return readfn(*this);
 }
-int Client::do_write()
+int libev_client::do_write()
 {
     return writefn(*this);
 }
 
 template<class T>
-int Client::make_socket(T* addr)
+int libev_client::make_socket(T* addr)
 {
     fd = util::create_nonblock_socket(addr->ai_family);
     if (fd == -1)
@@ -149,7 +149,7 @@ int Client::make_socket(T* addr)
     {
         if (!ssl)
         {
-            ssl = SSL_new(static_cast<Worker*>(worker)->ssl_ctx);
+            ssl = SSL_new(static_cast<libev_worker*>(worker)->ssl_ctx);
         }
 
         std::string host = tokenize_string(authority, ":")[0];
@@ -182,23 +182,23 @@ int Client::make_socket(T* addr)
     return 0;
 }
 
-void Client::clear_default_addr_info()
+void libev_client::clear_default_addr_info()
 {
     ares_address = nullptr;
     next_addr = nullptr;
     current_addr = nullptr;
 }
 
-void Client::start_conn_inactivity_watcher()
+void libev_client::start_conn_inactivity_watcher()
 {
-    ev_timer_again(static_cast<Worker*>(worker)->loop, &conn_inactivity_watcher);
+    ev_timer_again(static_cast<libev_worker*>(worker)->loop, &conn_inactivity_watcher);
 }
-void Client::stop_conn_inactivity_timer()
+void libev_client::stop_conn_inactivity_timer()
 {
-    ev_timer_stop(static_cast<Worker*>(worker)->loop, &conn_inactivity_watcher);
+    ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &conn_inactivity_watcher);
 }
 
-int Client::make_async_connection()
+int libev_client::make_async_connection()
 {
     int rv;
     if (current_addr)
@@ -247,44 +247,44 @@ int Client::make_async_connection()
         return -1;
     }
 
-    writefn = &Client::connected;
+    writefn = &libev_client::connected;
     state = CLIENT_CONNECTING;
 
     ev_io_set(&rev, fd, EV_READ);
     ev_io_set(&wev, fd, EV_WRITE);
 
-    ev_io_start(static_cast<Worker*>(worker)->loop, &wev);
+    ev_io_start(static_cast<libev_worker*>(worker)->loop, &wev);
     return 0;
 }
 
-void Client::probe_and_connect_to(const std::string& schema, const std::string& authority)
+void libev_client::probe_and_connect_to(const std::string& schema, const std::string& authority)
 {
     resolve_fqdn_and_connect(schema, authority, ares_addrinfo_query_callback_for_probe);
 
 }
 
-void Client::restart_timeout_timer()
+void libev_client::restart_timeout_timer()
 {
     if (config->conn_inactivity_timeout > 0.)
     {
-        ev_timer_again(static_cast<Worker*>(worker)->loop, &conn_inactivity_watcher);
+        ev_timer_again(static_cast<libev_worker*>(worker)->loop, &conn_inactivity_watcher);
     }
     if (config->json_config_schema.interval_to_send_ping > 0.)
     {
-        ev_timer_again(static_cast<Worker*>(worker)->loop, &send_ping_watcher);
+        ev_timer_again(static_cast<libev_worker*>(worker)->loop, &send_ping_watcher);
     }
 }
 
-void Client::setup_graceful_shutdown()
+void libev_client::setup_graceful_shutdown()
 {
     auto write_clear_callback = [this]()
     {
         disconnect();
     };
-    writefn = &Client::write_clear_with_callback;
+    writefn = &libev_client::write_clear_with_callback;
 }
 
-void Client::disconnect()
+void libev_client::disconnect()
 {
     cleanup_due_to_disconnect();
 
@@ -292,7 +292,7 @@ void Client::disconnect()
     {
         if (ev_is_active(&watcher))
         {
-            ev_timer_stop(static_cast<Worker*>(worker)->loop, &watcher);
+            ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &watcher);
         }
     };
 
@@ -300,7 +300,7 @@ void Client::disconnect()
     {
         if (ev_is_active(&watcher))
         {
-            ev_io_stop(static_cast<Worker*>(worker)->loop, &watcher);
+            ev_io_stop(static_cast<libev_worker*>(worker)->loop, &watcher);
         }
     };
 
@@ -326,7 +326,7 @@ void Client::disconnect()
     {
         if (ev_is_active(&probe_wev))
         {
-            ev_io_stop(static_cast<Worker*>(worker)->loop, &probe_wev);
+            ev_io_stop(static_cast<libev_worker*>(worker)->loop, &probe_wev);
         }
         close(probe_skt_fd);
         probe_skt_fd = -1;
@@ -358,68 +358,68 @@ void Client::disconnect()
     }
 }
 
-void Client::start_conn_active_watcher()
+void libev_client::start_conn_active_watcher()
 {
-    ev_timer_start(static_cast<Worker*>(worker)->loop, &conn_active_watcher);
+    ev_timer_start(static_cast<libev_worker*>(worker)->loop, &conn_active_watcher);
 }
 
-void Client::graceful_restart_connection()
+void libev_client::graceful_restart_connection()
 {
     write_clear_callback = [this]()
     {
         disconnect();
         resolve_fqdn_and_connect(schema, authority);
     };
-    writefn = &Client::write_clear_with_callback;
+    writefn = &libev_client::write_clear_with_callback;
     terminate_session();
 }
 
-void Client::start_rps_timer()
+void libev_client::start_rps_timer()
 {
     rps_watcher.repeat = std::max(0.1, 1. / rps);
-    ev_timer_again(static_cast<Worker*>(worker)->loop, &rps_watcher);
+    ev_timer_again(static_cast<libev_worker*>(worker)->loop, &rps_watcher);
 }
 
-void Client::stop_rps_timer()
+void libev_client::stop_rps_timer()
 {
-    ev_timer_stop(static_cast<Worker*>(worker)->loop, &rps_watcher);
+    ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &rps_watcher);
 }
 
-void Client::start_stream_timeout_timer()
+void libev_client::start_stream_timeout_timer()
 {
     stream_timeout_watcher.repeat = 0.01;
-    ev_timer_again(static_cast<Worker*>(worker)->loop, &stream_timeout_watcher);
+    ev_timer_again(static_cast<libev_worker*>(worker)->loop, &stream_timeout_watcher);
 }
 
-void Client::start_warmup_timer()
+void libev_client::start_warmup_timer()
 {
     worker->start_warmup_timer();
 }
-void Client::stop_warmup_timer()
+void libev_client::stop_warmup_timer()
 {
-    ev_timer_stop(static_cast<Worker*>(worker)->loop, &static_cast<Worker*>(worker)->warmup_watcher);
+    ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &static_cast<libev_worker*>(worker)->warmup_watcher);
 }
 
-void Client::start_timing_script_request_timeout_timer(double duration)
+void libev_client::start_timing_script_request_timeout_timer(double duration)
 {
     request_timeout_watcher.repeat = duration;
-    ev_timer_again(static_cast<Worker*>(worker)->loop, &request_timeout_watcher);
+    ev_timer_again(static_cast<libev_worker*>(worker)->loop, &request_timeout_watcher);
 }
 
-void Client::start_connect_to_preferred_host_timer()
+void libev_client::start_connect_to_preferred_host_timer()
 {
-    ev_timer_start(static_cast<Worker*>(worker)->loop, &connect_to_preferred_host_watcher);
+    ev_timer_start(static_cast<libev_worker*>(worker)->loop, &connect_to_preferred_host_watcher);
 }
 
-void Client::stop_timing_script_request_timeout_timer()
+void libev_client::stop_timing_script_request_timeout_timer()
 {
-    ev_timer_stop(static_cast<Worker*>(worker)->loop, &request_timeout_watcher);
+    ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &request_timeout_watcher);
 }
 
-void Client::conn_activity_timeout_handler()
+void libev_client::conn_activity_timeout_handler()
 {
-    ev_timer_stop(static_cast<Worker*>(worker)->loop, &conn_inactivity_watcher);
-    ev_timer_stop(static_cast<Worker*>(worker)->loop, &conn_active_watcher);
+    ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &conn_inactivity_watcher);
+    ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &conn_active_watcher);
 
     if (util::check_socket_connected(fd))
     {
@@ -427,7 +427,7 @@ void Client::conn_activity_timeout_handler()
     }
 }
 
-int Client::on_read(const uint8_t* data, size_t len)
+int libev_client::on_read(const uint8_t* data, size_t len)
 {
     auto rv = session->on_read(data, len);
     if (rv != 0)
@@ -442,7 +442,7 @@ int Client::on_read(const uint8_t* data, size_t len)
     return 0;
 }
 
-int Client::on_write()
+int libev_client::on_write()
 {
     if (wb.rleft() >= BACKOFF_WRITE_BUFFER_THRES)
     {
@@ -456,7 +456,7 @@ int Client::on_write()
     return 0;
 }
 
-int Client::read_clear()
+int libev_client::read_clear()
 {
     uint8_t buf[8_k];
 
@@ -488,9 +488,9 @@ int Client::read_clear()
     return 0;
 }
 
-int Client::write_clear_with_callback()
+int libev_client::write_clear_with_callback()
 {
-    writefn = &Client::write_clear;
+    writefn = &libev_client::write_clear;
     auto func = std::move(write_clear_callback);
     auto retCode = do_write();
     if (retCode == 0 && func)
@@ -500,7 +500,7 @@ int Client::write_clear_with_callback()
     return retCode;
 }
 
-int Client::write_clear()
+int libev_client::write_clear()
 {
     std::array<struct iovec, 2> iov;
 
@@ -526,7 +526,7 @@ int Client::write_clear()
         {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
             {
-                ev_io_start(static_cast<Worker*>(worker)->loop, &wev);
+                ev_io_start(static_cast<libev_worker*>(worker)->loop, &wev);
                 return 0;
             }
             return -1;
@@ -535,16 +535,16 @@ int Client::write_clear()
         wb.drain(nwrite);
     }
 
-    ev_io_stop(static_cast<Worker*>(worker)->loop, &wev);
+    ev_io_stop(static_cast<libev_worker*>(worker)->loop, &wev);
 
     return 0;
 }
 
-void Client::start_request_delay_execution_timer()
+void libev_client::start_request_delay_execution_timer()
 {
-    ev_timer_start(static_cast<Worker*>(worker)->loop, &delayed_request_watcher);
+    ev_timer_start(static_cast<libev_worker*>(worker)->loop, &delayed_request_watcher);
 }
-int Client::connected()
+int libev_client::connected()
 {
     if (!util::check_socket_connected(fd))
     {
@@ -553,19 +553,19 @@ int Client::connected()
         return ERR_CONNECT_FAIL;
     }
 
-    ev_io_start(static_cast<Worker*>(worker)->loop, &rev);
-    ev_io_stop(static_cast<Worker*>(worker)->loop, &wev);
+    ev_io_start(static_cast<libev_worker*>(worker)->loop, &rev);
+    ev_io_stop(static_cast<libev_worker*>(worker)->loop, &wev);
 
     if (ssl)
     {
-        readfn = &Client::tls_handshake;
-        writefn = &Client::tls_handshake;
+        readfn = &libev_client::tls_handshake;
+        writefn = &libev_client::tls_handshake;
 
         return do_write();
     }
 
-    readfn = &Client::read_clear;
-    writefn = &Client::write_clear;
+    readfn = &libev_client::read_clear;
+    writefn = &libev_client::write_clear;
 
     if (connection_made() != 0)
     {
@@ -576,7 +576,7 @@ int Client::connected()
     return 0;
 }
 
-int Client::tls_handshake()
+int libev_client::tls_handshake()
 {
     ERR_clear_error();
 
@@ -588,10 +588,10 @@ int Client::tls_handshake()
         switch (err)
         {
             case SSL_ERROR_WANT_READ:
-                ev_io_stop(static_cast<Worker*>(worker)->loop, &wev);
+                ev_io_stop(static_cast<libev_worker*>(worker)->loop, &wev);
                 return 0;
             case SSL_ERROR_WANT_WRITE:
-                ev_io_start(static_cast<Worker*>(worker)->loop, &wev);
+                ev_io_start(static_cast<libev_worker*>(worker)->loop, &wev);
                 return 0;
             default:
                 std::cerr << get_tls_error_string() << std::endl;
@@ -599,10 +599,10 @@ int Client::tls_handshake()
         }
     }
 
-    ev_io_stop(static_cast<Worker*>(worker)->loop, &wev);
+    ev_io_stop(static_cast<libev_worker*>(worker)->loop, &wev);
 
-    readfn = &Client::read_tls;
-    writefn = &Client::write_tls;
+    readfn = &libev_client::read_tls;
+    writefn = &libev_client::write_tls;
 
     if (connection_made() != 0)
     {
@@ -612,7 +612,7 @@ int Client::tls_handshake()
     return 0;
 }
 
-int Client::read_tls()
+int libev_client::read_tls()
 {
     uint8_t buf[8_k];
 
@@ -644,7 +644,7 @@ int Client::read_tls()
     }
 }
 
-int Client::write_tls()
+int libev_client::write_tls()
 {
     ERR_clear_error();
 
@@ -675,7 +675,7 @@ int Client::write_tls()
                     // renegotiation started
                     return -1;
                 case SSL_ERROR_WANT_WRITE:
-                    ev_io_start(static_cast<Worker*>(worker)->loop, &wev);
+                    ev_io_start(static_cast<libev_worker*>(worker)->loop, &wev);
                     return 0;
                 default:
                     return -1;
@@ -685,25 +685,25 @@ int Client::write_tls()
         wb.drain(rv);
     }
 
-    ev_io_stop(static_cast<Worker*>(worker)->loop, &wev);
+    ev_io_stop(static_cast<libev_worker*>(worker)->loop, &wev);
 
     return 0;
 }
 
-void Client::signal_write()
+void libev_client::signal_write()
 {
-    ev_io_start(static_cast<Worker*>(worker)->loop, &wev);
+    ev_io_start(static_cast<libev_worker*>(worker)->loop, &wev);
 }
 
-std::shared_ptr<Client_Interface> Client::create_dest_client(const std::string& dst_sch,
+std::shared_ptr<base_client> libev_client::create_dest_client(const std::string& dst_sch,
                                                              const std::string& dest_authority)
 {
-    auto new_client = std::make_shared<Client>(this->id, static_cast<Worker*>(worker), this->req_todo, this->config,
+    auto new_client = std::make_shared<libev_client>(this->id, static_cast<libev_worker*>(worker), this->req_todo, this->config,
                                                this, dst_sch, dest_authority);
     return new_client;
 }
 
-int Client::resolve_fqdn_and_connect(const std::string& schema, const std::string& authority,
+int libev_client::resolve_fqdn_and_connect(const std::string& schema, const std::string& authority,
                                      ares_addrinfo_callback callback)
 {
     std::string port;
@@ -722,7 +722,7 @@ int Client::resolve_fqdn_and_connect(const std::string& schema, const std::strin
     return 0;
 }
 
-int Client::connect_to_host(const std::string& schema, const std::string& authority)
+int libev_client::connect_to_host(const std::string& schema, const std::string& authority)
 {
     //if (config->verbose)
     {
@@ -731,18 +731,18 @@ int Client::connect_to_host(const std::string& schema, const std::string& author
     return resolve_fqdn_and_connect(schema, authority);
 }
 
-void Client::start_delayed_reconnect_timer()
+void libev_client::start_delayed_reconnect_timer()
 {
-    ev_timer_start(static_cast<Worker*>(worker)->loop, &delayed_reconnect_watcher);
+    ev_timer_start(static_cast<libev_worker*>(worker)->loop, &delayed_reconnect_watcher);
 }
 
-bool Client::probe_address(ares_addrinfo* ares_address)
+bool libev_client::probe_address(ares_addrinfo* ares_address)
 {
     if (probe_skt_fd != -1)
     {
         if (ev_is_active(&probe_wev))
         {
-            ev_io_stop(static_cast<Worker*>(worker)->loop, &probe_wev);
+            ev_io_stop(static_cast<libev_worker*>(worker)->loop, &probe_wev);
         }
         close(probe_skt_fd);
         probe_skt_fd = -1;
@@ -762,7 +762,7 @@ bool Client::probe_address(ares_addrinfo* ares_address)
             else
             {
                 ev_io_set(&probe_wev, probe_skt_fd, EV_WRITE);
-                ev_io_start(static_cast<Worker*>(worker)->loop, &probe_wev);
+                ev_io_start(static_cast<libev_worker*>(worker)->loop, &probe_wev);
                 return true;
             }
         }
@@ -770,46 +770,46 @@ bool Client::probe_address(ares_addrinfo* ares_address)
     return false;
 }
 
-int Client::do_connect()
+int libev_client::do_connect()
 {
     return connectfn(*this);
 }
 
-int Client::connect_with_async_fqdn_lookup()
+int libev_client::connect_with_async_fqdn_lookup()
 {
     restore_connectfn(); // one time deal
     return connect_to_host(schema, authority);
 }
 
-void Client::setup_connect_with_async_fqdn_lookup()
+void libev_client::setup_connect_with_async_fqdn_lookup()
 {
-    connectfn = &Client::connect_with_async_fqdn_lookup;
+    connectfn = &libev_client::connect_with_async_fqdn_lookup;
 }
 
-void Client::feed_timing_script_request_timeout_timer()
+void libev_client::feed_timing_script_request_timeout_timer()
 {
     if (!ev_is_active(&request_timeout_watcher))
     {
-        ev_feed_event(static_cast<Worker*>(worker)->loop, &request_timeout_watcher, EV_TIMER);
+        ev_feed_event(static_cast<libev_worker*>(worker)->loop, &request_timeout_watcher, EV_TIMER);
     }
 }
 
-void Client::start_connect_timeout_timer()
+void libev_client::start_connect_timeout_timer()
 {
-    ev_timer_start(static_cast<Worker*>(worker)->loop, &connection_timeout_watcher);
+    ev_timer_start(static_cast<libev_worker*>(worker)->loop, &connection_timeout_watcher);
 }
 
-void Client::stop_connect_timeout_timer()
+void libev_client::stop_connect_timeout_timer()
 {
-    ev_timer_stop(static_cast<Worker*>(worker)->loop, &connection_timeout_watcher);
+    ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &connection_timeout_watcher);
 }
 
-void Client::restore_connectfn()
+void libev_client::restore_connectfn()
 {
-    connectfn = &Client::connect;
+    connectfn = &libev_client::connect;
 }
 
-size_t Client::push_data_to_output_buffer(const uint8_t* data, size_t length)
+size_t libev_client::push_data_to_output_buffer(const uint8_t* data, size_t length)
 {
     if (wb.rleft() >= BACKOFF_WRITE_BUFFER_THRES)
     {
@@ -818,7 +818,7 @@ size_t Client::push_data_to_output_buffer(const uint8_t* data, size_t length)
     return wb.append(data, length);
 }
 
-bool Client::any_pending_data_to_write()
+bool libev_client::any_pending_data_to_write()
 {
     return (wb.rleft() > 0);
 }

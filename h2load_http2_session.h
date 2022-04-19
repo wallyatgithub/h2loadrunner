@@ -26,7 +26,7 @@
 #define H2LOAD_HTTP2_SESSION_H
 
 #include "h2load_session.h"
-#include "Client_Interface.h"
+#include "base_client.h"
 #include "h2load_Config.h"
 #include "h2load_stats.h"
 
@@ -37,7 +37,7 @@ namespace h2load
 class Http2Session : public Session
 {
 public:
-    Http2Session(Client_Interface* client);
+    Http2Session(base_client* client);
     virtual ~Http2Session();
     virtual void on_connect();
     virtual int submit_request();
@@ -56,7 +56,7 @@ public:
 private:
     int _submit_request();
 
-    Client_Interface* client_;
+    base_client* client_;
     nghttp2_session* session_;
     int32_t curr_stream_id;
 };

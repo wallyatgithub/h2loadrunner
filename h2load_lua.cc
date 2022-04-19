@@ -26,7 +26,7 @@ extern "C" {
 #include <fcntl.h>
 
 #include "h2load_utils.h"
-#include "Client_Interface.h"
+#include "base_client.h"
 
 #include "asio_worker.h"
 #include "h2load_lua.h"
@@ -344,7 +344,7 @@ void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load
         }
         else if (LUA_YIELD == retCode)
         {
-            // setup_parallel_test might be called, but not necessarily
+            // setup_parallel_test might have been called
         }
         else
         {
@@ -463,7 +463,7 @@ h2load::asio_worker* get_worker(lua_State *L)
     return get_lua_group_config(group_id).workers[get_worker_index(L)].get();
 }
 
-int32_t _make_connection(lua_State *L, const std::string& uri, std::function<void(bool, h2load::Client_Interface*)> connected_callback)
+int32_t _make_connection(lua_State *L, const std::string& uri, std::function<void(bool, h2load::base_client*)> connected_callback)
 {
     auto worker = get_worker(L);
     http_parser_url u {};
@@ -537,7 +537,7 @@ int32_t _make_connection(lua_State *L, const std::string& uri, std::function<voi
 
 int make_connection(lua_State *L)
 {
-    auto connected_callback = [L](bool success, h2load::Client_Interface* client)
+    auto connected_callback = [L](bool success, h2load::base_client* client)
     {
         lua_pushinteger(L, success ? client->get_client_unique_id() : -1);
         lua_resume_if_yielded(L, 1);
@@ -571,7 +571,7 @@ int make_connection(lua_State *L)
 
 int send_http_request(lua_State *L)
 {
-    auto request_sent = [L](int32_t stream_id, h2load::Client_Interface* client)
+    auto request_sent = [L](int32_t stream_id, h2load::base_client* client)
     {
         if (stream_id && client)
         {
@@ -591,7 +591,7 @@ int send_http_request(lua_State *L)
 
 int send_http_request_and_await_response(lua_State *L)
 {
-    auto request_sent = [L](int32_t stream_id, h2load::Client_Interface* client)
+    auto request_sent = [L](int32_t stream_id, h2load::base_client* client)
     {
         if (stream_id > 0 && client)
         {
@@ -694,7 +694,7 @@ int await_response(lua_State *L)
 }
 
 
-int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_Interface*)> request_sent_callback)
+int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::base_client*)> request_sent_callback)
 {
     auto argument_error = false;
     std::string payload;
@@ -762,7 +762,7 @@ int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::Client_
         h2load::asio_worker* worker;
         worker = get_worker(L);
 
-        auto connected_callback = [payload, schema, authority, method, path, headers, request_sent_callback](bool success, h2load::Client_Interface* client)
+        auto connected_callback = [payload, schema, authority, method, path, headers, request_sent_callback](bool success, h2load::base_client* client)
         {
             if (!success)
             {

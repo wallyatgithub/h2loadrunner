@@ -5,7 +5,7 @@
 #include <boost/noncopyable.hpp>
 #include <boost/asio/ssl.hpp>
 
-#include "Worker_Interface.h"
+#include "base_worker.h"
 #include "asio_client_connection.h"
 #include "asio_worker.h"
 #include "h2load_Config.h"
@@ -31,7 +31,7 @@ boost::asio::io_service& asio_worker::get_io_context()
     return io_context;
 }
 
-std::shared_ptr<Client_Interface> asio_worker::create_new_client(size_t req_todo)
+std::shared_ptr<base_client> asio_worker::create_new_client(size_t req_todo)
 {
     return std::make_shared<asio_client_connection>(io_context, next_client_id++, this, req_todo, (config), ssl_ctx);
 }
@@ -39,7 +39,7 @@ std::shared_ptr<Client_Interface> asio_worker::create_new_client(size_t req_todo
 
 asio_worker::asio_worker(uint32_t id, size_t nreq_todo, size_t nclients,
                          size_t rate, size_t max_samples, Config* config):
-    Worker_Interface(id, nreq_todo, nclients, rate, max_samples, config),
+    base_worker(id, nreq_todo, nclients, rate, max_samples, config),
     rate_mode_period_timer(io_context),
     warmup_timer(io_context),
     duration_timer(io_context),

@@ -16,7 +16,7 @@
 extern "C" {
 #include <ares.h>
 }
-#include "h2load_Client.h"
+#include "libev_client.h"
 #endif
 
 extern "C" {
@@ -35,14 +35,14 @@ extern "C" {
 #include <nghttp2/asio_http2_server.h>
 
 #include "h2load_utils.h"
-#include "Client_Interface.h"
+#include "base_client.h"
 #include "asio_worker.h"
 
 
 using namespace h2load;
 
 
-std::unique_ptr<h2load::Worker_Interface> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
+std::unique_ptr<h2load::base_worker> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
                                                         size_t nreqs, size_t nclients,
                                                         size_t rate, size_t max_samples, h2load::Config& config)
 {
@@ -83,14 +83,14 @@ std::unique_ptr<h2load::Worker_Interface> create_worker(uint32_t id, SSL_CTX* ss
 #else
     if (config.is_rate_mode())
     {
-        return std::make_unique<Worker>(id, ssl_ctx, nreqs, nclients, rate,
+        return std::make_unique<libev_worker>(id, ssl_ctx, nreqs, nclients, rate,
                                         max_samples, &config);
     }
     else
     {
         // Here rate is same as client because the rate_timeout callback
         // will be called only once
-        return std::make_unique<Worker>(id, ssl_ctx, nreqs, nclients, nclients,
+        return std::make_unique<libev_worker>(id, ssl_ctx, nreqs, nclients, nclients,
                                         max_samples, &config);
     }
 #endif
@@ -174,10 +174,10 @@ void sampling_init(h2load::Sampling& smp, size_t max_samples)
 
 void writecb(struct ev_loop* loop, ev_io* w, int revents)
 {
-    auto client = static_cast<Client*>(w->data);
+    auto client = static_cast<libev_client*>(w->data);
     client->restart_timeout_timer();
     auto rv = client->do_write();
-    if (rv == Client::ERR_CONNECT_FAIL)
+    if (rv == libev_client::ERR_CONNECT_FAIL)
     {
         client->disconnect();
         if (client->reconnect_to_alt_addr())
@@ -208,7 +208,7 @@ void writecb(struct ev_loop* loop, ev_io* w, int revents)
 
 void readcb(struct ev_loop* loop, ev_io* w, int revents)
 {
-    auto client = static_cast<Client*>(w->data);
+    auto client = static_cast<libev_client*>(w->data);
     client->restart_timeout_timer();
     if (client->do_read() != 0)
     {
@@ -230,14 +230,14 @@ void readcb(struct ev_loop* loop, ev_io* w, int revents)
 // Called every rate_period when rate mode is being used
 void rate_period_timeout_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
-    auto worker = static_cast<Worker*>(w->data);
+    auto worker = static_cast<libev_worker*>(w->data);
     worker->rate_period_timeout_handler();
 }
 
 // Called when the duration for infinite number of requests are over
 void duration_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
-    auto worker = static_cast<Worker*>(w->data);
+    auto worker = static_cast<libev_worker*>(w->data);
 
     worker->duration_timeout_handler();
     //ev_break (EV_A_ EVBREAK_ALL);
@@ -246,32 +246,32 @@ void duration_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 // Called when the warmup duration for infinite number of requests are over
 void warmup_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
-    auto worker = static_cast<Worker*>(w->data);
+    auto worker = static_cast<libev_worker*>(w->data);
     worker->warmup_timeout_handler();
 }
 
 void rps_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
-    auto client = static_cast<Client*>(w->data);
+    auto client = static_cast<libev_client*>(w->data);
     client->on_rps_timer();
 }
 
 void stream_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
-    auto client = static_cast<Client*>(w->data);
+    auto client = static_cast<libev_client*>(w->data);
     client->reset_timeout_requests();
 }
 
 void client_connection_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
-    auto client = static_cast<Client*>(w->data);
+    auto client = static_cast<libev_client*>(w->data);
     client->call_connected_callbacks(false);
     client->connection_timeout_handler();
 }
 
 void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
-    auto client = static_cast<Client*>(w->data);
+    auto client = static_cast<libev_client*>(w->data);
     client->resume_delayed_request_execution();
 }
 
@@ -280,13 +280,13 @@ void delayed_request_cb(struct ev_loop* loop, ev_timer* w, int revents)
 // connection
 void conn_activity_timeout_cb(EV_P_ ev_timer* w, int revents)
 {
-    auto client = static_cast<Client*>(w->data);
+    auto client = static_cast<libev_client*>(w->data);
     client->conn_activity_timeout_handler();
 }
 
 void client_request_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
-    auto client = static_cast<Client*>(w->data);
+    auto client = static_cast<libev_client*>(w->data);
     client->timing_script_timeout_handler();
 }
 
@@ -302,13 +302,13 @@ int get_ev_loop_flags()
 
 void ping_w_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
-    auto client = static_cast<Client*>(w->data);
+    auto client = static_cast<libev_client*>(w->data);
     client->submit_ping();
 }
 
 void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ares_addrinfo* res)
 {
-    Client* client = static_cast<Client*>(arg);
+    libev_client* client = static_cast<libev_client*>(arg);
 
     if (status == ARES_SUCCESS)
     {
@@ -331,7 +331,7 @@ void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ar
 
 void ares_io_cb(struct ev_loop* loop, struct ev_io* watcher, int revents)
 {
-    Client* client = static_cast<Client*>(watcher->data);
+    libev_client* client = static_cast<libev_client*>(watcher->data);
     ares_process_fd(client->channel,
                     revents & EV_READ ? watcher->fd : ARES_SOCKET_BAD,
                     revents & EV_WRITE ? watcher->fd : ARES_SOCKET_BAD);
@@ -339,14 +339,14 @@ void ares_io_cb(struct ev_loop* loop, struct ev_io* watcher, int revents)
 
 void reconnect_to_used_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
-    auto client = static_cast<Client*>(w->data);
+    auto client = static_cast<libev_client*>(w->data);
     ev_timer_stop(loop, w);
     client->reconnect_to_used_host();
 }
 
 void ares_addrinfo_query_callback_for_probe(void* arg, int status, int timeouts, struct ares_addrinfo* res)
 {
-    Client* client = static_cast<Client*>(arg);
+    libev_client* client = static_cast<libev_client*>(arg);
     if (status == ARES_SUCCESS)
     {
         client->probe_address(res);
@@ -356,7 +356,7 @@ void ares_addrinfo_query_callback_for_probe(void* arg, int status, int timeouts,
 
 void connect_to_prefered_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
-    auto client = static_cast<Client*>(w->data);
+    auto client = static_cast<libev_client*>(w->data);
     if (CLIENT_CONNECTED != client->state)
     {
         ev_timer_stop(loop, w); // reconnect will connect to preferred host first
@@ -373,7 +373,7 @@ void connect_to_prefered_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
 
 void probe_writecb(struct ev_loop* loop, ev_io* w, int revents)
 {
-    auto client = static_cast<Client*>(w->data);
+    auto client = static_cast<libev_client*>(w->data);
     ev_io_stop(loop, w);
     if (util::check_socket_connected(client->probe_skt_fd))
     {
@@ -383,8 +383,8 @@ void probe_writecb(struct ev_loop* loop, ev_io* w, int revents)
 
 void ares_socket_state_cb(void* data, int s, int read, int write)
 {
-    Client* client = static_cast<Client*>(data);
-    auto worker = static_cast<Worker*>(client->worker);
+    libev_client* client = static_cast<libev_client*>(data);
+    auto worker = static_cast<libev_worker*>(client->worker);
     if (read != 0 || write != 0)
     {
         if (client->ares_io_watchers.find(s) == client->ares_io_watchers.end())
@@ -620,7 +620,7 @@ std::vector<std::string> read_uri_from_file(std::istream& infile)
 }
 
 h2load::SDStats
-process_time_stats(const std::vector<std::unique_ptr<h2load::Worker_Interface>>& workers)
+process_time_stats(const std::vector<std::unique_ptr<h2load::base_worker>>& workers)
 {
     auto request_times_sampling = false;
     auto client_times_sampling = false;
@@ -1037,7 +1037,7 @@ size_t get_request_name_max_width(h2load::Config& config)
 }
 
 void output_realtime_stats(h2load::Config& config,
-                           std::vector<std::unique_ptr<h2load::Worker_Interface>>& workers,
+                           std::vector<std::unique_ptr<h2load::base_worker>>& workers,
                            std::atomic<bool>& workers_stopped, std::stringstream& dataStream)
 {
     std::vector<std::vector<size_t>> scenario_req_sent_till_now;
@@ -1262,7 +1262,7 @@ void output_realtime_stats(h2load::Config& config,
 
 
 std::vector<std::vector<h2load::SDStat>>
-                                      produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::Worker_Interface>>& workers)
+                                      produce_requests_latency_stats(const std::vector<std::unique_ptr<h2load::base_worker>>& workers)
 {
     auto request_times_sampling = false;
     size_t nrequest_times = 0;
@@ -1576,7 +1576,7 @@ void integrated_http2_server(std::stringstream& dataStream, h2load::Config& conf
 };
 
 void print_extended_stats_summary(const h2load::Stats& stats, h2load::Config& config,
-                                  const std::vector<std::unique_ptr<h2load::Worker_Interface>>& workers)
+                                  const std::vector<std::unique_ptr<h2load::base_worker>>& workers)
 {
     if (config.json_config_schema.scenarios.size())
     {

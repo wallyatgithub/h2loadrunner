@@ -48,7 +48,7 @@ const  std::string method_header = ":method";
 
 static std::string emptyString;
 
-class Client_Interface;
+class base_client;
 
 struct Request_Data
 {
@@ -70,7 +70,7 @@ struct Request_Data
     size_t curr_request_idx;
     size_t scenario_index;
     std::vector<std::string> string_collection;
-    std::function<void(int32_t, h2load::Client_Interface*)> request_sent_callback;
+    std::function<void(int32_t, h2load::base_client*)> request_sent_callback;
     explicit Request_Data():
         schema(&emptyString),
         authority(&emptyString),

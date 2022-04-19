@@ -11,7 +11,7 @@
 #endif
 #include "h2load_stats.h"
 #include "h2load_Config.h"
-#include "Worker_Interface.h"
+#include "base_worker.h"
 
 
 #include "memory"
@@ -21,7 +21,7 @@
 namespace h2load
 {
 
-class Worker: public Worker_Interface
+class libev_worker: public base_worker
 {
 public:
     struct ev_loop* loop;
@@ -31,10 +31,10 @@ public:
     ev_timer duration_watcher;
     ev_timer warmup_watcher;
 
-    Worker(uint32_t id, SSL_CTX* ssl_ctx, size_t nreq_todo, size_t nclients,
+    libev_worker(uint32_t id, SSL_CTX* ssl_ctx, size_t nreq_todo, size_t nclients,
            size_t rate, size_t max_samples, Config* config);
-    virtual ~Worker();
-    Worker(Worker&& o) = default;
+    virtual ~libev_worker();
+    libev_worker(libev_worker&& o) = default;
 
     virtual void start_rate_mode_period_timer();
     virtual void start_warmup_timer();
@@ -44,7 +44,7 @@ public:
     virtual void stop_duration_timer();
     virtual void run_event_loop();
     virtual void start_graceful_stop_timer();
-    virtual std::shared_ptr<Client_Interface> create_new_client(size_t req_todo);
+    virtual std::shared_ptr<base_client> create_new_client(size_t req_todo);
 
 
     void init_timers();
