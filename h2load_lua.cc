@@ -912,6 +912,67 @@ int stop_server(lua_State *L)
     return 0;
 }
 
+void load_service_script_into_lua_states(size_t group_id, const std::string& server_id)
+{
+    auto& lua_group_config = get_lua_group_config(group_id);
+    for (size_t index = 0; index < lua_group_config.lua_states_for_each_worker.size(); index++)
+    {
+        lua_State* parent_lua_state = lua_group_config.lua_states_for_each_worker[index].get();
+        set_inactive(parent_lua_state);
+        set_server_id(parent_lua_state, server_id);
+        luaL_dostring(parent_lua_state, lua_group_config.lua_script.c_str());
+    }
+}
+
+void invoke_service_registered_processor_function(lua_State *L, std::string lua_function_name,
+                                                                   boost::asio::io_service* ios,
+                                                                   uint64_t handler_id,
+                                                                   int32_t stream_id,
+                                                                   const std::multimap<std::string, std::string>& req_headers,
+                                                                   const std::string& payload)
+{
+    auto& lua_group_config = get_lua_group_config(get_group_id(L));
+    std::string& lua_script_to_load = lua_group_config.lua_script;
+    lua_State* cL = lua_newthread(L);
+    lua_group_config.coroutine_references[get_worker_index(L)][cL] = luaL_ref(L, LUA_REGISTRYINDEX);
+    lua_getglobal(cL, lua_function_name.c_str());
+    if (lua_isfunction(cL, -1))
+    {
+        lua_createtable(cL, 0, 3);
+        lua_pushlstring(cL, "ios", 3);
+        lua_pushlightuserdata(cL, ios);
+        lua_rawset(cL, -3);
+        lua_pushlstring(cL, "hid", 3);
+        lua_pushinteger(cL, handler_id);
+        lua_rawset(cL, -3);
+        lua_pushlstring(cL, "sid", 3);
+        lua_pushinteger(cL, stream_id);
+        lua_rawset(cL, -3);
+
+        std::map<std::string, std::string> headers;
+        for (auto& header : req_headers)
+        {
+            if (headers.count(header.first))
+            {
+                headers[header.first].append(";").append(header.second);
+            }
+            else
+            {
+                headers[header.first] = header.second;
+            }
+        }
+        lua_createtable(cL, 0, headers.size());
+        for (auto& header : headers)
+        {
+            lua_pushlstring(cL, header.first.c_str(), header.first.size());
+            lua_pushlstring(cL, header.second.c_str(), header.second.size());
+            lua_rawset(cL, -3);
+        }
+        lua_pushlstring(cL, payload.c_str(), payload.size());
+        lua_resume_wrapper(cL, 3);
+    }
+}
+
 int register_service_handler(lua_State *L)
 {
     std::string lua_function_name;
@@ -948,30 +1009,23 @@ int register_service_handler(lua_State *L)
     }
     std::string server_id = get_server_id(L);
     auto group_id = get_group_id(L);
-    auto& vec = get_H2Server_match_Instances(server_id);
+    auto number_of_thread_in_server = get_H2Server_match_Instances(server_id).size();
     auto& lua_group_config = get_lua_group_config(group_id);
     if (!lua_group_config.config_initialized)
     {
         lua_group_config.config_initialized = true;
         lua_group_config.number_of_lua_coroutines = 0;
         lua_group_config.number_of_client_to_same_host_in_one_worker = number_of_client;
-        lua_group_config.number_of_workers = vec.size();
+        lua_group_config.number_of_workers = number_of_thread_in_server;
         setup_test_group(group_id);
 
-        // TODO:
-        for (size_t index = 0; index < lua_group_config.lua_states_for_each_worker.size(); index++)
-        {
-            lua_State* parent_lua_state = lua_group_config.lua_states_for_each_worker[index].get();
-            set_inactive(parent_lua_state);
-            set_server_id(parent_lua_state, server_id);
-            luaL_dostring(parent_lua_state, lua_group_config.lua_script.c_str());
-        }
+        // TODO: is there any way to let lua load a function without running the whole script?
+        load_service_script_into_lua_states(group_id, server_id);
     }
 
     for (size_t index = 0; index < lua_group_config.number_of_workers; index++)
     {
         lua_State* parent_lua_state = lua_group_config.lua_states_for_each_worker[index].get();
-        set_server_id(parent_lua_state, server_id);
 
         auto request_processor = [parent_lua_state, lua_function_name](boost::asio::io_service* ios,
                                                     uint64_t handler_id,
@@ -979,52 +1033,10 @@ int register_service_handler(lua_State *L)
                                                     const std::multimap<std::string, std::string>& req_headers,
                                                     const std::string& payload)
         {
-            auto run_in_worker = [parent_lua_state, lua_function_name,
-                                  ios, handler_id, stream_id, req_headers,
-                                  payload]()
-            {
-                auto& lua_group_config = get_lua_group_config(get_group_id(parent_lua_state));
-                std::string& lua_script_to_load = lua_group_config.lua_script;
-                lua_State* cL = lua_newthread(parent_lua_state);
-                lua_group_config.coroutine_references[get_worker_index(parent_lua_state)][cL] = luaL_ref(parent_lua_state, LUA_REGISTRYINDEX);
-                //luaL_dostring(cL, lua_group_config.lua_script.c_str());
-                lua_getglobal(cL, lua_function_name.c_str());
-                if (lua_isfunction(cL, -1))
-                {
-                    lua_createtable(cL, 0, 3);
-                    lua_pushlstring(cL, "ios", 3);
-                    lua_pushlightuserdata(cL, ios);
-                    lua_rawset(cL, -3);
-                    lua_pushlstring(cL, "hid", 3);
-                    lua_pushinteger(cL, handler_id);
-                    lua_rawset(cL, -3);
-                    lua_pushlstring(cL, "sid", 3);
-                    lua_pushinteger(cL, stream_id);
-                    lua_rawset(cL, -3);
-
-                    std::map<std::string, std::string> headers;
-                    for (auto& header : req_headers)
-                    {
-                        if (headers.count(header.first))
-                        {
-                            headers[header.first].append(";").append(header.second);
-                        }
-                        else
-                        {
-                            headers[header.first] = header.second;
-                        }
-                    }
-                    lua_createtable(cL, 0, headers.size());
-                    for (auto& header : headers)
-                    {
-                        lua_pushlstring(cL, header.first.c_str(), header.first.size());
-                        lua_pushlstring(cL, header.second.c_str(), header.second.size());
-                        lua_rawset(cL, -3);
-                    }
-                    lua_pushlstring(cL, payload.c_str(), payload.size());
-                    lua_resume_wrapper(cL, 3);
-                }
-            };
+            auto run_in_worker = std::bind(invoke_service_registered_processor_function,
+                                           parent_lua_state, lua_function_name,
+                                           ios, handler_id, stream_id, req_headers,
+                                           payload);
             auto worker = get_worker(parent_lua_state);
             worker->get_io_context().post(run_in_worker);
             return true;

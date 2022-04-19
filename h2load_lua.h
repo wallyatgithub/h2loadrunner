@@ -106,6 +106,17 @@ std::mutex& get_lua_config_mutex(lua_State* L);
 
 Lua_State_Data& get_lua_state_data(lua_State* L);
 
+void start_test_group(size_t group_id);
+
+void load_service_script_into_lua_states(size_t group_id, const std::string& server_id);
+
+void invoke_service_registered_processor_function(lua_State *L, std::string lua_function_name,
+                                                                   boost::asio::io_service* ios,
+                                                                   uint64_t handler_id,
+                                                                   int32_t stream_id,
+                                                                   const std::multimap<std::string, std::string>& req_headers,
+                                                                   const std::string& payload);
+
 void setup_test_group(size_t group_id);
 
 void init_workers(size_t group_id);
