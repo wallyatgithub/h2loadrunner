@@ -68,6 +68,8 @@ void register_functions_to_lua(lua_State *L);
 
 void init_new_lua_state(lua_State* L);
 
+bool is_coroutine_status_tracked(lua_State* L);
+
 struct Lua_State_Data
 {
     size_t unique_id_within_group = 0;
@@ -80,7 +82,8 @@ struct Lua_Group_Config
         number_of_client_to_same_host_in_one_worker(1),
         number_of_lua_coroutines(1),
         config_initialized(false),
-        number_of_finished_coroutins(0)
+        number_of_finished_coroutins(0),
+        server_running(false)
     {
         coroutine_references.resize(number_of_workers);
     };
@@ -98,6 +101,8 @@ struct Lua_Group_Config
     std::vector<boost::asio::io_service::work> works;
     h2load::Config config_template;
     std::function<void()> group_start_entry;
+    bool server_running;
+    std::string server_id;
 };
 
 Lua_Group_Config& get_lua_group_config(size_t group_id);
@@ -110,12 +115,12 @@ void start_test_group(size_t group_id);
 
 void load_service_script_into_lua_states(size_t group_id, const std::string& server_id);
 
-void invoke_service_registered_processor_function(lua_State *L, std::string lua_function_name,
-                                                                   boost::asio::io_service* ios,
-                                                                   uint64_t handler_id,
-                                                                   int32_t stream_id,
-                                                                   const std::multimap<std::string, std::string>& req_headers,
-                                                                   const std::string& payload);
+void invoke_service_hanlder(lua_State *L, std::string lua_function_name,
+                                   boost::asio::io_service* ios,
+                                   uint64_t handler_id,
+                                   int32_t stream_id,
+                                   const std::multimap<std::string, std::string>& req_headers,
+                                   const std::string& payload);
 
 void setup_test_group(size_t group_id);
 

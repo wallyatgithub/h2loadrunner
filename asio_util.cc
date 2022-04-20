@@ -192,23 +192,41 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
 {
     try
     {
-
-        boost::asio::io_service work_offload_io_service;
-        boost::thread_group work_offload_thread_pool;
-        boost::asio::io_service::work work(work_offload_io_service);
-        for (size_t i = 0; i < config_schema.service.size(); i++)
-        {
-            work_offload_thread_pool.create_thread(boost::bind(&boost::asio::io_service::run, &work_offload_io_service));
-        }
-
         std::size_t num_threads = config_schema.threads;
-
         init_H2Server_match_Instances(num_threads, config_schema);
 
         auto this_thread_id = std::this_thread::get_id();
         std::stringstream ss;
         ss << this_thread_id;
         auto bootstrap_thread_id = ss.str();
+
+        bool create_off_load_thread = false;
+        H2Server& h2server = get_H2Server_match_Instances(bootstrap_thread_id)[0];
+        for (auto& service: h2server.services)
+        {
+            for (auto& response: service.second.responses)
+            {
+                if (response.lua_offload)
+                {
+                    create_off_load_thread = true;
+                    break;
+                }
+            }
+            if (create_off_load_thread)
+            {
+                break;
+            }
+        }
+        boost::asio::io_service work_offload_io_service;
+        boost::thread_group work_offload_thread_pool;
+        boost::asio::io_service::work work(work_offload_io_service);
+        if (create_off_load_thread)
+        {
+            for (size_t i = 0; i < config_schema.service.size(); i++)
+            {
+                work_offload_thread_pool.create_thread(boost::bind(&boost::asio::io_service::run, &work_offload_io_service));
+            }
+        }
 
         nghttp2::asio_http2::server::http2 server(config_schema);
 

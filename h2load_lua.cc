@@ -55,10 +55,11 @@ void set_worker_index(lua_State* L, size_t worker_index)
 
 size_t get_group_id(lua_State* L)
 {
+    size_t group_id = 0;
     auto top_before = lua_gettop(L);
     lua_pushlightuserdata(L, (void *)group_index_str.c_str());
     lua_gettable(L, LUA_REGISTRYINDEX);
-    auto group_id = lua_tonumber(L, -1);
+    group_id = lua_tonumber(L, -1);
     lua_settop(L, top_before);
     return group_id;
 }
@@ -179,7 +180,10 @@ void setup_test_group(size_t group_id)
 {
     auto& lua_group_config = get_lua_group_config(group_id);
     std::cerr << "number of workers: " << lua_group_config.number_of_workers
-              << ", nummber of coroutines: " << lua_group_config.number_of_lua_coroutines<<std::endl;
+              << ", nummber of coroutines: " << lua_group_config.number_of_lua_coroutines
+              << ", nummber of parallel connections to same host: "
+              << lua_group_config.number_of_client_to_same_host_in_one_worker
+              <<std::endl;
     // create one main state for each worker
     for (int i = 0; i < lua_group_config.number_of_workers; i++)
     {
@@ -291,12 +295,9 @@ bool is_test_finished(size_t number_of_test_groups)
 
     auto server_stopped = [](size_t group_id)
     {
-        for (auto& l: get_lua_group_config(group_id).lua_states_for_each_worker)
+        if (get_lua_group_config(group_id).server_running)
         {
-            if (get_server_id(l.get()).size())
-            {
-                return false;
-            }
+            return false;
         }
         return true;
     };
@@ -811,27 +812,39 @@ int lua_resume_if_yielded(lua_State *L, int nargs)
     }
 }
 
+bool is_coroutine_status_tracked(lua_State* L)
+{
+    auto group_id = get_group_id(L);
+    auto& lua_group_config = get_lua_group_config(group_id);
+    auto worker_index = get_worker_index(L);
+    if (get_lua_group_config(group_id).lua_state_data[worker_index].count(L))
+    {
+        return true;
+    }
+    return false;
+}
+
 int lua_resume_wrapper(lua_State *L, int nargs)
 {
     auto retCode = lua_resume(L, nargs);
     if (LUA_YIELD != retCode)
     {
-      auto group_id = get_group_id(L);
-      auto& lua_group_config = get_lua_group_config(group_id);
-      if (get_server_id(L).empty())
-      {
-            std::lock_guard<std::mutex> guard(get_lua_group_config_mutex(group_id));
-            lua_group_config.number_of_finished_coroutins++;
-      }
-      auto worker_index = get_worker_index(L);
-      if (lua_group_config.coroutine_references[worker_index].count(L))
-      {
-          auto parent_lua_state = lua_group_config.lua_states_for_each_worker[worker_index].get();
-          luaL_unref(parent_lua_state, LUA_REGISTRYINDEX, lua_group_config.coroutine_references[worker_index][L]);
-          lua_group_config.coroutine_references[worker_index].erase(L);
-          lua_gc(parent_lua_state, LUA_GCCOLLECT, 0);
-          lua_group_config.lua_state_data[worker_index].erase(L);
-      }
+        auto group_id = get_group_id(L);
+        auto& lua_group_config = get_lua_group_config(group_id);
+        auto worker_index = get_worker_index(L);
+        if (is_coroutine_status_tracked(L))
+        {
+              std::lock_guard<std::mutex> guard(get_lua_group_config_mutex(group_id));
+              lua_group_config.number_of_finished_coroutins++;
+        }
+        if (lua_group_config.coroutine_references[worker_index].count(L))
+        {
+            auto parent_lua_state = lua_group_config.lua_states_for_each_worker[worker_index].get();
+            luaL_unref(parent_lua_state, LUA_REGISTRYINDEX, lua_group_config.coroutine_references[worker_index][L]);
+            lua_group_config.coroutine_references[worker_index].erase(L);
+            lua_gc(parent_lua_state, LUA_GCCOLLECT, 0);
+            lua_group_config.lua_state_data[worker_index].erase(L);
+        }
     }
     return retCode;
 }
@@ -865,7 +878,7 @@ int start_server(lua_State *L)
 
     if (is_inactive(L))
     {
-        std::string server_id = get_server_id(L);
+        std::string server_id = get_lua_group_config(get_group_id(L)).server_id;
         lua_pushlstring(L, server_id.c_str(), server_id.size());
         return 1;
     }
@@ -887,7 +900,8 @@ int start_server(lua_State *L)
     ss<<bootstrap_thread_id;
     lua_pushlstring(L, ss.str().c_str(), ss.str().size());
     ready_promise.get_future().wait();
-    set_server_id(L, ss.str());
+    get_lua_group_config(get_group_id(L)).server_id = ss.str();
+    get_lua_group_config(get_group_id(L)).server_running = true;
     return 1;
 }
 
@@ -903,12 +917,9 @@ int stop_server(lua_State *L)
         stop_server(server_thread_hash);
     }
     lua_settop(L, 0);
-    set_server_id(L, "");
+    get_lua_group_config(get_group_id(L)).server_id.clear();
     auto group_id = get_group_id(L);
-    for (auto& l: get_lua_group_config(group_id).lua_states_for_each_worker)
-    {
-        set_server_id(l.get(), "");
-    }
+    get_lua_group_config(get_group_id(L)).server_running = false;
     return 0;
 }
 
@@ -919,12 +930,12 @@ void load_service_script_into_lua_states(size_t group_id, const std::string& ser
     {
         lua_State* parent_lua_state = lua_group_config.lua_states_for_each_worker[index].get();
         set_inactive(parent_lua_state);
-        set_server_id(parent_lua_state, server_id);
+        //set_server_id(parent_lua_state, server_id);
         luaL_dostring(parent_lua_state, lua_group_config.lua_script.c_str());
     }
 }
 
-void invoke_service_registered_processor_function(lua_State *L, std::string lua_function_name,
+void invoke_service_hanlder(lua_State *L, std::string lua_function_name,
                                                                    boost::asio::io_service* ios,
                                                                    uint64_t handler_id,
                                                                    int32_t stream_id,
@@ -932,9 +943,9 @@ void invoke_service_registered_processor_function(lua_State *L, std::string lua_
                                                                    const std::string& payload)
 {
     auto& lua_group_config = get_lua_group_config(get_group_id(L));
-    std::string& lua_script_to_load = lua_group_config.lua_script;
     lua_State* cL = lua_newthread(L);
     lua_group_config.coroutine_references[get_worker_index(L)][cL] = luaL_ref(L, LUA_REGISTRYINDEX);
+    lua_settop(L, 0);
     lua_getglobal(cL, lua_function_name.c_str());
     if (lua_isfunction(cL, -1))
     {
@@ -1007,7 +1018,7 @@ int register_service_handler(lua_State *L)
     {
         return 0;
     }
-    std::string server_id = get_server_id(L);
+    std::string server_id = get_lua_group_config(get_group_id(L)).server_id;
     auto group_id = get_group_id(L);
     auto number_of_thread_in_server = get_H2Server_match_Instances(server_id).size();
     auto& lua_group_config = get_lua_group_config(group_id);
@@ -1019,25 +1030,25 @@ int register_service_handler(lua_State *L)
         lua_group_config.number_of_workers = number_of_thread_in_server;
         setup_test_group(group_id);
 
-        // TODO: is there any way to let lua load a function without running the whole script?
+        // TODO: is there any way to locate a function without luaL_dostring which is to run the whole script?
         load_service_script_into_lua_states(group_id, server_id);
     }
 
     for (size_t index = 0; index < lua_group_config.number_of_workers; index++)
     {
         lua_State* parent_lua_state = lua_group_config.lua_states_for_each_worker[index].get();
+        h2load::asio_worker* worker = get_worker(parent_lua_state);
 
-        auto request_processor = [parent_lua_state, lua_function_name](boost::asio::io_service* ios,
+        auto request_processor = [parent_lua_state, lua_function_name, worker](boost::asio::io_service* ios,
                                                     uint64_t handler_id,
                                                     int32_t stream_id,
                                                     const std::multimap<std::string, std::string>& req_headers,
                                                     const std::string& payload)
         {
-            auto run_in_worker = std::bind(invoke_service_registered_processor_function,
+            auto run_in_worker = std::bind(invoke_service_hanlder,
                                            parent_lua_state, lua_function_name,
                                            ios, handler_id, stream_id, req_headers,
                                            payload);
-            auto worker = get_worker(parent_lua_state);
             worker->get_io_context().post(run_in_worker);
             return true;
         };
@@ -1110,10 +1121,6 @@ int send_response(lua_State *L)
                     lua_pop(L, 1);
                 }
                 break;
-            }
-            default:
-            {
-                std::cout<<"unexpected argument passed in"<<std::endl;;
             }
         }
         lua_pop(L, 1);
