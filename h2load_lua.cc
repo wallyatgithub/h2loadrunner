@@ -1018,9 +1018,8 @@ int register_service_handler(lua_State *L)
     {
         return 0;
     }
-    std::string server_id = get_lua_group_config(get_group_id(L)).server_id;
     auto group_id = get_group_id(L);
-    auto number_of_thread_in_server = get_H2Server_match_Instances(server_id).size();
+    auto number_of_thread_in_server = get_H2Server_match_Instances(server_thread_hash).size();
     auto& lua_group_config = get_lua_group_config(group_id);
     if (!lua_group_config.config_initialized)
     {
@@ -1031,7 +1030,7 @@ int register_service_handler(lua_State *L)
         setup_test_group(group_id);
 
         // TODO: is there any way to locate a function without luaL_dostring which is to run the whole script?
-        load_service_script_into_lua_states(group_id, server_id);
+        load_service_script_into_lua_states(group_id, server_thread_hash);
     }
 
     for (size_t index = 0; index < lua_group_config.number_of_workers; index++)
