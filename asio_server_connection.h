@@ -90,10 +90,11 @@ public:
     auto start_in_own_thread = [this, &conf]()
     {
         boost::system::error_code ec;
+        auto self = this->shared_from_this();
 
         handler_ = std::make_shared<http2_handler>(
             GET_IO_SERVICE(socket_), socket_.lowest_layer().remote_endpoint(ec),
-            [this]() { do_write(); }, mux_, conf);
+            [this, self]() { do_write(); }, mux_, conf);
         if (handler_->start() != 0) {
           stop();
           return;
