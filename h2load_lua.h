@@ -68,7 +68,9 @@ void register_functions_to_lua(lua_State *L);
 
 void init_new_lua_state(lua_State* L);
 
-bool is_coroutine_status_tracked(lua_State* L);
+bool is_coroutine_with_unique_id(lua_State* L);
+
+bool is_coroutine_to_be_returned_to_pool(lua_State* L);
 
 struct Lua_State_Data
 {
@@ -80,27 +82,28 @@ struct Lua_Group_Config
     explicit Lua_Group_Config():
         number_of_workers(1),
         number_of_client_to_same_host_in_one_worker(1),
-        number_of_lua_coroutines(1),
+        number_of_parallel_lua_coroutines(1),
         config_initialized(false),
         number_of_finished_coroutins(0),
         server_running(false)
     {
         coroutine_references.resize(number_of_workers);
+        lua_coroutine_pools.resize(number_of_workers);
     };
 
-    size_t number_of_lua_coroutines;
+    size_t number_of_parallel_lua_coroutines;
     size_t number_of_client_to_same_host_in_one_worker;
     size_t number_of_workers;
     bool config_initialized;
     std::string lua_script;
     size_t number_of_finished_coroutins;
     std::vector<std::map<lua_State*, int>> coroutine_references;
-    std::vector<std::shared_ptr<lua_State>> lua_states_for_each_worker;
+    std::vector<std::vector<lua_State*>> lua_coroutine_pools; // TODO: should we clean up this pool before process ends?
+    std::vector<std::shared_ptr<lua_State>> lua_main_states_per_worker;
     std::vector<std::shared_ptr<h2load::asio_worker>> workers;
     std::map<size_t, std::map<lua_State*, Lua_State_Data>> lua_state_data;
     std::vector<boost::asio::io_service::work> works;
     h2load::Config config_template;
-    std::function<void()> group_start_entry;
     bool server_running;
     std::string server_id;
 };
@@ -142,18 +145,10 @@ void set_server_id(lua_State* L, std::string server_id);
 
 std::string get_server_id(lua_State* L);
 
-void set_inactive(lua_State* L);
+void set_passive(lua_State* L);
 
-bool is_inactive(lua_State* L);
+bool is_passive(lua_State* L);
 
 bool is_test_finished(size_t number_of_test_groups);
-
-/*
-#define force_in_worker_thread_if_not_yet(L) \
-if (to_be_restarted_in_worker_thread(L)) \
-{ \
-    return lua_yield(L, 0); \
-}
-*/
 
 #endif
