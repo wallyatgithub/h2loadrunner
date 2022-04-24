@@ -202,10 +202,15 @@ void asio_worker::process_user_timers()
     std::chrono::steady_clock::time_point curr_timepoint = std::chrono::steady_clock::now();
     auto stop_sign = user_timers.upper_bound(curr_timepoint);
     auto iter = user_timers.begin();
+    std::vector<std::function<void(void)>> cbs;
     while (iter != stop_sign)
     {
-        iter->second();
+        cbs.push_back(iter->second);
         iter = user_timers.erase(iter);
+    }
+    for (auto& cb: cbs)
+    {
+        cb();
     }
 }
 

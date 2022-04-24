@@ -290,13 +290,17 @@ local after = os.time()
 if (after - before >= 1)
 then
     print "test pass"
+    print("before:", before)
+    print("after:", after)
 else
     print ("test failed", before, after);
 end
 
 print "test time_since_epoch"
 local time_since_epoch_before = time_since_epoch()
-sleep_for_ms(1000)
+print("now before sleep_for_ms:", os.time())
+sleep_for_ms(1100)
+print("now after sleep_for_ms:", os.time())
 local time_since_epoch_after = time_since_epoch()
 if (time_since_epoch_after - time_since_epoch_before >= 1000)
 then

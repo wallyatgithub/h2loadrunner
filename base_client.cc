@@ -1525,8 +1525,6 @@ void base_client::on_stream_close(int32_t stream_id, bool success, bool final)
 
     inc_status_counter_and_validate_response(stream_id);
 
-    process_stream_user_callback(stream_id);
-
     auto finished_request = requests_awaiting_response.find(stream_id);
 
     if (worker->current_phase == Phase::MAIN_DURATION ||
@@ -1588,6 +1586,8 @@ void base_client::on_stream_close(int32_t stream_id, bool success, bool final)
     }
 
     worker->report_progress();
+
+    process_stream_user_callback(stream_id);
 
     if (finished_request != requests_awaiting_response.end())
     {
