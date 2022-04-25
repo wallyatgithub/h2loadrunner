@@ -38,6 +38,8 @@ const static std::string group_index_str = "group_index";
 const static std::string server_id_str = "server_id";
 const static std::string inactive_state = "inactive_state";
 
+thread_local static bool need_to_return_from_c_function = false;
+thread_local static size_t number_of_result_to_return;
 
 void set_group_id(lua_State* L, size_t group_id)
 {
@@ -791,33 +793,28 @@ int lua_resume_if_yielded(lua_State *L, int nargs)
     }
     else
     {
-        auto& lua_state_data = get_lua_state_data(L);
-        lua_state_data.number_of_result = nargs;
-        lua_state_data.need_to_return_from_c_function = true;
+        number_of_result_to_return = nargs;
+        need_to_return_from_c_function = true;
         return nargs;
     }
 }
 
 void enter_c_function(lua_State* L)
 {
-    auto& lua_state_data = get_lua_state_data(L);
-    lua_state_data.number_of_result = 0;
-    lua_state_data.need_to_return_from_c_function = false;
+    number_of_result_to_return = 0;
+    need_to_return_from_c_function = false;
 }
 
 uint64_t leave_c_function(lua_State* L)
 {
-    auto& lua_state_data = get_lua_state_data(L);
-    if (lua_state_data.need_to_return_from_c_function)
-    {
-        lua_state_data.need_to_return_from_c_function = false;
-        auto number_of_result = lua_state_data.number_of_result;
-        return number_of_result;
-    }
-    else
-    {
-        return lua_yield(L, 0);
-    }
+      if (need_to_return_from_c_function)
+      {
+          return number_of_result_to_return;
+      }
+      else
+      {
+          return lua_yield(L, 0);
+      }
 }
 
 bool is_coroutine_with_unique_id(lua_State* L)

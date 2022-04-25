@@ -75,8 +75,6 @@ bool is_coroutine_to_be_returned_to_pool(lua_State* L);
 struct Lua_State_Data
 {
     int64_t unique_id_within_group = 0;
-    bool need_to_return_from_c_function = false;
-    size_t number_of_result = 0;
 };
 
 struct Lua_Group_Config
@@ -153,6 +151,9 @@ bool is_test_finished(size_t number_of_test_groups);
 
 void enter_c_function(lua_State* L);
 
+/*
+ * this function would return or yield, depending on the outcome of the lua c function
+ */
 uint64_t leave_c_function(lua_State* L);
 
 #endif
