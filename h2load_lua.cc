@@ -337,7 +337,7 @@ void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load
         bootstrap_lua_states.push_back(L);
         set_group_id(L, i);
         set_worker_index(L, 0);
-        get_lua_state_data(L).unique_id_within_group = -1;
+        get_lua_state_data(L).unique_id_within_group = 0;
         luaL_loadstring(L, lua_scripts[i].c_str());
         // if setup_parallel_test is not called, meaning no new coroutine is created,
         // then bootstrap L is to execute the script directly for each group
@@ -526,8 +526,8 @@ int32_t _make_connection(lua_State *L, const std::string& uri, std::function<voi
             }
         }
     };
-    //worker->get_io_context().post(run_inside_worker);
-    run_inside_worker();
+    worker->get_io_context().post(run_inside_worker);
+    //run_inside_worker();
     return 0;
 }
 
@@ -638,8 +638,8 @@ int sleep_for_ms(lua_State *L)
     {
         worker->enqueue_user_timer(ms_to_sleep, wakeup_me);
     };
-    //worker->get_io_context().post(run_in_worker);
-    run_in_worker();
+    worker->get_io_context().post(run_in_worker);
+    //run_in_worker();
     return lua_yield(L, 0);
 }
 
@@ -675,7 +675,8 @@ int await_response(lua_State *L)
         lua_resume_if_yielded(L, 2);
     };
 
-    retrieve_response_cb();
+    worker->get_io_context().post(retrieve_response_cb);
+    //retrieve_response_cb();
 
     return leave_c_function(L);
 }
@@ -972,7 +973,7 @@ void invoke_service_hanlder(lua_State *L, std::string lua_function_name,
     {
         cL = lua_newthread(L);
         lua_group_config.coroutine_references[get_worker_index(L)][cL] = luaL_ref(L, LUA_REGISTRYINDEX);
-        get_lua_state_data(cL).unique_id_within_group = 0;
+        get_lua_state_data(cL).unique_id_within_group = -1;
 
         lua_settop(L, 0);
     }
