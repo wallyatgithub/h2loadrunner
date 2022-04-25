@@ -1,13 +1,13 @@
 -- The following parameters can be changed for different test purpose
 
-local total_target_tps = 12000
+local total_target_tps = 24000
 
 -- TPS each worker thread will take = (total_target_tps / number_of_worker_threads)
 local number_of_worker_threads = 8
 
 local duration_to_run_in_seconds = 60
 
-local connections_per_host_per_thread = 10
+local connections_per_host_per_thread = 20
 
 -- each worker_thread will take (number_of_virtual_users / number_of_worker_threads) of virtual user
 local number_of_virtual_users = 24000

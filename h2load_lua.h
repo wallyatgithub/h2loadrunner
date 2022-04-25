@@ -133,8 +133,6 @@ void init_workers(size_t group_id);
 
 void stop_workers(size_t number_of_groups);
 
-bool is_running_in_worker_thread(lua_State* L);
-
 void set_group_id(lua_State* L, size_t group_id);
 
 void set_worker_index(lua_State* L, size_t worker_index);

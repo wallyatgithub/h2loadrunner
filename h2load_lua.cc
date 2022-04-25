@@ -278,13 +278,12 @@ void stop_workers(size_t number_of_groups)
     for (int i = 0; i < get_lua_group_config(group_index).workers.size(); i++)
     {
         auto worker_ptr = get_lua_group_config(group_index).workers[i].get();
-        auto stop_user_timer_service = [worker_ptr]()
+        auto stop_user_timer_and_clients = [worker_ptr]()
         {
             worker_ptr->stop_tick_timer();
             worker_ptr->stop_all_clients();
         };
-        worker_ptr->get_io_context().post(stop_user_timer_service);
-        // use std::move to destroy work
+        worker_ptr->get_io_context().post(stop_user_timer_and_clients);
         auto dummy = std::move(get_lua_group_config(group_index).works[i]);
     }
 }
@@ -383,15 +382,6 @@ void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load
     stop_workers(number_of_groups);
     // to let all workers clean up and quit
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-}
-
-bool is_running_in_worker_thread(lua_State* L)
-{
-    auto& lua_group_config = get_lua_group_config(get_group_id(L));
-    auto worker_thread = lua_group_config.workers[get_worker_index(L)];
-    auto curr_thread_id = std::this_thread::get_id();
-    auto worker_thread_id = worker_thread->get_thread_id();
-    return (curr_thread_id == worker_thread_id);
 }
 
 void init_workers(size_t group_id)
@@ -617,7 +607,6 @@ int time_since_epoch(lua_State *L)
 {
     auto curr_time_point = std::chrono::steady_clock::now();
     auto ms_since_epoch = std::chrono::duration_cast<std::chrono::milliseconds>(curr_time_point.time_since_epoch()).count();
-    std::cout<<"ms_since_epoch:"<<ms_since_epoch<<std::endl;
     lua_pushinteger(L, ms_since_epoch);
     return 1;
 }
@@ -871,7 +860,7 @@ int lua_resume_wrapper(lua_State *L, int nargs)
                 auto parent_lua_state = lua_group_config.lua_main_states_per_worker[worker_index].get();
                 luaL_unref(parent_lua_state, LUA_REGISTRYINDEX, lua_group_config.coroutine_references[worker_index][L]);
                 lua_group_config.coroutine_references[worker_index].erase(L);
-                lua_gc(parent_lua_state, LUA_GCCOLLECT, 0);
+                //lua_gc(parent_lua_state, LUA_GCCOLLECT, 0);
                 lua_group_config.lua_state_data[worker_index].erase(L);
             }
         }

@@ -1195,8 +1195,11 @@ size_t base_client::get_index_of_next_scenario_to_run()
         for (size_t scenario_index = 0; scenario_index < config->json_config_schema.scenarios.size(); scenario_index++)
         {
             auto& scenario = config->json_config_schema.scenarios[scenario_index];
-            totalWeight += ((scenario.weight * common_multiple) / scenario.requests.size());
-            schedule_map[totalWeight] = scenario_index;
+            if (scenario.weight > 0)
+            {
+                totalWeight += ((scenario.weight * common_multiple) / scenario.requests.size());
+                schedule_map[totalWeight] = scenario_index;
+            }
         }
         return schedule_map;
     };
@@ -1789,19 +1792,11 @@ void base_client::on_request_start(int32_t stream_id)
 {
     size_t scenario_index = 0;
     size_t request_index = 0;
-    if (worker->scenario_stats.size() > 0)
+    auto request_data = requests_awaiting_response.find(stream_id);
+    if ((worker->scenario_stats.size() > 0) && (request_data != requests_awaiting_response.end()))
     {
-        auto request_data = requests_awaiting_response.find(stream_id);
-        if (request_data != requests_awaiting_response.end())
-        {
-            scenario_index = request_data->second.scenario_index;
-            request_index = request_data->second.curr_request_idx;
-            if (request_data->second.request_sent_callback)
-            {
-                request_data->second.request_sent_callback(stream_id, this);
-                auto dummy = std::move(request_data->second.request_sent_callback);
-            }
-        }
+        scenario_index = request_data->second.scenario_index;
+        request_index = request_data->second.curr_request_idx;
     }
 
     if (streams.count(stream_id))
@@ -1813,6 +1808,13 @@ void base_client::on_request_start(int32_t stream_id)
     streams.insert(std::make_pair(stream_id, Stream(scenario_index, request_index, stats_eligible)));
     auto curr_timepoint = std::chrono::steady_clock::now();
     stream_timestamp.insert(std::make_pair(curr_timepoint, stream_id));
+
+    if ((request_data != requests_awaiting_response.end()) && (request_data->second.request_sent_callback))
+    {
+        request_data->second.request_sent_callback(stream_id, this);
+        auto dummy = std::move(request_data->second.request_sent_callback);
+    }
+
 }
 
 void base_client::record_request_time(RequestStat* req_stat)

@@ -231,14 +231,19 @@ int asio_client_connection::connected()
     {
         std::cerr << __FUNCTION__ << ":" << authority << std::endl;
     }
+
     is_client_stopped = false;
+
     do_read();
+
     if (connection_made() != 0)
     {
         call_connected_callbacks(false);
         return -1;
     }
+
     call_connected_callbacks(true);
+
     return 0;
 }
 
