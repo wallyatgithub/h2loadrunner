@@ -37,6 +37,9 @@ const static std::string worker_index_str = "worker_index";
 const static std::string group_index_str = "group_index";
 const static std::string server_id_str = "server_id";
 const static std::string inactive_state = "inactive_state";
+const static std::string io_service_str = "ios";
+const static std::string handler_id_str = "hid";
+const static std::string stream_id_str = "sid";
 
 thread_local static bool need_to_return_from_c_function = false;
 thread_local static size_t number_of_result_to_return;
@@ -467,7 +470,7 @@ int32_t _make_connection(lua_State *L, const std::string& uri, std::function<voi
     if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0 ||
         !util::has_uri_field(u, UF_SCHEMA) || !util::has_uri_field(u, UF_HOST))
     {
-        std::cout<<"invalid uri:"<<uri<<std::endl;
+        std::cerr<<"invalid uri:"<<uri<<std::endl;
         connected_callback(false, nullptr);
         return -1;
     }
@@ -971,7 +974,6 @@ void invoke_service_hanlder(lua_State *L, std::string lua_function_name,
         cL = lua_newthread(L);
         lua_group_config.coroutine_references[get_worker_index(L)][cL] = luaL_ref(L, LUA_REGISTRYINDEX);
         get_lua_state_data(cL).unique_id_within_group = -1;
-
         lua_settop(L, 0);
     }
 
@@ -979,13 +981,13 @@ void invoke_service_hanlder(lua_State *L, std::string lua_function_name,
     if (lua_isfunction(cL, -1))
     {
         lua_createtable(cL, 0, 3);
-        lua_pushlstring(cL, "ios", 3);
+        lua_pushlightuserdata(cL, (void *)io_service_str.c_str());
         lua_pushlightuserdata(cL, ios);
         lua_rawset(cL, -3);
-        lua_pushlstring(cL, "hid", 3);
+        lua_pushlightuserdata(cL, (void *)handler_id_str.c_str());
         lua_pushinteger(cL, handler_id);
         lua_rawset(cL, -3);
-        lua_pushlstring(cL, "sid", 3);
+        lua_pushlightuserdata(cL, (void *)stream_id_str.c_str());
         lua_pushinteger(cL, stream_id);
         lua_rawset(cL, -3);
 
@@ -1110,40 +1112,48 @@ int send_response(lua_State *L)
                 lua_pushnil(L);
                 while (lua_next(L, -2) != 0)
                 {
-                    size_t len;
-                    /* uses 'key' (at index -2) and 'value' (at index -1) */
-                    const char* k = lua_tolstring(L, -2, &len);
-                    std::string key(k, len);
-
-                    if (LUA_TSTRING == lua_type(L, -1))
+                    if (LUA_TLIGHTUSERDATA == lua_type(L, -2))
                     {
-                        const char* v = lua_tolstring(L, -1, &len);
-                        std::string value(v, len);
-                        //util::inp_strlower(key);
-                        response_headers[key] = value;
-                    }
-                    else if (LUA_TLIGHTUSERDATA == lua_type(L, -1))
-                    {
-                        ios = static_cast<boost::asio::io_service*>(lua_touserdata(L, -1));
-                    }
-                    else if (LUA_TNUMBER == lua_type(L, -1))
-                    {
-                        if (key == "hid")
+                        auto key = static_cast<const char*>(lua_touserdata(L, -2));
+                        if (key == io_service_str.c_str())
+                        {
+                            ios = static_cast<boost::asio::io_service*>(lua_touserdata(L, -1));
+                        }
+                        else if (key == handler_id_str.c_str())
                         {
                             handler_id = lua_tointeger(L, -1);
                         }
-                        else if (key == "sid")
+                        else if (key == stream_id_str.c_str())
                         {
                             stream_id= lua_tointeger(L, -1);
                         }
                         else
                         {
-                            std::cout<<"invalid key:"<<key<<std::endl;;
+                            std::cerr<<__LINE__<<" invalid key:"<<key<<std::endl;;
+                        }
+                    }
+                    else if (LUA_TSTRING == lua_type(L, -2))
+                    {
+                        size_t len;
+                        /* uses 'key' (at index -2) and 'value' (at index -1) */
+                        const char* k = lua_tolstring(L, -2, &len);
+                        std::string key(k, len);
+
+                        if (LUA_TSTRING == lua_type(L, -1))
+                        {
+                            const char* v = lua_tolstring(L, -1, &len);
+                            std::string value(v, len);
+                            //util::inp_strlower(key);
+                            response_headers[key] = value;
+                        }
+                        else
+                        {
+                            std::cerr<<"invalid value:"<<lua_type(L, -1)<<std::endl;;
                         }
                     }
                     else
                     {
-                        std::cout<<"invalid value:"<<lua_type(L, -1)<<std::endl;;
+                        std::cerr<<"invalid key type:"<<lua_type(L, -2)<<std::endl;;
                     }
                     /* removes 'value'; keeps 'key' for next iteration */
                     lua_pop(L, 1);
