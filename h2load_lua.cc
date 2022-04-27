@@ -991,23 +991,33 @@ void invoke_service_hanlder(lua_State *L, std::string lua_function_name,
         lua_pushinteger(cL, stream_id);
         lua_rawset(cL, -3);
 
-        std::map<std::string, std::string> headers;
+        std::map<const std::string*, std::vector<const std::string*>> headers;
         for (auto& header : req_headers)
         {
-            if (headers.count(header.first))
-            {
-                headers[header.first].append(";").append(header.second);
-            }
-            else
-            {
-                headers[header.first] = header.second;
-            }
+            headers[&header.first].push_back(&header.second);
         }
+
         lua_createtable(cL, 0, headers.size());
         for (auto& header : headers)
         {
-            lua_pushlstring(cL, header.first.c_str(), header.first.size());
-            lua_pushlstring(cL, header.second.c_str(), header.second.size());
+            lua_pushlstring(cL, header.first->c_str(), header.first->size());
+            if (header.second.size() == 1)
+            {
+                lua_pushlstring(cL, header.second[0]->c_str(), header.second[0]->size());
+            }
+            else
+            {
+                std::string header_value;
+                for (auto val: header.second)
+                {
+                    if (header_value.size())
+                    {
+                        header_value.append(";");
+                    }
+                    header_value.append(*val);
+                }
+                lua_pushlstring(cL, header_value.c_str(), header_value.size());
+            }
             lua_rawset(cL, -3);
         }
         lua_pushlstring(cL, payload.c_str(), payload.size());
