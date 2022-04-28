@@ -71,12 +71,14 @@ struct Request_Data
     size_t scenario_index;
     std::vector<std::string> string_collection;
     std::function<void(int32_t, h2load::base_client*)> request_sent_callback;
+    uint32_t stream_timeout_in_ms;
     explicit Request_Data():
         schema(&emptyString),
         authority(&emptyString),
         req_payload(&emptyString),
         path(&emptyString),
-        method(&emptyString)
+        method(&emptyString),
+        stream_timeout_in_ms(0)
     {
         user_id = 0;
         status_code = 0;

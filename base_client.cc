@@ -1420,10 +1420,8 @@ void base_client::reset_timeout_requests()
     {
         return;
     }
-    const std::chrono::milliseconds timeout_duration(config->stream_timeout_in_ms);
     std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
-    std::chrono::steady_clock::time_point timeout_timepoint = curr_time_point - timeout_duration;
-    auto no_timeout_it = stream_timestamp.upper_bound(timeout_timepoint);
+    auto no_timeout_it = stream_timestamp.upper_bound(curr_time_point);
     auto it = stream_timestamp.begin();
     bool call_signal_write = false;
     while (it != no_timeout_it)
@@ -1807,7 +1805,13 @@ void base_client::on_request_start(int32_t stream_id)
                            || worker->current_phase == Phase::MAIN_DURATION_GRACEFUL_SHUTDOWN);
     streams.insert(std::make_pair(stream_id, Stream(scenario_index, request_index, stats_eligible)));
     auto curr_timepoint = std::chrono::steady_clock::now();
-    stream_timestamp.insert(std::make_pair(curr_timepoint, stream_id));
+    auto timeout_interval = request_data->second.stream_timeout_in_ms;
+    if (!timeout_interval)
+    {
+        timeout_interval = config->json_config_schema.stream_timeout_in_ms;
+    }
+    auto timeout_timepoint = curr_timepoint + std::chrono::milliseconds(timeout_interval);
+    stream_timestamp.insert(std::make_pair(timeout_timepoint, stream_id));
 
     if ((request_data != requests_awaiting_response.end()) && (request_data->second.request_sent_callback))
     {

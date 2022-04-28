@@ -693,6 +693,7 @@ int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::base_cl
     std::string payload;
     std::map<std::string, std::string, ci_less> headers;
     static std::map<std::string, std::string, ci_less> dummyHeaders;
+    uint32_t timeout_interval_in_ms = 0;
     int top = lua_gettop(L);
     for (int i = 0; i < top; i++)
     {
@@ -729,6 +730,11 @@ int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::base_cl
                 }
                 break;
             }
+            case LUA_TNUMBER:
+            {
+                timeout_interval_in_ms = lua_tointeger(L, -1);
+                break;
+            }
             default:
             {
                 std::cerr << __FUNCTION__<<": invalid parameter passed in" << std::endl;
@@ -755,7 +761,7 @@ int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::base_cl
         h2load::asio_worker* worker;
         worker = get_worker(L);
 
-        auto connected_callback = [payload, schema, authority, method, path, headers, request_sent_callback](bool success, h2load::base_client* client)
+        auto connected_callback = [payload, schema, authority, method, path, headers, request_sent_callback, timeout_interval_in_ms](bool success, h2load::base_client* client)
         {
             if (!success)
             {
@@ -776,6 +782,7 @@ int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::base_cl
             request_to_send.schema = &(request_to_send.string_collection.back());
             request_to_send.shadow_req_headers = std::move(headers);
             request_to_send.req_headers = &dummyHeaders;
+            request_to_send.stream_timeout_in_ms = timeout_interval_in_ms;
             client->requests_to_submit.emplace_back(std::move(request_to_send));
             client->submit_request();
         };
