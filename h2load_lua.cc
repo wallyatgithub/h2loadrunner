@@ -859,7 +859,7 @@ int lua_resume_wrapper(lua_State *L, int nargs)
         }
         if (lua_group_config.coroutine_references[worker_index].count(L))
         {
-            if (is_coroutine_to_be_returned_to_pool(L))
+            if (is_coroutine_to_be_returned_to_pool(L) && (LUA_OK == retCode))
             {
                 lua_group_config.lua_coroutine_pools[worker_index].push_back(L);
             }
