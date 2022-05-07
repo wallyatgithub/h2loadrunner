@@ -124,6 +124,8 @@ struct Lua_Group_Config
 
 Lua_Group_Config& get_lua_group_config(size_t group_id);
 
+Data_Per_Worker_Thread& get_runtime_data(lua_State* L);
+
 std::mutex& get_lua_config_mutex(lua_State* L);
 
 Lua_State_Data& get_lua_state_data(lua_State* L);
