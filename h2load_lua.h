@@ -86,6 +86,15 @@ struct Host_Resolution_Data
     std::chrono::steady_clock::time_point expire_time_point;
 };
 
+struct Data_Per_Worker_Thread
+{
+    std::map<lua_State*, int> coroutine_references;
+    std::map<std::string, Host_Resolution_Data> host_resolution_data;
+    std::vector<lua_State*> lua_coroutine_pools;
+    std::shared_ptr<lua_State> lua_main_states_per_worker;
+    std::map<lua_State*, Lua_State_Data> lua_state_data;
+};
+
 struct Lua_Group_Config
 {
     explicit Lua_Group_Config():
@@ -96,8 +105,7 @@ struct Lua_Group_Config
         number_of_finished_coroutins(0),
         server_running(false)
     {
-        coroutine_references.resize(number_of_workers);
-        lua_coroutine_pools.resize(number_of_workers);
+        data_per_worker_thread.resize(number_of_workers);
     };
 
     size_t number_of_parallel_lua_coroutines;
@@ -106,12 +114,8 @@ struct Lua_Group_Config
     bool config_initialized;
     std::string lua_script;
     size_t number_of_finished_coroutins;
-    std::vector<std::map<lua_State*, int>> coroutine_references;
-    std::vector<std::map<std::string, Host_Resolution_Data>> host_resolution_data;
-    std::vector<std::vector<lua_State*>> lua_coroutine_pools;
-    std::vector<std::shared_ptr<lua_State>> lua_main_states_per_worker;
+    std::vector<Data_Per_Worker_Thread> data_per_worker_thread;
     std::vector<std::shared_ptr<h2load::asio_worker>> workers;
-    std::map<size_t, std::map<lua_State*, Lua_State_Data>> lua_state_data;
     std::vector<boost::asio::io_service::work> works;
     h2load::Config config_template;
     bool server_running;

@@ -775,6 +775,10 @@ int main(int argc, char** argv)
         for (auto& script_file: script_files)
         {
             std::ifstream buffer(script_file);
+            if (!buffer.is_open())
+            {
+                std::cerr << "file open error: " << script_file<<std::endl;
+            }
             std::string lua_script((std::istreambuf_iterator<char>(buffer)),
                                     std::istreambuf_iterator<char>());
             lua_scripts.push_back(lua_script);

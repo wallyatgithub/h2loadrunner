@@ -1,6 +1,6 @@
 -- The following parameters can be changed for different test purpose
 
-local total_target_tps = 24000
+local total_target_tps = 12000
 
 -- TPS each worker thread will take = (total_target_tps / number_of_worker_threads)
 local number_of_worker_threads = 8
