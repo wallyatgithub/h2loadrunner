@@ -46,6 +46,8 @@ int send_response(lua_State *L);
 
 int wait_for_message(lua_State *L);
 
+int resolve_hostname(lua_State *L);
+
 }
 
 int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::base_client*)> request_sent_callback);
@@ -77,6 +79,13 @@ struct Lua_State_Data
     int64_t unique_id_within_group = 0;
 };
 
+struct Host_Resolution_Data
+{
+    std::vector<lua_State*> lua_sates_await_result;
+    std::vector<std::string> ip_addresses;
+    std::chrono::steady_clock::time_point expire_time_point;
+};
+
 struct Lua_Group_Config
 {
     explicit Lua_Group_Config():
@@ -98,7 +107,8 @@ struct Lua_Group_Config
     std::string lua_script;
     size_t number_of_finished_coroutins;
     std::vector<std::map<lua_State*, int>> coroutine_references;
-    std::vector<std::vector<lua_State*>> lua_coroutine_pools; // TODO: should we clean up this pool before process ends?
+    std::vector<std::map<std::string, Host_Resolution_Data>> host_resolution_data;
+    std::vector<std::vector<lua_State*>> lua_coroutine_pools;
     std::vector<std::shared_ptr<lua_State>> lua_main_states_per_worker;
     std::vector<std::shared_ptr<h2load::asio_worker>> workers;
     std::map<size_t, std::map<lua_State*, Lua_State_Data>> lua_state_data;

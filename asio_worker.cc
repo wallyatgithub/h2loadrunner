@@ -44,7 +44,8 @@ asio_worker::asio_worker(uint32_t id, size_t nreq_todo, size_t nclients,
     warmup_timer(io_context),
     duration_timer(io_context),
     tick_timer(io_context),
-    ssl_ctx(boost::asio::ssl::context::sslv23)
+    ssl_ctx(boost::asio::ssl::context::sslv23),
+    async_resolver(io_context)
 {
     setup_SSL_CTX(ssl_ctx.native_handle(), *config);
 }
@@ -212,6 +213,23 @@ void asio_worker::process_user_timers()
     {
         cb();
     }
+}
+
+void asio_worker::resolve_hostname(const std::string& hostname, const std::function<void(std::vector<std::string>&)>& cb_function)
+{
+    auto resolve_handler = [cb_function](const boost::system::error_code& ec, boost::asio::ip::tcp::resolver::results_type results)
+    {
+        if (!ec)
+        {
+            std::vector<std::string> resolved_addresses;
+            for (auto it = results.begin(); it != results.end(); it++)
+            {
+                resolved_addresses.push_back(it->endpoint().address().to_string());
+            }
+            cb_function(resolved_addresses);
+        }
+    };
+    async_resolver.async_resolve(hostname, "", resolve_handler);
 }
 
 }

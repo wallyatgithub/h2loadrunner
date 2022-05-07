@@ -202,6 +202,8 @@ void setup_test_group(size_t group_id)
         lua_group_config.lua_main_states_per_worker.push_back(lua_state);
         std::map<lua_State*, int> coroutine_reference_map;
         lua_group_config.coroutine_references.push_back(coroutine_reference_map);
+        std::map<std::string, Host_Resolution_Data> dummy_map;
+        lua_group_config.host_resolution_data.push_back(dummy_map);
         std::vector<lua_State*> coroutine_pool;
         lua_group_config.lua_coroutine_pools.push_back(coroutine_pool);
     }
@@ -274,6 +276,7 @@ void init_new_lua_state(lua_State* L)
     lua_register(L, "register_service_handler", register_service_handler);
     lua_register(L, "send_response", send_response);
     lua_register(L, "wait_for_message", wait_for_message);
+    lua_register(L, "resolve_hostname", resolve_hostname);
 }
 
 
@@ -618,6 +621,8 @@ int time_since_epoch(lua_State *L)
 
 int sleep_for_ms(lua_State *L)
 {
+    enter_c_function(L);
+
     int64_t ms_to_sleep = 0;
     std::string stack;
     int top = lua_gettop(L);
@@ -645,7 +650,8 @@ int sleep_for_ms(lua_State *L)
     };
     worker->get_io_context().post(run_in_worker);
     //run_in_worker();
-    return lua_yield(L, 0);
+
+    return leave_c_function(L);
 }
 
 int await_response(lua_State *L)
@@ -1188,4 +1194,85 @@ int wait_for_message(lua_State *L)
 {
     return lua_yield(L, 0);
 }
+
+int resolve_hostname(lua_State *L)
+{
+    enter_c_function(L);
+
+    const uint32_t default_ttl_in_ms = 5000;
+    std::string hostname;
+    uint32_t ttl = default_ttl_in_ms;
+    int top = lua_gettop(L);
+    for (int i = 0; i < top; i++)
+    {
+        switch (lua_type(L, -1))
+        {
+            case LUA_TSTRING:
+            {
+                size_t len;
+                const char* str = lua_tolstring(L, -1, &len);
+                hostname.assign(str, len);
+                break;
+            }
+            case LUA_TNUMBER:
+            {
+                ttl = lua_tointeger(L, -1);
+                break;
+            }
+        }
+        lua_pop(L, 1);
+    }
+    lua_settop(L, 0);
+    auto worker = get_worker(L);
+    auto worker_id = get_worker_index(L);
+    auto group_id = get_group_id(L);
+    auto resolve_callback = [hostname, L, worker_id, group_id, ttl](std::vector<std::string>& resolved_addresses)
+    {
+        auto& lua_group_config = get_lua_group_config(group_id);
+        if (lua_group_config.host_resolution_data[worker_id][hostname].ip_addresses.empty())
+        {
+            lua_group_config.host_resolution_data[worker_id][hostname].ip_addresses = std::move(resolved_addresses);
+            lua_group_config.host_resolution_data[worker_id][hostname].expire_time_point = std::chrono::steady_clock::now() + std::chrono::milliseconds(ttl);
+        }
+        auto lua_states_to_resume = std::move(lua_group_config.host_resolution_data[worker_id][hostname].lua_sates_await_result);
+        auto& ip_addresses = lua_group_config.host_resolution_data[worker_id][hostname].ip_addresses;
+        for (auto& l: lua_states_to_resume)
+        {
+            lua_createtable(l, ip_addresses.size(), 0);
+            for (size_t i = 0; i < ip_addresses.size(); i++)
+            {
+                lua_pushinteger(l, i + 1);
+                lua_pushlstring(l, ip_addresses[i].c_str(), ip_addresses[i].size());
+                lua_rawset(l, -3);
+            }
+            lua_resume_if_yielded(l, 1);
+        }
+    };
+    auto resolve_in_worker = [hostname, L, resolve_callback, worker, worker_id, group_id]()
+    {
+        auto& lua_group_config = get_lua_group_config(group_id);
+        if (lua_group_config.host_resolution_data[worker_id][hostname].ip_addresses.size() &&
+            lua_group_config.host_resolution_data[worker_id][hostname].expire_time_point > std::chrono::steady_clock::now())
+        {
+            lua_group_config.host_resolution_data[worker_id][hostname].ip_addresses.clear();
+        }
+        if (lua_group_config.host_resolution_data[worker_id][hostname].ip_addresses.size())
+        {
+            resolve_callback(lua_group_config.host_resolution_data[worker_id][hostname].ip_addresses);
+        }
+        else if (lua_group_config.host_resolution_data[worker_id][hostname].lua_sates_await_result.size())
+        {
+            lua_group_config.host_resolution_data[worker_id][hostname].lua_sates_await_result.push_back(L);
+        }
+        else
+        {
+            lua_group_config.host_resolution_data[worker_id][hostname].lua_sates_await_result.push_back(L);
+            worker->resolve_hostname(hostname, resolve_callback);
+        }
+    };
+    worker->get_io_context().post(resolve_in_worker);
+
+    return leave_c_function(L);
+}
+
 

@@ -62,6 +62,8 @@ public:
 
     std::thread::id get_thread_id();
 
+    void resolve_hostname(const std::string& hostname, const std::function<void(std::vector<std::string>&)>& cb_function);
+
 private:
 
     void process_user_timers();
@@ -74,6 +76,7 @@ private:
     boost::asio::ssl::context ssl_ctx;
     std::multimap<std::chrono::steady_clock::time_point, std::function<void(void)>> user_timers;
     std::thread::id my_thread_id;
+    boost::asio::ip::tcp::resolver async_resolver;
 
 };
 
