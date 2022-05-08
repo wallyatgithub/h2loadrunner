@@ -1,0 +1,44 @@
+{
+  "address": "0.0.0.0",
+  "port": 8081,
+  "threads": 2,
+  "_private-key-file": "mtls/server.key",
+  "_cert-file": "mtls/server.crt",
+  "_caCert-file": "mtls/ca.crt",
+  "mTLS": false,
+  "verbose": false,
+  "max-concurrent-streams": 1024,
+  "Service": [
+    {
+      "Request": {
+        "name": "POST",
+        "headers": [
+          {
+            "header-name": ":path",
+            "matchType": "RegexMatch",
+            "input": ".*"
+          },
+          {
+            "header-name": ":method",
+            "matchType": "RegexMatch",
+            "input": ".*"
+          }
+        ],
+        "payload": []
+      },
+      "Responses": [
+        {
+          "name": "resp-201",
+          "weight": 100,
+          "throttle-ratio": 0,
+          "status-code": 201,
+          "payload": {
+            "msg-payload": "{   \"schema\": \"http\",   \"host\": \"192.168.1.107\",   \"port\": 8080 }",
+            "placeholder": "",
+            "arguments": []
+          }
+        }
+      ]
+    }
+  ]
+}

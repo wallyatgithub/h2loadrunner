@@ -7,8 +7,8 @@ function verify_response(response_header, response_payload)
         print ("response validation pass")
     else
         print ("response validation failed")
-        print ("status code:", headers[":status"])
-        print ("body:", body)
+        print ("status code:", response_header[":status"])
+        print ("body:", response_payload)
     end
 end
 

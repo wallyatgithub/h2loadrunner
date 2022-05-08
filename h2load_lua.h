@@ -48,6 +48,7 @@ int wait_for_message(lua_State *L);
 
 int resolve_hostname(lua_State *L);
 
+
 }
 
 int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::base_client*)> request_sent_callback);

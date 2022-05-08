@@ -219,15 +219,15 @@ void asio_worker::resolve_hostname(const std::string& hostname, const std::funct
 {
     auto resolve_handler = [cb_function](const boost::system::error_code& ec, boost::asio::ip::tcp::resolver::results_type results)
     {
+        std::vector<std::string> resolved_addresses;
         if (!ec)
         {
-            std::vector<std::string> resolved_addresses;
             for (auto it = results.begin(); it != results.end(); it++)
             {
                 resolved_addresses.push_back(it->endpoint().address().to_string());
             }
-            cb_function(resolved_addresses);
         }
+        cb_function(resolved_addresses);
     };
     async_resolver.async_resolve(hostname, "", resolve_handler);
 }

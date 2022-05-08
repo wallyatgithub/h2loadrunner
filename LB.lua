@@ -1,19 +1,38 @@
-local server_id = start_server("maock_root.json")
+local server_id = start_server("../maock_root.json")
 
 print("server id: ", server_id)
 
 register_service_handler(server_id, "POST", "handle_request", 20)
 
-clusters = {"10.67.34.200:8080", "10.67.34.200:8081", "10.67.34.200:8082"}
+dest_host = "localhosts"
+
+clusters = {}
 
 math.randomseed(os.time())
 
 function handle_request(response_addr, headers, payload)
     --print ("path:", headers[":path"])
-        index = math.random(table.getn(clusters))
-        headers[":authority"] = clusters[index]
+    clusters = resolve_hostname(dest_host)
+    if ((clusters == nil) or (table.getn(clusters) == 0))
+    then
+        response_header = {[":status"] = "503"}
+        response_body = "gateway not found"
+        send_response(response_addr, response_header, response_body)
+        return
+    end
 
-    response_header, response_body = send_http_request_and_await_response(headers, payload)
+    index = math.random(table.getn(clusters))
+    headers[":authority"] = clusters[index]
+    headers[":authority"] = headers[":authority"]..":8082"
+
+    response_header, response_body = send_http_request_and_await_response(headers, payload, 1000) -- 1000 is the response timeout
+
+    local next = next
+    if (next(response_header) == nil)
+    then
+        response_header = {[":status"] = "503"}
+        response_body = "gateway not reachable"
+    end
 
     send_response(response_addr, response_header, response_body)
 end
