@@ -1258,7 +1258,6 @@ int resolve_hostname(lua_State *L)
             {
                 return_addresses(L, resolved_addresses);
             }
-            std::cerr<<"resolve_callback"<<std::endl;
         };
         auto resolve_in_worker = [hostname, L, resolve_callback, worker, worker_id, group_id]()
         {
