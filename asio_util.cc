@@ -81,12 +81,12 @@ void send_response(uint32_t status_code,
             std::cout << "sending header " << header.first << ": " << header.second << std::endl;
         }
     }
-    if (resp_payload.size())
+    if (resp_payload.size() && (headers.count("content-length") == 0))
     {
         nghttp2::asio_http2::header_value hdr_val;
         hdr_val.sensitive = false;
         hdr_val.value = std::to_string(resp_payload.size());
-        headers.insert(std::make_pair("Content-Length", hdr_val));
+        headers.insert(std::make_pair("content-length", hdr_val));
     }
     if (debug_mode && resp_payload.size())
     {
