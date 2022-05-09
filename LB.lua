@@ -6,8 +6,6 @@ register_service_handler(server_id, "POST", "handle_request", 20)
 
 dest_host = "localhosts"
 
-clusters = {}
-
 math.randomseed(os.time())
 
 function handle_request(response_addr, headers, payload)
