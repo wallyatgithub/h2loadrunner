@@ -65,6 +65,10 @@ void response_impl::write_head(unsigned int status_code, header_map h) {
 void response_impl::end(std::string data) {
   end(string_generator(std::move(data)));
 }
+void response_impl::send_data_no_eos(std::string data = "")
+{
+    end(string_generator(std::move(data), false));
+}
 
 void response_impl::end(generator_cb cb) {
   if (state_ == response_state::BODY_STARTED) {

@@ -195,12 +195,21 @@ bool base_client::validate_response_with_lua(lua_State* L, const Request_Data& f
     bool retCode = true;
     if (lua_isfunction(L, -1))
     {
-        lua_createtable(L, 0, finished_request.resp_headers.size());
-        for (auto& header : finished_request.resp_headers)
+        lua_createtable(L, 0, std::accumulate(finished_request.resp_headers.begin(),
+                                              finished_request.resp_headers.end(),
+                                              0,
+                                              [](uint64_t sum, const std::map<std::string, std::string, ci_less>& val)
+                                              {
+                                                  return sum + val.size();
+                                              }));
+        for (auto& header_map : finished_request.resp_headers)
         {
-            lua_pushlstring(L, header.first.c_str(), header.first.size());
-            lua_pushlstring(L, header.second.c_str(), header.second.size());
-            lua_rawset(L, -3);
+            for (auto& header: header_map)
+            {
+                lua_pushlstring(L, header.first.c_str(), header.first.size());
+                lua_pushlstring(L, header.second.c_str(), header.second.size());
+                lua_rawset(L, -3);
+            }
         }
 
         lua_pushlstring(L, finished_request.resp_payload.c_str(), finished_request.resp_payload.size());
@@ -877,25 +886,33 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
     }
     else if (request_template.uri.typeOfAction == "fromResponseHeader")
     {
-        auto header = finished_request.resp_headers.find(request_template.uri.input);
-        if (header != finished_request.resp_headers.end())
+        std::string* uri_header_value = nullptr;
+        for (auto& header_map: finished_request.resp_headers)
+        {
+            auto header = header_map.find(request_template.uri.input);
+            if (header != header_map.end())
+            {
+                uri_header_value = &header->second;
+            }
+        }
+        if (uri_header_value && uri_header_value->size())
         {
             http_parser_url u {};
-            if (http_parser_parse_url(header->second.c_str(), header->second.size(), 0, &u) != 0)
+            if (http_parser_parse_url(uri_header_value->c_str(), uri_header_value->size(), 0, &u) != 0)
             {
-                std::cerr << "abort whole scenario sequence, as invalid URI found in header: " << header->second << std::endl;
+                std::cerr << "abort whole scenario sequence, as invalid URI found in header: " << *uri_header_value << std::endl;
                 return false;
             }
             else
             {
-                new_request.string_collection.emplace_back(get_reqline(header->second.c_str(), u));
+                new_request.string_collection.emplace_back(get_reqline(uri_header_value->c_str(), u));
                 new_request.path = &(new_request.string_collection.back());
                 if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
                 {
-                    new_request.string_collection.emplace_back(util::get_uri_field(header->second.c_str(), u, UF_SCHEMA).str());
+                    new_request.string_collection.emplace_back(util::get_uri_field(uri_header_value->c_str(), u, UF_SCHEMA).str());
                     util::inp_strlower(new_request.string_collection.back());
                     new_request.schema = &(new_request.string_collection.back());
-                    new_request.string_collection.emplace_back(util::get_uri_field(header->second.c_str(), u, UF_HOST).str());
+                    new_request.string_collection.emplace_back(util::get_uri_field(uri_header_value->c_str(), u, UF_HOST).str());
                     util::inp_strlower(new_request.string_collection.back());
                     if (util::has_uri_field(u, UF_PORT))
                     {
@@ -918,9 +935,12 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
             {
                 std::cout << "response status code:" << finished_request.status_code << std::endl;
                 std::cerr << "abort whole scenario sequence, as header not found: " << request_template.uri.input << std::endl;
-                for (auto& header : finished_request.resp_headers)
+                for (auto& header_map : finished_request.resp_headers)
                 {
-                    std::cout << header.first << ":" << header.second << std::endl;
+                    for (auto& header: header_map)
+                    {
+                        std::cout << header.first << ":" << header.second << std::endl;
+                    }
                 }
                 std::cout << "response payload:" << finished_request.resp_payload << std::endl;
             }
@@ -962,15 +982,18 @@ void base_client::update_content_length(Request_Data& data)
 
 void base_client::parse_and_save_cookies(Request_Data& finished_request)
 {
-    if (finished_request.resp_headers.find("Set-Cookie") != finished_request.resp_headers.end())
+    for (auto& header_map: finished_request.resp_headers)
     {
-        auto new_cookies = Cookie::parse_cookie_string(finished_request.resp_headers["Set-Cookie"],
-                                                       *finished_request.authority, *finished_request.schema);
-        for (auto& cookie : new_cookies)
+        if (header_map.find("Set-Cookie") != header_map.end())
         {
-            if (Cookie::is_cookie_acceptable(cookie))
+            auto new_cookies = Cookie::parse_cookie_string(header_map["Set-Cookie"],
+                                                           *finished_request.authority, *finished_request.schema);
+            for (auto& cookie : new_cookies)
             {
-                finished_request.saved_cookies[cookie.cookie_key] = std::move(cookie);
+                if (Cookie::is_cookie_acceptable(cookie))
+                {
+                    finished_request.saved_cookies[cookie.cookie_key] = std::move(cookie);
+                }
             }
         }
     }
@@ -1293,14 +1316,23 @@ bool base_client::update_request_with_lua(lua_State* L, const Request_Data& fini
     bool retCode = true;
     if (lua_isfunction(L, -1))
     {
-        lua_createtable(L, 0, finished_request.resp_headers.size());
-
-        for (auto& header : finished_request.resp_headers)
+        lua_createtable(L, 0, std::accumulate(finished_request.resp_headers.begin(),
+                                              finished_request.resp_headers.end(),
+                                              0,
+                                              [](uint64_t sum, const std::map<std::string, std::string, ci_less>& val)
+                                              {
+                                                  return sum + val.size();
+                                              }));
+        for (auto& header_map : finished_request.resp_headers)
         {
-            lua_pushlstring(L, header.first.c_str(), header.first.size());
-            lua_pushlstring(L, header.second.c_str(), header.second.size());
-            lua_rawset(L, -3);
+            for (auto& header: header_map)
+            {
+                lua_pushlstring(L, header.first.c_str(), header.first.size());
+                lua_pushlstring(L, header.second.c_str(), header.second.size());
+                lua_rawset(L, -3);
+            }
         }
+
         lua_pushlstring(L, method_header.c_str(), method_header.size());
         lua_pushlstring(L, finished_request.method->c_str(), finished_request.method->size());
         lua_rawset(L, -3);
@@ -1588,11 +1620,10 @@ void base_client::on_stream_close(int32_t stream_id, bool success, bool final)
 
     worker->report_progress();
 
-    process_stream_user_callback(stream_id);
-
     if (finished_request != requests_awaiting_response.end())
     {
         prepare_next_request(finished_request->second);
+        process_stream_user_callback(stream_id);
         requests_awaiting_response.erase(finished_request);
     }
     streams.erase(stream_id);
@@ -1620,6 +1651,16 @@ void base_client::on_stream_close(int32_t stream_id, bool success, bool final)
                 --rps_req_pending;
             }
         }
+    }
+}
+
+void base_client::on_header_frame(int32_t stream_id, uint8_t flags)
+{
+    if (requests_awaiting_response.count(stream_id))
+    {
+        Request_Data& request_data = requests_awaiting_response[stream_id];
+        std::map<std::string, std::string, ci_less> dummy;
+        request_data.resp_headers.push_back(dummy);
     }
 }
 
@@ -1862,15 +1903,20 @@ void base_client::on_header(int32_t stream_id, const uint8_t* name, size_t namel
         std::string header_value;
         header_value.assign((const char*)value, valuelen);
         header_value.erase(0, header_value.find_first_not_of(' '));
-        auto it = request->second.resp_headers.find(header_name);
-        if (it != request->second.resp_headers.end())
+        if (request->second.resp_headers.empty())
+        {
+            std::map<std::string, std::string, ci_less> dummy;
+            request->second.resp_headers.push_back(dummy);
+        }
+        auto it = request->second.resp_headers.back().find(header_name);
+        if (it != request->second.resp_headers.back().end())
         {
             // Set-Cookie case most likely
             it->second.append("; ").append(header_value);
         }
         else
         {
-            request->second.resp_headers[header_name] = header_value;
+            request->second.resp_headers.back()[header_name] = header_value;
         }
     }
 
@@ -2326,8 +2372,8 @@ void base_client::process_stream_user_callback(int32_t stream_id)
 {
     if (requests_awaiting_response.count(stream_id) && stream_user_callback_queue.count(stream_id))
     {
-        stream_user_callback_queue[stream_id].resp_headers = requests_awaiting_response[stream_id].resp_headers;
-        stream_user_callback_queue[stream_id].resp_payload = requests_awaiting_response[stream_id].resp_payload;
+        stream_user_callback_queue[stream_id].resp_headers = std::move(requests_awaiting_response[stream_id].resp_headers);
+        stream_user_callback_queue[stream_id].resp_payload = std::move(requests_awaiting_response[stream_id].resp_payload);
         stream_user_callback_queue[stream_id].response_available = true;
         if (stream_user_callback_queue[stream_id].response_callback)
         {
@@ -2343,20 +2389,55 @@ void base_client::pass_response_to_lua(int32_t stream_id, lua_State *L)
     {
         auto push_response_to_lua_stack = [this, L, stream_id]()
         {
-            lua_createtable(L, 0, stream_user_callback_queue[stream_id].resp_headers.size());
-            for (auto& header : stream_user_callback_queue[stream_id].resp_headers)
+            std::map<std::string, std::string, ci_less>* trailer = nullptr;
+            if (stream_user_callback_queue[stream_id].resp_headers.size() > 1 &&
+                stream_user_callback_queue[stream_id].resp_headers.back().count(grpc_status_header))
             {
-                lua_pushlstring(L, header.first.c_str(), header.first.size());
-                lua_pushlstring(L, header.second.c_str(), header.second.size());
-                lua_rawset(L, -3);
+                trailer = &stream_user_callback_queue[stream_id].resp_headers.back();
             }
+            lua_createtable(L, 0, std::accumulate(stream_user_callback_queue[stream_id].resp_headers.begin(),
+                                                  stream_user_callback_queue[stream_id].resp_headers.end(),
+                                                  0,
+                                                  [trailer](uint64_t sum, const std::map<std::string, std::string, ci_less>& val)
+                                                  {
+                                                      return sum + (&val == trailer ? 0: val.size());
+                                                  }));
+            for (auto& header_map : stream_user_callback_queue[stream_id].resp_headers)
+            {
+                if (&header_map == trailer)
+                {
+                    continue;
+                }
+                for (auto& header: header_map)
+                {
+                    lua_pushlstring(L, header.first.c_str(), header.first.size());
+                    lua_pushlstring(L, header.second.c_str(), header.second.size());
+                    lua_rawset(L, -3);
+                }
+            }
+
             lua_pushlstring(L, stream_user_callback_queue[stream_id].resp_payload.c_str(), stream_user_callback_queue[stream_id].resp_payload.size());
+
+            if (trailer)
+            {
+                lua_createtable(L, 0, trailer->size());
+                for (auto& header : *trailer)
+                {
+                    lua_pushlstring(L, header.first.c_str(), header.first.size());
+                    lua_pushlstring(L, header.second.c_str(), header.second.size());
+                    lua_rawset(L, -3);
+                }
+            }
+            else
+            {
+                lua_createtable(L, 0, 0);
+            }
         };
 
         if (stream_user_callback_queue[stream_id].response_available)
         {
             push_response_to_lua_stack();
-            lua_resume_if_yielded(L, 2);
+            lua_resume_if_yielded(L, 3);
             stream_user_callback_queue.erase(stream_id);
         }
         else
@@ -2364,7 +2445,7 @@ void base_client::pass_response_to_lua(int32_t stream_id, lua_State *L)
             auto callback = [push_response_to_lua_stack, L, this]()
             {
                 push_response_to_lua_stack();
-                lua_resume_if_yielded(L, 2);
+                lua_resume_if_yielded(L, 3);
             };
             stream_user_callback_queue[stream_id].response_callback = callback;
         }
@@ -2373,7 +2454,8 @@ void base_client::pass_response_to_lua(int32_t stream_id, lua_State *L)
     {
         lua_createtable(L, 0, 1);
         lua_pushlstring(L, "", 0);
-        lua_resume_if_yielded(L, 2);
+        lua_createtable(L, 0, 0);
+        lua_resume_if_yielded(L, 3);
     }
 }
 

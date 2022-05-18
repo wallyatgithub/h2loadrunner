@@ -46,6 +46,8 @@ const  std::string path_header = ":path";
 const  std::string authority_header = ":authority";
 const  std::string method_header = ":method";
 
+const  std::string grpc_status_header = "grpc-status";
+
 static std::string emptyString;
 
 class base_client;
@@ -62,7 +64,7 @@ struct Request_Data
     std::map<std::string, std::string, ci_less>* req_headers;
     std::map<std::string, std::string, ci_less> shadow_req_headers;
     std::string resp_payload;
-    std::map<std::string, std::string, ci_less> resp_headers;
+    std::vector<std::map<std::string, std::string, ci_less>> resp_headers;
     uint16_t status_code;
     uint16_t expected_status_code;
     uint32_t delay_before_executing_next;
@@ -115,9 +117,12 @@ struct Request_Data
 
         o << "response status code:" << request_data.status_code << std::endl;
         o << "resp_payload:" << request_data.resp_payload << std::endl;
-        for (auto& it : request_data.resp_headers)
+        for (auto& vit : request_data.resp_headers)
         {
-            o << "response header name: " << it.first << ", header value: " << it.second << std::endl;
+            for (auto& it: vit)
+            {
+                o << "response header name: " << it.first << ", header value: " << it.second << std::endl;
+            }
         }
         for (auto& it : request_data.saved_cookies)
         {

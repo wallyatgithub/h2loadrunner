@@ -127,6 +127,7 @@ namespace
 int htp_hdr_keycb(llhttp_t* htp, const char* data, size_t len)
 {
     auto session = static_cast<Http1Session*>(htp->data);
+    session->hdr_name.assign(data, len);
     auto client = session->get_client();
 
     session->stats.bytes_head += len;
@@ -140,10 +141,25 @@ namespace
 int htp_hdr_valcb(llhttp_t* htp, const char* data, size_t len)
 {
     auto session = static_cast<Http1Session*>(htp->data);
+    if (session->hdr_val.size())
+    {
+        session->hdr_val.append("; ").append(data, len);
+    }
+    else
+    {
+        session->hdr_val.assign(data, len);
+    }
     auto client = session->get_client();
 
     session->stats.bytes_head += len;
     session->stats.bytes_head_decomp += len;
+    client->on_header(session->stream_resp_counter_,
+                      (uint8_t*)(session->hdr_name.c_str()),
+                      session->hdr_name.size(),
+                      (uint8_t*)(session->hdr_val.c_str()),
+                      session->hdr_val.size());
+    session->hdr_name.clear();
+    session->hdr_val.clear();
     return 0;
 }
 } // namespace

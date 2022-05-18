@@ -54,6 +54,8 @@ public:
     Config* config;
     Stats& stats;
     std::map<int32_t, Request_Data>& request_map;
+    std::string hdr_name; // TODO: move to private
+    std::string hdr_val;
 
 private:
     base_client* client_;

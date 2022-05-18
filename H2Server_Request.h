@@ -175,12 +175,37 @@ public:
         return false;
     }
 
+    bool match_header(const std::vector<std::map<std::string, std::string, ci_less>>& response_headers) const
+    {
+        for (auto& response_header_frame: response_headers)
+        {
+            auto it = response_header_frame.find(header_name);
+            if (it != response_header_frame.end())
+            {
+                return match(it->second, match_type, object);
+            }
+        }
+        return false;
+    }
+
     bool match_json_doc(const rapidjson::Document& d) const
     {
         return match(getValueFromJsonPtr(d, json_pointer), match_type, object);
     }
 
     bool match(const std::map<std::string, std::string, ci_less>& response_headers, const rapidjson::Document& d)
+    {
+        if (header_name.size())
+        {
+            return match_header(response_headers);
+        }
+        else
+        {
+            return match_json_doc(d);
+        }
+    }
+
+    bool match(const std::vector<std::map<std::string, std::string, ci_less>>& response_headers, const rapidjson::Document& d)
     {
         if (header_name.size())
         {

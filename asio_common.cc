@@ -93,11 +93,11 @@ boost::system::error_code make_error_code(nghttp2_asio_error ev)
                                      nghttp2_asio_category());
 }
 
-generator_cb string_generator(std::string data)
+generator_cb string_generator(std::string data, bool eos)
 {
     auto strio = std::make_shared<std::pair<std::string, size_t>>(std::move(data),
                                                                   data.size());
-    return [strio](uint8_t* buf, size_t len, uint32_t* data_flags)
+    return [strio, eos](uint8_t* buf, size_t len, uint32_t* data_flags)
     {
         auto& data = strio->first;
         auto& left = strio->second;
@@ -107,6 +107,10 @@ generator_cb string_generator(std::string data)
         if (left == 0)
         {
             *data_flags |= NGHTTP2_DATA_FLAG_EOF;
+        }
+        if (!eos)
+        {
+            *data_flags |= NGHTTP2_DATA_FLAG_NO_END_STREAM;
         }
         return n;
     };

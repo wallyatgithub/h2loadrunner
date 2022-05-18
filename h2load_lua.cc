@@ -1101,6 +1101,7 @@ int send_response(lua_State *L)
 {
     std::string payload;
     std::map<std::string, std::string> response_headers;
+    std::map<std::string, std::string> trailer_headers;
     boost::asio::io_service* ios = nullptr;
     uint64_t handler_id = 0;
     int32_t stream_id = 0;
@@ -1118,6 +1119,11 @@ int send_response(lua_State *L)
             }
             case LUA_TTABLE:
             {
+                std::map<std::string, std::string>* table = &response_headers;
+                if (response_headers.size())
+                {
+                    table = &trailer_headers;
+                }
                 lua_pushnil(L);
                 while (lua_next(L, -2) != 0)
                 {
@@ -1153,7 +1159,7 @@ int send_response(lua_State *L)
                             const char* v = lua_tolstring(L, -1, &len);
                             std::string value(v, len);
                             //util::inp_strlower(key);
-                            response_headers[key] = value;
+                            (*table)[key] = value;
                         }
                         else
                         {
@@ -1175,7 +1181,7 @@ int send_response(lua_State *L)
         }
         lua_pop(L, 1);
     }
-    send_response_from_another_thread(ios, handler_id, stream_id, response_headers, payload);
+    send_response_from_another_thread(ios, handler_id, stream_id, response_headers, payload, trailer_headers);
     return 0;
 }
 

@@ -48,6 +48,7 @@ public:
   response_impl();
   void write_head(unsigned int status_code, header_map h = header_map{});
   void end(std::string data = "");
+  void send_data_no_eos(std::string data);
   void end(generator_cb cb);
   void write_trailer(header_map h);
   void on_close(close_cb cb);

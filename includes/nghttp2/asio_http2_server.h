@@ -80,9 +80,12 @@ public:
   // additional header fields in |h|.
   void write_head(unsigned int status_code, header_map h = header_map{}) const;
 
-  // Sends |data| as request body.  No further call of end() is
+  // Sends |data| as response body.  No further call of end() is
   // allowed.
   void end(std::string data = "") const;
+
+   // Sends |data| as response body with NGHTTP2_DATA_FLAG_NO_END_STREAM set (a trailer would follow)
+  void send_data_no_eos(std::string data) const;
 
   // Sets callback as a generator of the response body.  No further
   // call of end() is allowed.

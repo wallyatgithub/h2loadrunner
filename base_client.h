@@ -43,7 +43,7 @@ public:
     int32_t stream_id = 0;
     std::function<void(void)> response_callback;
     std::string resp_payload;
-    std::map<std::string, std::string, ci_less> resp_headers;
+    std::vector<std::map<std::string, std::string, ci_less>> resp_headers;
     bool response_available = false;
 };
 
@@ -190,6 +190,7 @@ public:
     void install_connected_callback(std::function<void(bool, h2load::base_client*)> callback);
     void queue_stream_for_user_callback(int32_t stream_id);
     void process_stream_user_callback(int32_t stream_id);
+    void on_header_frame(int32_t stream_id, uint8_t flags);
     void pass_response_to_lua(int32_t stream_id, lua_State *L);
     uint64_t get_client_unique_id();
     void set_prefered_authority(const std::string& authority);

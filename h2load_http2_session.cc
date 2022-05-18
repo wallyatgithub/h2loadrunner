@@ -71,7 +71,8 @@ int on_header_callback(nghttp2_session* session, const nghttp2_frame* frame,
 {
     auto client = static_cast<base_client*>(user_data);
     if (frame->hd.type != NGHTTP2_HEADERS ||
-        frame->headers.cat != NGHTTP2_HCAT_RESPONSE)
+        (frame->headers.cat != NGHTTP2_HCAT_RESPONSE &&
+         frame->headers.cat != NGHTTP2_HCAT_HEADERS))
     {
         return 0;
     }
@@ -272,6 +273,8 @@ void Http2Session::on_connect()
     nghttp2_session_callbacks_set_send_callback(callbacks, send_callback);
 
     nghttp2_option* opt;
+
+    nghttp2_option_set_no_http_messaging(opt, 1);
 
     rv = nghttp2_option_new(&opt);
     assert(rv == 0);

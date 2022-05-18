@@ -483,6 +483,7 @@ public:
         response_index = index;
     }
 
+    // TODO: add trailer_response support
     bool update_response_with_lua(const std::multimap<std::string, std::string>& req_headers,
                                             const std::string& req_body,
                                             std::map<std::string, std::string>& resp_headers,

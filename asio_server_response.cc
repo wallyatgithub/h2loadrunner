@@ -44,6 +44,8 @@ void response::write_head(unsigned int status_code, header_map h) const {
 
 void response::end(std::string data) const { impl_->end(std::move(data)); }
 
+void response::send_data_no_eos(std::string data) const { impl_->send_data_no_eos(std::move(data)); }
+
 void response::end(generator_cb cb) const { impl_->end(std::move(cb)); }
 
 void response::write_trailer(header_map h) const {
