@@ -46,9 +46,9 @@ size_t get_resp_name_max_size(const H2Server_Config_Schema& config_schema)
 }
 
 void send_response(uint32_t status_code,
-                   const std::map<std::string, std::string>& resp_headers,
-                   const std::string& resp_payload,
-                   const std::map<std::string, std::string>& trailer_headers,
+                   std::map<std::string, std::string>& resp_headers,
+                   std::string& resp_payload,
+                   std::map<std::string, std::string>& trailer_headers,
                    uint64_t handler_id,
                    int32_t stream_id,
                    uint64_t& matchedResponsesSent
@@ -70,6 +70,10 @@ void send_response(uint32_t status_code,
     {
         return;
     }
+    if (debug_mode)
+    {
+        std::cout << "sending status code: " << status_code << std::endl;
+    }
     nghttp2::asio_http2::header_map headers;
     for (auto& header : resp_headers)
     {
@@ -82,31 +86,31 @@ void send_response(uint32_t status_code,
             std::cout << "sending header " << header.first << ": " << header.second << std::endl;
         }
     }
-    if (resp_payload.size() && (headers.count("content-length") == 0))
+    if (resp_payload.size() && (headers.count("content-length") == 0) && (trailer_headers.empty()))
     {
         nghttp2::asio_http2::header_value hdr_val;
         hdr_val.sensitive = false;
         hdr_val.value = std::to_string(resp_payload.size());
         headers.insert(std::make_pair("content-length", hdr_val));
+        if (debug_mode && resp_payload.size())
+        {
+            std::cout << "sending header " << "content-length: " << resp_payload.size() << std::endl;
+        }
     }
     if (debug_mode && resp_payload.size())
     {
-        std::cout << "sending header " << "Content-Length: " << resp_payload.size() << std::endl;
         std::cout << "sending msg body " << resp_payload << std::endl;
     }
-    if (debug_mode)
-    {
-        std::cout << "sending status code: " << status_code << std::endl;
-    }
+
     auto& res = orig_stream->response();
     res.write_head(status_code, headers);
     if (trailer_headers.empty())
     {
-        res.end(resp_payload);
+        res.end(std::move(resp_payload));
     }
     else
     {
-        res.send_data_no_eos(resp_payload);
+        res.send_data_no_eos(std::move(resp_payload));
         nghttp2::asio_http2::header_map trailers;
         for (auto& header : trailer_headers)
         {
@@ -133,6 +137,21 @@ void send_response_from_another_thread(boost::asio::io_service* target_io_servic
                                        std::map<std::string, std::string>& trailer_headers
                                       )
 {
+    if (debug_mode)
+    {
+        std::cout<<"target_io_service: "<<target_io_service<<std::endl;
+        std::cout<<"handler_id: "<<handler_id<<std::endl;
+        std::cout<<"stream_id: "<<stream_id<<std::endl;
+        for (auto& header: resp_headers)
+        {
+            std::cout<<"response header: "<<header.first<<": "<<header.second<<std::endl;
+        }
+        std::cout<<"resp_payload: "<<resp_payload<<std::endl;
+        for (auto& header: trailer_headers)
+        {
+            std::cout<<"trailer_headers: "<<header.first<<": "<<header.second<<std::endl;
+        }
+    }
     thread_local static uint64_t matchedResponsesSent;
     if (!target_io_service)
     {
@@ -140,7 +159,7 @@ void send_response_from_another_thread(boost::asio::io_service* target_io_servic
     }
     uint32_t status_code = atoi(resp_headers[status].c_str());
     resp_headers.erase(status);
-    auto call_send_response = [handler_id, stream_id, status_code, resp_headers, resp_payload, trailer_headers]()
+    auto call_send_response = [handler_id, stream_id, status_code, resp_headers, resp_payload, trailer_headers]() mutable
     {
         send_response(status_code, resp_headers, resp_payload, trailer_headers, handler_id, stream_id, matchedResponsesSent);
     };
@@ -151,13 +170,14 @@ void update_response_with_lua(const H2Server_Response* matched_response,
                               std::multimap<std::string, std::string>& req_headers,
                               std::string& req_payload,
                               std::map<std::string, std::string>& resp_headers,
+                              std::map<std::string, std::string>& trailers,
                               std::string& resp_payload,
                               boost::asio::io_service* ios,
                               uint64_t handler_id,
                               int32_t stream_id,
                               uint64_t& matchedResponsesSent)
 {
-    matched_response->update_response_with_lua(req_headers, req_payload, resp_headers, resp_payload);
+    matched_response->update_response_with_lua(req_headers, req_payload, resp_headers, trailers, resp_payload);
     if (!ios)
     {
         return;
@@ -339,6 +359,7 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
                                                                 msg.headers,
                                                                 req.unmutable_payload(),
                                                                 response_headers,
+                                                                trailer_headers,
                                                                 response_payload,
                                                                 h2server.io_service,
                                                                 handler_id,
@@ -350,7 +371,7 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
                         }
                         else
                         {
-                            matched_response->update_response_with_lua(msg.headers, req.unmutable_payload(), response_headers, response_payload);
+                            matched_response->update_response_with_lua(msg.headers, req.unmutable_payload(), response_headers, trailer_headers, response_payload);
                             if (response_headers.count(status))
                             {
                                 status_code = atoi(response_headers[status].c_str());

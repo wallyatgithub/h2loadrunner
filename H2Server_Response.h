@@ -487,6 +487,7 @@ public:
     bool update_response_with_lua(const std::multimap<std::string, std::string>& req_headers,
                                             const std::string& req_body,
                                             std::map<std::string, std::string>& resp_headers,
+                                            std::map<std::string, std::string>& trailers,
                                             std::string& response_body) const
     {
         bool retCode = true;
@@ -537,6 +538,8 @@ public:
             lua_pushlstring(L, status.c_str(), status.size());
             lua_pushlstring(L, status_code_string.c_str(), status_code_string.size());
             lua_rawset(L, -3);
+            resp_headers.clear();
+            trailers.clear();
 
             lua_pushlstring(L, response_body.c_str(), response_body.size());
 
@@ -555,6 +558,11 @@ public:
                     }
                     case LUA_TTABLE:
                     {
+                        std::map<std::string, std::string>* table = &trailers;
+                        if (table->size())
+                        {
+                            table = &resp_headers;
+                        }
                         lua_pushnil(L);
                         while (lua_next(L, -2) != 0)
                         {
@@ -568,7 +576,7 @@ public:
                             std::string key(k, len);
                             const char* v = lua_tolstring(L, -1, &len);
                             std::string value(v, len);
-                            resp_headers[key] = value;
+                            (*table)[key] = value;
                             /* removes 'value'; keeps 'key' for next iteration */
                             lua_pop(L, 1);
                         }
@@ -582,6 +590,10 @@ public:
                     }
                 }
                 lua_pop(L, 1);
+            }
+            if (resp_headers.empty())
+            {
+                std::swap(trailers, resp_headers);
             }
         }
         else

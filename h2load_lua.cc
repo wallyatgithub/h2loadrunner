@@ -588,9 +588,10 @@ int send_http_request_and_await_response(lua_State *L)
         }
         else
         {
-            lua_createtable(L, 0, 1);
+            lua_createtable(L, 0, 0);
             lua_pushlstring(L, "", 0);
-            lua_resume_if_yielded(L, 2);
+            lua_createtable(L, 0, 0);
+            lua_resume_if_yielded(L, 3);
         }
     };
     _send_http_request(L, request_sent);
@@ -1119,10 +1120,10 @@ int send_response(lua_State *L)
             }
             case LUA_TTABLE:
             {
-                std::map<std::string, std::string>* table = &response_headers;
-                if (response_headers.size())
+                std::map<std::string, std::string>* table = &trailer_headers;
+                if (trailer_headers.size())
                 {
-                    table = &trailer_headers;
+                    table = &response_headers;
                 }
                 lua_pushnil(L);
                 while (lua_next(L, -2) != 0)
@@ -1163,12 +1164,12 @@ int send_response(lua_State *L)
                         }
                         else
                         {
-                            std::cerr<<"invalid value:"<<lua_type(L, -1)<<std::endl;;
+                            std::cerr<<"invalid value:"<<lua_type(L, -1)<<std::endl;
                         }
                     }
                     else
                     {
-                        std::cerr<<"invalid key type:"<<lua_type(L, -2)<<std::endl;;
+                        std::cerr<<"invalid key type:"<<lua_type(L, -2)<<std::endl;
                     }
                     /* removes 'value'; keeps 'key' for next iteration */
                     lua_pop(L, 1);
@@ -1180,6 +1181,10 @@ int send_response(lua_State *L)
             }
         }
         lua_pop(L, 1);
+    }
+    if (response_headers.empty() && trailer_headers.size())
+    {
+        std::swap(response_headers, trailer_headers);
     }
     send_response_from_another_thread(ios, handler_id, stream_id, response_headers, payload, trailer_headers);
     return 0;

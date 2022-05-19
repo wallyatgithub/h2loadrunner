@@ -65,6 +65,7 @@ public:
 
   unsigned int status_code() const;
   const header_map &header() const;
+  const header_map &trailers() const;
   void pushed(bool f);
   void push_promise_sent();
   void stream(class stream *s);
@@ -75,6 +76,7 @@ public:
 private:
   class stream *strm_;
   header_map header_;
+  header_map trailers_;
   generator_cb generator_cb_;
   close_cb close_cb_;
   unsigned int status_code_;

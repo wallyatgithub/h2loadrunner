@@ -1567,7 +1567,7 @@ void integrated_http2_server(std::stringstream& dataStream, h2load::Config& conf
 
         nghttp2::asio_http2::header_map headers;
         res.write_head(200, headers);
-        res.end(std::string(replyMsg));
+        res.end(std::move(replyMsg));
     });
     if (server.listen_and_serve(ec, std::string("0.0.0.0"), std::to_string(serverPort)))
     {

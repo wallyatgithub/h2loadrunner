@@ -2394,6 +2394,11 @@ void base_client::pass_response_to_lua(int32_t stream_id, lua_State *L)
                 stream_user_callback_queue[stream_id].resp_headers.back().count(grpc_status_header))
             {
                 trailer = &stream_user_callback_queue[stream_id].resp_headers.back();
+                if (config->verbose)
+                {
+                    std::cout<<"number of header frames: "<<stream_user_callback_queue[stream_id].resp_headers.size()
+                             <<", trailer found"<<std::endl;
+                }
             }
             lua_createtable(L, 0, std::accumulate(stream_user_callback_queue[stream_id].resp_headers.begin(),
                                                   stream_user_callback_queue[stream_id].resp_headers.end(),
@@ -2452,7 +2457,7 @@ void base_client::pass_response_to_lua(int32_t stream_id, lua_State *L)
     }
     else
     {
-        lua_createtable(L, 0, 1);
+        lua_createtable(L, 0, 0);
         lua_pushlstring(L, "", 0);
         lua_createtable(L, 0, 0);
         lua_resume_if_yielded(L, 3);

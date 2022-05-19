@@ -65,7 +65,7 @@ void response_impl::write_head(unsigned int status_code, header_map h) {
 void response_impl::end(std::string data) {
   end(string_generator(std::move(data)));
 }
-void response_impl::send_data_no_eos(std::string data = "")
+void response_impl::send_data_no_eos(std::string data)
 {
     end(string_generator(std::move(data), false));
 }
@@ -89,8 +89,9 @@ void response_impl::end(generator_cb cb) {
 }
 
 void response_impl::write_trailer(header_map h) {
-  auto handler = strm_->handler();
-  handler->submit_trailer(*strm_, std::move(h));
+  //auto handler = strm_->handler();
+  //handler->submit_trailer(*strm_, std::move(h));
+  trailers_ = std::move(h);
 }
 
 void response_impl::start_response() {
@@ -152,12 +153,20 @@ void response_impl::push_promise_sent() {
 
 const header_map &response_impl::header() const { return header_; }
 
+const header_map &response_impl::trailers() const { return trailers_; }
+
 void response_impl::stream(class stream *s) { strm_ = s; }
 
 generator_cb::result_type
 response_impl::call_read(uint8_t *data, std::size_t len, uint32_t *data_flags) {
   if (generator_cb_) {
-    return generator_cb_(data, len, data_flags);
+    auto retCode = generator_cb_(data, len, data_flags);
+    if ((*data_flags & NGHTTP2_DATA_FLAG_EOF) && trailers_.size())
+    {
+        auto handler = strm_->handler();
+        handler->submit_trailer(*strm_, std::move(trailers_));
+    }
+    return retCode;
   }
 
   *data_flags |= NGHTTP2_DATA_FLAG_EOF;

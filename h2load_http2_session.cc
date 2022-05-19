@@ -103,6 +103,7 @@ int on_frame_recv_callback(nghttp2_session* session, const nghttp2_frame* frame,
     {
         return 0;
     }
+    client->on_header_frame(frame->hd.stream_id, frame->hd.flags);
     client->get_stats().bytes_head +=
         frame->hd.length - frame->headers.padlen -
         ((frame->hd.flags & NGHTTP2_FLAG_PRIORITY) ? 5 : 0);
