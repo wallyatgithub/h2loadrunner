@@ -67,7 +67,7 @@ void response_impl::end(std::string data) {
 }
 void response_impl::send_data_no_eos(std::string data)
 {
-    end(string_generator(std::move(data), false));
+    end(string_generator(std::move(data)));
 }
 
 void response_impl::end(generator_cb cb) {
@@ -88,11 +88,24 @@ void response_impl::end(generator_cb cb) {
   state_ = response_state::BODY_STARTED;
 }
 
-void response_impl::write_trailer(header_map h) {
-  //auto handler = strm_->handler();
-  //handler->submit_trailer(*strm_, std::move(h));
-  trailers_ = std::move(h);
+void response_impl::write_trailer(header_map h)
+{
+    trailers_ = std::move(h);
+    if (!generator_cb_)
+    {
+        send_trailer();
+    }
 }
+
+void response_impl::send_trailer()
+{
+    if (trailers_.size())
+    {
+        auto handler = strm_->handler();
+        handler->submit_trailer(*strm_, std::move(trailers_));
+    }
+}
+
 
 void response_impl::start_response() {
   auto handler = strm_->handler();
@@ -158,20 +171,28 @@ const header_map &response_impl::trailers() const { return trailers_; }
 void response_impl::stream(class stream *s) { strm_ = s; }
 
 generator_cb::result_type
-response_impl::call_read(uint8_t *data, std::size_t len, uint32_t *data_flags) {
-  if (generator_cb_) {
-    auto retCode = generator_cb_(data, len, data_flags);
-    if ((*data_flags & NGHTTP2_DATA_FLAG_EOF) && trailers_.size())
+response_impl::call_read(uint8_t *data, std::size_t len, uint32_t *data_flags)
+{
+    auto retCode = 0;
+    if (generator_cb_)
     {
-        auto handler = strm_->handler();
-        handler->submit_trailer(*strm_, std::move(trailers_));
+        retCode = generator_cb_(data, len, data_flags);
+        if (*data_flags & NGHTTP2_DATA_FLAG_EOF)
+        {
+            auto dummy = std::move(generator_cb_);
+        }
+    }
+    else
+    {
+        *data_flags |= NGHTTP2_DATA_FLAG_EOF;
+    }
+
+    if (*data_flags & NGHTTP2_DATA_FLAG_EOF && trailers_.size())
+    {
+        *data_flags |= NGHTTP2_DATA_FLAG_NO_END_STREAM;
+        send_trailer();
     }
     return retCode;
-  }
-
-  *data_flags |= NGHTTP2_DATA_FLAG_EOF;
-
-  return 0;
 }
 
 } // namespace server

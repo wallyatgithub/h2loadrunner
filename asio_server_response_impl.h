@@ -74,6 +74,8 @@ public:
   void call_on_close(uint32_t error_code);
 
 private:
+
+  void send_trailer();
   class stream *strm_;
   header_map header_;
   header_map trailers_;
