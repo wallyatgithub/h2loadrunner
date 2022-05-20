@@ -104,6 +104,13 @@ void asio_worker::stop_rate_mode_period_timer()
     rate_mode_period_timer.cancel();
 }
 
+void asio_worker::prepare_worker_stop()
+{
+    stop_tick_timer();
+    stop_all_clients();
+    async_resolver.cancel();
+}
+
 void asio_worker::handle_tick_timer_timeout(const boost::system::error_code & ec)
 {
     if (!timer_common_check(tick_timer, ec, &asio_worker::handle_tick_timer_timeout))

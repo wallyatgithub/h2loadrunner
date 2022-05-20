@@ -60,6 +60,8 @@ public:
 
     void stop_tick_timer();
 
+    void prepare_worker_stop();
+
     std::thread::id get_thread_id();
 
     void resolve_hostname(const std::string& hostname, const std::function<void(std::vector<std::string>&)>& cb_function);

@@ -46,8 +46,6 @@ const  std::string path_header = ":path";
 const  std::string authority_header = ":authority";
 const  std::string method_header = ":method";
 
-const  std::string grpc_status_header = "grpc-status";
-
 static std::string emptyString;
 
 class base_client;
@@ -65,6 +63,7 @@ struct Request_Data
     std::map<std::string, std::string, ci_less> shadow_req_headers;
     std::string resp_payload;
     std::vector<std::map<std::string, std::string, ci_less>> resp_headers;
+    bool resp_trailer_present = false;
     uint16_t status_code;
     uint16_t expected_status_code;
     uint32_t delay_before_executing_next;

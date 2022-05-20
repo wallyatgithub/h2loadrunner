@@ -99,11 +99,12 @@ int on_frame_recv_callback(nghttp2_session* session, const nghttp2_frame* frame,
 {
     auto client = static_cast<base_client*>(user_data);
     if (frame->hd.type != NGHTTP2_HEADERS ||
-        frame->headers.cat != NGHTTP2_HCAT_RESPONSE)
+        (frame->headers.cat != NGHTTP2_HCAT_RESPONSE &&
+         frame->headers.cat != NGHTTP2_HCAT_HEADERS))
     {
         return 0;
     }
-    client->on_header_frame(frame->hd.stream_id, frame->hd.flags);
+
     client->get_stats().bytes_head +=
         frame->hd.length - frame->headers.padlen -
         ((frame->hd.flags & NGHTTP2_FLAG_PRIORITY) ? 5 : 0);
@@ -114,6 +115,26 @@ int on_frame_recv_callback(nghttp2_session* session, const nghttp2_frame* frame,
     return 0;
 }
 } // namespace
+
+namespace
+{
+
+int on_begin_header_callback(nghttp2_session *session,
+                                       const nghttp2_frame *frame,
+                                       void *user_data)
+{
+    auto client = static_cast<base_client*>(user_data);
+    if (frame->hd.type != NGHTTP2_HEADERS ||
+        (frame->headers.cat != NGHTTP2_HCAT_RESPONSE &&
+         frame->headers.cat != NGHTTP2_HCAT_HEADERS))
+    {
+        return 0;
+    }
+
+    client->on_header_frame_begin(frame->hd.stream_id, frame->hd.flags);
+    return 0;
+}
+}
 
 namespace
 {
@@ -255,6 +276,9 @@ void Http2Session::on_connect()
     nghttp2_session_callbacks_new(&callbacks);
 
     auto callbacks_deleter = defer(nghttp2_session_callbacks_del, callbacks);
+
+    nghttp2_session_callbacks_set_on_begin_headers_callback(callbacks,
+                                                         on_begin_header_callback);
 
     nghttp2_session_callbacks_set_on_frame_recv_callback(callbacks,
                                                          on_frame_recv_callback);

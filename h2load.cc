@@ -1147,7 +1147,7 @@ int main(int argc, char** argv)
 
     std::cerr << "starting benchmark..." << std::endl;
 
-    std::vector<std::unique_ptr<base_worker>> workers;
+    std::vector<std::shared_ptr<base_worker>> workers;
     workers.reserve(config.nthreads);
 
 #ifndef NOTHREADS

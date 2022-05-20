@@ -153,6 +153,11 @@ int htp_hdr_valcb(llhttp_t* htp, const char* data, size_t len)
 
     session->stats.bytes_head += len;
     session->stats.bytes_head_decomp += len;
+    if (!session->on_header_frame_callback_called)
+    {
+        client->on_header_frame_begin(session->stream_resp_counter_, 0);
+        session->on_header_frame_callback_called == true;
+    }
     client->on_header(session->stream_resp_counter_,
                       (uint8_t*)(session->hdr_name.c_str()),
                       session->hdr_name.size(),
@@ -178,6 +183,7 @@ int htp_body_cb(llhttp_t* htp, const char* data, size_t len)
 {
     auto session = static_cast<Http1Session*>(htp->data);
     auto client = session->get_client();
+    // TODO: grpc-web support, extract trailer from msg body
     client->on_data_chunk(session->stream_resp_counter_, (const uint8_t*)data, len);
 
     client->record_ttfb();

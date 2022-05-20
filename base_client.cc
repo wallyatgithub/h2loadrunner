@@ -1654,13 +1654,17 @@ void base_client::on_stream_close(int32_t stream_id, bool success, bool final)
     }
 }
 
-void base_client::on_header_frame(int32_t stream_id, uint8_t flags)
+void base_client::on_header_frame_begin(int32_t stream_id, uint8_t flags)
 {
     if (requests_awaiting_response.count(stream_id))
     {
         Request_Data& request_data = requests_awaiting_response[stream_id];
         std::map<std::string, std::string, ci_less> dummy;
         request_data.resp_headers.push_back(dummy);
+        if (request_data.resp_headers.size() > 1 && (flags & NGHTTP2_FLAG_END_STREAM)) // TODO: add payload check?
+        {
+            request_data.resp_trailer_present = true;
+        }
     }
 }
 
@@ -1903,11 +1907,7 @@ void base_client::on_header(int32_t stream_id, const uint8_t* name, size_t namel
         std::string header_value;
         header_value.assign((const char*)value, valuelen);
         header_value.erase(0, header_value.find_first_not_of(' '));
-        if (request->second.resp_headers.empty())
-        {
-            std::map<std::string, std::string, ci_less> dummy;
-            request->second.resp_headers.push_back(dummy);
-        }
+        assert(request->second.resp_headers.size());
         auto it = request->second.resp_headers.back().find(header_name);
         if (it != request->second.resp_headers.back().end())
         {
@@ -2375,6 +2375,7 @@ void base_client::process_stream_user_callback(int32_t stream_id)
         stream_user_callback_queue[stream_id].resp_headers = std::move(requests_awaiting_response[stream_id].resp_headers);
         stream_user_callback_queue[stream_id].resp_payload = std::move(requests_awaiting_response[stream_id].resp_payload);
         stream_user_callback_queue[stream_id].response_available = true;
+        stream_user_callback_queue[stream_id].resp_trailer_present = requests_awaiting_response[stream_id].resp_trailer_present;
         if (stream_user_callback_queue[stream_id].response_callback)
         {
             stream_user_callback_queue[stream_id].response_callback();
@@ -2391,7 +2392,7 @@ void base_client::pass_response_to_lua(int32_t stream_id, lua_State *L)
         {
             std::map<std::string, std::string, ci_less>* trailer = nullptr;
             if (stream_user_callback_queue[stream_id].resp_headers.size() > 1 &&
-                stream_user_callback_queue[stream_id].resp_headers.back().count(grpc_status_header))
+                stream_user_callback_queue[stream_id].resp_trailer_present)
             {
                 trailer = &stream_user_callback_queue[stream_id].resp_headers.back();
                 if (config->verbose)

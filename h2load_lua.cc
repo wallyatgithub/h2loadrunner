@@ -270,8 +270,7 @@ void stop_workers(size_t number_of_groups)
         auto worker_ptr = get_lua_group_config(group_index).workers[i].get();
         auto stop_user_timer_and_clients = [worker_ptr]()
         {
-            worker_ptr->stop_tick_timer();
-            worker_ptr->stop_all_clients();
+            worker_ptr->prepare_worker_stop();
         };
         worker_ptr->get_io_context().post(stop_user_timer_and_clients);
         auto dummy = std::move(get_lua_group_config(group_index).works[i]);
