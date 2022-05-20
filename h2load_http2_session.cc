@@ -299,10 +299,10 @@ void Http2Session::on_connect()
 
     nghttp2_option* opt;
 
-    nghttp2_option_set_no_http_messaging(opt, 1);
-
     rv = nghttp2_option_new(&opt);
     assert(rv == 0);
+
+    //nghttp2_option_set_no_http_messaging(opt, 1);
 
     if (config->encoder_header_table_size != NGHTTP2_DEFAULT_HEADER_TABLE_SIZE)
     {
