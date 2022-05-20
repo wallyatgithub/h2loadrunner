@@ -285,7 +285,7 @@
             "description":"interval (in milliseconds) to wait before this scenario can be scheduled to run; before this interval is over, the weight of this scenario is considered zero; granularity: 100ms",
             "default": 0,
             "type":"integer"
-          }
+          },
           "user-id-variable-in-path-and-data":
           {
             "description":"Specifies the variable name in uri path and payload, which is considered as a user id, and is to be replaced with an actual value specified by next fields.",
