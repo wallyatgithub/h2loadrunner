@@ -15,8 +15,7 @@
 namespace h2load
 {
 
-class asio_worker: public std::enable_shared_from_this<asio_worker>, public h2load::base_worker,
-    private boost::noncopyable
+class asio_worker: public h2load::base_worker, private boost::noncopyable
 {
 public:
 

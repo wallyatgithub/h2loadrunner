@@ -742,6 +742,7 @@ void asio_client_connection::handle_read_complete(const boost::system::error_cod
         // a read finish callback gets scheduled while a connection switch is ongoing, do nothing
         return;
     }
+    worker->stats.bytes_total += bytes_transferred;
     restart_timeout_timer();
     if (session->on_read(input_buffer.data(), bytes_transferred) != 0)
     {
