@@ -193,6 +193,8 @@ bool is_test_finished(size_t number_of_test_groups);
 
 void enter_c_function(lua_State* L);
 
+void format_length_prefixed_message(std::string& payload);
+
 /*
  * this function would return or yield, depending on the outcome of the lua c function
  */

@@ -567,10 +567,12 @@ void update_orig_dst_and_proto(std::map<std::string, std::string, ci_less>& head
     if (headers.count(h2load::x_envoy_original_dst_host_header))
     {
         orig_dst = headers[h2load::x_envoy_original_dst_host_header];
+        headers.erase(h2load::x_envoy_original_dst_host_header);
     }
     if (headers.count(h2load::x_proto_to_use))
     {
         proto = headers[h2load::x_proto_to_use];
+        headers.erase(h2load::x_proto_to_use);
     }
 }
 
@@ -635,24 +637,28 @@ int forward_http_request_and_await_response(lua_State *L)
     return leave_c_function(L);
 }
 
+void format_length_prefixed_message(std::string& payload)
+{
+    std::vector<char> length_prefixed_message;
+    uint32_t len = htonl(payload.size());
+    length_prefixed_message.resize(1 + sizeof(len) + payload.size());
+    length_prefixed_message[0] = '\0';
+    memcpy((void*)&length_prefixed_message[1], &len, sizeof(len));
+    memcpy((void*)&length_prefixed_message[1 + sizeof(len)], payload.c_str(), payload.size());
+    payload.assign(&length_prefixed_message[0], length_prefixed_message.size());
+}
+
 int send_grpc_request_and_await_response(lua_State *L)
 {
     auto request_prep = [](std::map<std::string, std::string, ci_less>& headers, std::string& payload,
                            std::string& orig_dst, std::string& proto)
     {
-        update_orig_dst_and_proto(headers, payload, orig_dst, proto);
         headers[h2load::method_header] = "POST";
         headers["content-type"] = "application/grpc";
         headers["te"] = "trailers";
         headers["grpc-accept-encoding"]="identity"; // TODO: 
 
-        std::vector<char> payload_in_wire_format;
-        uint32_t len = htonl(payload.size());
-        payload_in_wire_format.resize(1 + sizeof(len) + payload.size());
-        payload_in_wire_format[0] = '\0';
-        memcpy((void*)&payload_in_wire_format[1], &len, sizeof(len));
-        memcpy((void*)&payload_in_wire_format[1 + sizeof(len)], payload.c_str(), payload.size());
-        payload.assign(&payload_in_wire_format[0], payload_in_wire_format.size());
+        format_length_prefixed_message(payload);
     };
     enter_c_function(L);
     _send_http_request(L, request_prep, await_response_request_sent_cb_generator(L));
@@ -1261,6 +1267,11 @@ int send_response(lua_State *L)
     if (response_headers.empty() && trailer_headers.size())
     {
         std::swap(response_headers, trailer_headers);
+    }
+    // TODO: more explicit check
+    if (trailer_headers.size())
+    {
+        format_length_prefixed_message(payload);
     }
     send_response_from_another_thread(ios, handler_id, stream_id, response_headers, payload, trailer_headers);
     return 0;
