@@ -12,6 +12,7 @@
 #include <iomanip>
 #include <string>
 #include <random>
+#include <numeric>
 
 #include "tls.h"
 #include "base_client.h"

@@ -27,7 +27,7 @@ using Request_Preprocessor = std::function<void(std::map<std::string, std::strin
 
 static Request_Preprocessor dummy_req_pre_processor = {};
 
-using Request_Sent_cb = std::function<void((int32_t stream_id, h2load::base_client* client))>;
+using Request_Sent_cb = std::function<void(int32_t, h2load::base_client*)>;
 
 
 Request_Sent_cb await_response_request_sent_cb_generator(lua_State *L);
