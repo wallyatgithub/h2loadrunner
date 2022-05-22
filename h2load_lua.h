@@ -19,6 +19,20 @@ extern "C" {
 #include "h2load_Config.h"
 #include "asio_worker.h"
 
+
+using Request_Preprocessor = std::function<void(std::map<std::string, std::string, ci_less>& headers,
+                                                std::string& payload,
+                                                std::string& orig_dst,
+                                                std::string& proto)>;
+
+static Request_Preprocessor dummy_req_pre_processor = {};
+
+using Request_Sent_cb = std::function<void((int32_t stream_id, h2load::base_client* client))>;
+
+
+Request_Sent_cb await_response_request_sent_cb_generator(lua_State *L);
+
+
 extern "C"
 {
 
@@ -27,6 +41,8 @@ int make_connection(lua_State *L);
 int send_http_request(lua_State *L);
 
 int send_http_request_and_await_response(lua_State *L);
+
+int send_grpc_request_and_await_response(lua_State *L);
 
 int await_response(lua_State *L);
 
@@ -51,7 +67,7 @@ int resolve_hostname(lua_State *L);
 
 }
 
-int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::base_client*)> request_sent_callback);
+int _send_http_request(lua_State *L, Request_Preprocessor request_preprocessor, std::function<void(int32_t, h2load::base_client*)> request_sent_callback);
 
 void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load::Config& config);
 
@@ -61,13 +77,20 @@ h2load::asio_worker* get_worker(lua_State *L);
  * return code:
  * 0: successfully injected std::function to worker thread, thus the caller needs to yield
  */
-int32_t _make_connection(lua_State *L, const std::string& uri, std::function<void(bool)> connected_callback);
+int32_t _make_connection(lua_State *L, const std::string& uri, std::function<void(bool)> connected_callback,
+                               const std::string& orig_dst, const std::string& proto);
 
 int lua_resume_wrapper (lua_State *L, int nargs);
+
+void update_orig_dst_and_proto(std::map<std::string, std::string, ci_less>& headers, std::string& payload,
+                                         std::string& orig_dst,
+                                         std::string& proto);
 
 int lua_resume_if_yielded(lua_State *L, int nargs);
 
 void register_functions_to_lua(lua_State *L);
+
+void register_3rd_party_lib_func_to_lua(lua_State *L);
 
 void init_new_lua_state(lua_State* L);
 
@@ -172,5 +195,16 @@ void enter_c_function(lua_State* L);
  * this function would return or yield, depending on the outcome of the lua c function
  */
 uint64_t leave_c_function(lua_State* L);
+
+extern "C"
+{
+// functions from pb.so
+LUALIB_API int luaopen_pb_io(lua_State *L);
+LUALIB_API int luaopen_pb_conv(lua_State *L);
+LUALIB_API int luaopen_pb_buffer(lua_State *L);
+LUALIB_API int luaopen_pb_slice(lua_State *L);
+LUALIB_API int luaopen_pb(lua_State *L);
+LUALIB_API int luaopen_pb_unsafe(lua_State *L);
+}
 
 #endif

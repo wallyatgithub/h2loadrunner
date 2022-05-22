@@ -975,8 +975,7 @@ void base_client::update_content_length(Request_Data& data)
     if (data.req_payload->size())
     {
         std::string content_length = "content-length";
-        //data.req_headers.erase(content_length);
-        data.shadow_req_headers[content_length] = std::to_string(data.req_payload->size());
+        data.req_headers_of_individual[content_length] = std::to_string(data.req_payload->size());
     }
 }
 
@@ -1014,7 +1013,7 @@ void base_client::populate_request_from_config_template(Request_Data& new_reques
                                                                             request_template.tokenized_payload,
                                                                             new_request.user_id));
     new_request.req_payload = &(new_request.string_collection.back());
-    new_request.req_headers = &request_template.headers_in_map;
+    new_request.req_headers_from_config = &request_template.headers_in_map;
     new_request.expected_status_code = request_template.expected_status_code;
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
 }
@@ -1264,9 +1263,9 @@ void base_client::produce_request_cookie_header(Request_Data& req_to_be_sent)
     {
         return;
     }
-    auto iter = req_to_be_sent.req_headers->find("Cookie");
+    auto iter = req_to_be_sent.req_headers_from_config->find("Cookie");
     std::set<std::string> cookies_from_config;
-    if (iter != req_to_be_sent.req_headers->end())
+    if (iter != req_to_be_sent.req_headers_from_config->end())
     {
         auto cookie_vec = Cookie::parse_cookie_string(iter->second, *req_to_be_sent.authority, *req_to_be_sent.schema);
         for (auto& cookie : cookie_vec)
@@ -1297,14 +1296,14 @@ void base_client::produce_request_cookie_header(Request_Data& req_to_be_sent)
     }
     if (!cookies_to_append.empty())
     {
-        if (iter != req_to_be_sent.req_headers->end() && !iter->second.empty())
+        if (iter != req_to_be_sent.req_headers_from_config->end() && !iter->second.empty())
         {
-            req_to_be_sent.shadow_req_headers["Cookie"] = iter->second;
-            req_to_be_sent.shadow_req_headers["Cookie"].append(cookie_delimeter).append(cookies_to_append);
+            req_to_be_sent.req_headers_of_individual["Cookie"] = iter->second;
+            req_to_be_sent.req_headers_of_individual["Cookie"].append(cookie_delimeter).append(cookies_to_append);
         }
         else
         {
-            req_to_be_sent.shadow_req_headers["Cookie"] = std::move(cookies_to_append);
+            req_to_be_sent.req_headers_of_individual["Cookie"] = std::move(cookies_to_append);
         }
     }
 }
@@ -1349,8 +1348,8 @@ bool base_client::update_request_with_lua(lua_State* L, const Request_Data& fini
 
         lua_pushlstring(L, finished_request.resp_payload.c_str(), finished_request.resp_payload.size());
 
-        lua_createtable(L, 0, request_to_send.req_headers->size());
-        for (auto& header : * (request_to_send.req_headers))
+        lua_createtable(L, 0, request_to_send.req_headers_from_config->size());
+        for (auto& header : *(request_to_send.req_headers_from_config))
         {
             lua_pushlstring(L, header.first.c_str(), header.first.size());
             lua_pushlstring(L, header.second.c_str(), header.second.size());
@@ -1418,7 +1417,7 @@ bool base_client::update_request_with_lua(lua_State* L, const Request_Data& fini
                     request_to_send.string_collection.emplace_back(headers[scheme_header]);
                     request_to_send.schema = &(request_to_send.string_collection.back());
                     headers.erase(scheme_header);
-                    request_to_send.shadow_req_headers = std::move(headers);
+                    request_to_send.req_headers_of_individual = std::move(headers);
                     break;
                 }
                 default:

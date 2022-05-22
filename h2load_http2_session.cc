@@ -450,16 +450,16 @@ int Http2Session::_submit_request()
         return -1;
     }
 
-    http2_nvs.reserve(data.req_headers->size() + data.shadow_req_headers.size() + 4);
+    http2_nvs.reserve(data.req_headers_from_config->size() + data.req_headers_of_individual.size() + 4);
 
     http2_nvs.emplace_back(http2::make_nv(path_header, *data.path, false));
     http2_nvs.emplace_back(http2::make_nv(scheme_header, *data.schema, false));
     http2_nvs.emplace_back(http2::make_nv(authority_header, *data.authority, false));
     http2_nvs.emplace_back(http2::make_nv(method_header, *data.method, false));
 
-    for (auto& header : *data.req_headers)
+    for (auto& header : *data.req_headers_from_config)
     {
-        if (data.shadow_req_headers.count(header.first))
+        if (data.req_headers_of_individual.count(header.first))
         {
             continue;
         }
@@ -471,7 +471,7 @@ int Http2Session::_submit_request()
         http2_nvs.emplace_back(http2::make_nv(header.first, header.second, false));
     }
 
-    for (auto& header : data.shadow_req_headers)
+    for (auto& header : data.req_headers_of_individual)
     {
         if (header.first == path_header || header.first == scheme_header || header.first == authority_header
             || header.first == method_header)

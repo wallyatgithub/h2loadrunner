@@ -41,8 +41,11 @@ const static std::string io_service_str = "ios";
 const static std::string handler_id_str = "hid";
 const static std::string stream_id_str = "sid";
 
+const static std::string dummy_string = "";
+
 thread_local static bool need_to_return_from_c_function = false;
 thread_local static size_t number_of_result_to_return;
+
 
 void set_group_id(lua_State* L, size_t group_id)
 {
@@ -250,6 +253,7 @@ void init_new_lua_state(lua_State* L)
     lua_register(L, "send_http_request", send_http_request);
     lua_register(L, "await_response", await_response);
     lua_register(L, "send_http_request_and_await_response", send_http_request_and_await_response);
+    lua_register(L, "send_grpc_request_and_await_response", send_grpc_request_and_await_response);
     lua_register(L, "setup_parallel_test", setup_parallel_test);
     lua_register(L, "sleep_for_ms", sleep_for_ms);
     lua_register(L, "time_since_epoch", time_since_epoch);
@@ -259,6 +263,7 @@ void init_new_lua_state(lua_State* L)
     lua_register(L, "send_response", send_response);
     lua_register(L, "wait_for_message", wait_for_message);
     lua_register(L, "resolve_hostname", resolve_hostname);
+    register_3rd_party_lib_func_to_lua(L);
 }
 
 
@@ -452,7 +457,8 @@ Data_Per_Worker_Thread& get_runtime_data(lua_State* L)
     return get_lua_group_config(get_group_id(L)).data_per_worker_thread[get_worker_index(L)];
 }
 
-int32_t _make_connection(lua_State *L, const std::string& uri, std::function<void(bool, h2load::base_client*)> connected_callback)
+int32_t _make_connection(lua_State *L, const std::string& uri, std::function<void(bool, h2load::base_client*)> connected_callback,
+                               const std::string& orig_dst, const std::string& proto)
 {
     auto worker = get_worker(L);
     http_parser_url u {};
@@ -548,13 +554,33 @@ int make_connection(lua_State *L)
     }
     lua_settop(L, 0);
 
-    _make_connection(L, base_uri, connected_callback);
+    _make_connection(L, base_uri, connected_callback, dummy_string, dummy_string);
 
     return leave_c_function(L);
 }
 
+void update_orig_dst_and_proto(std::map<std::string, std::string, ci_less>& headers, std::string& payload,
+                                         std::string& orig_dst,
+                                         std::string& proto)
+{
+    if (headers.count(h2load::x_envoy_original_dst_host_header))
+    {
+        orig_dst = headers[h2load::x_envoy_original_dst_host_header];
+    }
+    if (headers.count(h2load::x_proto_to_use))
+    {
+        proto = headers[h2load::x_proto_to_use];
+    }
+}
+
 int send_http_request(lua_State *L)
 {
+    auto request_prep = [](std::map<std::string, std::string, ci_less>& headers, std::string& payload,
+                           std::string& orig_dst, std::string& proto)
+    {
+        update_orig_dst_and_proto(headers, payload, orig_dst, proto);
+    };
+
     enter_c_function(L);
     auto request_sent = [L](int32_t stream_id, h2load::base_client* client)
     {
@@ -571,14 +597,13 @@ int send_http_request(lua_State *L)
         }
         lua_resume_if_yielded(L, 2);
     };
-    _send_http_request(L, request_sent);
+    _send_http_request(L, dummy_req_pre_processor, request_sent);
     return leave_c_function(L);
 }
 
-int send_http_request_and_await_response(lua_State *L)
+Request_Sent_cb await_response_request_sent_cb_generator(lua_State *L)
 {
-    enter_c_function(L);
-    auto request_sent = [L](int32_t stream_id, h2load::base_client* client)
+    return [L](int32_t stream_id, h2load::base_client* client)
     {
         if (stream_id > 0 && client)
         {
@@ -593,7 +618,33 @@ int send_http_request_and_await_response(lua_State *L)
             lua_resume_if_yielded(L, 3);
         }
     };
-    _send_http_request(L, request_sent);
+}
+int send_http_request_and_await_response(lua_State *L)
+{
+    auto request_prep = [](std::map<std::string, std::string, ci_less>& headers, std::string& payload,
+                           std::string& orig_dst, std::string& proto)
+    {
+        update_orig_dst_and_proto(headers, payload, orig_dst, proto);
+    };
+
+    enter_c_function(L);
+    _send_http_request(L, request_prep, await_response_request_sent_cb_generator(L));
+    return leave_c_function(L);
+}
+
+int send_grpc_request_and_await_response(lua_State *L)
+{
+    auto request_prep = [](std::map<std::string, std::string, ci_less>& headers, std::string& payload,
+                           std::string& orig_dst, std::string& proto)
+    {
+        update_orig_dst_and_proto(headers, payload, orig_dst, proto);
+        headers[h2load::method_header] = "POST";
+        headers["content-type"] = "application/grpc";
+        headers["te"] = "trailers";
+        headers["grpc-accept-encoding"]="identity"; // TODO: 
+    };
+    enter_c_function(L);
+    _send_http_request(L, request_prep, await_response_request_sent_cb_generator(L));
     return leave_c_function(L);
 }
 
@@ -679,7 +730,7 @@ int await_response(lua_State *L)
 }
 
 
-int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::base_client*)> request_sent_callback)
+int _send_http_request(lua_State *L, Request_Preprocessor request_preprocessor, std::function<void(int32_t, h2load::base_client*)> request_sent_callback)
 {
     auto argument_error = false;
     std::string payload;
@@ -740,6 +791,14 @@ int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::base_cl
 
     if (!argument_error)
     {
+        std::string original_dst;
+        std::string proto;
+
+        if (request_preprocessor)
+        {
+            request_preprocessor(headers, payload, original_dst, proto);
+        }
+
         std::string schema = headers[h2load::scheme_header];
         headers.erase(h2load::scheme_header);
         std::string authority = headers[h2load::authority_header];
@@ -753,7 +812,7 @@ int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::base_cl
         h2load::asio_worker* worker;
         worker = get_worker(L);
 
-        auto connected_callback = [payload, schema, authority, method, path, headers, request_sent_callback, timeout_interval_in_ms](bool success, h2load::base_client* client)
+        auto connected_callback = [payload, schema, authority, method, path, headers, request_sent_callback, timeout_interval_in_ms, original_dst, proto](bool success, h2load::base_client* client)
         {
             if (!success)
             {
@@ -772,13 +831,13 @@ int _send_http_request(lua_State *L, std::function<void(int32_t, h2load::base_cl
             request_to_send.authority = &(request_to_send.string_collection.back());
             request_to_send.string_collection.emplace_back(schema);
             request_to_send.schema = &(request_to_send.string_collection.back());
-            request_to_send.shadow_req_headers = std::move(headers);
-            request_to_send.req_headers = &dummyHeaders;
+            request_to_send.req_headers_of_individual = std::move(headers);
+            request_to_send.req_headers_from_config = &dummyHeaders;
             request_to_send.stream_timeout_in_ms = timeout_interval_in_ms;
             client->requests_to_submit.emplace_back(std::move(request_to_send));
             client->submit_request();
         };
-        _make_connection(L, base_uri, connected_callback);
+        _make_connection(L, base_uri, connected_callback, original_dst, proto);
     }
     else
     {
@@ -1296,3 +1355,27 @@ int resolve_hostname(lua_State *L)
     return leave_c_function(L);
 }
 
+
+void register_3rd_party_lib_func_to_lua(lua_State *L)
+{
+    const std::string pb = "pb";
+    luaopen_pb(L);
+    lua_setglobal(L, pb.c_str());
+
+    const std::string pbio = "pb.io";
+    luaopen_pb_io(L);
+    lua_setglobal(L, pbio.c_str());
+
+    const std::string pbconv = "pb.conv";
+    luaopen_pb_conv(L);
+    lua_setglobal(L, pbconv.c_str());
+
+    const std::string pbslice = "pb.slice";
+    luaopen_pb_slice(L);
+    lua_setglobal(L, pbslice.c_str());
+
+    const std::string pbbuffer = "pb.buffer";
+    luaopen_pb_buffer(L);
+    lua_setglobal(L, pbbuffer.c_str());
+
+}

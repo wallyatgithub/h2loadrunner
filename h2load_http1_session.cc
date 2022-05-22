@@ -363,9 +363,9 @@ int Http1Session::_submit_request()
     req.append(*data.method).append(" ").append(*data.path).append(" HTTP/1.1\r\n");
     req.append("Host: ").append(*data.authority).append("\r\n");
 
-    for (auto& header : *data.req_headers)
+    for (auto& header : *data.req_headers_from_config)
     {
-        if (data.shadow_req_headers.count(header.first))
+        if (data.req_headers_of_individual.count(header.first))
         {
             continue;
         }
@@ -379,7 +379,7 @@ int Http1Session::_submit_request()
         req.append(header.second);
         req.append("\r\n");
     }
-    for (auto& header : data.shadow_req_headers)
+    for (auto& header : data.req_headers_of_individual)
     {
         if (header.first == path_header || header.first == scheme_header || header.first == authority_header
             || header.first == method_header)

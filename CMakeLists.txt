@@ -210,6 +210,7 @@ set(H2LOAD_SOURCES
   base_worker.cc
   asio_client_connection.cc
   asio_worker.cc
+  pb.c
   h2load_lua.cc
   ${H2LOAD_SOURCE_USING_LIBEV}
   ${ASIO_SV_SOURCES}

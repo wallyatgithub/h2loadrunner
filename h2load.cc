@@ -440,7 +440,7 @@ int main(int argc, char** argv)
             {"stream-timeout-interval-ms", required_argument, &flag, 23},
             {"rps-input-file", required_argument, &flag, 24},
             {"config-file", required_argument, &flag, 25},
-            {"script-file", required_argument, &flag, 26},
+            {"script", required_argument, &flag, 26},
             {nullptr, 0, nullptr, 0}
         };
         int option_index = 0;

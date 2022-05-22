@@ -41,10 +41,15 @@ using namespace nghttp2;
 namespace h2load
 {
 
-const  std::string scheme_header = ":scheme";
-const  std::string path_header = ":path";
-const  std::string authority_header = ":authority";
-const  std::string method_header = ":method";
+const std::string scheme_header = ":scheme";
+const std::string path_header = ":path";
+const std::string authority_header = ":authority";
+const std::string method_header = ":method";
+
+const std::string x_envoy_original_dst_host_header = "x-envoy-original-dst-host";
+
+const std::string x_proto_to_use = "x-protocol-to-use";
+
 
 static std::string emptyString;
 
@@ -59,8 +64,8 @@ struct Request_Data
     uint64_t user_id;
     std::string* method;
     size_t req_payload_cursor;
-    std::map<std::string, std::string, ci_less>* req_headers;
-    std::map<std::string, std::string, ci_less> shadow_req_headers;
+    std::map<std::string, std::string, ci_less>* req_headers_from_config;
+    std::map<std::string, std::string, ci_less> req_headers_of_individual;
     std::string resp_payload;
     std::vector<std::map<std::string, std::string, ci_less>> resp_headers;
     bool resp_trailer_present = false;
@@ -105,11 +110,11 @@ struct Request_Data
           << "expected_status_code:" << request_data.expected_status_code << std::endl
           << "delay_before_executing_next:" << request_data.delay_before_executing_next << std::endl;
 
-        for (auto& it : * (request_data.req_headers))
+        for (auto& it : * (request_data.req_headers_from_config))
         {
             o << "request header name from template: " << it.first << ", header value: " << it.second << std::endl;
         }
-        for (auto& it : request_data.shadow_req_headers)
+        for (auto& it : request_data.req_headers_of_individual)
         {
             o << "updated request header name: " << it.first << ", header value: " << it.second << std::endl;
         }
