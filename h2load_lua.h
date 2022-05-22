@@ -42,6 +42,8 @@ int send_http_request(lua_State *L);
 
 int send_http_request_and_await_response(lua_State *L);
 
+int forward_http_request_and_await_response(lua_State *L);
+
 int send_grpc_request_and_await_response(lua_State *L);
 
 int await_response(lua_State *L);

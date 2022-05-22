@@ -253,6 +253,7 @@ void init_new_lua_state(lua_State* L)
     lua_register(L, "send_http_request", send_http_request);
     lua_register(L, "await_response", await_response);
     lua_register(L, "send_http_request_and_await_response", send_http_request_and_await_response);
+    lua_register(L, "forward_http_request_and_await_response", forward_http_request_and_await_response);
     lua_register(L, "send_grpc_request_and_await_response", send_grpc_request_and_await_response);
     lua_register(L, "setup_parallel_test", setup_parallel_test);
     lua_register(L, "sleep_for_ms", sleep_for_ms);
@@ -575,12 +576,6 @@ void update_orig_dst_and_proto(std::map<std::string, std::string, ci_less>& head
 
 int send_http_request(lua_State *L)
 {
-    auto request_prep = [](std::map<std::string, std::string, ci_less>& headers, std::string& payload,
-                           std::string& orig_dst, std::string& proto)
-    {
-        update_orig_dst_and_proto(headers, payload, orig_dst, proto);
-    };
-
     enter_c_function(L);
     auto request_sent = [L](int32_t stream_id, h2load::base_client* client)
     {
@@ -619,7 +614,15 @@ Request_Sent_cb await_response_request_sent_cb_generator(lua_State *L)
         }
     };
 }
+
 int send_http_request_and_await_response(lua_State *L)
+{
+    enter_c_function(L);
+    _send_http_request(L, dummy_req_pre_processor, await_response_request_sent_cb_generator(L));
+    return leave_c_function(L);
+}
+
+int forward_http_request_and_await_response(lua_State *L)
 {
     auto request_prep = [](std::map<std::string, std::string, ci_less>& headers, std::string& payload,
                            std::string& orig_dst, std::string& proto)

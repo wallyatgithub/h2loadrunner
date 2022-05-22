@@ -23,7 +23,7 @@ function handle_request(response_addr, headers, payload)
     headers["x-envoy-original-dst-host"] = clusters[index]
     headers["x-envoy-original-dst-host"] = headers["x-envoy-original-dst-host"]..":8082"
 
-    response_header, response_body = send_http_request_and_await_response(headers, payload, 1000) -- 1000 is the response timeout
+    response_header, response_body = forward_http_request_and_await_response(headers, payload, 1000) -- 1000 is the response timeout
 
     local next = next
     if (next(response_header) == nil)
