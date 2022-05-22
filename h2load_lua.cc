@@ -458,7 +458,7 @@ Data_Per_Worker_Thread& get_runtime_data(lua_State* L)
 }
 
 int32_t _make_connection(lua_State *L, const std::string& uri, std::function<void(bool, h2load::base_client*)> connected_callback,
-                               const std::string& orig_dst, const std::string& proto)
+                                const std::string& proto)
 {
     auto worker = get_worker(L);
     http_parser_url u {};
@@ -554,7 +554,7 @@ int make_connection(lua_State *L)
     }
     lua_settop(L, 0);
 
-    _make_connection(L, base_uri, connected_callback, dummy_string, dummy_string);
+    _make_connection(L, base_uri, connected_callback, dummy_string);
 
     return leave_c_function(L);
 }
@@ -642,6 +642,14 @@ int send_grpc_request_and_await_response(lua_State *L)
         headers["content-type"] = "application/grpc";
         headers["te"] = "trailers";
         headers["grpc-accept-encoding"]="identity"; // TODO: 
+
+        std::vector<char> payload_in_wire_format;
+        uint32_t len = htonl(payload.size());
+        payload_in_wire_format.resize(1 + sizeof(len) + payload.size());
+        payload_in_wire_format[0] = '\0';
+        memcpy((void*)&payload_in_wire_format[1], &len, sizeof(len));
+        memcpy((void*)&payload_in_wire_format[1 + sizeof(len)], payload.c_str(), payload.size());
+        payload.assign(&payload_in_wire_format[0], payload_in_wire_format.size());
     };
     enter_c_function(L);
     _send_http_request(L, request_prep, await_response_request_sent_cb_generator(L));
@@ -808,11 +816,18 @@ int _send_http_request(lua_State *L, Request_Preprocessor request_preprocessor, 
         std::string path = headers[h2load::path_header];
         headers.erase(h2load::path_header);
         std::string base_uri = schema;
-        base_uri.append("://").append(authority);
+        if (original_dst.size())
+        {
+            base_uri.append("://").append(original_dst);
+        }
+        else
+        {
+            base_uri.append("://").append(authority);
+        }
         h2load::asio_worker* worker;
         worker = get_worker(L);
 
-        auto connected_callback = [payload, schema, authority, method, path, headers, request_sent_callback, timeout_interval_in_ms, original_dst, proto](bool success, h2load::base_client* client)
+        auto connected_callback = [payload, schema, authority, method, path, headers, request_sent_callback, timeout_interval_in_ms, proto](bool success, h2load::base_client* client)
         {
             if (!success)
             {
@@ -837,7 +852,7 @@ int _send_http_request(lua_State *L, Request_Preprocessor request_preprocessor, 
             client->requests_to_submit.emplace_back(std::move(request_to_send));
             client->submit_request();
         };
-        _make_connection(L, base_uri, connected_callback, original_dst, proto);
+        _make_connection(L, base_uri, connected_callback, proto);
     }
     else
     {

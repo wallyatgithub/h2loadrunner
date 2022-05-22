@@ -78,7 +78,7 @@ h2load::asio_worker* get_worker(lua_State *L);
  * 0: successfully injected std::function to worker thread, thus the caller needs to yield
  */
 int32_t _make_connection(lua_State *L, const std::string& uri, std::function<void(bool)> connected_callback,
-                               const std::string& orig_dst, const std::string& proto);
+                                const std::string& proto);
 
 int lua_resume_wrapper (lua_State *L, int nargs);
 

@@ -4,7 +4,7 @@ print("server id: ", server_id)
 
 register_service_handler(server_id, "POST", "handle_request", 20)
 
-dest_host = "localhosts"
+dest_host = "localhost"
 
 math.randomseed(os.time())
 
@@ -20,8 +20,8 @@ function handle_request(response_addr, headers, payload)
     end
 
     index = math.random(table.getn(clusters))
-    headers[":authority"] = clusters[index]
-    headers[":authority"] = headers[":authority"]..":8082"
+    headers["x-envoy-original-dst-host"] = clusters[index]
+    headers["x-envoy-original-dst-host"] = headers["x-envoy-original-dst-host"]..":8082"
 
     response_header, response_body = send_http_request_and_await_response(headers, payload, 1000) -- 1000 is the response timeout
 
