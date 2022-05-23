@@ -1,4 +1,7 @@
 
+math.randomseed(os.time())
+
+dest_host = {"192.168.1.125:50051", "192.168.1.125:50052"}
 -- do not change this variable
 local protobuf_start_offset = 6
 
@@ -7,10 +10,10 @@ pb.loadfile "hello.pb"
 
 local grpc_path = "/helloworld.Greeter/SayHello"
 
-local total_target_tps = 5000
+local total_target_tps = 10000
 
 -- TPS each worker thread will take = (total_target_tps / number_of_worker_threads)
-local number_of_worker_threads = 1
+local number_of_worker_threads = 4
 
 local duration_to_run_in_seconds = 60
 
@@ -28,6 +31,11 @@ local interval_in_ms_between_requests_for_every_virtual_user = ((number_of_virtu
 local number_of_request_to_send_in_one_loop_of_virtual_user = 1
 
 local number_of_loops_for_each_virtual_user = ((duration_to_run_in_seconds * 1000) / interval_in_ms_between_requests_for_every_virtual_user)
+
+if (my_id < number_of_worker_threads)
+then
+    print("number of loops for each virtual user to run: ", number_of_loops_for_each_virtual_user)
+end
 
 -- the following global variables are shared among all number_of_virtual_users within one worker_thread
 --
@@ -89,7 +97,6 @@ local function sleep_between_requests_if_necessary(latency)
 end
 
 function generate_load()
-    print("load started, loops to run: ", number_of_loops_for_each_virtual_user)
     local loop_count = 0;
     local msg = {"H2loadrunner GRPC Client loop count: ", 0}
     for request_index = 1,number_of_loops_for_each_virtual_user do
@@ -106,7 +113,8 @@ function generate_load()
 
             local request_payload = pb.encode("helloworld.HelloRequest", hello)
 
-            local request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.125:50051", [":path"]=grpc_path}
+            local dest_host_index = math.random(table.getn(dest_host))
+            local request_headers_to_send = {[":scheme"]="http", [":authority"]=dest_host[dest_host_index], [":path"]=grpc_path}
 
             local resp_headers, resp_body, trailers = send_grpc_request_and_await_response(request_headers_to_send, request_payload)
             
