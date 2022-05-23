@@ -1,0 +1,53 @@
+{
+  "address": "0.0.0.0",
+  "port": 8081,
+  "threads": 2,
+  "private-key-file": "",
+  "cert-file": "",
+  "caCert-file": "",
+  "mTLS": false,
+  "max-concurrent-streams": 2048,
+  "header-table-size": 4096,
+  "encoder-header-table-size": 4096,
+  "window-bits": 30,
+  "connection-window-bits": 30,
+  "socket-receive-buffer-size": 4194304,
+  "socket-send-buffer-size": 4194304,
+  "verbose": false,
+  "Service": [
+    {
+      "Request": {
+        "name": "nudm_sdm_get",
+        "headers": [
+          {
+            "header-name": ":path",
+            "matchType": "Contains",
+            "input": "nudm-sdm/v2"
+          },
+          {
+            "header-name": ":method",
+            "matchType": "RegexMatch",
+            "input": "[Gg][Ee][Tt]"
+          }
+        ],
+        "payload": []
+      },
+      "Responses": [
+        {
+          "name": "200",
+          "weight": 100,
+          "throttle-ratio": 100,
+          "status-code": 200,
+          "payload": {
+            "msg-payload": "",
+            "placeholder": "",
+            "arguments": []
+          },
+          "additonalHeaders": [],
+          "luaScript": "",
+          "lua-offload": false
+        }
+      ]
+    }
+  ]
+}

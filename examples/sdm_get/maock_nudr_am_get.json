@@ -1,0 +1,58 @@
+{
+  "address": "0.0.0.0",
+  "port": 8082,
+  "threads": 2,
+  "private-key-file": "",
+  "cert-file": "",
+  "caCert-file": "",
+  "mTLS": false,
+  "max-concurrent-streams": 2048,
+  "header-table-size": 4096,
+  "encoder-header-table-size": 4096,
+  "window-bits": 30,
+  "connection-window-bits": 30,
+  "socket-receive-buffer-size": 4194304,
+  "socket-send-buffer-size": 4194304,
+  "verbose": false,
+  "Service": [
+    {
+      "Request": {
+        "name": "nudr_get_subscription_data",
+        "headers": [
+          {
+            "header-name": ":path",
+            "matchType": "Contains",
+            "input": "nudr-dr/v2/subscription-data"
+          },
+          {
+            "header-name": ":method",
+            "matchType": "RegexMatch",
+            "input": "[Gg][Ee][Tt]"
+          },
+          {
+            "header-name": ":path",
+            "matchType": "Contains",
+            "input": "dataset-names=am"
+          }
+        ],
+        "payload": []
+      },
+      "Responses": [
+        {
+          "name": "200",
+          "weight": 100,
+          "throttle-ratio": 0,
+          "status-code": 200,
+          "payload": {
+            "msg-payload": "{\"amData\":{\"activeTime\":120,\"coreNetworkTypeRestrictions\":[\"EPC\",\"5GC\"],\"micoAllowed\":false,\"internalGroupIds\":[\"123456Aa-123-123-1122334455667788BBaa\",\"123456Aa-123-123-1122334455667788BBcc\"],\"gpsis\":[\"msisdn-12010460001\",\"msisdn-12010460002\"],\"ladnInformation\":[\"lad1\"],\"subsRegTimer\":120,\"odbPacketServices\":\"120\",\"rfspIndex\":1,\"subscribedDnnList\":[\"dnn1\",\"dnn2\"],\"ueUsageType\":1,\"dlPacketCount\":12,\"ratRestrictions\":[\"NR\"],\"mcsPriority\":false,\"supportedFeatures\":\"80000000\",\"mpsPriority\":false,\"serviceAreaRestriction\":{\"maxNumOfTAs\":123,\"restrictionType\":\"ALLOWED_AREAS\",\"areas\":[{\"areaId\":1,\"tacs\":[\"333343\",\"333355\"],\"areaCodes\":[\"201\"]}]},\"nssai\":{\"supportedFeatures\":\"80000000\",\"defaultSingleNssais\":[\"255-19CDE0\"],\"singleNssais\":[\"255-19CDE0\", \"212\", \"222-20CDE0\"]},\"forbiddenAreas\":[{\"forbiddenAreasId\":1,\"areaCodes\":[\"204\",\"213\"],\"tacs\":[\"3333\"]}],\"subscribedUeAmbr\":{\"downlink\":\"1680 Mbps\",\"uplink\":\"1680 Mbps\"}}}",
+            "placeholder": "",
+            "arguments": []
+          },
+          "additonalHeaders": [],
+          "luaScript": "",
+          "lua-offload": false
+        }
+      ]
+    }
+  ]
+}

@@ -358,11 +358,12 @@ Options:
               change of rps is needed.
   --config-file=<PATH>
               A JSON file specifying the configurations needed.
-  --script-file=<PATH>
+  --script=<PATH>
               A Lua script file to load and run. Configuration related
               to host, Scenarioes in above config-file will be ignored
               And the actual connection and request will be controlled
               by the script.
+              Multiple scripts are acceptable w/ multiple --script arg
   -v, --verbose
               Output debug information.
   --version   Display version information and exit.
