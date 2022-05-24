@@ -465,6 +465,7 @@ int32_t _make_connection(lua_State* L, const std::string& uri,
                          const std::string& proto)
 {
     auto worker = get_worker(L);
+    /*
     http_parser_url u {};
     if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0 ||
         !util::has_uri_field(u, UF_SCHEMA) || !util::has_uri_field(u, UF_HOST))
@@ -473,6 +474,7 @@ int32_t _make_connection(lua_State* L, const std::string& uri,
         connected_callback(false, nullptr);
         return -1;
     }
+    */
     auto group_id = get_group_id(L);
     auto clients_needed = get_lua_group_config(group_id).number_of_client_to_same_host_in_one_worker;
     auto run_inside_worker = [uri, connected_callback, worker, clients_needed]()
@@ -481,14 +483,19 @@ int32_t _make_connection(lua_State* L, const std::string& uri,
         if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0 ||
             !util::has_uri_field(u, UF_SCHEMA) || !util::has_uri_field(u, UF_HOST))
         {
+            std::cerr << "invalid uri:" << uri << std::endl;
             return connected_callback(false, nullptr);
         }
         std::string schema = util::get_uri_field(uri.c_str(), u, UF_SCHEMA).str();
         std::string authority = util::get_uri_field(uri.c_str(), u, UF_HOST).str();
-        auto port = util::get_default_port(uri.c_str(), u);
+        uint32_t port;
         if (util::has_uri_field(u, UF_PORT))
         {
             port = u.port;
+        }
+        else
+        {
+            port = util::get_default_port(uri.c_str(), u);
         }
         authority.append(":").append(std::to_string(port));
         auto client_id = worker->next_client_id;
@@ -828,14 +835,21 @@ int _send_http_request(lua_State* L, Request_Preprocessor request_preprocessor,
         headers.erase(h2load::method_header);
         std::string path = headers[h2load::path_header];
         headers.erase(h2load::path_header);
-        std::string base_uri = schema;
+        std::string base_uri;
         if (original_dst.size())
         {
-            base_uri.append("://").append(original_dst);
+            if (original_dst.find("http") != std::string::npos)
+            {
+                base_uri = original_dst;
+            }
+            else
+            {
+                base_uri.append(schema).append("://").append(original_dst);
+            }
         }
         else
         {
-            base_uri.append("://").append(authority);
+            base_uri.append(schema).append("://").append(authority);
         }
         h2load::asio_worker* worker;
         worker = get_worker(L);
