@@ -217,6 +217,7 @@ public:
     // The client id per worker
     uint32_t id;
     std::string selected_proto;
+    std::string preferred_non_tls_proto;
     bool new_connection_requested;
     // true if the current connection will be closed, and no more new
     // request cannot be processed.

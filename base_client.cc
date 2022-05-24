@@ -2284,7 +2284,19 @@ int base_client::select_protocol_and_allocate_session()
     }
     else
     {
-        switch (config->no_tls_proto)
+        auto proto = config->no_tls_proto;
+        if (preferred_non_tls_proto.size())
+        {
+            if (preferred_non_tls_proto == "h2c")
+            {
+                proto = h2load::Config::PROTO_HTTP2;
+            }
+            else
+            {
+                proto = h2load::Config::PROTO_HTTP1_1;
+            }
+        }
+        switch (proto)
         {
             case Config::PROTO_HTTP2:
                 session = std::make_unique<Http2Session>(this);

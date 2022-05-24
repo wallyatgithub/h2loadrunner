@@ -477,7 +477,7 @@ int32_t _make_connection(lua_State* L, const std::string& uri,
     */
     auto group_id = get_group_id(L);
     auto clients_needed = get_lua_group_config(group_id).number_of_client_to_same_host_in_one_worker;
-    auto run_inside_worker = [uri, connected_callback, worker, clients_needed]()
+    auto run_inside_worker = [uri, connected_callback, worker, proto, clients_needed]()
     {
         http_parser_url u {};
         if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0 ||
@@ -510,6 +510,7 @@ int32_t _make_connection(lua_State* L, const std::string& uri,
             clients[base_uri].insert(client.get());
             client->install_connected_callback(connected_callback);
             client->set_prefered_authority(authority);
+            client->preferred_non_tls_proto = proto;
             client->connect_to_host(schema, authority);
         }
         else
@@ -586,8 +587,25 @@ void update_orig_dst_and_proto(std::map<std::string, std::string, ci_less>& head
     }
 }
 
+// TODO: this is called every request, should be optimized
+void update_proto(std::map<std::string, std::string, ci_less>& headers, std::string& payload,
+                       std::string& orig_dst,
+                       std::string& proto)
+{
+    if (headers.count(h2load::x_proto_to_use))
+    {
+        proto = headers[h2load::x_proto_to_use];
+        headers.erase(h2load::x_proto_to_use);
+    }
+}
+
 int send_http_request(lua_State* L)
 {
+    auto request_prep = [](std::map<std::string, std::string, ci_less>& headers, std::string & payload,
+                           std::string & orig_dst, std::string & proto)
+    {
+        update_proto(headers, payload, orig_dst, proto);
+    };
     enter_c_function(L);
     auto request_sent = [L](int32_t stream_id, h2load::base_client * client)
     {
@@ -604,7 +622,7 @@ int send_http_request(lua_State* L)
         }
         lua_resume_if_yielded(L, 2);
     };
-    _send_http_request(L, dummy_req_pre_processor, request_sent);
+    _send_http_request(L, request_prep, request_sent);
     return leave_c_function(L);
 }
 
@@ -629,8 +647,14 @@ Request_Sent_cb await_response_request_sent_cb_generator(lua_State* L)
 
 int send_http_request_and_await_response(lua_State* L)
 {
+    auto request_prep = [](std::map<std::string, std::string, ci_less>& headers, std::string & payload,
+                           std::string & orig_dst, std::string & proto)
+    {
+        update_proto(headers, payload, orig_dst, proto);
+    };
+
     enter_c_function(L);
-    _send_http_request(L, dummy_req_pre_processor, await_response_request_sent_cb_generator(L));
+    _send_http_request(L, request_prep, await_response_request_sent_cb_generator(L));
     return leave_c_function(L);
 }
 
