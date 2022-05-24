@@ -32,8 +32,8 @@ Unique_Id::Unique_Id()
 }
 
 base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Config* conf,
-                                   base_client* parent, const std::string& dest_schema,
-                                   const std::string& dest_authority):
+                         base_client* parent, const std::string& dest_schema,
+                         const std::string& dest_authority):
     worker(wrker),
     cstat(),
     config(conf),
@@ -140,7 +140,7 @@ void base_client::record_ttfb()
 }
 
 void base_client::log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req,
-                                          int32_t stream_id)
+                                     int32_t stream_id)
 {
     if (config.json_config_schema.failed_request_log_file.empty())
     {
@@ -200,12 +200,12 @@ bool base_client::validate_response_with_lua(lua_State* L, const Request_Data& f
                                               finished_request.resp_headers.end(),
                                               0,
                                               [](uint64_t sum, const std::map<std::string, std::string, ci_less>& val)
-                                              {
-                                                  return sum + val.size();
-                                              }));
+        {
+            return sum + val.size();
+        }));
         for (auto& header_map : finished_request.resp_headers)
         {
-            for (auto& header: header_map)
+            for (auto& header : header_map)
             {
                 lua_pushlstring(L, header.first.c_str(), header.first.size());
                 lua_pushlstring(L, header.second.c_str(), header.second.size());
@@ -789,7 +789,7 @@ void base_client::cleanup_due_to_disconnect()
     }
 
     worker->get_client_ids().erase(this->get_client_unique_id());
-    for (auto& client_set: worker->get_client_pool())
+    for (auto& client_set : worker->get_client_pool())
     {
         client_set.second.erase(this);
     }
@@ -823,7 +823,7 @@ void base_client::cleanup_due_to_disconnect()
 
     call_connected_callbacks(false);
 
-    for (auto& req: requests_awaiting_response)
+    for (auto& req : requests_awaiting_response)
     {
         if (req.second.request_sent_callback)
         {
@@ -832,7 +832,7 @@ void base_client::cleanup_due_to_disconnect()
         }
     }
 
-    for (auto& req: requests_to_submit)
+    for (auto& req : requests_to_submit)
     {
         if (req.request_sent_callback)
         {
@@ -869,84 +869,96 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
     new_request.user_id = finished_request.user_id;
     populate_request_from_config_template(new_request, scenario_index, curr_index);
 
-    if (request_template.uri.typeOfAction == "input")
+    switch (request_template.uri.uri_action)
     {
-        new_request.string_collection.emplace_back(reassemble_str_with_variable(config, scenario_index, curr_index,
-                                                                                request_template.tokenized_path,
-                                                                                new_request.user_id));
-        new_request.path = &(new_request.string_collection.back());
-    }
-    else if (request_template.uri.typeOfAction == "sameWithLastOne")
-    {
-        new_request.string_collection.emplace_back(*finished_request.path);
-        new_request.path = &(new_request.string_collection.back());
-        new_request.string_collection.emplace_back(*finished_request.schema);
-        new_request.schema = &(new_request.string_collection.back());
-        new_request.string_collection.emplace_back(*finished_request.authority);
-        new_request.authority = &(new_request.string_collection.back());
-    }
-    else if (request_template.uri.typeOfAction == "fromResponseHeader")
-    {
-        std::string* uri_header_value = nullptr;
-        for (auto& header_map: finished_request.resp_headers)
+        case INPUT_URI:
         {
-            auto header = header_map.find(request_template.uri.input);
-            if (header != header_map.end())
-            {
-                uri_header_value = &header->second;
-            }
+            new_request.string_collection.emplace_back(reassemble_str_with_variable(config, scenario_index, curr_index,
+                                                                                    request_template.tokenized_path,
+                                                                                    new_request.user_id));
+            new_request.path = &(new_request.string_collection.back());
+
+            break;
         }
-        if (uri_header_value && uri_header_value->size())
+        case SAME_WITH_LAST_ONE:
         {
-            http_parser_url u {};
-            if (http_parser_parse_url(uri_header_value->c_str(), uri_header_value->size(), 0, &u) != 0)
+            new_request.string_collection.emplace_back(*finished_request.path);
+            new_request.path = &(new_request.string_collection.back());
+            new_request.string_collection.emplace_back(*finished_request.schema);
+            new_request.schema = &(new_request.string_collection.back());
+            new_request.string_collection.emplace_back(*finished_request.authority);
+            new_request.authority = &(new_request.string_collection.back());
+            break;
+        }
+        case FROM_RESPONSE_HEADER:
+        {
+            std::string* uri_header_value = nullptr;
+            for (auto& header_map : finished_request.resp_headers)
             {
-                std::cerr << "abort whole scenario sequence, as invalid URI found in header: " << *uri_header_value << std::endl;
-                return false;
-            }
-            else
-            {
-                new_request.string_collection.emplace_back(get_reqline(uri_header_value->c_str(), u));
-                new_request.path = &(new_request.string_collection.back());
-                if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
+                auto header = header_map.find(request_template.uri.input);
+                if (header != header_map.end())
                 {
-                    new_request.string_collection.emplace_back(util::get_uri_field(uri_header_value->c_str(), u, UF_SCHEMA).str());
-                    util::inp_strlower(new_request.string_collection.back());
-                    new_request.schema = &(new_request.string_collection.back());
-                    new_request.string_collection.emplace_back(util::get_uri_field(uri_header_value->c_str(), u, UF_HOST).str());
-                    util::inp_strlower(new_request.string_collection.back());
-                    if (util::has_uri_field(u, UF_PORT))
-                    {
-                        new_request.string_collection.back().append(":").append(util::utos(u.port));
-                    }
-                    new_request.authority = &(new_request.string_collection.back());
+                    uri_header_value = &header->second;
+                }
+            }
+            if (uri_header_value && uri_header_value->size())
+            {
+                http_parser_url u {};
+                if (http_parser_parse_url(uri_header_value->c_str(), uri_header_value->size(), 0, &u) != 0)
+                {
+                    std::cerr << "abort whole scenario sequence, as invalid URI found in header: " << *uri_header_value << std::endl;
+                    return false;
                 }
                 else
                 {
-                    new_request.string_collection.emplace_back(*finished_request.schema);
-                    new_request.schema = &(new_request.string_collection.back());
-                    new_request.string_collection.emplace_back(*finished_request.authority);
-                    new_request.authority = &(new_request.string_collection.back());
-                }
-            }
-        }
-        else
-        {
-            if (config->verbose)
-            {
-                std::cout << "response status code:" << finished_request.status_code << std::endl;
-                std::cerr << "abort whole scenario sequence, as header not found: " << request_template.uri.input << std::endl;
-                for (auto& header_map : finished_request.resp_headers)
-                {
-                    for (auto& header: header_map)
+                    new_request.string_collection.emplace_back(get_reqline(uri_header_value->c_str(), u));
+                    new_request.path = &(new_request.string_collection.back());
+                    if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
                     {
-                        std::cout << header.first << ":" << header.second << std::endl;
+                        new_request.string_collection.emplace_back(util::get_uri_field(uri_header_value->c_str(), u, UF_SCHEMA).str());
+                        util::inp_strlower(new_request.string_collection.back());
+                        new_request.schema = &(new_request.string_collection.back());
+                        new_request.string_collection.emplace_back(util::get_uri_field(uri_header_value->c_str(), u, UF_HOST).str());
+                        util::inp_strlower(new_request.string_collection.back());
+                        if (util::has_uri_field(u, UF_PORT))
+                        {
+                            new_request.string_collection.back().append(":").append(util::utos(u.port));
+                        }
+                        new_request.authority = &(new_request.string_collection.back());
+                    }
+                    else
+                    {
+                        new_request.string_collection.emplace_back(*finished_request.schema);
+                        new_request.schema = &(new_request.string_collection.back());
+                        new_request.string_collection.emplace_back(*finished_request.authority);
+                        new_request.authority = &(new_request.string_collection.back());
                     }
                 }
-                std::cout << "response payload:" << finished_request.resp_payload << std::endl;
             }
-            return false;
+            else
+            {
+                if (config->verbose)
+                {
+                    std::cout << "response status code:" << finished_request.status_code << std::endl;
+                    std::cerr << "abort whole scenario sequence, as header not found: " << request_template.uri.input << std::endl;
+                    for (auto& header_map : finished_request.resp_headers)
+                    {
+                        for (auto& header : header_map)
+                        {
+                            std::cout << header.first << ":" << header.second << std::endl;
+                        }
+                    }
+                    std::cout << "response payload:" << finished_request.resp_payload << std::endl;
+                }
+                return false;
+            }
+            break;
         }
+        default:
+        {
+
+        }
+
     }
 
     if (!request_template.clear_old_cookies)
@@ -982,7 +994,7 @@ void base_client::update_content_length(Request_Data& data)
 
 void base_client::parse_and_save_cookies(Request_Data& finished_request)
 {
-    for (auto& header_map: finished_request.resp_headers)
+    for (auto& header_map : finished_request.resp_headers)
     {
         if (header_map.find("Set-Cookie") != header_map.end())
         {
@@ -1001,8 +1013,8 @@ void base_client::parse_and_save_cookies(Request_Data& finished_request)
 
 
 void base_client::populate_request_from_config_template(Request_Data& new_request,
-                                                             size_t scenario_index,
-                                                             size_t index_in_config_template)
+                                                        size_t scenario_index,
+                                                        size_t index_in_config_template)
 {
     auto& request_template = config->json_config_schema.scenarios[scenario_index].requests[index_in_config_template];
 
@@ -1168,7 +1180,7 @@ bool base_client::rps_mode()
 }
 
 void base_client::update_scenario_based_stats(size_t scenario_index, size_t request_index, bool success,
-                                                   bool status_success)
+                                              bool status_success)
 {
     if (worker->scenario_stats.size() == 0)
     {
@@ -1310,7 +1322,7 @@ void base_client::produce_request_cookie_header(Request_Data& req_to_be_sent)
 }
 
 bool base_client::update_request_with_lua(lua_State* L, const Request_Data& finished_request,
-                                               Request_Data& request_to_send)
+                                          Request_Data& request_to_send)
 {
     lua_getglobal(L, make_request);
     bool retCode = true;
@@ -1320,12 +1332,12 @@ bool base_client::update_request_with_lua(lua_State* L, const Request_Data& fini
                                               finished_request.resp_headers.end(),
                                               0,
                                               [](uint64_t sum, const std::map<std::string, std::string, ci_less>& val)
-                                              {
-                                                  return sum + val.size();
-                                              }));
+        {
+            return sum + val.size();
+        }));
         for (auto& header_map : finished_request.resp_headers)
         {
-            for (auto& header: header_map)
+            for (auto& header : header_map)
             {
                 lua_pushlstring(L, header.first.c_str(), header.first.size());
                 lua_pushlstring(L, header.second.c_str(), header.second.size());
@@ -1350,7 +1362,7 @@ bool base_client::update_request_with_lua(lua_State* L, const Request_Data& fini
         lua_pushlstring(L, finished_request.resp_payload.c_str(), finished_request.resp_payload.size());
 
         lua_createtable(L, 0, request_to_send.req_headers_from_config->size());
-        for (auto& header : *(request_to_send.req_headers_from_config))
+        for (auto& header : * (request_to_send.req_headers_from_config))
         {
             lua_pushlstring(L, header.first.c_str(), header.first.size());
             lua_pushlstring(L, header.second.c_str(), header.second.size());
@@ -1890,7 +1902,7 @@ Request_Data base_client::get_request_to_submit()
 }
 
 void base_client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
-                                 const uint8_t* value, size_t valuelen)
+                            const uint8_t* value, size_t valuelen)
 {
     auto itr = streams.find(stream_id);
     if (itr == std::end(streams))
@@ -2305,7 +2317,7 @@ void base_client::report_tls_info()
 }
 
 bool base_client::get_host_and_port_from_authority(const std::string& schema, const std::string& authority,
-                                                        std::string& host, std::string& port)
+                                                   std::string& host, std::string& port)
 {
     http_parser_url u {};
     if (http_parser_parse_url(authority.c_str(), authority.size(), true, &u) == 0 && util::has_uri_field(u, UF_HOST))
@@ -2341,7 +2353,7 @@ bool base_client::get_host_and_port_from_authority(const std::string& schema, co
 
 void base_client::call_connected_callbacks(bool success)
 {
-    for (auto& callback: connected_callbacks)
+    for (auto& callback : connected_callbacks)
     {
         if (callback)
         {
@@ -2384,7 +2396,7 @@ void base_client::process_stream_user_callback(int32_t stream_id)
     }
 }
 
-void base_client::pass_response_to_lua(int32_t stream_id, lua_State *L)
+void base_client::pass_response_to_lua(int32_t stream_id, lua_State* L)
 {
     if (stream_user_callback_queue.count(stream_id))
     {
@@ -2397,24 +2409,24 @@ void base_client::pass_response_to_lua(int32_t stream_id, lua_State *L)
                 trailer = &stream_user_callback_queue[stream_id].resp_headers.back();
                 if (config->verbose)
                 {
-                    std::cout<<"number of header frames: "<<stream_user_callback_queue[stream_id].resp_headers.size()
-                             <<", trailer found"<<std::endl;
+                    std::cout << "number of header frames: " << stream_user_callback_queue[stream_id].resp_headers.size()
+                              << ", trailer found" << std::endl;
                 }
             }
             lua_createtable(L, 0, std::accumulate(stream_user_callback_queue[stream_id].resp_headers.begin(),
                                                   stream_user_callback_queue[stream_id].resp_headers.end(),
                                                   0,
                                                   [trailer](uint64_t sum, const std::map<std::string, std::string, ci_less>& val)
-                                                  {
-                                                      return sum + (&val == trailer ? 0: val.size());
-                                                  }));
+            {
+                return sum + (&val == trailer ? 0 : val.size());
+            }));
             for (auto& header_map : stream_user_callback_queue[stream_id].resp_headers)
             {
                 if (&header_map == trailer)
                 {
                     continue;
                 }
-                for (auto& header: header_map)
+                for (auto& header : header_map)
                 {
                     lua_pushlstring(L, header.first.c_str(), header.first.size());
                     lua_pushlstring(L, header.second.c_str(), header.second.size());
@@ -2422,7 +2434,8 @@ void base_client::pass_response_to_lua(int32_t stream_id, lua_State *L)
                 }
             }
 
-            lua_pushlstring(L, stream_user_callback_queue[stream_id].resp_payload.c_str(), stream_user_callback_queue[stream_id].resp_payload.size());
+            lua_pushlstring(L, stream_user_callback_queue[stream_id].resp_payload.c_str(),
+                            stream_user_callback_queue[stream_id].resp_payload.size());
 
             if (trailer)
             {

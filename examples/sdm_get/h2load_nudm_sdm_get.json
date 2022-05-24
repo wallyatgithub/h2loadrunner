@@ -1,6 +1,6 @@
 {
   "schema": "http",
-  "host": "10.67.34.200",
+  "host": "192.168.1.125",
   "port": 8081,
   "load-share-hosts": [],
   "open-new-connection-based-on-authority-header": false,

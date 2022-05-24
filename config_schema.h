@@ -17,11 +17,39 @@
 static const char* validate_response = "validate_response";
 static const char* make_request = "make_request";
 
+const std::string input_uri = "input";
+const std::string same_with_last_one = "sameWithLastOne";
+const std::string from_response_header = "fromResponseHeader";
+const std::string from_lua_script = "fromLuaScript";
+const std::string from_x_path = "fromXPath";
+const std::string from_json_pointer = "fromJsonPointer";
+
+enum URI_ACTION
+{
+    INPUT_URI = 0,
+    SAME_WITH_LAST_ONE,
+    FROM_RESPONSE_HEADER,
+    FROM_LUA_SCRIPT,
+    FROM_X_PATH,
+    FROM_JSON_POINTER
+};
+
+const std::map<std::string, URI_ACTION> uri_action_map =
+{
+    {input_uri, INPUT_URI},
+    {same_with_last_one, SAME_WITH_LAST_ONE},
+    {from_response_header, FROM_RESPONSE_HEADER},
+    {from_lua_script, FROM_LUA_SCRIPT},
+    {from_x_path, FROM_X_PATH},
+    {from_json_pointer, FROM_JSON_POINTER},
+};
+
 class Uri
 {
 public:
     std::string typeOfAction;
     std::string input;
+    URI_ACTION uri_action;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("typeOfAction", &this->typeOfAction);

@@ -50,7 +50,6 @@ const std::string x_envoy_original_dst_host_header = "x-envoy-original-dst-host"
 
 const std::string x_proto_to_use = "x-protocol-to-use";
 
-
 static std::string emptyString;
 
 class base_client;

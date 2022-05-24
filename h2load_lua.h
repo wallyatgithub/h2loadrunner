@@ -30,69 +30,70 @@ static Request_Preprocessor dummy_req_pre_processor = {};
 using Request_Sent_cb = std::function<void(int32_t, h2load::base_client*)>;
 
 
-Request_Sent_cb await_response_request_sent_cb_generator(lua_State *L);
+Request_Sent_cb await_response_request_sent_cb_generator(lua_State* L);
 
 
 extern "C"
 {
 
-int make_connection(lua_State *L);
+    int make_connection(lua_State* L);
 
-int send_http_request(lua_State *L);
+    int send_http_request(lua_State* L);
 
-int send_http_request_and_await_response(lua_State *L);
+    int send_http_request_and_await_response(lua_State* L);
 
-int forward_http_request_and_await_response(lua_State *L);
+    int forward_http_request_and_await_response(lua_State* L);
 
-int send_grpc_request_and_await_response(lua_State *L);
+    int send_grpc_request_and_await_response(lua_State* L);
 
-int await_response(lua_State *L);
+    int await_response(lua_State* L);
 
-int setup_parallel_test(lua_State *L);
+    int setup_parallel_test(lua_State* L);
 
-int sleep_for_ms(lua_State *L);
+    int sleep_for_ms(lua_State* L);
 
-int time_since_epoch(lua_State *L);
+    int time_since_epoch(lua_State* L);
 
-int start_server(lua_State *L);
+    int start_server(lua_State* L);
 
-int stop_server(lua_State *L);
+    int stop_server(lua_State* L);
 
-int register_service_handler(lua_State *L);
+    int register_service_handler(lua_State* L);
 
-int send_response(lua_State *L);
+    int send_response(lua_State* L);
 
-int wait_for_message(lua_State *L);
+    int wait_for_message(lua_State* L);
 
-int resolve_hostname(lua_State *L);
+    int resolve_hostname(lua_State* L);
 
 
 }
 
-int _send_http_request(lua_State *L, Request_Preprocessor request_preprocessor, std::function<void(int32_t, h2load::base_client*)> request_sent_callback);
+int _send_http_request(lua_State* L, Request_Preprocessor request_preprocessor,
+                       std::function<void(int32_t, h2load::base_client*)> request_sent_callback);
 
 void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load::Config& config);
 
-h2load::asio_worker* get_worker(lua_State *L);
+h2load::asio_worker* get_worker(lua_State* L);
 
 /*
  * return code:
  * 0: successfully injected std::function to worker thread, thus the caller needs to yield
  */
-int32_t _make_connection(lua_State *L, const std::string& uri, std::function<void(bool)> connected_callback,
-                                const std::string& proto);
+int32_t _make_connection(lua_State* L, const std::string& uri, std::function<void(bool)> connected_callback,
+                         const std::string& proto);
 
-int lua_resume_wrapper (lua_State *L, int nargs);
+int lua_resume_wrapper(lua_State* L, int nargs);
 
 void update_orig_dst_and_proto(std::map<std::string, std::string, ci_less>& headers, std::string& payload,
-                                         std::string& orig_dst,
-                                         std::string& proto);
+                               std::string& orig_dst,
+                               std::string& proto);
 
-int lua_resume_if_yielded(lua_State *L, int nargs);
+int lua_resume_if_yielded(lua_State* L, int nargs);
 
-void register_functions_to_lua(lua_State *L);
+void register_functions_to_lua(lua_State* L);
 
-void register_3rd_party_lib_func_to_lua(lua_State *L);
+void register_3rd_party_lib_func_to_lua(lua_State* L);
 
 void init_new_lua_state(lua_State* L);
 
@@ -160,12 +161,12 @@ void start_test_group(size_t group_id);
 
 void load_service_script_into_lua_states(size_t group_id, const std::string& server_id);
 
-void invoke_service_hanlder(lua_State *L, std::string lua_function_name,
-                                   boost::asio::io_service* ios,
-                                   uint64_t handler_id,
-                                   int32_t stream_id,
-                                   const std::multimap<std::string, std::string>& req_headers,
-                                   const std::string& payload);
+void invoke_service_hanlder(lua_State* L, std::string lua_function_name,
+                            boost::asio::io_service* ios,
+                            uint64_t handler_id,
+                            int32_t stream_id,
+                            const std::multimap<std::string, std::string>& req_headers,
+                            const std::string& payload);
 
 void setup_test_group(size_t group_id);
 
@@ -202,13 +203,13 @@ uint64_t leave_c_function(lua_State* L);
 
 extern "C"
 {
-// functions from pb.so
-LUALIB_API int luaopen_pb_io(lua_State *L);
-LUALIB_API int luaopen_pb_conv(lua_State *L);
-LUALIB_API int luaopen_pb_buffer(lua_State *L);
-LUALIB_API int luaopen_pb_slice(lua_State *L);
-LUALIB_API int luaopen_pb(lua_State *L);
-LUALIB_API int luaopen_pb_unsafe(lua_State *L);
+    // functions from pb.so
+    LUALIB_API int luaopen_pb_io(lua_State* L);
+    LUALIB_API int luaopen_pb_conv(lua_State* L);
+    LUALIB_API int luaopen_pb_buffer(lua_State* L);
+    LUALIB_API int luaopen_pb_slice(lua_State* L);
+    LUALIB_API int luaopen_pb(lua_State* L);
+    LUALIB_API int luaopen_pb_unsafe(lua_State* L);
 }
 
 #endif

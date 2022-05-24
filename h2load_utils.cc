@@ -43,8 +43,8 @@ using namespace h2load;
 
 
 std::shared_ptr<h2load::base_worker> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
-                                                        size_t nreqs, size_t nclients,
-                                                        size_t rate, size_t max_samples, h2load::Config& config)
+                                                   size_t nreqs, size_t nclients,
+                                                   size_t rate, size_t max_samples, h2load::Config& config)
 {
     std::stringstream rate_report;
     if (config.is_rate_mode() && nclients > rate)
@@ -84,14 +84,14 @@ std::shared_ptr<h2load::base_worker> create_worker(uint32_t id, SSL_CTX* ssl_ctx
     if (config.is_rate_mode())
     {
         return std::make_shared<libev_worker>(id, ssl_ctx, nreqs, nclients, rate,
-                                        max_samples, &config);
+                                              max_samples, &config);
     }
     else
     {
         // Here rate is same as client because the rate_timeout callback
         // will be called only once
         return std::make_shared<libev_worker>(id, ssl_ctx, nreqs, nclients, nclients,
-                                        max_samples, &config);
+                                              max_samples, &config);
     }
 #endif
 }
@@ -1367,6 +1367,16 @@ void post_process_json_config_schema(h2load::Config& config)
         }
         for (auto& request : scenario.requests)
         {
+            auto iter = uri_action_map.find(request.uri.typeOfAction);
+            if (iter != uri_action_map.end())
+            {
+                request.uri.uri_action = iter->second;
+            }
+            else
+            {
+                std::cerr << request.uri.typeOfAction << " is invalid" << std::endl;
+                abort();
+            }
             for (auto& header_with_value : request.additonalHeaders)
             {
                 size_t t = header_with_value.find(":", 1);
@@ -1466,9 +1476,9 @@ std::vector<std::vector<std::string>> read_csv_file(const std::string& csv_file_
     std::getline(infile, line); // remove first row which is column name;
     while (std::getline(infile, line))
     {
-        if (line.size() && line[line.size()-1] == '\r')
+        if (line.size() && line[line.size() - 1] == '\r')
         {
-           line = line.substr(0, line.size() - 1);
+            line = line.substr(0, line.size() - 1);
         }
         std::vector<std::string> row;
         std::stringstream lineStream(line);
@@ -1813,7 +1823,8 @@ void process_delayed_scenario(h2load::Config& config)
         Scenario& scenario = config.json_config_schema.scenarios[index];
         if (scenario.interval_to_wait_before_start)
         {
-            delayed_scenarios.insert(std::make_pair(index, std::make_pair(scenario.interval_to_wait_before_start, scenario.weight)));
+            delayed_scenarios.insert(std::make_pair(index, std::make_pair(scenario.interval_to_wait_before_start,
+                                                                          scenario.weight)));
             scenario.weight = 0;
         }
     }
@@ -1824,9 +1835,10 @@ void process_delayed_scenario(h2load::Config& config)
         auto config_ptr = &config;
         auto update_scenario = [config_ptr, process_start_time_point](std::map<size_t, std::pair<uint32_t, uint32_t>>& sce)
         {
-            auto ms_since_start = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - process_start_time_point).count();
+            auto ms_since_start = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() -
+                                                                                        process_start_time_point).count();
             auto it = sce.begin();
-            while(it != sce.end())
+            while (it != sce.end())
             {
                 if (it->second.first <= ms_since_start)
                 {
