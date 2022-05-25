@@ -62,12 +62,17 @@ extern "C"
 
     int send_response(lua_State* L);
 
+    int forward_response(lua_State* L);
+
     int wait_for_message(lua_State* L);
 
     int resolve_hostname(lua_State* L);
 
 
 }
+
+int _send_response(lua_State* L, bool updatePayload);
+
 
 int _send_http_request(lua_State* L, Request_Preprocessor request_preprocessor,
                        std::function<void(int32_t, h2load::base_client*)> request_sent_callback);

@@ -117,7 +117,7 @@ function generate_load()
             local request_headers_to_send = {[":scheme"]="http", [":authority"]=dest_host[dest_host_index], [":path"]=grpc_path}
 
             local resp_headers, resp_body, trailers = send_grpc_request_and_await_response(request_headers_to_send, request_payload)
-            
+
             if (trailers["grpc-status"] == "0")
             then
                 total_requests_sent = total_requests_sent + 1

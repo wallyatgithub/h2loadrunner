@@ -263,6 +263,7 @@ void init_new_lua_state(lua_State* L)
     lua_register(L, "stop_server", stop_server);
     lua_register(L, "register_service_handler", register_service_handler);
     lua_register(L, "send_response", send_response);
+    lua_register(L, "forward_response", forward_response);
     lua_register(L, "wait_for_message", wait_for_message);
     lua_register(L, "resolve_hostname", resolve_hostname);
     register_3rd_party_lib_func_to_lua(L);
@@ -1225,6 +1226,16 @@ int register_service_handler(lua_State* L)
 
 int send_response(lua_State* L)
 {
+    return _send_response(L, true);
+}
+
+int forward_response(lua_State* L)
+{
+    return _send_response(L, false);
+}
+
+int _send_response(lua_State* L, bool updatePayload)
+{
     std::string payload;
     std::map<std::string, std::string> response_headers;
     std::map<std::string, std::string> trailer_headers;
@@ -1270,7 +1281,7 @@ int send_response(lua_State* L)
                         }
                         else
                         {
-                            std::cerr << __LINE__ << " invalid key:" << key << std::endl;;
+                            std::cerr << __LINE__ << " invalid key:" << key << std::endl;
                         }
                     }
                     else if (LUA_TSTRING == lua_type(L, -2))
@@ -1312,7 +1323,7 @@ int send_response(lua_State* L)
         std::swap(response_headers, trailer_headers);
     }
     // TODO: more explicit check
-    if (trailer_headers.size())
+    if (updatePayload && trailer_headers.size())
     {
         format_length_prefixed_message(payload);
     }

@@ -14,5 +14,5 @@ function handle_request(response_addr, headers, payload)
         headers[":authority"] = clusters[index]
 
     response_header, response_body, trailer = send_http_request_and_await_response(headers, payload)
-    send_response(response_addr, response_header, response_body, trailer)
+    forward_response(response_addr, response_header, response_body, trailer)
 end
