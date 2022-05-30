@@ -1,0 +1,164 @@
+#include "asio_server_base_handler.h"
+
+#include <iostream>
+
+#include "asio_common.h"
+#include "asio_server_serve_mux.h"
+#include "asio_server_stream.h"
+#include "asio_server_request_impl.h"
+#include "asio_server_response_impl.h"
+#include "http2.h"
+#include "util.h"
+#include "template.h"
+#include "H2Server_Config_Schema.h"
+
+namespace nghttp2 {
+
+namespace asio_http2 {
+
+namespace server {
+
+thread_local std::atomic<uint64_t> base_handler::handler_unique_id(0);
+thread_local std::map<uint64_t, base_handler*> base_handler::alive_handlers;
+thread_local std::map<uint64_t, boost::asio::io_service*> base_handler::handler_io_service;
+
+base_handler::base_handler(boost::asio::io_service &io_service,
+                             boost::asio::ip::tcp::endpoint ep,
+                             connection_write writefun, serve_mux &mux,
+                             const H2Server_Config_Schema& conf)
+    : writefun_(writefun),
+      mux_(mux),
+      io_service_(io_service),
+      remote_ep_(ep),
+      buf_(nullptr),
+      buflen_(0),
+      inside_callback_(false),
+      write_signaled_(false),
+      tstamp_cached_(time(nullptr)),
+      formatted_date_(util::http_date(tstamp_cached_)),
+      this_handler_id(handler_unique_id++),
+      config(conf)
+{
+      alive_handlers[this_handler_id] = this;
+      handler_io_service[this_handler_id] = &io_service_;
+}
+
+base_handler::~base_handler() {
+  alive_handlers.erase(this_handler_id);
+  handler_io_service.erase(this_handler_id);
+}
+
+base_handler* base_handler::find_handler(uint64_t handler_id)
+{
+    auto it = alive_handlers.find(handler_id);
+    if (it != alive_handlers.end())
+    {
+        return it->second;
+    }
+    return nullptr;
+}
+
+boost::asio::io_service* base_handler::find_io_service(uint64_t handler_id)
+{
+    auto it = handler_io_service.find(handler_id);
+    if (it != handler_io_service.end())
+    {
+        return it->second;
+    }
+    return nullptr;
+}
+
+uint64_t base_handler::get_handler_id()
+{
+    return this_handler_id;
+}
+
+const std::string &base_handler::http_date() {
+  auto t = time(nullptr);
+  if (t != tstamp_cached_) {
+    tstamp_cached_ = t;
+    formatted_date_ = util::http_date(t);
+  }
+  return formatted_date_;
+}
+
+int base_handler::start() {
+  return 0;
+}
+
+stream* base_handler::create_stream(int32_t stream_id) {
+  return nullptr;
+}
+
+void base_handler::close_stream(int32_t stream_id) {
+  streams_.erase(stream_id);
+}
+
+stream *base_handler::find_stream(int32_t stream_id) {
+  auto i = streams_.find(stream_id);
+  if (i == std::end(streams_)) {
+    return nullptr;
+  }
+
+  return (*i).second.get();
+}
+
+void base_handler::call_on_request(stream &strm) {
+
+}
+
+bool base_handler::should_stop() const {
+  return false;
+}
+
+int base_handler::start_response(stream &strm) {
+  
+  return 0;
+}
+
+int base_handler::submit_trailer(stream &strm, header_map h) {
+  return 0;
+}
+
+void base_handler::enter_callback() {
+  assert(!inside_callback_);
+  inside_callback_ = true;
+}
+
+void base_handler::leave_callback() {
+  assert(inside_callback_);
+  inside_callback_ = false;
+}
+
+void base_handler::stream_error(int32_t stream_id, uint32_t error_code) {
+}
+
+void base_handler::signal_write() {
+}
+
+void base_handler::initiate_write() {
+}
+
+void base_handler::resume(stream &strm) {
+}
+
+response* base_handler::push_promise(boost::system::error_code &ec,
+                                      stream &strm, std::string method,
+                                      std::string raw_path_query,
+                                      header_map h) {
+  return nullptr;
+}
+
+boost::asio::io_service &base_handler::io_service() { return io_service_; }
+
+const boost::asio::ip::tcp::endpoint &base_handler::remote_endpoint() {
+  return remote_ep_;
+}
+
+
+} // namespace server
+
+} // namespace asio_http2
+
+} // namespace nghttp2
+
