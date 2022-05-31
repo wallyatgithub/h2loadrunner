@@ -16,7 +16,7 @@
 #include <boost/thread/thread.hpp>
 
 #include <nghttp2/asio_http2_server.h>
-#include "asio_server_http2_handler.h"
+#include "asio_server_base_handler.h"
 #include "asio_server_stream.h"
 
 #include "H2Server_Config_Schema.h"

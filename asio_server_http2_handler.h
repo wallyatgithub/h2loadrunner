@@ -35,6 +35,7 @@
 #include <boost/array.hpp>
 
 #include <nghttp2/asio_http2_server.h>
+#include "asio_server_base_handler.h"
 
 namespace nghttp2 {
 namespace asio_http2 {
@@ -44,15 +45,7 @@ class http2_handler;
 class stream;
 class serve_mux;
 
-struct callback_guard {
-  callback_guard(http2_handler &h);
-  ~callback_guard();
-  http2_handler &handler;
-};
-
-using connection_write = std::function<void(void)>;
-
-class http2_handler : public std::enable_shared_from_this<http2_handler> {
+class http2_handler : public std::enable_shared_from_this<http2_handler>, public base_handler {
 public:
   http2_handler(boost::asio::io_service &io_service,
                 boost::asio::ip::tcp::endpoint ep, connection_write writefun,
@@ -61,47 +54,29 @@ public:
 
   ~http2_handler();
 
-  int start();
-
-  stream *create_stream(int32_t stream_id);
-  void close_stream(int32_t stream_id);
-  stream *find_stream(int32_t stream_id);
-
   void call_on_request(stream &s);
 
-  bool should_stop() const;
+  virtual int start();
 
-  int start_response(stream &s);
+  virtual bool should_stop() const;
 
-  int submit_trailer(stream &s, header_map h);
+  virtual int start_response(stream &s);
 
-  void stream_error(int32_t stream_id, uint32_t error_code);
+  virtual int submit_trailer(stream &s, header_map h);
 
-  void initiate_write();
+  virtual void stream_error(int32_t stream_id, uint32_t error_code);
 
-  void enter_callback();
-  void leave_callback();
+  virtual void resume(stream &s);
 
-  void resume(stream &s);
-
-  response *push_promise(boost::system::error_code &ec, stream &s,
+  virtual response* push_promise(boost::system::error_code &ec, stream &s,
                          std::string method, std::string raw_path_query,
                          header_map h);
 
-  void signal_write();
+  virtual void initiate_write();
 
-  boost::asio::io_service &io_service();
+  virtual void signal_write();
 
-  const boost::asio::ip::tcp::endpoint &remote_endpoint();
-
-  const std::string &http_date();
-  static http2_handler* find_http2_handler(uint64_t handler_id);
-  static boost::asio::io_service* find_io_service(uint64_t handler_id);
-
-  uint64_t get_handler_id();
-
-  template <size_t N>
-  int on_read(const boost::array<uint8_t, N> &buffer, std::size_t len) {
+  virtual int on_read(const std::vector<uint8_t>& buffer, std::size_t len) {
     callback_guard cg(*this);
 
     int rv;
@@ -115,8 +90,7 @@ public:
     return 0;
   }
 
-  template <size_t N>
-  int on_write(boost::array<uint8_t, N> &buffer, std::size_t &len) {
+  virtual int on_write(std::vector<uint8_t>& buffer, std::size_t &len) {
     callback_guard cg(*this);
 
     len = 0;
@@ -157,25 +131,9 @@ public:
   }
 
 private:
-  std::map<int32_t, std::shared_ptr<stream>> streams_;
-  connection_write writefun_;
-  serve_mux &mux_;
-  boost::asio::io_service &io_service_;
-  boost::asio::ip::tcp::endpoint remote_ep_;
   nghttp2_session *session_;
   const uint8_t *buf_;
   std::size_t buflen_;
-  bool inside_callback_;
-  // true if we have pending on_write call.  This avoids repeated call
-  // of io_service::post.
-  bool write_signaled_;
-  time_t tstamp_cached_;
-  std::string formatted_date_;
-  thread_local static std::atomic<uint64_t> handler_unique_id;
-  thread_local static std::map<uint64_t, http2_handler*> alive_handlers;
-  thread_local static std::map<uint64_t, boost::asio::io_service*> handler_io_service;
-  uint64_t this_handler_id;
-  const H2Server_Config_Schema& config;
 };
 
 } // namespace server

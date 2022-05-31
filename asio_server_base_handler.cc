@@ -30,8 +30,6 @@ base_handler::base_handler(boost::asio::io_service &io_service,
       mux_(mux),
       io_service_(io_service),
       remote_ep_(ep),
-      buf_(nullptr),
-      buflen_(0),
       inside_callback_(false),
       write_signaled_(false),
       tstamp_cached_(time(nullptr)),
@@ -82,12 +80,11 @@ const std::string &base_handler::http_date() {
   return formatted_date_;
 }
 
-int base_handler::start() {
-  return 0;
-}
-
 stream* base_handler::create_stream(int32_t stream_id) {
-  return nullptr;
+    auto p =
+        streams_.emplace(stream_id, std::make_unique<stream>(this, stream_id));
+    assert(p.second);
+    return (*p.first).second.get();
 }
 
 void base_handler::close_stream(int32_t stream_id) {
@@ -103,23 +100,6 @@ stream *base_handler::find_stream(int32_t stream_id) {
   return (*i).second.get();
 }
 
-void base_handler::call_on_request(stream &strm) {
-
-}
-
-bool base_handler::should_stop() const {
-  return false;
-}
-
-int base_handler::start_response(stream &strm) {
-  
-  return 0;
-}
-
-int base_handler::submit_trailer(stream &strm, header_map h) {
-  return 0;
-}
-
 void base_handler::enter_callback() {
   assert(!inside_callback_);
   inside_callback_ = true;
@@ -130,30 +110,17 @@ void base_handler::leave_callback() {
   inside_callback_ = false;
 }
 
-void base_handler::stream_error(int32_t stream_id, uint32_t error_code) {
-}
-
-void base_handler::signal_write() {
-}
-
-void base_handler::initiate_write() {
-}
-
-void base_handler::resume(stream &strm) {
-}
-
-response* base_handler::push_promise(boost::system::error_code &ec,
-                                      stream &strm, std::string method,
-                                      std::string raw_path_query,
-                                      header_map h) {
-  return nullptr;
-}
-
 boost::asio::io_service &base_handler::io_service() { return io_service_; }
 
 const boost::asio::ip::tcp::endpoint &base_handler::remote_endpoint() {
   return remote_ep_;
 }
+
+callback_guard::callback_guard(base_handler &h) : handler(h) {
+  handler.enter_callback();
+}
+
+callback_guard::~callback_guard() { handler.leave_callback(); }
 
 
 } // namespace server

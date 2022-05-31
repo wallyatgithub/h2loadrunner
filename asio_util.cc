@@ -6,10 +6,10 @@ bool debug_mode = false;
 
 void close_stream(uint64_t& handler_id, int32_t stream_id)
 {
-    auto h2_handler = nghttp2::asio_http2::server::http2_handler::find_http2_handler(handler_id);
-    if (h2_handler)
+    auto handler = nghttp2::asio_http2::server::base_handler::find_handler(handler_id);
+    if (handler)
     {
-        h2_handler->close_stream(stream_id);
+        handler->close_stream(stream_id);
     }
 }
 
@@ -54,18 +54,18 @@ void send_response(uint32_t status_code,
                    uint64_t& matchedResponsesSent
                   )
 {
-    auto h2_handler = nghttp2::asio_http2::server::http2_handler::find_http2_handler(handler_id);
-    if (!h2_handler)
+    auto handler = nghttp2::asio_http2::server::base_handler::find_handler(handler_id);
+    if (!handler)
     {
         return;
     }
     if (!status_code)
     {
-        h2_handler->close_stream(stream_id);;
+        handler->close_stream(stream_id);;
         return;
     }
 
-    auto orig_stream = h2_handler->find_stream(stream_id);
+    auto orig_stream = handler->find_stream(stream_id);
     if (!orig_stream)
     {
         return;
@@ -299,7 +299,7 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
             static thread_local std::map<std::string, std::string> trailer_headers; // TODO: 
             auto store_io_service_to_H2Server = [handler_id]()
             {
-                auto my_io_service = nghttp2::asio_http2::server::http2_handler::find_io_service(handler_id);
+                auto my_io_service = nghttp2::asio_http2::server::base_handler::find_io_service(handler_id);
                 h2server.set_io_service(my_io_service);
                 return true;
             };

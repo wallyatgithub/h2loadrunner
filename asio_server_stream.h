@@ -33,20 +33,20 @@ namespace nghttp2 {
 namespace asio_http2 {
 namespace server {
 
-class http2_handler;
+class base_handler;
 
 class stream {
 public:
-  stream(http2_handler *h, int32_t stream_id);
+  stream(base_handler *h, int32_t stream_id);
 
   int32_t get_stream_id() const;
   class request &request();
   class response &response();
 
-  http2_handler *handler() const;
+  base_handler *handler() const;
 
 private:
-  http2_handler *handler_;
+  base_handler *handler_;
   class request request_;
   class response response_;
   int32_t stream_id_;

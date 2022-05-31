@@ -83,6 +83,8 @@ public:
         tls_handshake_timeout_(tls_handshake_timeout),
         read_timeout_(read_timeout),
         writing_(false),
+        buffer_(8 * 1024, 0),
+        outbuf_(64 * 1024, 0),
         stopped_(false) {}
 
   /// Start the first asynchronous operation for the connection.
@@ -242,12 +244,12 @@ private:
 
   serve_mux &mux_;
 
-  std::shared_ptr<http2_handler> handler_;
+  std::shared_ptr<base_handler> handler_;
 
   /// Buffer for incoming data.
-  boost::array<uint8_t, 8_k> buffer_;
+  std::vector<uint8_t> buffer_;
 
-  boost::array<uint8_t, 64_k> outbuf_;
+  std::vector<uint8_t> outbuf_;
 
   boost::asio::deadline_timer deadline_;
   boost::posix_time::time_duration tls_handshake_timeout_;

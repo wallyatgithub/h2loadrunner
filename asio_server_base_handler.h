@@ -22,66 +22,73 @@ class serve_mux;
 
 using connection_write = std::function<void(void)>;
 
-class base_handler : public std::enable_shared_from_this<base_handler> {
+struct callback_guard {
+  callback_guard(base_handler &h);
+  ~callback_guard();
+  base_handler &handler;
+};
+
+class base_handler {
 public:
   base_handler(boost::asio::io_service &io_service,
                 boost::asio::ip::tcp::endpoint ep, connection_write writefun,
                 serve_mux &mux,
                 const H2Server_Config_Schema& conf);
 
-  ~base_handler();
+  virtual ~base_handler();
 
-  virtual int start();
+  virtual int start() = 0;;
 
-  virtual stream* create_stream(int32_t stream_id);
-  virtual void close_stream(int32_t stream_id);
-  virtual stream* find_stream(int32_t stream_id);
+  virtual bool should_stop() const = 0;
 
-  virtual void call_on_request(stream &s);
+  virtual int start_response(stream &s) = 0;
 
-  virtual bool should_stop() const;
+  virtual int submit_trailer(stream &s, header_map h) = 0;
 
-  virtual int start_response(stream &s);
+  virtual void stream_error(int32_t stream_id, uint32_t error_code) = 0;
 
-  virtual int submit_trailer(stream &s, header_map h);
-
-  virtual void stream_error(int32_t stream_id, uint32_t error_code);
-
-  virtual void initiate_write();
-
-  virtual void enter_callback();
-  virtual void leave_callback();
-
-  virtual void resume(stream &s);
+  virtual void resume(stream &s) = 0;
 
   virtual response* push_promise(boost::system::error_code &ec, stream &s,
                          std::string method, std::string raw_path_query,
-                         header_map h);
+                         header_map h) = 0;
 
-  virtual void signal_write();
+  virtual int on_read(const std::vector<uint8_t>& buffer, std::size_t len) = 0;
+
+  virtual int on_write(std::vector<uint8_t>& buffer, std::size_t &len) = 0;
+
+  virtual void initiate_write() = 0;
+
+  virtual void signal_write() = 0;
+
+  stream* create_stream(int32_t stream_id);
+
+  void close_stream(int32_t stream_id);
+
+  stream* find_stream(int32_t stream_id);
+
+  void enter_callback();
+
+  void leave_callback();
 
   boost::asio::io_service &io_service();
 
   const boost::asio::ip::tcp::endpoint &remote_endpoint();
 
   const std::string &http_date();
+
   static base_handler* find_handler(uint64_t handler_id);
+
   static boost::asio::io_service* find_io_service(uint64_t handler_id);
 
   uint64_t get_handler_id();
 
-  virtual int on_read(const std::vector<uint8_t>& buffer, std::size_t len) = 0;
-
-  virtual int on_write(std::vector<uint8_t>& buffer, std::size_t &len) = 0;
-
-private:
+protected:
   std::map<int32_t, std::shared_ptr<stream>> streams_;
   connection_write writefun_;
   serve_mux &mux_;
   boost::asio::io_service &io_service_;
   boost::asio::ip::tcp::endpoint remote_ep_;
-  const uint8_t *buf_;
-  std::size_t buflen_;
   bool inside_callback_;
   // true if we have pending on_write call.  This avoids repeated call
   // of io_service::post.

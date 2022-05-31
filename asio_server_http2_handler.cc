@@ -245,32 +245,15 @@ int on_frame_not_send_callback(nghttp2_session *session,
 }
 } // namespace
 
-thread_local std::atomic<uint64_t> http2_handler::handler_unique_id(0);
-thread_local std::map<uint64_t, http2_handler*> http2_handler::alive_handlers;
-thread_local std::map<uint64_t, boost::asio::io_service*> http2_handler::handler_io_service;
-
-
-
 http2_handler::http2_handler(boost::asio::io_service &io_service,
                              boost::asio::ip::tcp::endpoint ep,
                              connection_write writefun, serve_mux &mux,
                              const H2Server_Config_Schema& conf)
-    : writefun_(writefun),
-      mux_(mux),
-      io_service_(io_service),
-      remote_ep_(ep),
+    : base_handler(io_service, ep, writefun, mux, conf),
       session_(nullptr),
       buf_(nullptr),
-      buflen_(0),
-      inside_callback_(false),
-      write_signaled_(false),
-      tstamp_cached_(time(nullptr)),
-      formatted_date_(util::http_date(tstamp_cached_)),
-      this_handler_id(handler_unique_id++),
-      config(conf)
+      buflen_(0)
 {
-      alive_handlers[this_handler_id] = this;
-      handler_io_service[this_handler_id] = &io_service_;
 }
 
 http2_handler::~http2_handler() {
@@ -282,40 +265,6 @@ http2_handler::~http2_handler() {
   nghttp2_session_del(session_);
   alive_handlers.erase(this_handler_id);
   handler_io_service.erase(this_handler_id);
-}
-
-http2_handler* http2_handler::find_http2_handler(uint64_t handler_id)
-{
-    auto it = alive_handlers.find(handler_id);
-    if (it != alive_handlers.end())
-    {
-        return it->second;
-    }
-    return nullptr;
-}
-
-boost::asio::io_service* http2_handler::find_io_service(uint64_t handler_id)
-{
-    auto it = handler_io_service.find(handler_id);
-    if (it != handler_io_service.end())
-    {
-        return it->second;
-    }
-    return nullptr;
-}
-
-uint64_t http2_handler::get_handler_id()
-{
-    return this_handler_id;
-}
-
-const std::string &http2_handler::http_date() {
-  auto t = time(nullptr);
-  if (t != tstamp_cached_) {
-    tstamp_cached_ = t;
-    formatted_date_ = util::http_date(t);
-  }
-  return formatted_date_;
 }
 
 int http2_handler::start() {
@@ -385,26 +334,6 @@ int http2_handler::start() {
                                         (1 << config.connection_window_bits) - 1);
 
   return 0;
-}
-
-stream *http2_handler::create_stream(int32_t stream_id) {
-  auto p =
-      streams_.emplace(stream_id, std::make_unique<stream>(this, stream_id));
-  assert(p.second);
-  return (*p.first).second.get();
-}
-
-void http2_handler::close_stream(int32_t stream_id) {
-  streams_.erase(stream_id);
-}
-
-stream *http2_handler::find_stream(int32_t stream_id) {
-  auto i = streams_.find(stream_id);
-  if (i == std::end(streams_)) {
-    return nullptr;
-  }
-
-  return (*i).second.get();
 }
 
 void http2_handler::call_on_request(stream &strm) {
@@ -479,32 +408,23 @@ int http2_handler::submit_trailer(stream &strm, header_map h) {
   return 0;
 }
 
-void http2_handler::enter_callback() {
-  assert(!inside_callback_);
-  inside_callback_ = true;
-}
-
-void http2_handler::leave_callback() {
-  assert(inside_callback_);
-  inside_callback_ = false;
-}
-
-void http2_handler::stream_error(int32_t stream_id, uint32_t error_code) {
-  ::nghttp2::asio_http2::server::stream_error(session_, stream_id, error_code);
-  signal_write();
-}
 
 void http2_handler::signal_write() {
-  if (!inside_callback_ && !write_signaled_) {
-    write_signaled_ = true;
-    auto self = shared_from_this();
-    io_service_.post([self]() { self->initiate_write(); });
-  }
+    if (!inside_callback_ && !write_signaled_) {
+      write_signaled_ = true;
+      auto self = shared_from_this();
+      io_service_.post([self]() { self->initiate_write(); });
+    }
 }
 
 void http2_handler::initiate_write() {
   write_signaled_ = false;
   writefun_();
+}
+
+void http2_handler::stream_error(int32_t stream_id, uint32_t error_code) {
+  ::nghttp2::asio_http2::server::stream_error(session_, stream_id, error_code);
+  signal_write();
 }
 
 void http2_handler::resume(stream &strm) {
@@ -561,17 +481,6 @@ response *http2_handler::push_promise(boost::system::error_code &ec,
   return &promised_strm->response();
 }
 
-boost::asio::io_service &http2_handler::io_service() { return io_service_; }
-
-const boost::asio::ip::tcp::endpoint &http2_handler::remote_endpoint() {
-  return remote_ep_;
-}
-
-callback_guard::callback_guard(http2_handler &h) : handler(h) {
-  handler.enter_callback();
-}
-
-callback_guard::~callback_guard() { handler.leave_callback(); }
 
 } // namespace server
 

@@ -26,7 +26,7 @@
 
 #include "asio_server_stream.h"
 #include "asio_server_request_impl.h"
-#include "asio_server_http2_handler.h"
+#include "asio_server_base_handler.h"
 #include "asio_common.h"
 
 #include "http2.h"
