@@ -41,7 +41,6 @@ namespace nghttp2 {
 namespace asio_http2 {
 namespace server {
 
-class http2_handler;
 class stream;
 class serve_mux;
 

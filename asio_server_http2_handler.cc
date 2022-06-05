@@ -261,10 +261,7 @@ http2_handler::~http2_handler() {
     auto &strm = p.second;
     strm->response().impl().call_on_close(NGHTTP2_INTERNAL_ERROR);
   }
-
   nghttp2_session_del(session_);
-  alive_handlers.erase(this_handler_id);
-  handler_io_service.erase(this_handler_id);
 }
 
 int http2_handler::start() {

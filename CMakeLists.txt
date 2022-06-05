@@ -192,6 +192,7 @@ set(ASIO_SV_SOURCES
   asio_server_request_handler.cc
   asio_server_tls_context.cc
   asio_server_base_handler.cc
+  asio_server_http1_handler.cc
   asio_util.cc
 )
 

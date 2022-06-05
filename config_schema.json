@@ -7,7 +7,7 @@
   {
     "schema":
     {
-      "description":"http or https",
+      "description":"http, or https; to use TLS or mTLS, please choose https here",
       "type":"string",
       "default": "http",
       "enum": ["http", "https"]
