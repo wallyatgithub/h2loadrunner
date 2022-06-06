@@ -12,6 +12,119 @@
 #include "template.h"
 #include "H2Server_Config_Schema.h"
 
+namespace
+{
+// HTTP request message begin
+int http1_msg_begincb(llhttp_t* htp)
+{
+    return 0;
+}
+} // namespace
+
+
+
+namespace
+{
+// HTTP request message complete
+int http1_msg_completecb(llhttp_t* htp)
+{
+
+    return 0;
+}
+} // namespace
+
+namespace
+{
+int http1_hdr_keycb(llhttp_t* htp, const char* data, size_t len)
+{
+    return 0;
+}
+} // namespace
+
+namespace
+{
+int http1_hdr_valcb(llhttp_t* htp, const char* data, size_t len)
+{
+    return 0;
+}
+} // namespace
+
+namespace
+{
+int http1_hdrs_completecb(llhttp_t* htp)
+{
+    return 0;
+}
+} // namespace
+
+namespace
+{
+int http1_body_cb(llhttp_t* htp, const char* data, size_t len)
+{
+
+    return 0;
+}
+} // namespace
+
+namespace
+{
+int http1_on_url_cb(llhttp_t* htp, const char* data, size_t len)
+{
+
+    return 0;
+}
+} // namespace
+
+namespace
+{
+int http1_url_complete(llhttp_t* htp)
+{
+
+    return 0;
+}
+} // namespace
+
+namespace
+{
+int http1_hdr_field_comp(llhttp_t* htp)
+{
+
+    return 0;
+}
+} // namespace
+
+namespace
+{
+int http1_hdr_val_comp(llhttp_t* htp)
+{
+
+    return 0;
+}
+} // namespace
+
+
+namespace
+{
+constexpr llhttp_settings_t http1_hooks =
+{
+    http1_msg_begincb,     // llhttp_cb      on_message_begin;
+    http1_on_url_cb,       // llhttp_data_cb on_url;
+    nullptr,               // llhttp_data_cb on_status;
+    http1_hdr_keycb,       // llhttp_data_cb on_header_field;
+    http1_hdr_valcb,       // llhttp_data_cb on_header_value;
+    http1_hdrs_completecb, // llhttp_cb      on_headers_complete;
+    http1_body_cb,         // llhttp_data_cb on_body;
+    http1_msg_completecb,  // llhttp_cb      on_message_complete;
+    nullptr,               // llhttp_cb      on_chunk_header
+    nullptr,               // llhttp_cb      on_chunk_complete
+    http1_url_complete,    // llhttp_cb      on_url_complete
+    nullptr,               // llhttp_cb      on_status_complete
+    http1_hdr_field_comp,  // llhttp_cb      on_header_field_complete
+    http1_hdr_val_comp     // llhttp_cb      on_header_value_complete
+};
+} // namespace
+
+
 namespace nghttp2 {
 
 namespace asio_http2 {
@@ -33,9 +146,11 @@ http1_handler::~http1_handler() {
   }
 }
 
-int http1_handler::start() {
-  
-  return 0;
+int http1_handler::start()
+{
+    llhttp_init(&http_parser, HTTP_REQUEST, &http1_hooks);
+    http_parser.data = this;
+    return 0;
 }
 
 void http1_handler::call_on_request(stream &strm) {
@@ -49,7 +164,6 @@ bool http1_handler::should_stop() const {
 
 int http1_handler::start_response(stream &strm) {
   int rv;
-
   
   return 0;
 }
