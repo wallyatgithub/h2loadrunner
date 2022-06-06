@@ -117,10 +117,10 @@ constexpr llhttp_settings_t http1_hooks =
     http1_msg_completecb,  // llhttp_cb      on_message_complete;
     nullptr,               // llhttp_cb      on_chunk_header
     nullptr,               // llhttp_cb      on_chunk_complete
-    http1_url_complete,    // llhttp_cb      on_url_complete
+    nullptr,               // llhttp_cb      on_url_complete
     nullptr,               // llhttp_cb      on_status_complete
-    http1_hdr_field_comp,  // llhttp_cb      on_header_field_complete
-    http1_hdr_val_comp     // llhttp_cb      on_header_value_complete
+    nullptr,               // llhttp_cb      on_header_field_complete
+    nullptr                // llhttp_cb      on_header_value_complete
 };
 } // namespace
 
