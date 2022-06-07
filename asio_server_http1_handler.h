@@ -56,8 +56,6 @@ public:
   virtual int on_read(const std::vector<uint8_t>& buffer, std::size_t len) {
     callback_guard cg(*this);
 
-    
-
     return 0;
   }
 
@@ -68,6 +66,11 @@ public:
 
     return 0;
   }
+
+  uint32_t request_count = 0;
+  std::string schema;
+  std::string host;
+  std::string port;
 
 private:
   llhttp_t http_parser;

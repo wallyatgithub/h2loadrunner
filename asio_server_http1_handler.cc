@@ -12,11 +12,19 @@
 #include "template.h"
 #include "H2Server_Config_Schema.h"
 
+namespace nghttp2 {
+
+namespace asio_http2 {
+
+namespace server {
+
 namespace
 {
 // HTTP request message begin
 int http1_msg_begincb(llhttp_t* htp)
 {
+    auto handler = static_cast<http1_handler*>(htp->data);
+    handler->create_stream(++handler->request_count);
     return 0;
 }
 } // namespace
@@ -37,6 +45,7 @@ namespace
 {
 int http1_hdr_keycb(llhttp_t* htp, const char* data, size_t len)
 {
+    auto handler = static_cast<http1_handler*>(htp->data);
     return 0;
 }
 } // namespace
@@ -70,6 +79,55 @@ namespace
 {
 int http1_on_url_cb(llhttp_t* htp, const char* data, size_t len)
 {
+    auto handler = static_cast<http1_handler*>(htp->data);
+    auto strm = handler->find_stream(handler->request_count);
+    if (!strm) {
+      return 0;
+    }
+
+    auto &req = strm->request().impl();
+    auto &uri = req.uri();
+    req.method(llhttp_method_name(static_cast<llhttp_method>(htp->method)));
+
+    int rv;
+    http_parser_url u{};
+    rv = http_parser_parse_url(data, len, 0, &u);
+    if (u.field_set & (1 << UF_SCHEMA))
+    {
+        uri.scheme.assign(util::get_uri_field(data, u, UF_SCHEMA).str());
+        if (handler->schema.empty())
+        {
+            handler->schema = uri.scheme;
+        }
+    }
+
+    if (u.field_set & (1 << UF_HOST))
+    {
+        uri.host.assign(util::get_uri_field(data, u, UF_HOST).str());
+        if (u.field_set & (1 << UF_PORT))
+        {
+            uri.host.append(":").append(util::utos(u.port));
+        }
+        if (handler->host.empty())
+        {
+            handler->host = uri.host;
+        }
+    }
+    if (u.field_set & (1 << UF_PATH))
+    {
+        uri.path = util::get_uri_field(data, u, UF_PATH).str();
+    }
+    else
+    {
+        uri.path = "/";
+    }
+
+    if (u.field_set & (1 << UF_QUERY))
+    {
+        uri.path += '?';
+        uri.path += util::get_uri_field(data, u, UF_QUERY);
+    }
+
 
     return 0;
 }
@@ -124,12 +182,6 @@ constexpr llhttp_settings_t http1_hooks =
 };
 } // namespace
 
-
-namespace nghttp2 {
-
-namespace asio_http2 {
-
-namespace server {
 
 http1_handler::http1_handler(boost::asio::io_service &io_service,
                              boost::asio::ip::tcp::endpoint ep,
