@@ -71,6 +71,8 @@ public:
   std::string schema;
   std::string host;
   std::string port;
+  bool should_keep_alive = false;
+  std::string curr_header_name;
 
 private:
   llhttp_t http_parser;

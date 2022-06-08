@@ -25,7 +25,7 @@ int http1_msg_begincb(llhttp_t* htp)
 {
     auto handler = static_cast<http1_handler*>(htp->data);
     handler->create_stream(++handler->request_count);
-    return 0;
+    return HPE_OK;
 }
 } // namespace
 
@@ -36,8 +36,11 @@ namespace
 // HTTP request message complete
 int http1_msg_completecb(llhttp_t* htp)
 {
+    auto handler = static_cast<http1_handler*>(htp->data);
+    auto strm = handler->find_stream(handler->request_count);
+    handler->call_on_request(*strm);
 
-    return 0;
+    return HPE_OK;
 }
 } // namespace
 
@@ -46,7 +49,8 @@ namespace
 int http1_hdr_keycb(llhttp_t* htp, const char* data, size_t len)
 {
     auto handler = static_cast<http1_handler*>(htp->data);
-    return 0;
+    handler->curr_header_name.assign(data, len);
+    return HPE_OK;
 }
 } // namespace
 
@@ -54,7 +58,17 @@ namespace
 {
 int http1_hdr_valcb(llhttp_t* htp, const char* data, size_t len)
 {
-    return 0;
+    auto handler = static_cast<http1_handler*>(htp->data);
+    auto strm = handler->find_stream(handler->request_count);
+    if (!strm) {
+      return HPE_OK;
+    }
+    auto &req = strm->request().impl();
+    req.header().emplace(handler->curr_header_name,
+                          header_value{std::string(data, len), true});
+
+
+    return HPE_OK;
 }
 } // namespace
 
@@ -62,7 +76,7 @@ namespace
 {
 int http1_hdrs_completecb(llhttp_t* htp)
 {
-    return 0;
+    return HPE_OK;
 }
 } // namespace
 
@@ -70,8 +84,18 @@ namespace
 {
 int http1_body_cb(llhttp_t* htp, const char* data, size_t len)
 {
+    auto handler = static_cast<http1_handler*>(htp->data);
+    auto strm = handler->find_stream(handler->request_count);
 
-    return 0;
+    if (!strm) {
+      return 0;
+    }
+
+    strm->request().impl().payload().append((const char*)data, len);
+
+    strm->request().impl().call_on_data((const uint8_t*)data, len);
+
+    return HPE_OK;
 }
 } // namespace
 
@@ -82,7 +106,7 @@ int http1_on_url_cb(llhttp_t* htp, const char* data, size_t len)
     auto handler = static_cast<http1_handler*>(htp->data);
     auto strm = handler->find_stream(handler->request_count);
     if (!strm) {
-      return 0;
+      return HPE_OK;
     }
 
     auto &req = strm->request().impl();
@@ -128,8 +152,7 @@ int http1_on_url_cb(llhttp_t* htp, const char* data, size_t len)
         uri.path += util::get_uri_field(data, u, UF_QUERY);
     }
 
-
-    return 0;
+    return HPE_OK;
 }
 } // namespace
 
@@ -137,26 +160,10 @@ namespace
 {
 int http1_url_complete(llhttp_t* htp)
 {
+    auto handler = static_cast<http1_handler*>(htp->data);
+    handler->should_keep_alive = llhttp_should_keep_alive(htp);
 
-    return 0;
-}
-} // namespace
-
-namespace
-{
-int http1_hdr_field_comp(llhttp_t* htp)
-{
-
-    return 0;
-}
-} // namespace
-
-namespace
-{
-int http1_hdr_val_comp(llhttp_t* htp)
-{
-
-    return 0;
+    return HPE_OK;
 }
 } // namespace
 
@@ -211,7 +218,7 @@ void http1_handler::call_on_request(stream &strm) {
 }
 
 bool http1_handler::should_stop() const {
-  return true;
+  return !should_keep_alive;
 }
 
 int http1_handler::start_response(stream &strm) {
