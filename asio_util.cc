@@ -103,7 +103,7 @@ void send_response(uint32_t status_code,
     }
 
     auto& res = orig_stream->response();
-    res.write_head(status_code, headers);
+    res.write_head(status_code, std::move(headers));
     if (trailer_headers.empty())
     {
         res.end(std::move(resp_payload));

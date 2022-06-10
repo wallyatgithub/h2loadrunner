@@ -359,7 +359,8 @@ int Http1Session::_submit_request()
     {
         return -1;
     }
-    std::string req;
+    static thread_local std::string req(16 * 1024, ' ');
+    req.clear();
     req.append(*data.method).append(" ").append(*data.path).append(" HTTP/1.1\r\n");
     req.append("Host: ").append(*data.authority).append("\r\n");
 
