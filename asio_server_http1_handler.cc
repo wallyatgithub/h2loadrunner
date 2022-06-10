@@ -270,6 +270,13 @@ int http1_handler::on_read(const std::vector<uint8_t>& buffer, std::size_t len)
 int http1_handler::on_write(std::vector<uint8_t>& buffer, std::size_t& len)
 {
     callback_guard cg(*this);
+    const std::string http10 = "HTTP/1.0";
+    const std::string http11 = "HTTP/1.1";
+    const std::string crlf = "\r\n";
+    const std::string SP = " ";
+    const std::string colon = ":";
+    const size_t inc_step = 16 * 1024;
+    size_t data_len = 0;
 
     while (stream_ids_to_respond.size())
     {
@@ -279,12 +286,6 @@ int http1_handler::on_write(std::vector<uint8_t>& buffer, std::size_t& len)
         auto strm = find_stream(stream_id);
         auto& res = strm->response().impl();
         auto& headers = res.header();
-        const std::string http10 = "HTTP/1.0";
-        const std::string http11 = "HTTP/1.1";
-        const std::string crlf = "\r\n";
-        const std::string SP = " ";
-        const std::string colon = ":";
-        const size_t inc_step = 16 * 1024;
         auto inc_buffer_size = [inc_step](std::vector<uint8_t>& buffer, size_t required_size)
         {
             if (buffer.size() < required_size)
@@ -292,8 +293,6 @@ int http1_handler::on_write(std::vector<uint8_t>& buffer, std::size_t& len)
                 buffer.resize(buffer.size() + required_size + inc_step);
             }
         };
-        
-        size_t data_len = 0;
 
         auto& http_ver = (should_keep_alive ? http11 : http10);
         auto status_code = std::to_string(res.status_code());
@@ -350,12 +349,9 @@ int http1_handler::on_write(std::vector<uint8_t>& buffer, std::size_t& len)
             inc_buffer_size(buffer, inc_step);
             data_len += res.call_read(&buffer[data_len] + data_len, buffer.size() - data_len, &data_flag);
         }
-        
-        return data_len;
     }
 
-    len = 0;
-
+    len = data_len;
     return 0;
 }
 
