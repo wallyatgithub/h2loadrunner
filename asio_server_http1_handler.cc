@@ -40,6 +40,7 @@ namespace
 int http1_msg_completecb(llhttp_t* htp)
 {
     auto handler = static_cast<http1_handler*>(htp->data);
+    handler->should_keep_alive = llhttp_should_keep_alive(htp);
     auto strm = handler->find_stream(handler->request_count);
     handler->call_on_request(*strm);
 
@@ -188,7 +189,7 @@ constexpr llhttp_settings_t http1_hooks =
     http1_msg_completecb,  // llhttp_cb      on_message_complete;
     nullptr,               // llhttp_cb      on_chunk_header
     nullptr,               // llhttp_cb      on_chunk_complete
-    http1_url_complete,    // llhttp_cb      on_url_complete
+    nullptr,               // llhttp_cb      on_url_complete
     nullptr,               // llhttp_cb      on_status_complete
     nullptr,               // llhttp_cb      on_header_field_complete
     nullptr                // llhttp_cb      on_header_value_complete
