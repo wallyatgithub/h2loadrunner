@@ -234,7 +234,7 @@ bool http1_handler::should_stop() const
 int http1_handler::start_response(stream& strm)
 {
     int rv;
-    stream_ids_to_respond.push_back(strm.get_stream_id());
+    stream_ids_to_respond.insert(strm.get_stream_id());
 
     signal_write();
     return 0;
@@ -264,7 +264,44 @@ int http1_handler::on_read(const std::vector<uint8_t>& buffer, std::size_t len)
 {
     callback_guard cg(*this);
 
+    auto htperr = llhttp_execute(&http_parser, reinterpret_cast<const char*>(buffer.data()), len);
+
+    auto nread = (htperr == HPE_OK
+                 ? len
+                 : static_cast<size_t>(reinterpret_cast<const uint8_t*>(llhttp_get_error_pos(&http_parser)) - buffer.data()));
+
+    if (htperr == HPE_PAUSED)
+    {
+        // pause is done only when connection: close is requested
+        return -1;
+    }
+
+    if (htperr != HPE_OK)
+    {
+        std::cerr << "[ERROR] HTTP parse error: "
+                  << "(" << llhttp_errno_name(htperr) << ") "
+                  << llhttp_get_error_reason(&http_parser) << std::endl;
+        return -1;
+    }
+
     return 0;
+}
+
+std::set<uint32_t> http1_handler::get_consecutive_stream_ids_to_respond()
+{
+    std::set<uint32_t> ret;
+    if (*stream_ids_to_respond.begin() == streams_.begin()->first)
+    {
+        auto iter = stream_ids_to_respond.begin();
+        ret.insert(*iter);
+        iter = stream_ids_to_respond.erase(iter);
+        while ((iter != stream_ids_to_respond.end())&&(*iter - *(ret.rbegin()) == 1))
+        {
+            ret.insert(*iter);
+            iter = stream_ids_to_respond.erase(iter);
+        }
+    }
+    return ret;
 }
 
 int http1_handler::on_write(std::vector<uint8_t>& buffer, std::size_t& len)
@@ -277,11 +314,11 @@ int http1_handler::on_write(std::vector<uint8_t>& buffer, std::size_t& len)
     const std::string colon = ":";
     const size_t inc_step = 16 * 1024;
     size_t data_len = 0;
-
-    while (stream_ids_to_respond.size())
+    auto stream_ids = get_consecutive_stream_ids_to_respond();
+    while (stream_ids.size())
     {
-        auto stream_id = stream_ids_to_respond.front();
-        stream_ids_to_respond.pop_front();
+        auto stream_id = *(stream_ids.begin());
+        stream_ids.erase(stream_ids.begin());
         
         auto strm = find_stream(stream_id);
         auto& res = strm->response().impl();
@@ -349,6 +386,7 @@ int http1_handler::on_write(std::vector<uint8_t>& buffer, std::size_t& len)
             inc_buffer_size(buffer, inc_step);
             data_len += res.call_read(&buffer[data_len] + data_len, buffer.size() - data_len, &data_flag);
         }
+        close_stream(stream_id);
     }
 
     len = data_len;

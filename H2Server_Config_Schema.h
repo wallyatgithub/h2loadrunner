@@ -162,6 +162,7 @@ public:
     uint64_t connection_window_bits;
     uint64_t header_table_size;
     uint64_t encoder_header_table_size;
+    std::string no_tls_proto;
     std::vector<Schema_Service> service;
     explicit H2Server_Config_Schema():
         enable_mTLS(false),
@@ -172,7 +173,8 @@ public:
         window_bits(30),
         connection_window_bits(30),
         header_table_size(4096),
-        encoder_header_table_size(4096)
+        encoder_header_table_size(4096),
+        no_tls_proto("h2c")
     {
     }
     void staticjson_init(staticjson::ObjectHandler* h)
@@ -192,6 +194,7 @@ public:
         h->add_property("encoder-header-table-size", &this->encoder_header_table_size, staticjson::Flags::Optional);
         h->add_property("window-bits", &this->window_bits, staticjson::Flags::Optional);
         h->add_property("connection-window-bits", &this->connection_window_bits, staticjson::Flags::Optional);
+        h->add_property("no-tls-proto", &this->no_tls_proto, staticjson::Flags::Optional);
         h->add_property("Service", &this->service);
     }
 };

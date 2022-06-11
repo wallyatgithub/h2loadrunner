@@ -47,6 +47,8 @@
 #include <nghttp2/asio_http2_server.h>
 
 #include "asio_server_http2_handler.h"
+#include "asio_server_http1_handler.h"
+
 #include "asio_server_serve_mux.h"
 #include "util.h"
 #include "template.h"
@@ -88,15 +90,26 @@ public:
         stopped_(false) {}
 
   /// Start the first asynchronous operation for the connection.
-  void start(const H2Server_Config_Schema& conf) {
-    auto start_in_own_thread = [this, &conf]()
+  void start(const H2Server_Config_Schema& conf, const std::string& proto) {
+    auto start_in_own_thread = [this, &conf, proto]()
     {
         boost::system::error_code ec;
         auto self = this->shared_from_this();
 
-        handler_ = std::make_shared<http2_handler>(
-            GET_IO_SERVICE(socket_), socket_.lowest_layer().remote_endpoint(ec),
-            [this, self]() { do_write(); }, mux_, conf);
+        if (proto == "h2c")
+        {
+            handler_ = std::make_shared<http2_handler>(
+                GET_IO_SERVICE(socket_), socket_.lowest_layer().remote_endpoint(ec),
+                [this, self]() { do_write(); }, mux_, conf);
+
+        }
+        else
+        {
+            handler_ = std::make_shared<http1_handler>(
+                GET_IO_SERVICE(socket_), socket_.lowest_layer().remote_endpoint(ec),
+                [this, self]() { do_write(); }, mux_, conf);
+        }
+
         if (handler_->start() != 0) {
           stop();
           return;

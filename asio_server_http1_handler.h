@@ -7,7 +7,7 @@
 #include <functional>
 #include <string>
 #include <mutex>
-#include <deque>
+#include <set>
 
 #include <boost/array.hpp>
 
@@ -68,10 +68,12 @@ public:
     std::string port;
     bool should_keep_alive = false;
     std::string curr_header_name;
-    std::deque<uint32_t> stream_ids_to_respond;
+    std::set<uint32_t> stream_ids_to_respond;
 
 private:
     llhttp_t http_parser;
+    std::set<uint32_t> get_consecutive_stream_ids_to_respond();
+
 };
 
 } // namespace server

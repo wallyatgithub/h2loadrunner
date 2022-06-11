@@ -75,6 +75,12 @@
       "default": 4194304,
       "type":"integer"
     },
+    "no-tls-proto":
+    {
+      "description":"Specify ALPN identifier of the protocol to be used for non-TLS connections. Available protocols: h2c and http/1.1",
+      "type":"string",
+      "default":"h2c"
+    },
     "verbose":{
         "description": "true: print debug trace; false: no debug print",
         "default": false,

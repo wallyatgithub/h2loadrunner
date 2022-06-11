@@ -157,13 +157,11 @@ void server::start_accept(boost::asio::ssl::context &tls_context,
                   new_connection->stop();
                   return;
                 }
-
+                std::string proto = "h2c";
                 if (!tls_h2_negotiated(new_connection->socket())) {
-                  new_connection->stop();
-                  return;
+                  proto = "http/1.1";
                 }
-
-                new_connection->start(conf);
+                new_connection->start(conf, proto);
               });
         }
 
@@ -191,7 +189,7 @@ void server::start_accept(tcp::acceptor &acceptor, serve_mux &mux) {
           boost::asio::socket_base::receive_buffer_size snd_option(config.skt_send_buffer_size);
           new_connection->socket().set_option(snd_option);
           new_connection->start_read_deadline();
-          new_connection->start(config);
+          new_connection->start(config, config.no_tls_proto);
         }
         if (acceptor.is_open()) {
           start_accept(acceptor, mux);
