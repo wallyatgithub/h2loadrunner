@@ -290,7 +290,7 @@ int http1_handler::on_read(const std::vector<uint8_t>& buffer, std::size_t len)
 std::set<uint32_t> http1_handler::get_consecutive_stream_ids_to_respond()
 {
     std::set<uint32_t> ret;
-    if (*stream_ids_to_respond.begin() == streams_.begin()->first)
+    if (stream_ids_to_respond.size() && streams_.size() && *stream_ids_to_respond.begin() == streams_.begin()->first)
     {
         auto iter = stream_ids_to_respond.begin();
         ret.insert(*iter);
