@@ -20,15 +20,15 @@
       "type":"integer"
     },
     "private-key-file":{
-      "description":"path to private key file",
+      "description":"path to private key file in PEM format",
       "type":"string"
     },
     "cert-file":{
-      "description":"path to cert file",
+      "description":"path to cert file in PEM format",
       "type":"string"
     },
     "caCert-file":{
-      "description":"path to CA cert file for client certificate verification, this is used when mTLS is enabled",
+      "description":"path to CA cert file in PEM format for client certificate verification, this is used when mTLS is enabled",
       "type":"string"
     },
     "mTLS":{

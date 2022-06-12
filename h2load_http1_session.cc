@@ -266,6 +266,11 @@ int Http1Session::submit_request()
 
 int Http1Session::on_read(const uint8_t* data, size_t len)
 {
+    if (config->verbose)
+    {
+        std::cout.write(reinterpret_cast<const char*>(data), len);
+    }
+
     auto htperr =
         llhttp_execute(&htp_, reinterpret_cast<const char*>(data), len);
     auto nread = htperr == HPE_OK
@@ -273,11 +278,6 @@ int Http1Session::on_read(const uint8_t* data, size_t len)
                  : static_cast<size_t>(reinterpret_cast<const uint8_t*>(
                                            llhttp_get_error_pos(&htp_)) -
                                        data);
-
-    if (config->verbose)
-    {
-        std::cout.write(reinterpret_cast<const char*>(data), nread);
-    }
 
     if (htperr == HPE_PAUSED)
     {

@@ -386,8 +386,10 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
             else
             {
                 unMatchedresponses++;
-                res.write_head(404, {{"reason", {"no match found"}}});
-                res.end("no matched entry found\n");
+                const std::string not_found = "no matched entry found\r\n";
+                const std::string length = std::to_string(not_found.size());
+                res.write_head(404, {{"reason", {"no match found"}}, {"content-length", {length}}});
+                res.end(not_found);
             }
         });
 
@@ -591,6 +593,7 @@ void start_server(const std::string& config_file_name, bool start_stats_thread, 
         std::cout << "error reading config file:" << result.description() << std::endl;
         exit(1);
     }
+    config_schema.config_post_process();
 
     if (config_schema.verbose)
     {

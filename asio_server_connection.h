@@ -90,13 +90,13 @@ public:
         stopped_(false) {}
 
   /// Start the first asynchronous operation for the connection.
-  void start(const H2Server_Config_Schema& conf, const std::string& proto) {
+  void start(const H2Server_Config_Schema& conf, NO_TLS_PROTO proto) {
     auto start_in_own_thread = [this, &conf, proto]()
     {
         boost::system::error_code ec;
         auto self = this->shared_from_this();
 
-        if (proto == "h2c")
+        if (proto == HTTP2)
         {
             handler_ = std::make_shared<http2_handler>(
                 GET_IO_SERVICE(socket_), socket_.lowest_layer().remote_endpoint(ec),
