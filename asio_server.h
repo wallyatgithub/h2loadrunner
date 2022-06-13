@@ -45,7 +45,7 @@
 
 #include <boost/noncopyable.hpp>
 
-#include <nghttp2/asio_http2_server.h>
+#include <nghttp2/asio_httpx_server.h>
 
 #include "asio_io_service_pool.h"
 #include "H2Server_Config_Schema.h"

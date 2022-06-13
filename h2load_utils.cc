@@ -32,7 +32,7 @@ extern "C" {
 #include "config_schema.h"
 #include "tls.h"
 
-#include <nghttp2/asio_http2_server.h>
+#include <nghttp2/asio_httpx_server.h>
 
 #include "h2load_utils.h"
 #include "base_client.h"
@@ -1533,7 +1533,7 @@ void integrated_http2_server(std::stringstream& dataStream, h2load::Config& conf
     std::cerr << "builtin server listening at port: " << serverPort << std::endl;
     H2Server_Config_Schema config_schema;
 
-    nghttp2::asio_http2::server::http2 server(config_schema);
+    nghttp2::asio_http2::server::asio_httpx_server server(config_schema);
     boost::system::error_code ec;
     server.num_threads(1);
     server.handle("/stat", [&](const nghttp2::asio_http2::server::asio_server_request & req,

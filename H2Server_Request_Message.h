@@ -6,7 +6,7 @@
 #include <vector>
 #include <list>
 #include <map>
-#include <nghttp2/asio_http2_server.h>
+#include <nghttp2/asio_httpx_server.h>
 #include "asio_server_response.h"
 #include "asio_server_request.h"
 

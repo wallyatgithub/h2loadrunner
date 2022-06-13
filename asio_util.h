@@ -15,7 +15,7 @@
 #include <boost/asio/io_service.hpp>
 #include <boost/thread/thread.hpp>
 
-#include <nghttp2/asio_http2_server.h>
+#include <nghttp2/asio_httpx_server.h>
 #include "asio_server_base_handler.h"
 #include "asio_server_stream.h"
 
@@ -76,7 +76,7 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
 
 std::vector<H2Server>& get_H2Server_match_Instances(const std::string& thread_id);
 
-std::map<std::string, nghttp2::asio_http2::server::http2*>::iterator get_h2_server_instance(const std::string& thread_id);
+std::map<std::string, nghttp2::asio_http2::server::asio_httpx_server*>::iterator get_h2_server_instance(const std::string& thread_id);
 
 bool init_H2Server_match_Instances(std::size_t number_of_instances, const std::string& config_schema);
 

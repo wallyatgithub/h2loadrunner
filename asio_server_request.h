@@ -27,7 +27,7 @@
 
 #include "nghttp2_config.h"
 
-#include <nghttp2/asio_http2_server.h>
+#include <nghttp2/asio_httpx_server.h>
 #include <boost/asio/ip/tcp.hpp>
 
 namespace nghttp2 {

@@ -44,15 +44,15 @@ class asio_server_response;
 // the application must not access to those objects.
 typedef std::function<void(const asio_server_request&, asio_server_response&, uint64_t, int32_t)> request_cb;
 
-class http2_impl;
+class asio_server_httpx_impl;
 
-class http2 {
+class asio_httpx_server {
 public:
-  http2(const H2Server_Config_Schema& conf);
-  ~http2();
+  asio_httpx_server(const H2Server_Config_Schema& conf);
+  ~asio_httpx_server();
 
-  http2(http2 &&other) noexcept;
-  http2 &operator=(http2 &&other) noexcept;
+  asio_httpx_server(asio_httpx_server &&other) noexcept;
+  asio_httpx_server &operator=(asio_httpx_server &&other) noexcept;
 
   // Starts listening connection on given address and port and serves
   // incoming requests in cleartext TCP connection.  If |asynchronous|
@@ -120,10 +120,10 @@ public:
   // Sets read timeout, which defaults to 60 seconds.
   void read_timeout(const boost::posix_time::time_duration &t);
 
-  // Gracefully stop http2 server
+  // Gracefully stop asio_httpx_server server
   void stop();
 
-  // Join on http2 server and wait for it to fully stop
+  // Join on asio_httpx_server server and wait for it to fully stop
   void join();
 
   // Get access to the io_service objects.
@@ -134,7 +134,7 @@ public:
   std::vector<int> ports() const;
 
 private:
-  std::unique_ptr<http2_impl> impl_;
+  std::unique_ptr<asio_server_httpx_impl> impl_;
 };
 
 // Configures |tls_context| for server use.  This function sets couple

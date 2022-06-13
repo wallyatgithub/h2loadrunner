@@ -273,7 +273,7 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
             }
         }
 
-        nghttp2::asio_http2::server::http2 server(config_schema);
+        nghttp2::asio_http2::server::asio_httpx_server server(config_schema);
 
         get_h2_server_instance(ss.str())->second = &server;
 
@@ -660,9 +660,9 @@ void install_request_callback(const std::string& bootstrap_thread_id, size_t ser
     }
 }
 
-std::map<std::string, nghttp2::asio_http2::server::http2*>::iterator get_h2_server_instance(const std::string& thread_id)
+std::map<std::string, nghttp2::asio_http2::server::asio_httpx_server*>::iterator get_h2_server_instance(const std::string& thread_id)
 {
-    static std::map<std::string, nghttp2::asio_http2::server::http2*> h2_servers;
+    static std::map<std::string, nghttp2::asio_http2::server::asio_httpx_server*> h2_servers;
     static std::mutex map_mutex;
     if (h2_servers.count(thread_id) == 0)
     {

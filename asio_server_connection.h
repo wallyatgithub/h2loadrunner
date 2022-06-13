@@ -44,7 +44,7 @@
 #include <boost/noncopyable.hpp>
 #include <boost/array.hpp>
 
-#include <nghttp2/asio_http2_server.h>
+#include <nghttp2/asio_httpx_server.h>
 
 #include "asio_server_http2_handler.h"
 #include "asio_server_http1_handler.h"

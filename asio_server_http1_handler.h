@@ -11,7 +11,7 @@
 
 #include <boost/array.hpp>
 
-#include <nghttp2/asio_http2_server.h>
+#include <nghttp2/asio_httpx_server.h>
 #include "asio_server_base_handler.h"
 
 #include "llhttp.h"

@@ -10,7 +10,7 @@
 
 #include <boost/array.hpp>
 
-#include <nghttp2/asio_http2_server.h>
+#include <nghttp2/asio_httpx_server.h>
 
 namespace nghttp2
 {

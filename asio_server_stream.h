@@ -27,7 +27,7 @@
 
 #include "nghttp2_config.h"
 
-#include <nghttp2/asio_http2_server.h>
+#include <nghttp2/asio_httpx_server.h>
 #include "asio_server_request.h"
 #include "asio_server_response.h"
 

@@ -27,7 +27,7 @@
 
 #include "nghttp2_config.h"
 
-#include <nghttp2/asio_http2_server.h>
+#include <nghttp2/asio_httpx_server.h>
 
 #include "asio_server_serve_mux.h"
 #include "H2Server_Config_Schema.h"
@@ -40,9 +40,9 @@ namespace server {
 
 class server;
 
-class http2_impl {
+class asio_server_httpx_impl {
 public:
-  http2_impl(const H2Server_Config_Schema& conf);
+  asio_server_httpx_impl(const H2Server_Config_Schema& conf);
   boost::system::error_code listen_and_serve(
       boost::system::error_code &ec, boost::asio::ssl::context *tls_context,
       const std::string &address, const std::string &port, bool asynchronous);

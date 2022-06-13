@@ -24,9 +24,9 @@
  */
 #include "nghttp2_config.h"
 
-#include <nghttp2/asio_http2_server.h>
+#include <nghttp2/asio_httpx_server.h>
 
-#include "asio_server_http2_impl.h"
+#include "asio_server_httpx_impl.h"
 #include "asio_server.h"
 #include "template.h"
 
@@ -36,13 +36,13 @@ namespace asio_http2 {
 
 namespace server {
 
-http2::http2(const H2Server_Config_Schema& conf) : impl_(std::make_unique<http2_impl>(conf)) {}
+asio_httpx_server::asio_httpx_server(const H2Server_Config_Schema& conf) : impl_(std::make_unique<asio_server_httpx_impl>(conf)) {}
 
-http2::~http2() {}
+asio_httpx_server::~asio_httpx_server() {}
 
-http2::http2(http2 &&other) noexcept : impl_(std::move(other.impl_)) {}
+asio_httpx_server::asio_httpx_server(asio_httpx_server &&other) noexcept : impl_(std::move(other.impl_)) {}
 
-http2 &http2::operator=(http2 &&other) noexcept {
+asio_httpx_server &asio_httpx_server::operator=(asio_httpx_server &&other) noexcept {
   if (this == &other) {
     return *this;
   }
@@ -52,45 +52,45 @@ http2 &http2::operator=(http2 &&other) noexcept {
   return *this;
 }
 
-boost::system::error_code http2::listen_and_serve(boost::system::error_code &ec,
+boost::system::error_code asio_httpx_server::listen_and_serve(boost::system::error_code &ec,
                                                   const std::string &address,
                                                   const std::string &port,
                                                   bool asynchronous) {
   return impl_->listen_and_serve(ec, nullptr, address, port, asynchronous);
 }
 
-boost::system::error_code http2::listen_and_serve(
+boost::system::error_code asio_httpx_server::listen_and_serve(
     boost::system::error_code &ec, boost::asio::ssl::context &tls_context,
     const std::string &address, const std::string &port, bool asynchronous) {
   return impl_->listen_and_serve(ec, &tls_context, address, port, asynchronous);
 }
 
-void http2::num_threads(size_t num_threads) { impl_->num_threads(num_threads); }
+void asio_httpx_server::num_threads(size_t num_threads) { impl_->num_threads(num_threads); }
 
-void http2::backlog(int backlog) { impl_->backlog(backlog); }
+void asio_httpx_server::backlog(int backlog) { impl_->backlog(backlog); }
 
-void http2::tls_handshake_timeout(const boost::posix_time::time_duration &t) {
+void asio_httpx_server::tls_handshake_timeout(const boost::posix_time::time_duration &t) {
   impl_->tls_handshake_timeout(t);
 }
 
-void http2::read_timeout(const boost::posix_time::time_duration &t) {
+void asio_httpx_server::read_timeout(const boost::posix_time::time_duration &t) {
   impl_->read_timeout(t);
 }
 
-bool http2::handle(std::string pattern, request_cb cb) {
+bool asio_httpx_server::handle(std::string pattern, request_cb cb) {
   return impl_->handle(std::move(pattern), std::move(cb));
 }
 
-void http2::stop() { impl_->stop(); }
+void asio_httpx_server::stop() { impl_->stop(); }
 
-void http2::join() { return impl_->join(); }
+void asio_httpx_server::join() { return impl_->join(); }
 
 const std::vector<std::shared_ptr<boost::asio::io_service>> &
-http2::io_services() const {
+asio_httpx_server::io_services() const {
   return impl_->io_services();
 }
 
-std::vector<int> http2::ports() const { return impl_->ports(); }
+std::vector<int> asio_httpx_server::ports() const { return impl_->ports(); }
 
 } // namespace server
 
