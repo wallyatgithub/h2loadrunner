@@ -44,7 +44,7 @@ class asio_server_response;
 // the application must not access to those objects.
 typedef std::function<void(const asio_server_request&, asio_server_response&, uint64_t, int32_t)> request_cb;
 
-class asio_server_httpx_impl;
+class asio_httpx_server_impl;
 
 class asio_httpx_server {
 public:
@@ -134,7 +134,7 @@ public:
   std::vector<int> ports() const;
 
 private:
-  std::unique_ptr<asio_server_httpx_impl> impl_;
+  std::unique_ptr<asio_httpx_server_impl> impl_;
 };
 
 // Configures |tls_context| for server use.  This function sets couple

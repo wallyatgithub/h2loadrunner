@@ -26,7 +26,7 @@
 
 #include <nghttp2/asio_httpx_server.h>
 
-#include "asio_server_httpx_impl.h"
+#include "asio_httpx_server_impl.h"
 #include "asio_server.h"
 #include "template.h"
 
@@ -36,7 +36,7 @@ namespace asio_http2 {
 
 namespace server {
 
-asio_httpx_server::asio_httpx_server(const H2Server_Config_Schema& conf) : impl_(std::make_unique<asio_server_httpx_impl>(conf)) {}
+asio_httpx_server::asio_httpx_server(const H2Server_Config_Schema& conf) : impl_(std::make_unique<asio_httpx_server_impl>(conf)) {}
 
 asio_httpx_server::~asio_httpx_server() {}
 

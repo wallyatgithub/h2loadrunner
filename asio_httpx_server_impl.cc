@@ -22,7 +22,7 @@
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#include "asio_server_httpx_impl.h"
+#include "asio_httpx_server_impl.h"
 
 #include <openssl/ssl.h>
 
@@ -37,14 +37,14 @@ namespace asio_http2 {
 
 namespace server {
 
-asio_server_httpx_impl::asio_server_httpx_impl(const H2Server_Config_Schema& conf)
+asio_httpx_server_impl::asio_httpx_server_impl(const H2Server_Config_Schema& conf)
     : num_threads_(1),
       backlog_(-1),
       tls_handshake_timeout_(boost::posix_time::seconds(60)),
       read_timeout_(boost::posix_time::seconds(60)),
       config(conf){}
 
-boost::system::error_code asio_server_httpx_impl::listen_and_serve(
+boost::system::error_code asio_httpx_server_impl::listen_and_serve(
     boost::system::error_code &ec, boost::asio::ssl::context *tls_context,
     const std::string &address, const std::string &port, bool asynchronous) {
   server_.reset(
@@ -53,33 +53,33 @@ boost::system::error_code asio_server_httpx_impl::listen_and_serve(
                                    mux_, asynchronous);
 }
 
-void asio_server_httpx_impl::num_threads(size_t num_threads) { num_threads_ = num_threads; }
+void asio_httpx_server_impl::num_threads(size_t num_threads) { num_threads_ = num_threads; }
 
-void asio_server_httpx_impl::backlog(int backlog) { backlog_ = backlog; }
+void asio_httpx_server_impl::backlog(int backlog) { backlog_ = backlog; }
 
-void asio_server_httpx_impl::tls_handshake_timeout(
+void asio_httpx_server_impl::tls_handshake_timeout(
     const boost::posix_time::time_duration &t) {
   tls_handshake_timeout_ = t;
 }
 
-void asio_server_httpx_impl::read_timeout(const boost::posix_time::time_duration &t) {
+void asio_httpx_server_impl::read_timeout(const boost::posix_time::time_duration &t) {
   read_timeout_ = t;
 }
 
-bool asio_server_httpx_impl::handle(std::string pattern, request_cb cb) {
+bool asio_httpx_server_impl::handle(std::string pattern, request_cb cb) {
   return mux_.handle(std::move(pattern), std::move(cb));
 }
 
-void asio_server_httpx_impl::stop() { return server_->stop(); }
+void asio_httpx_server_impl::stop() { return server_->stop(); }
 
-void asio_server_httpx_impl::join() { return server_->join(); }
+void asio_httpx_server_impl::join() { return server_->join(); }
 
 const std::vector<std::shared_ptr<boost::asio::io_service>> &
-asio_server_httpx_impl::io_services() const {
+asio_httpx_server_impl::io_services() const {
   return server_->io_services();
 }
 
-std::vector<int> asio_server_httpx_impl::ports() const { return server_->ports(); }
+std::vector<int> asio_httpx_server_impl::ports() const { return server_->ports(); }
 
 } // namespace server
 

@@ -40,9 +40,9 @@ namespace server {
 
 class server;
 
-class asio_server_httpx_impl {
+class asio_httpx_server_impl {
 public:
-  asio_server_httpx_impl(const H2Server_Config_Schema& conf);
+  asio_httpx_server_impl(const H2Server_Config_Schema& conf);
   boost::system::error_code listen_and_serve(
       boost::system::error_code &ec, boost::asio::ssl::context *tls_context,
       const std::string &address, const std::string &port, bool asynchronous);
