@@ -25,30 +25,30 @@
 #include "asio_server_stream.h"
 
 #include "asio_server_base_handler.h"
-#include "asio_server_request_impl.h"
-#include "asio_server_response_impl.h"
+#include "asio_server_request.h"
+#include "asio_server_response.h"
 
 namespace nghttp2 {
 namespace asio_http2 {
 namespace server {
 
-stream::stream(base_handler *h, int32_t stream_id)
+asio_server_stream::asio_server_stream(base_handler *h, int32_t stream_id)
     : handler_(h), stream_id_(stream_id) {
-  request_.impl().stream(this);
-  response_.impl().stream(this);
+  request_.stream(this);
+  response_.stream(this);
 }
 
-int32_t stream::get_stream_id() const { return stream_id_; }
+int32_t asio_server_stream::get_stream_id() const { return stream_id_; }
 
-class request &stream::request() {
+class asio_server_request& asio_server_stream::request() {
   return request_;
 }
 
-class response &stream::response() {
+class asio_server_response& asio_server_stream::response() {
   return response_;
 }
 
-base_handler *stream::handler() const { return handler_; }
+base_handler* asio_server_stream::handler() const { return handler_; }
 
 } // namespace server
 } // namespace asio_http2

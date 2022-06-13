@@ -33,7 +33,7 @@ namespace nghttp2 {
 namespace asio_http2 {
 namespace server {
 
-class stream;
+class asio_server_stream;
 
 enum class response_state {
   INITIAL,
@@ -43,9 +43,9 @@ enum class response_state {
   BODY_STARTED,
 };
 
-class response_impl {
+class asio_server_response {
 public:
-  response_impl();
+  asio_server_response();
   void write_head(unsigned int status_code, header_map h = header_map{});
   void end(std::string data = "");
   void send_data_no_eos(std::string data);
@@ -56,7 +56,7 @@ public:
 
   void cancel(uint32_t error_code);
 
-  response *push(boost::system::error_code &ec, std::string method,
+  asio_server_response* push(boost::system::error_code &ec, std::string method,
                  std::string raw_path_query, header_map) const;
 
   boost::asio::io_service &io_service();
@@ -68,21 +68,24 @@ public:
   const header_map &trailers() const;
   void pushed(bool f);
   void push_promise_sent();
-  void stream(class stream *s);
+  void stream(class asio_server_stream *s);
   generator_cb::result_type call_read(uint8_t *data, std::size_t len,
                                       uint32_t *data_flags);
   void call_on_close(uint32_t error_code);
 
+  size_t get_payload_size();
+
 private:
 
   void send_trailer();
-  class stream *strm_;
+  class asio_server_stream *strm_;
   header_map header_;
   header_map trailers_;
   generator_cb generator_cb_;
   close_cb close_cb_;
   unsigned int status_code_;
   response_state state_;
+  size_t payload_size_ = 0;
   // true if this is pushed stream's response
   bool pushed_;
   // true if PUSH_PROMISE is sent if this is response of a pushed

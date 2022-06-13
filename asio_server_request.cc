@@ -22,46 +22,60 @@
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#include "nghttp2_config.h"
-
-#include <nghttp2/asio_http2_server.h>
-
-#include "asio_server_request_impl.h"
-
-#include "template.h"
+#include "asio_server_request.h"
 
 namespace nghttp2 {
 namespace asio_http2 {
 namespace server {
 
-request::request() : impl_(std::make_unique<request_impl>()) {}
+asio_server_request::asio_server_request() : strm_(nullptr), header_buffer_size_(0) {}
 
-request::~request() {}
+const header_map &asio_server_request::header() const { return header_; }
 
-const header_map &request::header() const { return impl_->header(); }
+const std::string &asio_server_request::method() const { return method_; }
 
-const std::string &request::method() const { return impl_->method(); }
+const uri_ref &asio_server_request::uri() const { return uri_; }
 
-const uri_ref &request::uri() const { return impl_->uri(); }
+uri_ref &asio_server_request::uri() { return uri_; }
 
-void request::on_data(data_cb cb) const {
-  return impl_->on_data(std::move(cb));
+void asio_server_request::header(header_map h) { header_ = std::move(h); }
+
+header_map &asio_server_request::header() { return header_; }
+
+void asio_server_request::method(std::string arg) { method_ = std::move(arg); }
+
+void asio_server_request::on_data(data_cb cb) { on_data_cb_ = std::move(cb); }
+
+void asio_server_request::stream(class asio_server_stream *s) { strm_ = s; }
+
+void asio_server_request::call_on_data(const uint8_t *data, std::size_t len) {
+  if (on_data_cb_) {
+    on_data_cb_(data, len);
+  }
 }
 
-request_impl &request::impl() const { return *impl_; }
-
-const boost::asio::ip::tcp::endpoint &request::remote_endpoint() const {
-  return impl_->remote_endpoint();
+const boost::asio::ip::tcp::endpoint &asio_server_request::remote_endpoint() const {
+  return remote_ep_;
 }
 
-std::string& request::payload()
+void asio_server_request::remote_endpoint(boost::asio::ip::tcp::endpoint ep) {
+  remote_ep_ = std::move(ep);
+}
+
+size_t asio_server_request::header_buffer_size() const { return header_buffer_size_; }
+
+void asio_server_request::update_header_buffer_size(size_t len) {
+  header_buffer_size_ += len;
+}
+
+std::string& asio_server_request::payload()
 {
-  return impl_->payload();
+  return payload_;
 }
 
-const std::string& request::unmutable_payload() const
+const std::string& asio_server_request::unmutable_payload() const
 {
-  return impl_->unmutable_payload();
+  return payload_;
 }
 
 

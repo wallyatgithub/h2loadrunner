@@ -35,7 +35,7 @@ namespace asio_http2 {
 
 namespace server {
 
-class request_impl;
+class asio_server_request;
 
 // port from go's ServeMux
 
@@ -48,7 +48,7 @@ struct handler_entry {
 class serve_mux {
 public:
   bool handle(std::string pattern, request_cb cb);
-  request_cb handler(request_impl &req) const;
+  request_cb handler(asio_server_request& req) const;
   request_cb match(const std::string &path) const;
 
 private:

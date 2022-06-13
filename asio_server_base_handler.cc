@@ -5,8 +5,8 @@
 #include "asio_common.h"
 #include "asio_server_serve_mux.h"
 #include "asio_server_stream.h"
-#include "asio_server_request_impl.h"
-#include "asio_server_response_impl.h"
+#include "asio_server_request.h"
+#include "asio_server_response.h"
 #include "http2.h"
 #include "util.h"
 #include "template.h"
@@ -86,10 +86,10 @@ const std::string& base_handler::http_date()
     return formatted_date_;
 }
 
-stream* base_handler::create_stream(int32_t stream_id)
+asio_server_stream* base_handler::create_stream(int32_t stream_id)
 {
     auto p =
-        streams_.emplace(stream_id, std::make_unique<stream>(this, stream_id));
+        streams_.emplace(stream_id, std::make_unique<asio_server_stream>(this, stream_id));
     assert(p.second);
     return (*p.first).second.get();
 }
@@ -99,7 +99,7 @@ void base_handler::close_stream(int32_t stream_id)
     streams_.erase(stream_id);
 }
 
-stream* base_handler::find_stream(int32_t stream_id)
+asio_server_stream* base_handler::find_stream(int32_t stream_id)
 {
     auto i = streams_.find(stream_id);
     if (i == std::end(streams_))

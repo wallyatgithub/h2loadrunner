@@ -5,8 +5,8 @@
 #include "asio_common.h"
 #include "asio_server_serve_mux.h"
 #include "asio_server_stream.h"
-#include "asio_server_request_impl.h"
-#include "asio_server_response_impl.h"
+#include "asio_server_request.h"
+#include "asio_server_response.h"
 #include "http2.h"
 #include "util.h"
 #include "template.h"
@@ -68,7 +68,7 @@ int http1_hdr_valcb(llhttp_t* htp, const char* data, size_t len)
     {
         return HPE_OK;
     }
-    auto& req = strm->request().impl();
+    auto& req = strm->request();
     req.header().emplace(handler->curr_header_name,
                          header_value{std::string(data, len), true});
 
@@ -97,9 +97,9 @@ int http1_body_cb(llhttp_t* htp, const char* data, size_t len)
         return 0;
     }
 
-    strm->request().impl().payload().append((const char*)data, len);
+    strm->request().payload().append((const char*)data, len);
 
-    strm->request().impl().call_on_data((const uint8_t*)data, len);
+    strm->request().call_on_data((const uint8_t*)data, len);
 
     return HPE_OK;
 }
@@ -116,7 +116,7 @@ int http1_on_url_cb(llhttp_t* htp, const char* data, size_t len)
         return HPE_OK;
     }
 
-    auto& req = strm->request().impl();
+    auto& req = strm->request();
     auto& uri = req.uri();
     req.method(llhttp_method_name(static_cast<llhttp_method>(htp->method)));
 
@@ -210,7 +210,7 @@ http1_handler::~http1_handler()
     for (auto& p : streams_)
     {
         auto& strm = p.second;
-        strm->response().impl().call_on_close(NGHTTP2_INTERNAL_ERROR);
+        strm->response().call_on_close(NGHTTP2_INTERNAL_ERROR);
     }
 }
 
@@ -221,9 +221,9 @@ int http1_handler::start()
     return 0;
 }
 
-void http1_handler::call_on_request(stream& strm)
+void http1_handler::call_on_request(asio_server_stream& strm)
 {
-    auto cb = mux_.handler(strm.request().impl());
+    auto cb = mux_.handler(strm.request());
     cb(strm.request(), strm.response(), strm.handler()->get_handler_id(), strm.get_stream_id());
 }
 
@@ -232,7 +232,7 @@ bool http1_handler::should_stop() const
     return (!should_keep_alive);
 }
 
-int http1_handler::start_response(stream& strm)
+int http1_handler::start_response(asio_server_stream& strm)
 {
     int rv;
     stream_ids_to_respond.insert(strm.get_stream_id());
@@ -241,9 +241,8 @@ int http1_handler::start_response(stream& strm)
     return 0;
 }
 
-int http1_handler::submit_trailer(stream& strm, header_map h)
+int http1_handler::submit_trailer(asio_server_stream& strm, header_map h)
 {
-
     return 0;
 }
 
@@ -313,6 +312,7 @@ int http1_handler::on_write(std::vector<uint8_t>& buffer, std::size_t& len)
     const std::string crlf = "\r\n";
     const std::string SP = " ";
     const std::string colon = ":";
+    const std::string content_length = "content-length";
     const size_t inc_step = 16 * 1024;
     size_t data_len = 0;
     auto stream_ids = get_consecutive_stream_ids_to_respond();
@@ -322,7 +322,7 @@ int http1_handler::on_write(std::vector<uint8_t>& buffer, std::size_t& len)
         stream_ids.erase(stream_ids.begin());
         
         auto strm = find_stream(stream_id);
-        auto& res = strm->response().impl();
+        auto& res = strm->response();
         auto& headers = res.header();
         auto inc_buffer_size = [inc_step](std::vector<uint8_t>& buffer, size_t required_size)
         {
@@ -357,10 +357,30 @@ int http1_handler::on_write(std::vector<uint8_t>& buffer, std::size_t& len)
 
         std::copy_n(crlf.c_str(), crlf.size(), std::begin(buffer) + data_len);
         data_len += crlf.size();
-        
+
+        if (headers.count(content_length) == 0 && res.get_payload_size())
+        {
+            std::string payload_size = std::to_string(res.get_payload_size());
+
+            inc_buffer_size(buffer, content_length.size() + colon.size() + payload_size.size() + crlf.size());
+
+            std::copy_n(content_length.c_str(), content_length.size(), std::begin(buffer) + data_len);
+            data_len += content_length.size();
+
+            std::copy_n(colon.c_str(), colon.size(), std::begin(buffer) + data_len);
+            data_len += colon.size();
+
+            std::copy_n(payload_size.c_str(), payload_size.size(), std::begin(buffer) + data_len);
+            data_len += payload_size.size();
+
+            std::copy_n(crlf.c_str(), crlf.size(), std::begin(buffer) + data_len);
+            data_len += crlf.size();
+
+        }        
         for (auto& header : headers)
         {
             inc_buffer_size(buffer, header.first.size() + colon.size() + header.second.value.size() + crlf.size());
+
             std::copy_n(header.first.c_str(), header.first.size(), std::begin(buffer) + data_len);
             data_len += header.first.size();
 
@@ -404,13 +424,13 @@ void http1_handler::stream_error(int32_t stream_id, uint32_t error_code)
 {
 }
 
-void http1_handler::resume(stream& strm)
+void http1_handler::resume(asio_server_stream& strm)
 {
     signal_write();
 }
 
-response* http1_handler::push_promise(boost::system::error_code& ec,
-                                      stream& strm, std::string method,
+asio_server_response* http1_handler::push_promise(boost::system::error_code& ec,
+                                      asio_server_stream& strm, std::string method,
                                       std::string raw_path_query,
                                       header_map h)
 {

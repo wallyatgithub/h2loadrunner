@@ -69,7 +69,7 @@ using request_cb = std::function<void(const request &)>;
 using connect_cb =
     std::function<void(boost::asio::ip::tcp::resolver::iterator)>;
 
-class request_impl;
+class asio_server_request;
 
 class request {
 public:
@@ -112,10 +112,10 @@ public:
   const header_map &header() const;
 
   // Application must not call this directly.
-  request_impl &impl() const;
+  asio_server_request &impl() const;
 
 private:
-  std::unique_ptr<request_impl> impl_;
+  std::unique_ptr<asio_server_request> impl_;
 };
 
 // Wrapper around an nghttp2_priority_spec.

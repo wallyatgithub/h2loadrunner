@@ -24,7 +24,7 @@
  */
 #include "asio_server_serve_mux.h"
 
-#include "asio_server_request_impl.h"
+#include "asio_server_request.h"
 #include "asio_server_request_handler.h"
 #include "util.h"
 #include "http2.h"
@@ -74,7 +74,7 @@ bool serve_mux::handle(std::string pattern, request_cb cb) {
   return true;
 }
 
-request_cb serve_mux::handler(request_impl &req) const {
+request_cb serve_mux::handler(asio_server_request &req) const {
   auto &path = req.uri().path;
   if (req.method() != "CONNECT") {
     auto clean_path = ::nghttp2::http2::path_join(StringRef{}, StringRef{},

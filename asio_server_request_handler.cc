@@ -23,6 +23,8 @@
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 #include "asio_server_request_handler.h"
+#include "asio_server_request.h"
+#include "asio_server_response.h"
 
 #include "util.h"
 #include "http2.h"
@@ -52,7 +54,7 @@ std::string create_html(int status_code) {
 } // namespace
 
 request_cb redirect_handler(int status_code, std::string uri) {
-  return [status_code, uri](const request &req, const response &res, uint64_t handler_id, int32_t stream_id) {
+  return [status_code, uri](const asio_server_request& req, asio_server_response& res, uint64_t handler_id, int32_t stream_id) {
     header_map h;
     h.emplace("location", header_value{std::move(uri)});
     std::string html;
@@ -67,7 +69,7 @@ request_cb redirect_handler(int status_code, std::string uri) {
 }
 
 request_cb status_handler(int status_code) {
-  return [status_code](const request &req, const response &res, uint64_t handler_id, int32_t stream_id) {
+  return [status_code](const asio_server_request& req, asio_server_response& res, uint64_t handler_id, int32_t stream_id) {
     if (!::nghttp2::http2::expect_response_body(status_code)) {
       res.write_head(status_code);
       res.end();

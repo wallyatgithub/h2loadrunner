@@ -7,6 +7,8 @@
 #include <list>
 #include <map>
 #include <nghttp2/asio_http2_server.h>
+#include "asio_server_response.h"
+#include "asio_server_request.h"
 
 #include "H2Server_Config_Schema.h"
 
@@ -18,7 +20,7 @@ public:
     rapidjson::Document  json_payload;
     const std::string* json_payload_string;
     std::map<size_t, bool> match_result;
-    H2Server_Request_Message(const nghttp2::asio_http2::server::request& req)
+    H2Server_Request_Message(const nghttp2::asio_http2::server::asio_server_request& req)
     {
         json_payload_string = &(req.unmutable_payload());
         std::string path_header_name = ":path";

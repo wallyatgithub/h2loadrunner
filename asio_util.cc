@@ -288,8 +288,8 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
                             &respStats,
                             bootstrap_thread_id
                            ]
-                            (const nghttp2::asio_http2::server::request& req,
-                             const nghttp2::asio_http2::server::response& res,
+                            (const nghttp2::asio_http2::server::asio_server_request& req,
+                             nghttp2::asio_http2::server::asio_server_response& res,
                              uint64_t handler_id, int32_t stream_id
                             )
         {

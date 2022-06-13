@@ -34,11 +34,11 @@ namespace nghttp2 {
 namespace asio_http2 {
 namespace server {
 
-class stream;
+class asio_server_stream;
 
-class request_impl {
+class asio_server_request {
 public:
-  request_impl();
+  asio_server_request();
 
   void header(header_map h);
   const header_map &header() const;
@@ -52,7 +52,7 @@ public:
 
   void on_data(data_cb cb);
 
-  void stream(class stream *s);
+  void stream(class asio_server_stream *s);
   void call_on_data(const uint8_t *data, std::size_t len);
 
   const boost::asio::ip::tcp::endpoint &remote_endpoint() const;
@@ -64,7 +64,7 @@ public:
   const std::string& unmutable_payload() const;
 
 private:
-  class stream *strm_;
+  class asio_server_stream *strm_;
   header_map header_;
   std::string method_;
   uri_ref uri_;

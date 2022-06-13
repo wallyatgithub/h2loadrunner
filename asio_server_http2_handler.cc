@@ -29,8 +29,8 @@
 #include "asio_common.h"
 #include "asio_server_serve_mux.h"
 #include "asio_server_stream.h"
-#include "asio_server_request_impl.h"
-#include "asio_server_response_impl.h"
+#include "asio_server_request.h"
+#include "asio_server_response.h"
 #include "http2.h"
 #include "util.h"
 #include "template.h"
@@ -84,7 +84,7 @@ int on_header_callback(nghttp2_session *session, const nghttp2_frame *frame,
     return 0;
   }
 
-  auto &req = strm->request().impl();
+  auto &req = strm->request();
   auto &uref = req.uri();
 
   switch (nghttp2::http2::lookup_token(name, namelen)) {
@@ -135,7 +135,7 @@ int on_frame_recv_callback(nghttp2_session *session, const nghttp2_frame *frame,
     }
 
     if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
-      strm->request().impl().call_on_data(nullptr, 0);
+      strm->request().call_on_data(nullptr, 0);
     }
 
     if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM)
@@ -149,11 +149,11 @@ int on_frame_recv_callback(nghttp2_session *session, const nghttp2_frame *frame,
       break;
     }
 
-    auto &req = strm->request().impl();
+    auto &req = strm->request();
     req.remote_endpoint(handler->remote_endpoint());
 
     if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
-      strm->request().impl().call_on_data(nullptr, 0);
+      strm->request().call_on_data(nullptr, 0);
     }
 
     if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM)
@@ -180,9 +180,9 @@ int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags,
     return 0;
   }
 
-  strm->request().impl().payload().append((const char*)data, len);
+  strm->request().payload().append((const char*)data, len);
 
-  strm->request().impl().call_on_data(data, len);
+  strm->request().call_on_data(data, len);
 
   return 0;
 }
@@ -199,7 +199,7 @@ int on_stream_close_callback(nghttp2_session *session, int32_t stream_id,
     return 0;
   }
 
-  strm->response().impl().call_on_close(error_code);
+  strm->response().call_on_close(error_code);
 
   handler->close_stream(stream_id);
 
@@ -222,7 +222,7 @@ int on_frame_send_callback(nghttp2_session *session, const nghttp2_frame *frame,
     return 0;
   }
 
-  auto &res = strm->response().impl();
+  auto &res = strm->response();
   res.push_promise_sent();
 
   return 0;
@@ -259,7 +259,7 @@ http2_handler::http2_handler(boost::asio::io_service &io_service,
 http2_handler::~http2_handler() {
   for (auto &p : streams_) {
     auto &strm = p.second;
-    strm->response().impl().call_on_close(NGHTTP2_INTERNAL_ERROR);
+    strm->response().call_on_close(NGHTTP2_INTERNAL_ERROR);
   }
   nghttp2_session_del(session_);
 }
@@ -333,8 +333,8 @@ int http2_handler::start() {
   return 0;
 }
 
-void http2_handler::call_on_request(stream &strm) {
-  auto cb = mux_.handler(strm.request().impl());
+void http2_handler::call_on_request(asio_server_stream &strm) {
+  auto cb = mux_.handler(strm.request());
   cb(strm.request(), strm.response(), strm.handler()->get_handler_id(), strm.get_stream_id());
 }
 
@@ -343,10 +343,10 @@ bool http2_handler::should_stop() const {
          !nghttp2_session_want_write(session_);
 }
 
-int http2_handler::start_response(stream &strm) {
+int http2_handler::start_response(asio_server_stream &strm) {
   int rv;
 
-  auto &res = strm.response().impl();
+  auto &res = strm.response();
   auto &header = res.header();
   auto nva = std::vector<nghttp2_nv>();
   nva.reserve(2 + header.size());
@@ -360,15 +360,15 @@ int http2_handler::start_response(stream &strm) {
   }
 
   nghttp2_data_provider *prd_ptr = nullptr, prd;
-  auto &req = strm.request().impl();
+  auto &req = strm.request();
   if (::nghttp2::http2::expect_response_body(req.method(), res.status_code())) {
     prd.source.ptr = &strm;
     prd.read_callback = [](nghttp2_session *session, int32_t stream_id,
                            uint8_t *buf, size_t length, uint32_t *data_flags,
                            nghttp2_data_source *source,
                            void *user_data) -> ssize_t {
-      auto &strm = *static_cast<stream *>(source->ptr);
-      return strm.response().impl().call_read(buf, length, data_flags);
+      auto &strm = *static_cast<asio_server_stream *>(source->ptr);
+      return strm.response().call_read(buf, length, data_flags);
     };
     prd_ptr = &prd;
   }
@@ -384,7 +384,7 @@ int http2_handler::start_response(stream &strm) {
   return 0;
 }
 
-int http2_handler::submit_trailer(stream &strm, header_map h) {
+int http2_handler::submit_trailer(asio_server_stream &strm, header_map h) {
   int rv;
   auto nva = std::vector<nghttp2_nv>();
   nva.reserve(h.size());
@@ -424,20 +424,20 @@ void http2_handler::stream_error(int32_t stream_id, uint32_t error_code) {
   signal_write();
 }
 
-void http2_handler::resume(stream &strm) {
+void http2_handler::resume(asio_server_stream &strm) {
   nghttp2_session_resume_data(session_, strm.get_stream_id());
   signal_write();
 }
 
-response *http2_handler::push_promise(boost::system::error_code &ec,
-                                      stream &strm, std::string method,
+asio_server_response* http2_handler::push_promise(boost::system::error_code &ec,
+                                      asio_server_stream &strm, std::string method,
                                       std::string raw_path_query,
                                       header_map h) {
   int rv;
 
   ec.clear();
 
-  auto &req = strm.request().impl();
+  auto &req = strm.request();
 
   auto nva = std::vector<nghttp2_nv>();
   nva.reserve(4 + h.size());
@@ -461,7 +461,7 @@ response *http2_handler::push_promise(boost::system::error_code &ec,
   }
 
   auto promised_strm = create_stream(rv);
-  auto &promised_req = promised_strm->request().impl();
+  auto &promised_req = promised_strm->request();
   promised_req.header(std::move(h));
   promised_req.method(std::move(method));
 
@@ -470,7 +470,7 @@ response *http2_handler::push_promise(boost::system::error_code &ec,
   uref.host = req.uri().host;
   split_path(uref, std::begin(raw_path_query), std::end(raw_path_query));
 
-  auto &promised_res = promised_strm->response().impl();
+  auto &promised_res = promised_strm->response();
   promised_res.pushed(true);
 
   signal_write();

@@ -184,9 +184,7 @@ set(ASIO_SV_SOURCES
   asio_server.cc
   asio_server_http2_handler.cc
   asio_server_request.cc
-  asio_server_request_impl.cc
   asio_server_response.cc
-  asio_server_response_impl.cc
   asio_server_stream.cc
   asio_server_serve_mux.cc
   asio_server_request_handler.cc

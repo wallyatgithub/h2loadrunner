@@ -28,112 +28,21 @@
 #include <nghttp2/asio_http2.h>
 #include "H2Server_Config_Schema.h"
 
+
 namespace nghttp2 {
 
 namespace asio_http2 {
 
 namespace server {
 
-class request_impl;
-class response_impl;
-
-class request {
-public:
-  // Application must not call this directly.
-  request();
-  ~request();
-
-  // Returns request header fields.  The pseudo header fields, which
-  // start with colon (:), are excluded from this list.
-  const header_map &header() const;
-
-  // Returns method (e.g., GET).
-  const std::string &method() const;
-
-  // Returns request URI, split into components.
-  const uri_ref &uri() const;
-
-  // Sets callback which is invoked when chunk of request body is
-  // received.
-  void on_data(data_cb cb) const;
-
-  // Application must not call this directly.
-  request_impl &impl() const;
-
-  // Returns the remote endpoint of the request
-  const boost::asio::ip::tcp::endpoint &remote_endpoint() const;
-
-  std::string& payload();
-  const std::string& unmutable_payload() const;
-
-private:
-  std::unique_ptr<request_impl> impl_;
-};
-
-class response {
-public:
-  // Application must not call this directly.
-  response();
-  ~response();
-
-  // Write response header using |status_code| (e.g., 200) and
-  // additional header fields in |h|.
-  void write_head(unsigned int status_code, header_map h = header_map{}) const;
-
-  // Sends |data| as response body.  No further call of end() is
-  // allowed.
-  void end(std::string data = "") const;
-
-   // Sends |data| as response body with NGHTTP2_DATA_FLAG_NO_END_STREAM set (a trailer would follow)
-  void send_data_no_eos(std::string data) const;
-
-  // Sets callback as a generator of the response body.  No further
-  // call of end() is allowed.
-  void end(generator_cb cb) const;
-
-  // Write trailer part.  This must be called after setting both
-  // NGHTTP2_DATA_FLAG_EOF and NGHTTP2_DATA_FLAG_NO_END_STREAM set in
-  // *data_flag parameter in generator_cb passed to end() function.
-  void write_trailer(header_map h) const;
-
-  // Sets callback which is invoked when this request and response are
-  // finished.  After the invocation of this callback, the application
-  // must not access request and response object.
-  void on_close(close_cb cb) const;
-
-  // Cancels this request and response with given error code.
-  void cancel(uint32_t error_code = NGHTTP2_INTERNAL_ERROR) const;
-
-  // Resumes deferred response.
-  void resume() const;
-
-  // Pushes resource denoted by |raw_path_query| using |method|.  The
-  // additional header fields can be given in |h|.  This function
-  // returns pointer to response object for promised stream, otherwise
-  // nullptr and error code is filled in |ec|.  Be aware that the
-  // header field name given in |h| must be lower-cased.
-  const response *push(boost::system::error_code &ec, std::string method,
-                       std::string raw_path_query,
-                       header_map h = header_map{}) const;
-
-  // Returns status code.
-  unsigned int status_code() const;
-
-  // Returns boost::asio::io_service this response is running on.
-  boost::asio::io_service &io_service() const;
-
-  // Application must not call this directly.
-  response_impl &impl() const;
-
-private:
-  std::unique_ptr<response_impl> impl_;
-};
+class asio_server_request;
+class asio_server_response;
 
 // This is so called request callback.  Called every time request is
 // received.  The life time of |request| and |response| objects end
 // when callback set by response::on_close() is called.  After that,
 // the application must not access to those objects.
-typedef std::function<void(const request &, const response &, uint64_t, int32_t)> request_cb;
+typedef std::function<void(const asio_server_request&, asio_server_response&, uint64_t, int32_t)> request_cb;
 
 class http2_impl;
 

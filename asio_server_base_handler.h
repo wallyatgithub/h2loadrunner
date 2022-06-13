@@ -20,8 +20,9 @@ namespace server
 {
 
 class base_handler;
-class stream;
+class asio_server_stream;
 class serve_mux;
+class asio_server_response;
 
 using connection_write = std::function<void(void)>;
 
@@ -46,15 +47,15 @@ public:
 
     virtual bool should_stop() const = 0;
 
-    virtual int start_response(stream& s) = 0;
+    virtual int start_response(asio_server_stream& s) = 0;
 
-    virtual int submit_trailer(stream& s, header_map h) = 0;
+    virtual int submit_trailer(asio_server_stream& s, header_map h) = 0;
 
     virtual void stream_error(int32_t stream_id, uint32_t error_code) = 0;
 
-    virtual void resume(stream& s) = 0;
+    virtual void resume(asio_server_stream& s) = 0;
 
-    virtual response* push_promise(boost::system::error_code& ec, stream& s,
+    virtual asio_server_response* push_promise(boost::system::error_code& ec, asio_server_stream& s,
                                    std::string method, std::string raw_path_query,
                                    header_map h) = 0;
 
@@ -66,11 +67,11 @@ public:
 
     virtual void signal_write() = 0;
 
-    stream* create_stream(int32_t stream_id);
+    asio_server_stream* create_stream(int32_t stream_id);
 
     void close_stream(int32_t stream_id);
 
-    stream* find_stream(int32_t stream_id);
+    asio_server_stream* find_stream(int32_t stream_id);
 
     void enter_callback();
 
@@ -89,7 +90,7 @@ public:
     uint64_t get_handler_id();
 
 protected:
-    std::map<int32_t, std::shared_ptr<stream>> streams_;
+    std::map<int32_t, std::shared_ptr<asio_server_stream>> streams_;
     connection_write writefun_;
     serve_mux& mux_;
     boost::asio::io_service& io_service_;

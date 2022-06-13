@@ -133,7 +133,7 @@ void server::start_accept(boost::asio::ssl::context &tls_context,
     return;
   }
 
-  auto new_connection = std::make_shared<connection<ssl_socket>>(
+  auto new_connection = std::make_shared<asio_server_connection<ssl_socket>>(
       mux, tls_handshake_timeout_, read_timeout_,
       io_service_pool_.get_io_service(), tls_context);
 
@@ -175,7 +175,7 @@ void server::start_accept(tcp::acceptor &acceptor, serve_mux &mux) {
     return;
   }
 
-  auto new_connection = std::make_shared<connection<tcp::socket>>(
+  auto new_connection = std::make_shared<asio_server_connection<tcp::socket>>(
       mux, tls_handshake_timeout_, read_timeout_,
       io_service_pool_.get_io_service());
 

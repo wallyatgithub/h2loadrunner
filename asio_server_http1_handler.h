@@ -23,7 +23,7 @@ namespace asio_http2
 namespace server
 {
 
-class stream;
+class asio_server_stream;
 class serve_mux;
 
 class http1_handler : public std::enable_shared_from_this<http1_handler>, public base_handler
@@ -36,21 +36,21 @@ public:
 
     ~http1_handler();
 
-    void call_on_request(stream& s);
+    void call_on_request(asio_server_stream& s);
 
     virtual int start();
 
     virtual bool should_stop() const;
 
-    virtual int start_response(stream& s);
+    virtual int start_response(asio_server_stream& s);
 
-    virtual int submit_trailer(stream& s, header_map h);
+    virtual int submit_trailer(asio_server_stream& s, header_map h);
 
     virtual void stream_error(int32_t stream_id, uint32_t error_code);
 
-    virtual void resume(stream& s);
+    virtual void resume(asio_server_stream& s);
 
-    virtual response* push_promise(boost::system::error_code& ec, stream& s,
+    virtual asio_server_response* push_promise(boost::system::error_code& ec, asio_server_stream& s,
                                    std::string method, std::string raw_path_query,
                                    header_map h);
 

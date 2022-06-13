@@ -69,12 +69,12 @@ namespace server {
 
 /// Represents a single connection from a client.
 template <typename socket_type>
-class connection : public std::enable_shared_from_this<connection<socket_type>>,
+class asio_server_connection : public std::enable_shared_from_this<asio_server_connection<socket_type>>,
                    private boost::noncopyable {
 public:
   /// Construct a connection with the given io_service.
   template <typename... SocketArgs>
-  explicit connection(
+  explicit asio_server_connection(
       serve_mux &mux,
       const boost::posix_time::time_duration &tls_handshake_timeout,
       const boost::posix_time::time_duration &read_timeout,
@@ -124,13 +124,13 @@ public:
   void start_tls_handshake_deadline() {
     deadline_.expires_from_now(tls_handshake_timeout_);
     deadline_.async_wait(
-        std::bind(&connection::handle_deadline, this->shared_from_this()));
+        std::bind(&asio_server_connection::handle_deadline, this->shared_from_this()));
   }
 
   void start_read_deadline() {
     deadline_.expires_from_now(read_timeout_);
     deadline_.async_wait(
-        std::bind(&connection::handle_deadline, this->shared_from_this()));
+        std::bind(&asio_server_connection::handle_deadline, this->shared_from_this()));
   }
 
   void handle_deadline() {
@@ -146,7 +146,7 @@ public:
     }
 
     deadline_.async_wait(
-        std::bind(&connection::handle_deadline, this->shared_from_this()));
+        std::bind(&asio_server_connection::handle_deadline, this->shared_from_this()));
   }
 
   void do_read() {

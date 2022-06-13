@@ -1536,8 +1536,8 @@ void integrated_http2_server(std::stringstream& dataStream, h2load::Config& conf
     nghttp2::asio_http2::server::http2 server(config_schema);
     boost::system::error_code ec;
     server.num_threads(1);
-    server.handle("/stat", [&](const nghttp2::asio_http2::server::request & req,
-                               const nghttp2::asio_http2::server::response & res,
+    server.handle("/stat", [&](const nghttp2::asio_http2::server::asio_server_request & req,
+                               nghttp2::asio_http2::server::asio_server_response & res,
                                uint64_t handler_id, int32_t stream_id)
     {
         nghttp2::asio_http2::header_map headers;
@@ -1549,8 +1549,8 @@ void integrated_http2_server(std::stringstream& dataStream, h2load::Config& conf
         res.write_head(200, std::move(headers));
         res.end(payload);
     });
-    server.handle("/config", [&](const nghttp2::asio_http2::server::request & req,
-                                 const nghttp2::asio_http2::server::response & res,
+    server.handle("/config", [&](const nghttp2::asio_http2::server::asio_server_request & req,
+                                 nghttp2::asio_http2::server::asio_server_response & res,
                                  uint64_t handler_id, int32_t stream_id)
     {
         std::string raw_query = req.uri().raw_query;
