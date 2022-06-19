@@ -323,6 +323,7 @@ int http1_handler::on_write(std::vector<uint8_t>& buffer, std::size_t& len)
         
         auto strm = find_stream(stream_id);
         auto& res = strm->response();
+        auto& req = strm->request();
         auto& headers = res.header();
         auto inc_buffer_size = [inc_step](std::vector<uint8_t>& buffer, size_t required_size)
         {
@@ -400,12 +401,18 @@ int http1_handler::on_write(std::vector<uint8_t>& buffer, std::size_t& len)
         data_len += crlf.size();
 
 
-        uint32_t data_flag = 0;
-        data_len += res.call_read(&buffer[data_len], buffer.size() - data_len, &data_flag);
-        while (!(data_flag & NGHTTP2_DATA_FLAG_EOF))
+        if (::nghttp2::http2::expect_response_body(req.method(), res.status_code()))
         {
-            inc_buffer_size(buffer, inc_step);
-            data_len += res.call_read(&buffer[data_len] + data_len, buffer.size() - data_len, &data_flag);
+            uint32_t data_flag = 0;
+            data_len += res.call_read(&buffer[data_len], buffer.size() - data_len, &data_flag);
+            if (!(data_flag & NGHTTP2_ERR_DEFERRED))
+            {
+                while (!(data_flag & NGHTTP2_DATA_FLAG_EOF))
+                {
+                    inc_buffer_size(buffer, inc_step);
+                    data_len += res.call_read(&buffer[data_len] + data_len, buffer.size() - data_len, &data_flag);
+                }
+            }
         }
         close_stream(stream_id);
     }
