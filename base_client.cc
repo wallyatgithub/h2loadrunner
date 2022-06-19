@@ -996,9 +996,10 @@ void base_client::parse_and_save_cookies(Request_Data& finished_request)
 {
     for (auto& header_map : finished_request.resp_headers)
     {
-        if (header_map.find("Set-Cookie") != header_map.end())
+        auto iter = header_map.find("Set-Cookie");
+        if (iter != header_map.end())
         {
-            auto new_cookies = Cookie::parse_cookie_string(header_map["Set-Cookie"],
+            auto new_cookies = Cookie::parse_cookie_string(iter->second,
                                                            *finished_request.authority, *finished_request.schema);
             for (auto& cookie : new_cookies)
             {
