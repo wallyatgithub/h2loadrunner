@@ -141,6 +141,10 @@ void server::start_accept(boost::asio::ssl::context &tls_context,
       new_connection->socket().lowest_layer(),
       [this, &tls_context, &acceptor, &mux,
        new_connection](const boost::system::error_code &e) {
+        if (e == boost::asio::error::no_descriptors) {
+          std::cerr<<"too many sockets opened, please check ulimt -n setting"<<std::endl;
+          return;
+        }
         if (!e) {
           new_connection->socket().lowest_layer().set_option(
               tcp::no_delay(true));
@@ -182,6 +186,11 @@ void server::start_accept(tcp::acceptor &acceptor, serve_mux &mux) {
   acceptor.async_accept(
       new_connection->socket(), [this, &acceptor, &mux, new_connection](
                                     const boost::system::error_code &e) {
+        if (e == boost::asio::error::no_descriptors) {
+          std::cerr<<"too many sockets opened, please check ulimt -n setting"<<std::endl;
+          return;
+        }
+
         if (!e) {
           new_connection->socket().set_option(tcp::no_delay(true));
           boost::asio::socket_base::receive_buffer_size rcv_option(config.skt_recv_buffer_size);

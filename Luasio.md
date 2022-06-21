@@ -1,3 +1,4 @@
+
 # Luasio: A cross-platform high-performance web platform
 
 
@@ -82,3 +83,4 @@ Once the response from nUDR is received, Luasio will resume the exact coroutine 
     send_response(response_addr, udm_resp_header, table.concat(multiple_dataset_get_resp_amdata))
 
 ## Siloed threading model with best scalability
+**Luasio** starts independent worker threads to listen and accept incoming connections. Each worker thread has a partner thread to originate outgoing connections. This worker thread for incoming connection and the partner thread for outgoing connection is a pair. Each pair is independent from each other, and this makes **Luasio** capacity is linearly scalable on multi-core machines.
