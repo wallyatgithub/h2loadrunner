@@ -126,6 +126,41 @@ boost::system::error_code server::bind_and_listen(boost::system::error_code &ec,
   return ec;
 }
 
+void server::reset_acceptor(tcp::acceptor &acceptor, std::function<void(void)> start_accept)
+{
+    if (!delayed_accept_timer.count(&acceptor))
+    {
+        boost::asio::deadline_timer timer(GET_IO_SERVICE(acceptor));
+        timer.expires_from_now(boost::posix_time::millisec(100));
+        timer.async_wait
+        (
+            [this, &acceptor, start_accept](const boost::system::error_code & ec)
+            {
+                auto endpoint = acceptor.local_endpoint();
+                acceptor.close();
+
+                boost::system::error_code errorCode;
+                if (acceptor.open(endpoint.protocol(), errorCode))
+                {
+                    return;
+                }
+
+                acceptor.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
+
+                if (acceptor.bind(endpoint, errorCode))
+                {
+                    return;
+                }
+
+                acceptor.listen(boost::asio::socket_base::max_connections);
+                delayed_accept_timer.erase(&acceptor);
+                start_accept();
+            }
+        );
+        delayed_accept_timer.insert(std::make_pair(&acceptor, std::move(timer)));
+    }
+}
+
 void server::start_accept(boost::asio::ssl::context &tls_context,
                           tcp::acceptor &acceptor, serve_mux &mux) {
 
@@ -141,10 +176,6 @@ void server::start_accept(boost::asio::ssl::context &tls_context,
       new_connection->socket().lowest_layer(),
       [this, &tls_context, &acceptor, &mux,
        new_connection](const boost::system::error_code &e) {
-        if (e == boost::asio::error::no_descriptors) {
-          std::cerr<<"too many sockets opened, please check ulimt -n setting"<<std::endl;
-          return;
-        }
         if (!e) {
           new_connection->socket().lowest_layer().set_option(
               tcp::no_delay(true));
@@ -168,6 +199,11 @@ void server::start_accept(boost::asio::ssl::context &tls_context,
                 new_connection->start(conf, proto);
               });
         }
+        if (e == boost::asio::error::no_descriptors) {
+          std::cerr<<"too many sockets opened, please check ulimt -n setting"<<std::endl;
+          reset_acceptor(acceptor, [this, &tls_context, &acceptor, &mux](){start_accept(tls_context, acceptor, mux);});
+          return;
+        }
 
         start_accept(tls_context, acceptor, mux);
       });
@@ -186,11 +222,6 @@ void server::start_accept(tcp::acceptor &acceptor, serve_mux &mux) {
   acceptor.async_accept(
       new_connection->socket(), [this, &acceptor, &mux, new_connection](
                                     const boost::system::error_code &e) {
-        if (e == boost::asio::error::no_descriptors) {
-          std::cerr<<"too many sockets opened, please check ulimt -n setting"<<std::endl;
-          return;
-        }
-
         if (!e) {
           new_connection->socket().set_option(tcp::no_delay(true));
           boost::asio::socket_base::receive_buffer_size rcv_option(config.skt_recv_buffer_size);
@@ -199,6 +230,11 @@ void server::start_accept(tcp::acceptor &acceptor, serve_mux &mux) {
           new_connection->socket().set_option(snd_option);
           new_connection->start_read_deadline();
           new_connection->start(config, config.no_tls_proto_enum);
+        }
+        if (e == boost::asio::error::no_descriptors) {
+          std::cerr<<"too many sockets opened, please check ulimt -n setting"<<std::endl;
+          reset_acceptor(acceptor, [this, &acceptor, &mux](){start_accept(acceptor, mux);});
+          return;
         }
         if (acceptor.is_open()) {
           start_accept(acceptor, mux);

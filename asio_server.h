@@ -41,6 +41,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include <memory>
 
 #include <boost/noncopyable.hpp>
@@ -97,12 +98,15 @@ private:
                                             const std::string &port,
                                             int backlog);
 
+  void reset_acceptor(tcp::acceptor &acceptor, std::function<void(void)> start_accept);
+
   /// The pool of io_service objects used to perform asynchronous
   /// operations.
   io_service_pool io_service_pool_;
 
   /// Acceptor used to listen for incoming connections.
   std::vector<tcp::acceptor> acceptors_;
+  std::map<tcp::acceptor*, boost::asio::deadline_timer> delayed_accept_timer;
 
   std::unique_ptr<boost::asio::ssl::context> ssl_ctx_;
 
