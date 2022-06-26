@@ -44,14 +44,14 @@ io_service_pool::io_service_pool(std::size_t pool_size) : next_io_service_(0) {
     throw std::runtime_error("io_service_pool size is 0");
   }
 
-  // Give all the io_services work to do so that their run() functions will not
-  // exit until they are explicitly stopped.
-  for (std::size_t i = 0; i < pool_size; ++i) {
+  // add an additional io_service for listener thread
+  for (std::size_t i = 0; i < pool_size + 1; ++i) {
     auto io_service = std::make_shared<boost::asio::io_service>();
     auto work = std::make_shared<boost::asio::io_service::work>(*io_service);
     io_services_.push_back(io_service);
     work_.push_back(work);
   }
+  next_io_service_ = 1; // starting from 1 to skip the listener thread
 }
 
 void io_service_pool::run(bool asynchronous) {
@@ -92,7 +92,7 @@ boost::asio::io_service &io_service_pool::get_io_service() {
   auto &io_service = *io_services_[next_io_service_];
   ++next_io_service_;
   if (next_io_service_ == io_services_.size()) {
-    next_io_service_ = 0;
+    next_io_service_ = 1;
   }
   return io_service;
 }

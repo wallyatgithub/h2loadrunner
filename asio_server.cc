@@ -85,7 +85,7 @@ boost::system::error_code server::bind_and_listen(boost::system::error_code &ec,
                                                   int backlog) {
   // Open the acceptor with the option to reuse the address (i.e.
   // SO_REUSEADDR).
-  tcp::resolver resolver(io_service_pool_.get_io_service());
+  tcp::resolver resolver(*io_service_pool_.io_services()[0]);
   tcp::resolver::query query(address, port);
   auto it = resolver.resolve(query, ec);
   if (ec) {
@@ -94,7 +94,7 @@ boost::system::error_code server::bind_and_listen(boost::system::error_code &ec,
 
   for (; it != tcp::resolver::iterator(); ++it) {
     tcp::endpoint endpoint = *it;
-    auto acceptor = tcp::acceptor(io_service_pool_.get_io_service());
+    auto acceptor = tcp::acceptor(*io_service_pool_.io_services()[0]);
 
     if (acceptor.open(endpoint.protocol(), ec)) {
       continue;
@@ -113,6 +113,9 @@ boost::system::error_code server::bind_and_listen(boost::system::error_code &ec,
     }
 
     acceptors_.push_back(std::move(acceptor));
+    boost::asio::deadline_timer timer(GET_IO_SERVICE(acceptor));
+    timer.expires_from_now(boost::posix_time::millisec(-100));
+    delayed_accept_timer.insert(std::make_pair(&acceptor, std::move(timer)));
   }
 
   if (acceptors_.empty()) {
@@ -128,36 +131,18 @@ boost::system::error_code server::bind_and_listen(boost::system::error_code &ec,
 
 void server::reset_acceptor(tcp::acceptor &acceptor, std::function<void(void)> start_accept)
 {
-    if (!delayed_accept_timer.count(&acceptor))
+    auto timer = delayed_accept_timer.find(&acceptor);
+    if (timer != delayed_accept_timer.end() && timer->second.expires_from_now() < boost::posix_time::millisec(0))
     {
-        boost::asio::deadline_timer timer(GET_IO_SERVICE(acceptor));
-        timer.expires_from_now(boost::posix_time::millisec(100));
-        timer.async_wait
+        timer->second.expires_from_now(boost::posix_time::millisec(100));
+        timer->second.async_wait
         (
-            [this, &acceptor, start_accept](const boost::system::error_code & ec)
+            [start_accept](const boost::system::error_code & ec)
             {
-                auto endpoint = acceptor.local_endpoint();
-                acceptor.close();
-
-                boost::system::error_code errorCode;
-                if (acceptor.open(endpoint.protocol(), errorCode))
-                {
-                    return;
-                }
-
-                acceptor.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
-
-                if (acceptor.bind(endpoint, errorCode))
-                {
-                    return;
-                }
-
-                acceptor.listen(boost::asio::socket_base::max_connections);
-                delayed_accept_timer.erase(&acceptor);
                 start_accept();
             }
         );
-        delayed_accept_timer.insert(std::make_pair(&acceptor, std::move(timer)));
+
     }
 }
 

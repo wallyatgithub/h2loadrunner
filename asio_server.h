@@ -106,7 +106,7 @@ private:
 
   /// Acceptor used to listen for incoming connections.
   std::vector<tcp::acceptor> acceptors_;
-  std::map<tcp::acceptor*, boost::asio::deadline_timer> delayed_accept_timer;
+  std::map<void*, boost::asio::deadline_timer> delayed_accept_timer;
 
   std::unique_ptr<boost::asio::ssl::context> ssl_ctx_;
 
