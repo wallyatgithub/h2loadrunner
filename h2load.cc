@@ -1251,7 +1251,16 @@ int main(int argc, char** argv)
 
     for (auto& fut : futures)
     {
-        fut.get();
+        try
+        {
+            fut.get();
+        }
+        catch(const std::exception& e)
+        {
+            std::cerr << " caught exception " << e.what()
+                      << ", future.valid() == " << fut.valid() << "\n";
+        }
+
     }
     workers_stopped = true;
 

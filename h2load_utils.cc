@@ -1372,6 +1372,12 @@ void post_process_json_config_schema(h2load::Config& config)
             scenario.variable_range_start = 0;
             scenario.variable_range_end = scenario.user_ids.size();
         }
+        if (scenario.variable_range_end < scenario.variable_range_start)
+        {
+            std::cerr << "scenario " << scenario.name <<" user id range end "<<scenario.variable_range_end
+                      <<" is smaller than range start "<<scenario.variable_range_start<<std::endl;
+            abort();
+        }
         for (auto& request : scenario.requests)
         {
             auto iter = uri_action_map.find(request.uri.typeOfAction);
