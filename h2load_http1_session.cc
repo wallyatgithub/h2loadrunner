@@ -269,6 +269,7 @@ int Http1Session::on_read(const uint8_t* data, size_t len)
     if (config->verbose)
     {
         std::cout.write(reinterpret_cast<const char*>(data), len);
+        std::cout<<std::endl;
     }
 
     auto htperr =
