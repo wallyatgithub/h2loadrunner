@@ -445,6 +445,7 @@ int Http1Session::_on_write()
         if (config->verbose)
         {
             std::cout << "[send " << send_size << " byte(s)]" << std::endl;
+            std::cout << "[send data: " << std::string(stream_buffer.c_str(), send_size) << std::endl;
         }
 
         if (send_size < stream_buffer.size())
