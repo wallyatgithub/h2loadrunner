@@ -184,6 +184,13 @@ void server::start_accept(boost::asio::ssl::context &tls_context,
                 new_connection->start(conf, proto);
               });
         }
+        if (e)
+        {
+            if (config.verbose)
+            {
+                std::cerr<<"error during accept:"<<e<<std::endl;
+            }
+        }
         if (e == boost::asio::error::no_descriptors) {
           std::cerr<<"too many sockets opened, please check ulimt -n setting"<<std::endl;
           reset_acceptor(acceptor, [this, &tls_context, &acceptor, &mux](){start_accept(tls_context, acceptor, mux);});

@@ -154,7 +154,9 @@ void asio_client_connection::stop_timing_script_request_timeout_timer()
 
 void asio_client_connection::start_connect_timeout_timer()
 {
-    connect_timer.expires_from_now(boost::posix_time::seconds(2));
+    // set a longer timeout if too many connections are to be established
+    uint32_t timeout = (config->nclients / 1000) + 2;
+    connect_timer.expires_from_now(boost::posix_time::seconds(timeout));
     connect_timer.async_wait
     (
         [this](const boost::system::error_code & ec)

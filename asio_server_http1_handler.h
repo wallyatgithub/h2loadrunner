@@ -66,7 +66,7 @@ public:
     std::string schema;
     std::string host;
     std::string port;
-    bool should_keep_alive = false;
+    bool should_keep_alive = true;
     std::string curr_header_name;
     std::set<uint32_t> stream_ids_to_respond;
 
