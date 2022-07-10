@@ -113,8 +113,8 @@ Config config;
 
 namespace
 {
-constexpr size_t MAX_SAMPLES = 1000000;
-constexpr size_t MAX_SAMPLES_PER_THREAD = 10240;
+constexpr size_t MAX_SAMPLES = 100000;
+constexpr size_t MAX_SAMPLES_PER_THREAD = 10000;
 
 } // namespace
 
