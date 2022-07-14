@@ -85,11 +85,16 @@ Once the response from nUDR is received, Luasio will resume the exact coroutine 
 ## APIs offered by **Luasio**
 
 Data types of common variables used next:
-request_header/response_header: a map with string as the key, and string as the value
-request_payload/response_payload: a string
-client_id: integer
-stream_id: integer
-timeout: an integer in millisecond
+
+- request_header/response_header: a map with string as the key, and string as the value
+
+- request_payload/response_payload: a string
+
+- client_id: integer
+
+- stream_id: integer
+
+- timeout: an integer in millisecond
 
 **send_http_request_and_await_response**
 response_header, response_payload = send_http_request_and_await_response(request_header, request_payload, timeout)
@@ -132,4 +137,5 @@ It takes 2 arguments, the host name which is a string, and the ttl which is an i
 
 ## How to run Luasio
 As mentioned at the beginning, Luasio is the program mode of h2loadrunner; so once you have prepared your script, just run the script with h2loadrunner:
-./h2loadrunner --script=your_script.lua
+
+	./h2loadrunner --script=your_script.lua
