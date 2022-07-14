@@ -98,23 +98,24 @@ Data types of common variables used next:
 
 **send_http_request_and_await_response**
 
-response_header, response_payload = send_http_request_and_await_response(request_header, request_payload, timeout)
+    response_header, response_payload = send_http_request_and_await_response(request_header, request_payload, timeout)
 
 timeout is to specify how long this function should wait for the response before returning
 
 **send_http_request**
 
-client_id, stream_id = send_http_request((request_header, request_payload)
+    client_id, stream_id = send_http_request(request_header, request_payload)
 
 client id and stream id can be pass to **await_response** after a call to **send_http_request**
 
 **await_response**
 
-response_header, response_payload = await_response(client_id, stream_id)
+    response_header, response_payload = await_response(client_id, stream_id)
 
 **sleep_for_ms**
 
-sleep_for_ms(timeout)
+    sleep_for_ms(timeout)
+
 sleep for millisecond specified by timeout
 
 **time_since_epoch**
@@ -138,8 +139,10 @@ send_response takes 3 arguments, the response_address mentioned above, the respo
 
 **stop_server**
 
+    stop_server(server_id_which_is_returned_from_start_server)
+
 Stop server specified by the server id
-stop_server(server_id_which_is_returned_from_start_server)
+
 
 **resolve_hostname**
 
