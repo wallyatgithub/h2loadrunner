@@ -635,6 +635,10 @@ int levenshtein(const char* a, int alen, const char* b, int blen, int swapcost,
 
 void show_candidates(const char* unkopt, const option* options)
 {
+    if (!unkopt || !options)
+    {
+        return;
+    }
     for (; *unkopt == '-'; ++unkopt)
         ;
     if (*unkopt == '\0')

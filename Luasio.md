@@ -3,7 +3,7 @@
 
 
 ## What is Luasio？
-**Luasio** is a web platform built with ASIO; it is written in C++, and is **truly** cross-platform, with best-in-class performance on every popular OS, including Linux, Windows, Mac OS, FreeBSD, etc.
+**Luasio** is the program mode of h2loadrunner, and it is a web platform built with ASIO; it is written in C++, and is **truly** cross-platform, with best-in-class performance on every popular OS, including Linux, Windows, Mac OS, FreeBSD, etc.
 
 Luasio has a built-in web server engine that supports both http1.1 and http2 with very advanced routing pattern, which can match an incoming http message based on its path, method, authority (host part), any other arbitrary header, and the message body content, as well as their combinations.
 
@@ -29,7 +29,7 @@ Luasio uses Lua, because Lua provides a very simple programing interface to mana
 ## How to use Luasio
 Write a piece of Lua script, to start a web server listening at some port; meanwhile, provide a configuration file in Json to define the route pattern to match, as well as a function for Luasio to call when a match of the incoming request is found.
 
-Luasio would start a web server at the given port, and inspect every incoming http1 or http2 request from the client, to find a match with the pattern defined; once a match is found, Luaasio would call the function above.
+Luasio would start a web server at the given port, and inspect every incoming http1 or http2 request from the client, to find a match with the pattern defined; once a match is found, Luasio would call the function above.
 
 The function is able to see every header and the message body of the matched request; it can choose to generate the response and send back the response immediately.
 
@@ -82,5 +82,54 @@ Once the response from nUDR is received, Luasio will resume the exact coroutine 
     
     send_response(response_addr, udm_resp_header, table.concat(multiple_dataset_get_resp_amdata))
 
-## Siloed threading model with best scalability
-**Luasio** starts independent worker threads to listen and accept incoming connections. Each worker thread has a partner thread to originate outgoing connections. This worker thread for incoming connection and the partner thread for outgoing connection is a pair. Each pair is independent from each other, and this makes **Luasio** capacity is linearly scalable on multi-core machines.
+## APIs offered by **Luasio**
+
+Data types of common variables used next:
+request_header/response_header: a map with string as the key, and string as the value
+request_payload/response_payload: a string
+client_id: integer
+stream_id: integer
+timeout: an integer in millisecond
+
+**send_http_request_and_await_response**
+response_header, response_payload = send_http_request_and_await_response(request_header, request_payload, timeout)
+
+timeout is to specify how long this function should wait for the response before returning
+
+**send_http_request**
+client_id, stream_id = send_http_request((request_header, request_payload)
+
+client id and stream id can be pass to **await_response** after a call to **send_http_request**
+
+**await_response**
+response_header, response_payload = await_response(client_id, stream_id)
+
+**sleep_for_ms**
+sleep_for_ms(timeout)
+sleep for millisecond specified by timeout
+
+**time_since_epoch**
+time_since_epoch takes no argument, but it returns the milliseconds since the clock's epoch (may NOT necessarily to be 1970)
+
+**start_server**
+start_server takes 1 argument which is the config file name (the Json configuration , say maock.json, prepared in this way: https://github.com/wallyatgithub/maock#how-maock-works--usage) for the server, and it returns a string which is the server id.
+
+**register_service_handler**
+register_service_handler takes 4 arguments: the server id; the request name specified in the Json configuration above; a function name which is the request processor, that would be called when the request specified right before enters the server; and a last argument which is a interger, to specify the parallel connections to the same upstream host (if you may originate outgoing connection in the request processor).
+
+the request processor takes 3 arguments: response_address which is a table (don't modify this table) and would be used by send_response next, request_header, request_payload
+
+**send_response**
+send_response takes 3 arguments, the response_address mentioned above, the response_header, the response_payload
+
+
+**stop_server**
+stop server specified by the server id
+stop_server(server_id_which_is_returned_from_start_server)
+
+**resolve_hostname**
+It takes 2 arguments, the host name which is a string, and the ttl which is an integer. It returns a table with interger as the key and string as the value, each value is a resolved address. The ttl is in milliseconds, it specifies the interval Luasio would cache the resolution result, i.e., a next call to resolve_hostname within ttl, would return the previous resolution result directly.
+
+## How to run Luasio
+As mentioned at the beginning, Luasio is the program mode of h2loadrunner; so once you have prepared your script, just run the script with h2loadrunner:
+./h2loadrunner --script=your_script.lua
