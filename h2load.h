@@ -54,6 +54,11 @@ static std::string emptyString;
 
 class base_client;
 
+struct Scenario_Data
+{
+    std::map<std::string, std::string> user_varibles;
+};
+
 struct Request_Data
 {
     std::string* schema;
@@ -77,6 +82,7 @@ struct Request_Data
     std::vector<std::string> string_collection;
     std::function<void(int32_t, h2load::base_client*)> request_sent_callback;
     uint32_t stream_timeout_in_ms;
+    Scenario_Data scenario_data;
     explicit Request_Data():
         schema(&emptyString),
         authority(&emptyString),

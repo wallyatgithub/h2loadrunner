@@ -65,7 +65,7 @@ public:
                 reg_exp.assign(object, std::regex_constants::ECMAScript|std::regex_constants::optimize);
             }
         }
-        catch (std::regex_error e)
+        catch (std::regex_error& e)
         {
             std::cerr<<"invalid reg exp: "<<object<<" reason: "<<e.what()<<std::endl;
         }
@@ -83,7 +83,7 @@ public:
                 reg_exp.assign(object, std::regex_constants::ECMAScript|std::regex_constants::optimize);
             }
         }
-        catch (std::regex_error e)
+        catch (std::regex_error& e)
         {
             std::cerr<<"invalid reg exp: "<<object<<" "<<e.what()<<std::endl;
         }

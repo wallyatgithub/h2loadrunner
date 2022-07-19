@@ -195,6 +195,8 @@ public:
     void pass_response_to_lua(int32_t stream_id, lua_State *L);
     uint64_t get_client_unique_id();
     void set_prefered_authority(const std::string& authority);
+    void run_post_response_action(Request_Data& finished_request);
+    void run_pre_request_action(Request_Data& new_request);
 
     base_worker* worker;
     ClientStat cstat;

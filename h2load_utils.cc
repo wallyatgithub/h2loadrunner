@@ -1450,6 +1450,17 @@ void post_process_json_config_schema(h2load::Config& config)
             {
                 request.response_match_rules.emplace_back(Match_Rule(schema_payload_match));
             }
+            for (auto& response_value_regex_picker: request.response_value_regex_pickers)
+            {
+                if (response_value_regex_picker.where_to_pickup_from.empty() ||
+                     response_value_regex_picker.source.empty() ||
+                     response_value_regex_picker.picker_regexp.empty() ||
+                     response_value_regex_picker.save_to_variable_name.empty())
+                {
+                    continue;
+                }
+                request.actual_regex_value_pickers.emplace_back(Regex_Picker(response_value_regex_picker));
+            }
             if (request.luaScript.size())
             {
                 lua_State* L = luaL_newstate();

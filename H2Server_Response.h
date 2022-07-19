@@ -313,7 +313,7 @@ public:
             {
                 reg_exp.assign(payload_argument.regex, std::regex_constants::ECMAScript|std::regex_constants::optimize);
             }
-            catch (std::regex_error e)
+            catch (std::regex_error& e)
             {
                 std::cerr<<"invalid reg exp: "<<payload_argument.regex<<" "<<e.what()<<std::endl;
             }

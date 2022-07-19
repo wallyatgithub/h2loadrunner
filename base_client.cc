@@ -849,6 +849,117 @@ void base_client::record_client_end_time()
     cstat.client_end_time = std::chrono::steady_clock::now();
 }
 
+void base_client::run_post_response_action(Request_Data& finished_request)
+{
+    auto& actual_regex_value_pickers =
+        config->json_config_schema.scenarios
+        [finished_request.scenario_index].requests[finished_request.curr_request_idx].actual_regex_value_pickers;
+    rapidjson::Document req_json_payload;
+    rapidjson::Document resp_json_payload;
+    bool req_json_decoded = false;
+    bool resp_json_decoded = false;
+    for (auto& value_picker: actual_regex_value_pickers)
+    {
+        std::string result;
+        std::string source;
+        switch (value_picker.where_to_pick_up_from)
+        {
+            case SOURCE_TYPE_RES_HEADER:
+            {
+                for (auto& header_map: finished_request.resp_headers)
+                {
+                    auto iter = header_map.find(value_picker.source);
+                    if (iter != header_map.end())
+                    {
+                        source = iter->second;
+                        break;
+                    }
+                }
+                break;
+            }
+            case SOURCE_TYPE_REQ_HEADER:
+            {
+                auto iter = finished_request.req_headers_of_individual.find(value_picker.source);
+                if (iter != finished_request.req_headers_of_individual.end())
+                {
+                    source = iter->second;
+                    break;
+                }
+                iter = finished_request.req_headers_from_config->find(value_picker.source);
+                if (iter != finished_request.req_headers_from_config->end())
+                {
+                    source = iter->second;
+                    break;
+                }
+                if (source == path_header_name)
+                {
+                    source = *finished_request.path;
+                    break;
+                }
+                if (source == scheme_header_name)
+                {
+                    source = *finished_request.schema;
+                    break;
+                }
+                if (source == method_header_name)
+                {
+                    source = *finished_request.method;
+                    break;
+                }
+                if (source == authority_header_name)
+                {
+                    source = *finished_request.authority;
+                    break;
+                }
+                break;
+            }
+            case SOURCE_TYPE_REQ_POINTER:
+            {
+                if (!req_json_decoded)
+                {
+                    req_json_payload.Parse(finished_request.req_payload->c_str());
+                    req_json_decoded = true;
+                }
+                source = getValueFromJsonPtr(req_json_payload, value_picker.source);
+            }
+            case SOURCE_TYPE_RES_POINTER:
+            {
+                if (!resp_json_decoded)
+                {
+                    resp_json_payload.Parse(finished_request.resp_payload.c_str());
+                    resp_json_decoded = true;
+                }
+                source = getValueFromJsonPtr(resp_json_payload, value_picker.source);
+            }
+            default:
+            {
+            }
+        }
+        std::smatch match_result;
+        if (std::regex_search(source, match_result, value_picker.picker_regexp))
+        {
+            result = match_result[0];
+        }
+        else
+        {
+            result.clear();
+        }
+        finished_request.scenario_data.user_varibles[value_picker.variable_name] = result;
+    }
+    if (config->verbose)
+    {
+        for (auto& var: finished_request.scenario_data.user_varibles)
+        {
+            std::cout<<"variable name = "<<var.first<<", value = "<<var.second<<std::endl;
+        }
+    }
+}
+
+void base_client::run_pre_request_action(Request_Data& new_request)
+{
+
+}
+
 bool base_client::prepare_next_request(Request_Data& finished_request)
 {
     size_t scenario_index = finished_request.scenario_index;
@@ -860,8 +971,10 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
         return false;
     }
 
+    run_post_response_action(finished_request);
 
     Request_Data new_request;
+    new_request.scenario_data = std::move(finished_request.scenario_data);
     new_request.scenario_index = scenario_index;
     new_request.curr_request_idx = curr_index;
 
@@ -967,6 +1080,8 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
         move_cookies_to_new_request(finished_request, new_request);
         produce_request_cookie_header(new_request);
     }
+
+    run_pre_request_action(new_request);
 
     if (request_template.luaScript.size())
     {

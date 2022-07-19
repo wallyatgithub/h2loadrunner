@@ -24,6 +24,16 @@ const std::string from_lua_script = "fromLuaScript";
 const std::string from_x_path = "fromXPath";
 const std::string from_json_pointer = "fromJsonPointer";
 
+const std::string request_header = "Request-Header";
+const std::string response_header = "Response-Header";
+const std::string json_ptr_of_req_payload = "Json-Pointer-In-Request-Payload";
+const std::string json_ptr_of_resp_payload = "Json-Pointer-In-Response-Payload";
+
+const std::string path_header_name = ":path";
+const std::string scheme_header_name = ":scheme";
+const std::string authority_header_name = ":authority";
+const std::string method_header_name = ":method";
+
 enum URI_ACTION
 {
     INPUT_URI = 0,
@@ -34,6 +44,22 @@ enum URI_ACTION
     FROM_JSON_POINTER
 };
 
+enum VALUE_SOURCE_TYPE
+{
+    SOURCE_TYPE_REQ_HEADER = 0,
+    SOURCE_TYPE_REQ_POINTER,
+    SOURCE_TYPE_RES_HEADER,
+    SOURCE_TYPE_RES_POINTER
+};
+
+const std::map<std::string, VALUE_SOURCE_TYPE> value_pickup_action_map =
+{
+    {request_header, SOURCE_TYPE_REQ_HEADER},
+    {response_header, SOURCE_TYPE_REQ_POINTER},
+    {json_ptr_of_req_payload, SOURCE_TYPE_RES_HEADER},
+    {json_ptr_of_resp_payload, SOURCE_TYPE_RES_POINTER}
+};
+
 const std::map<std::string, URI_ACTION> uri_action_map =
 {
     {input_uri, INPUT_URI},
@@ -41,7 +67,7 @@ const std::map<std::string, URI_ACTION> uri_action_map =
     {from_response_header, FROM_RESPONSE_HEADER},
     {from_lua_script, FROM_LUA_SCRIPT},
     {from_x_path, FROM_X_PATH},
-    {from_json_pointer, FROM_JSON_POINTER},
+    {from_json_pointer, FROM_JSON_POINTER}
 };
 
 class Uri
@@ -69,6 +95,57 @@ public:
     }
 };
 
+class Response_Value_Regex_Picker
+{
+public:
+    std::string where_to_pickup_from = response_header;
+    std::string source;
+    std::string picker_regexp;
+    std::string save_to_variable_name;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("where-to-pickup-from", &this->where_to_pickup_from);
+        h->add_property("source", &this->source);
+        h->add_property("regexp", &this->picker_regexp);
+        h->add_property("save-to-variable", &this->save_to_variable_name);
+    }
+};
+
+class Regex_Picker
+{
+public:
+    VALUE_SOURCE_TYPE where_to_pick_up_from = SOURCE_TYPE_RES_HEADER;
+    std::string source;
+    std::regex picker_regexp;
+    std::string variable_name;
+    Regex_Picker(const Response_Value_Regex_Picker& picker_schema)
+    {
+        auto iter = value_pickup_action_map.find(picker_schema.where_to_pickup_from);
+        if (iter == value_pickup_action_map.end())
+        {
+            std::cerr<<"invalid value: "<<picker_schema.where_to_pickup_from<<std::endl;
+            exit(1);
+        }
+        where_to_pick_up_from = iter->second;
+        source = picker_schema.source;
+        variable_name = picker_schema.save_to_variable_name;
+        try
+        {
+            picker_regexp.assign(picker_schema.picker_regexp, std::regex_constants::ECMAScript|std::regex_constants::optimize);
+        }
+        catch (std::regex_error& e)
+        {
+            std::cerr<<"invalid reg exp: "<<picker_schema.picker_regexp<<" reason: "<<e.what()<<std::endl;
+        }
+    }
+};
+
+struct String_With_Variables_In_Between
+{
+    std::vector<std::string> string_segments;
+    std::vector<std::string> variables_in_between;
+};
+
 class Request
 {
 public:
@@ -78,18 +155,21 @@ public:
     bool validate_response_function_present;
     std::string schema;
     std::string authority;
-    std::string path;
+    std::string path; // filled by post_process_json_config_schema
     Uri uri;
     std::string method;
     std::string payload;
     std::vector<std::string> additonalHeaders;
     uint32_t expected_status_code; // staticJson does not accept uint16_t
     Schema_Response_Match response_match;
-    std::vector<Match_Rule> response_match_rules;
+    std::vector<Match_Rule> response_match_rules; // filled by post_process_json_config_schema
     std::map<std::string, std::string, ci_less> headers_in_map;
     std::vector<std::string> tokenized_path;
     std::vector<std::string> tokenized_payload;
     uint32_t delay_before_executing_next;
+    std::vector<Response_Value_Regex_Picker> response_value_regex_pickers;
+    std::vector<Regex_Picker> actual_regex_value_pickers; // filled by post_process_json_config_schema
+
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("luaScript", &this->luaScript, staticjson::Flags::Optional);
@@ -101,6 +181,7 @@ public:
         h->add_property("expected-status-code", &this->expected_status_code, staticjson::Flags::Optional);
         h->add_property("delay-before-executing-next", &this->delay_before_executing_next, staticjson::Flags::Optional);
         h->add_property("response-match", &this->response_match, staticjson::Flags::Optional);
+        h->add_property("response-value-regex-pickers", &this->response_value_regex_pickers, staticjson::Flags::Optional);
     }
     explicit Request()
     {
