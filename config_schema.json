@@ -435,18 +435,18 @@
                     }
                   }
                 },
-                "response-value-regex-pickers":
+                "value-pickers":
                 {
-                  "description": "Using a regular expression to pick up a value, from a specific header, or from a value in the payload specified by a Json pointer, and then save the value to a variable whose name is given in save-to-variable; the stored value can be used later by wrapping the name of the variable with ${}, for example, pick up a value from the response header here, and store it to a variable named user_id, and then refer to this variable in a later request of the same scenario in this way: some_api_path/${user_id}, and ${user_id} would be replaced by the actual value stored here",
+                  "description": "This is the actions to run when the response is received; it is using a regular expression to pick up a value, from a specific header, or from a value in the payload specified by a Json pointer, and then save the value to a variable whose name is given in save-to-variable; the stored value can be used later by wrapping the name of the variable with ${}, for example, pick up a value from the response header here, and store it to a variable named user_id, and then refer to this variable in a later request of the same scenario in this way: some_api_path/${user_id}, and ${user_id} would be replaced by the actual value stored here",
                   "type": "array",
                   "items": {
                     "type": "object",
-                    "description": "One response-value-regex-picker",
+                    "description": "One value-picker",
                     "properties":{
                       "where-to-pickup-from": {
-                        "description": "where to pick up the value from",
+                        "description": "where to pick up the value from: from request header, request payload, response header, response payload",
                         "type":"string",
-			            "enum": ["Request-Header", "Response-Header", "Json-Pointer-In-Request-Payload", "Json-Pointer-In-Response-Payload"]
+			"enum": ["Request-Header", "Response-Header", "Json-Pointer-In-Request-Payload", "Json-Pointer-In-Response-Payload"]
                       },
                       "source": {
                         "type":"string",
@@ -457,7 +457,7 @@
                         "type":"string"
                       },
                       "save-to-variable": {
-                        "description": "A name of the varible into what the extracted value is saved to, and supposely this name would be refered to somewhere later to fetch the value",
+                        "description": "A name of the varible into what the extracted value is saved to, and supposely this name would be refered to somewhere later to fetch the value by wrapping the name with ${}",
                         "type":"string"
                       }
                     }

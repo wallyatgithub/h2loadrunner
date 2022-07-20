@@ -97,6 +97,8 @@ void insert_customized_headers_to_Json_scenarios(h2load::Config& config);
 
 void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config);
 
+void tokenize_path_and_payload_for_fast_var_replace_new(h2load::Config& config);
+
 std::string reassemble_str_with_variable(h2load::Config* config,
                                          size_t scenario_index,
                                          size_t request_index,
@@ -202,5 +204,13 @@ bool is_it_an_ipv6_address(const std::string& address);
 bool is_null_destination(h2load::Config& config);
 
 void process_delayed_scenario(h2load::Config& config);
+
+void split_string(const std::string& source, String_With_Variables_In_Between& result);
+
+std::string get_current_user_id_string(h2load::Config* config,
+                                         size_t scenario_index,
+                                         size_t request_index,
+                                         uint64_t variable_value);
+
 
 #endif

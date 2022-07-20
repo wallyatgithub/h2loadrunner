@@ -1141,7 +1141,10 @@ void base_client::populate_request_from_config_template(Request_Data& new_reques
                                                                             index_in_config_template,
                                                                             request_template.tokenized_payload,
                                                                             new_request.user_id));
+    //new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_payload_with_vars, new_request.scenario_data));
+
     new_request.req_payload = &(new_request.string_collection.back());
+
     new_request.req_headers_from_config = &request_template.headers_in_map;
     new_request.expected_status_code = request_template.expected_status_code;
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
@@ -2161,6 +2164,8 @@ Request_Data base_client::prepare_first_request()
     new_request.curr_request_idx = curr_index;
 
     new_request.user_id = controller->runtime_scenario_data[scenario_index].curr_req_variable_value;
+    new_request.scenario_data.user_varibles[config->json_config_schema.scenarios[scenario_index].variable_name_in_path_and_data] =
+    get_current_user_id_string(config, new_request.scenario_index, new_request.curr_request_idx, new_request.user_id);
     if (controller->runtime_scenario_data[scenario_index].req_variable_value_end)
     {
         controller->runtime_scenario_data[scenario_index].curr_req_variable_value++;
@@ -2180,6 +2185,9 @@ Request_Data base_client::prepare_first_request()
     new_request.string_collection.emplace_back(reassemble_str_with_variable(config, scenario_index, curr_index,
                                                                             request_template.tokenized_path,
                                                                             new_request.user_id));
+
+    //new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_payload_with_vars, new_request.scenario_data));
+
     new_request.path = &(new_request.string_collection.back());
 
     if (scenario.requests[curr_index].make_request_function_present)
@@ -2605,5 +2613,26 @@ void base_client::pass_response_to_lua(int32_t stream_id, lua_State* L)
         lua_resume_if_yielded(L, 3);
     }
 }
+
+std::string base_client::assemble_string(const String_With_Variables_In_Between& source, Scenario_Data& scenario_data)
+{
+    const std::string value_not_found = ": value_not_found";
+    std::stringstream outputStream;
+    for (size_t index = 0; index < source.variables_in_between.size(); index++)
+    {
+        outputStream<<source.string_segments[index];
+        auto iter = scenario_data.user_varibles.find(source.variables_in_between[index]);
+        if (iter != scenario_data.user_varibles.end())
+        {
+            outputStream<<iter->second;
+        }
+        else
+        {
+            outputStream<<source.variables_in_between[index]<<value_not_found;
+        }
+    }
+    return outputStream.str();
+}
+
 
 }

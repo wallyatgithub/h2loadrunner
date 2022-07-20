@@ -1143,6 +1143,7 @@ int main(int argc, char** argv)
     }
 
     tokenize_path_and_payload_for_fast_var_replace(config);
+    tokenize_path_and_payload_for_fast_var_replace_new(config);
 
     resolve_host(config);
 

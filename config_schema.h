@@ -166,6 +166,9 @@ public:
     std::map<std::string, std::string, ci_less> headers_in_map;
     std::vector<std::string> tokenized_path;
     std::vector<std::string> tokenized_payload;
+    String_With_Variables_In_Between tokenized_path_with_vars;
+    String_With_Variables_In_Between tokenized_payload_with_vars;
+
     uint32_t delay_before_executing_next;
     std::vector<Response_Value_Regex_Picker> response_value_regex_pickers;
     std::vector<Regex_Picker> actual_regex_value_pickers; // filled by post_process_json_config_schema
@@ -181,7 +184,7 @@ public:
         h->add_property("expected-status-code", &this->expected_status_code, staticjson::Flags::Optional);
         h->add_property("delay-before-executing-next", &this->delay_before_executing_next, staticjson::Flags::Optional);
         h->add_property("response-match", &this->response_match, staticjson::Flags::Optional);
-        h->add_property("response-value-regex-pickers", &this->response_value_regex_pickers, staticjson::Flags::Optional);
+        h->add_property("value-pickers", &this->response_value_regex_pickers, staticjson::Flags::Optional);
     }
     explicit Request()
     {

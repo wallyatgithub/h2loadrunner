@@ -839,12 +839,41 @@ void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config)
     }
 }
 
-std::string reassemble_str_with_variable(h2load::Config* config,
+
+void tokenize_path_and_payload_for_fast_var_replace_new(h2load::Config& config)
+{
+    for (auto& scenario : config.json_config_schema.scenarios)
+    {
+        assert(scenario.requests.size());
+        for (auto& request : scenario.requests)
+        {
+            size_t i = 0;
+
+            auto tokenized_path = tokenize_string(request.path, scenario.variable_name_in_path_and_data);
+            for (i = 0; i < (tokenized_path.size() - 1); i++)
+            {
+                split_string(tokenized_path[i], request.tokenized_path_with_vars);
+                request.tokenized_path_with_vars.string_segments.push_back(scenario.variable_name_in_path_and_data);
+            }
+            split_string(tokenized_path[i], request.tokenized_path_with_vars);
+
+
+            auto tokenized_payload = tokenize_string(request.payload, scenario.variable_name_in_path_and_data);
+            for (i = 0; i < (tokenized_payload.size() - 1); i++)
+            {
+                split_string(tokenized_payload[i], request.tokenized_payload_with_vars);
+                request.tokenized_payload_with_vars.string_segments.push_back(scenario.variable_name_in_path_and_data);
+            }
+            split_string(tokenized_payload[i], request.tokenized_payload_with_vars);
+        }
+    }
+}
+
+
+std::string get_current_user_id_string(h2load::Config* config,
                                          size_t scenario_index,
                                          size_t request_index,
-                                         const std::vector<std::string>& tokenized_source,
                                          uint64_t variable_value)
-
 {
     auto init_full_var_len = [config]()
     {
@@ -862,37 +891,49 @@ std::string reassemble_str_with_variable(h2load::Config* config,
         }
         return str_len_vec;
     };
-
     static thread_local auto str_len_vec = init_full_var_len();
+    auto& config_scenario = config->json_config_schema.scenarios[scenario_index];
+
+    std::string curr_var_value_str;
+    if (config_scenario.user_ids.size())
+    {
+        assert(variable_value < config_scenario.user_ids.size());
+        if (request_index < config_scenario.user_ids[variable_value].size())
+        {
+            curr_var_value_str = config_scenario.user_ids[variable_value][request_index];
+        }
+        else
+        {
+            curr_var_value_str = config_scenario.user_ids[variable_value][0];
+        }
+    }
+    else
+    {
+        curr_var_value_str = std::to_string(variable_value);
+        std::string padding;
+        padding.reserve(str_len_vec[scenario_index] - curr_var_value_str.size());
+        for (size_t i = 0; i < str_len_vec[scenario_index] - curr_var_value_str.size(); i++)
+        {
+            padding.append("0");
+        }
+        curr_var_value_str.insert(0, padding);
+    }
+    return curr_var_value_str;
+}
+
+std::string reassemble_str_with_variable(h2load::Config* config,
+                                         size_t scenario_index,
+                                         size_t request_index,
+                                         const std::vector<std::string>& tokenized_source,
+                                         uint64_t variable_value)
+
+{
     std::string retStr = tokenized_source[0];
     auto& config_scenario = config->json_config_schema.scenarios[scenario_index];
 
     if (tokenized_source.size() > 1)
     {
-        std::string curr_var_value_str;
-        if (config_scenario.user_ids.size())
-        {
-            assert(variable_value < config_scenario.user_ids.size());
-            if (request_index < config_scenario.user_ids[variable_value].size())
-            {
-                curr_var_value_str = config_scenario.user_ids[variable_value][request_index];
-            }
-            else
-            {
-                curr_var_value_str = config_scenario.user_ids[variable_value][0];
-            }
-        }
-        else
-        {
-            curr_var_value_str = std::to_string(variable_value);
-            std::string padding;
-            padding.reserve(str_len_vec[scenario_index] - curr_var_value_str.size());
-            for (size_t i = 0; i < str_len_vec[scenario_index] - curr_var_value_str.size(); i++)
-            {
-                padding.append("0");
-            }
-            curr_var_value_str.insert(0, padding);
-        }
+        auto curr_var_value_str = get_current_user_id_string(config, scenario_index, request_index, variable_value);
 
         size_t target_size = std::accumulate(tokenized_source.begin(), tokenized_source.end(), 0,
                                              [](uint64_t sum, const std::string& val)
@@ -1453,9 +1494,9 @@ void post_process_json_config_schema(h2load::Config& config)
             for (auto& response_value_regex_picker: request.response_value_regex_pickers)
             {
                 if (response_value_regex_picker.where_to_pickup_from.empty() ||
-                     response_value_regex_picker.source.empty() ||
-                     response_value_regex_picker.picker_regexp.empty() ||
-                     response_value_regex_picker.save_to_variable_name.empty())
+                    response_value_regex_picker.source.empty() ||
+                    response_value_regex_picker.picker_regexp.empty() ||
+                    response_value_regex_picker.save_to_variable_name.empty())
                 {
                     continue;
                 }
@@ -1898,5 +1939,39 @@ void process_delayed_scenario(h2load::Config& config)
     }
 }
 
+void split_string(const std::string& source, String_With_Variables_In_Between& result)
+{
+    size_t offset = 0;
+    auto variable_found = [&source](size_t offset, size_t& var_start, size_t& var_end)
+    {
+        if (offset >= (source.size()-1))
+        {
+            return false;
+        }
+        var_start = source.find("${", offset);
+        var_end = source.find("}", offset);
+        if ((var_start == std::string::npos) ||
+            (var_end == std::string::npos) ||
+            (var_end < var_start))
+        {
+            return false;
+        }
+        return true;
+    };
 
+    size_t var_start = 0;
+    size_t var_end = 0;
+
+    while (variable_found(offset, var_start, var_end))
+    {
+        auto segment = source.substr(offset, var_start - offset);
+        auto var_name = source.substr(var_start + 2, (var_end - (var_start + 2)));
+        result.string_segments.push_back(segment);
+        result.variables_in_between.push_back(var_name);
+
+        offset = var_end + 1;
+    }
+    result.string_segments.push_back(source.substr(offset, std::string::npos));
+
+}
 

@@ -197,6 +197,8 @@ public:
     void set_prefered_authority(const std::string& authority);
     void run_post_response_action(Request_Data& finished_request);
     void run_pre_request_action(Request_Data& new_request);
+    std::string assemble_string(const String_With_Variables_In_Between& source, Scenario_Data& scenario_data);
+
 
     base_worker* worker;
     ClientStat cstat;
