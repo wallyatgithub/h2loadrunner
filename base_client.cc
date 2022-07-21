@@ -1184,6 +1184,12 @@ void base_client::populate_request_from_config_template(Request_Data& new_reques
     new_request.req_headers_from_config = &request_template.headers_in_map;
     new_request.expected_status_code = request_template.expected_status_code;
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
+    for (auto& h: request_template.headers_with_variable)
+    {
+        auto name = assemble_string(h.first, new_request.scenario_data);
+        auto value = assemble_string(h.second, new_request.scenario_data);
+        new_request.req_headers_of_individual[name] = value;
+    }
 }
 
 void base_client::terminate_sub_clients()

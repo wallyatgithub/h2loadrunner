@@ -1442,6 +1442,16 @@ void post_process_json_config_schema(h2load::Config& config)
                               << std::endl;
                     continue;
                 }
+                size_t start, end;
+                if (variable_present(header_name, 0, start, end) || variable_present(header_value, 0, start, end))
+                {
+                    String_With_Variables_In_Between name_result;
+                    split_string(header_name, name_result);
+                    String_With_Variables_In_Between value_result;
+                    split_string(header_value, value_result);
+                    request.headers_with_variable.emplace_back(std::make_pair(name_result, value_result));
+                    continue;
+                }
                 request.headers_in_map[header_name] = header_value;
             }
             load_file_content(request.payload);
