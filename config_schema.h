@@ -168,6 +168,7 @@ public:
     Schema_Response_Match response_match;
     std::vector<Match_Rule> response_match_rules; // filled by post_process_json_config_schema
     std::map<std::string, std::string, ci_less> headers_in_map;
+    std::vector<std::pair<String_With_Variables_In_Between, String_With_Variables_In_Between>> headers_with_variable;
     String_With_Variables_In_Between tokenized_path_with_vars;
     String_With_Variables_In_Between tokenized_payload_with_vars;
 

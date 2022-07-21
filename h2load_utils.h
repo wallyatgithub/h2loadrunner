@@ -210,5 +210,6 @@ std::string get_current_user_id_string(h2load::Config* config,
                                          size_t request_index,
                                          uint64_t variable_value);
 
+bool variable_present(const std::string& source, size_t start_offset, size_t& var_start, size_t& var_end);
 
 #endif

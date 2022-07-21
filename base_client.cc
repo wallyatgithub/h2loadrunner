@@ -969,7 +969,7 @@ void base_client::run_post_response_action(Request_Data& finished_request)
     }
     if (config->verbose)
     {
-        std::cout<<"variable list of current user: "<<source<<std::endl;
+        std::cout<<"variable list of current user: "<<std::endl;
         for (auto& var: finished_request.scenario_data.user_varibles)
         {
             std::cout<<"variable name = "<<var.first<<", value = "<<var.second<<std::endl;

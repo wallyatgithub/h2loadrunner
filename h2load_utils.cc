@@ -1446,7 +1446,9 @@ void post_process_json_config_schema(h2load::Config& config)
             }
             load_file_content(request.payload);
             load_file_content(request.luaScript);
-            if (request.uri.typeOfAction == input_uri)
+            size_t start;
+            size_t end;
+            if (request.uri.uri_action == INPUT_URI && !variable_present(request.uri.input, 0, start, end))
             {
                 http_parser_url u {};
                 if (http_parser_parse_url(request.uri.input.c_str(), request.uri.input.size(), 0, &u) != 0)
@@ -1468,9 +1470,10 @@ void post_process_json_config_schema(h2load::Config& config)
                     }
                 }
             }
-            else if (request.uri.typeOfAction == input_with_variable)
+            else if (variable_present(request.uri.input, 0, start, end))
             {
                 request.path = request.uri.input;
+                request.uri.uri_action = INPUT_WITH_VARIABLE;
             }
 
             for (auto& schema_header_match : request.response_match.header_match)
@@ -1931,30 +1934,30 @@ void process_delayed_scenario(h2load::Config& config)
     }
 }
 
+bool variable_present(const std::string& source, size_t start_offset, size_t& var_start, size_t& var_end)
+{
+    if (start_offset >= (source.size()-1))
+    {
+        return false;
+    }
+    var_start = source.find("${", start_offset);
+    var_end = source.find("}", start_offset);
+    if ((var_start == std::string::npos) ||
+        (var_end == std::string::npos) ||
+        (var_end < var_start))
+    {
+        return false;
+    }
+    return true;
+}
+
 void split_string(const std::string& source, String_With_Variables_In_Between& result)
 {
     size_t offset = 0;
-    auto variable_found = [&source](size_t offset, size_t& var_start, size_t& var_end)
-    {
-        if (offset >= (source.size()-1))
-        {
-            return false;
-        }
-        var_start = source.find("${", offset);
-        var_end = source.find("}", offset);
-        if ((var_start == std::string::npos) ||
-            (var_end == std::string::npos) ||
-            (var_end < var_start))
-        {
-            return false;
-        }
-        return true;
-    };
-
     size_t var_start = 0;
     size_t var_end = 0;
 
-    while (variable_found(offset, var_start, var_end))
+    while (variable_present(source, offset, var_start, var_end))
     {
         auto segment = source.substr(offset, var_start - offset);
         auto var_name = source.substr(var_start + 2, (var_end - (var_start + 2)));
