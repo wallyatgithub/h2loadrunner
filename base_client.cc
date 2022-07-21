@@ -13,6 +13,7 @@
 #include <string>
 #include <random>
 #include <numeric>
+#include <cassert>
 
 #include "tls.h"
 #include "base_client.h"
@@ -519,6 +520,20 @@ void base_client::on_status_code(int32_t stream_id, uint16_t status)
     }
 }
 
+void base_client::sanitize_request(Request_Data& new_request)
+{
+    if (!new_request.schema || new_request.schema->empty())
+    {
+        new_request.string_collection.emplace_back(schema);
+        new_request.schema = &(new_request.string_collection.back());
+    }
+    if (!new_request.authority || new_request.authority->empty())
+    {
+        new_request.string_collection.emplace_back(authority);
+        new_request.authority = &(new_request.string_collection.back());
+    }
+}
+
 void base_client::enqueue_request(Request_Data& finished_request, Request_Data&& new_request)
 {
     auto client = this->parent_client ? this->parent_client : this;
@@ -935,6 +950,12 @@ void base_client::run_post_response_action(Request_Data& finished_request)
             {
             }
         }
+        if (config->verbose)
+        {
+            std::cout<<"where_to_pick_up_from: "<<value_picker.where_to_pick_up_from<<std::endl;
+            std::cout<<"target:"<<value_picker.source<<std::endl;
+            std::cout<<"target value located: "<<source<<std::endl;
+        }
         std::smatch match_result;
         if (std::regex_search(source, match_result, value_picker.picker_regexp))
         {
@@ -948,6 +969,7 @@ void base_client::run_post_response_action(Request_Data& finished_request)
     }
     if (config->verbose)
     {
+        std::cout<<"variable list of current user: "<<source<<std::endl;
         for (auto& var: finished_request.scenario_data.user_varibles)
         {
             std::cout<<"variable name = "<<var.first<<", value = "<<var.second<<std::endl;
@@ -960,35 +982,70 @@ void base_client::run_pre_request_action(Request_Data& new_request)
 
 }
 
+bool base_client::parse_uri_and_poupate_request(const std::string& uri, Request_Data& new_request)
+{
+    if (uri.size())
+    {
+        http_parser_url u {};
+        if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0)
+        {
+            std::cerr << "abort whole scenario sequence, as invalid URI found in header: " << uri << std::endl;
+            return false;
+        }
+        else
+        {
+            new_request.string_collection.emplace_back(get_reqline(uri.c_str(), u));
+            new_request.path = &(new_request.string_collection.back());
+            if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
+            {
+                new_request.string_collection.emplace_back(util::get_uri_field(uri.c_str(), u, UF_SCHEMA).str());
+                util::inp_strlower(new_request.string_collection.back());
+                new_request.schema = &(new_request.string_collection.back());
+                new_request.string_collection.emplace_back(util::get_uri_field(uri.c_str(), u, UF_HOST).str());
+                util::inp_strlower(new_request.string_collection.back());
+                if (util::has_uri_field(u, UF_PORT))
+                {
+                    new_request.string_collection.back().append(":").append(util::utos(u.port));
+                }
+                new_request.authority = &(new_request.string_collection.back());
+            }
+        }
+    }
+    return true;
+}
+
 bool base_client::prepare_next_request(Request_Data& finished_request)
 {
+    run_post_response_action(finished_request);
+
     size_t scenario_index = finished_request.scenario_index;
     Scenario& scenario = config->json_config_schema.scenarios[scenario_index];
 
-    size_t curr_index = ((finished_request.curr_request_idx + 1) % scenario.requests.size());
-    if (curr_index == 0)
+    size_t curr_req_index = ((finished_request.curr_request_idx + 1) % scenario.requests.size());
+    if (curr_req_index == 0)
     {
         return false;
     }
-
-    run_post_response_action(finished_request);
+    auto& request_template = scenario.requests[curr_req_index];
+    if (!request_template.clear_old_cookies)
+    {
+        parse_and_save_cookies(finished_request);
+    }
 
     Request_Data new_request;
     new_request.scenario_data = std::move(finished_request.scenario_data);
-    new_request.scenario_index = scenario_index;
-    new_request.curr_request_idx = curr_index;
 
-    auto& request_template = scenario.requests[curr_index];
+    new_request.scenario_index = scenario_index;
+    new_request.curr_request_idx = curr_req_index;
     new_request.user_id = finished_request.user_id;
-    populate_request_from_config_template(new_request, scenario_index, curr_index);
+
+    populate_request_from_config_template(new_request, scenario_index, curr_req_index);
 
     switch (request_template.uri.uri_action)
     {
         case INPUT_URI:
         {
-            new_request.string_collection.emplace_back(reassemble_str_with_variable(config, scenario_index, curr_index,
-                                                                                    request_template.tokenized_path,
-                                                                                    new_request.user_id));
+            new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, new_request.scenario_data));
             new_request.path = &(new_request.string_collection.back());
 
             break;
@@ -1014,38 +1071,15 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
                     uri_header_value = &header->second;
                 }
             }
-            if (uri_header_value && uri_header_value->size())
+            new_request.authority = nullptr;
+            if (parse_uri_and_poupate_request(*uri_header_value, new_request))
             {
-                http_parser_url u {};
-                if (http_parser_parse_url(uri_header_value->c_str(), uri_header_value->size(), 0, &u) != 0)
+                if (!new_request.authority)
                 {
-                    std::cerr << "abort whole scenario sequence, as invalid URI found in header: " << *uri_header_value << std::endl;
-                    return false;
-                }
-                else
-                {
-                    new_request.string_collection.emplace_back(get_reqline(uri_header_value->c_str(), u));
-                    new_request.path = &(new_request.string_collection.back());
-                    if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
-                    {
-                        new_request.string_collection.emplace_back(util::get_uri_field(uri_header_value->c_str(), u, UF_SCHEMA).str());
-                        util::inp_strlower(new_request.string_collection.back());
-                        new_request.schema = &(new_request.string_collection.back());
-                        new_request.string_collection.emplace_back(util::get_uri_field(uri_header_value->c_str(), u, UF_HOST).str());
-                        util::inp_strlower(new_request.string_collection.back());
-                        if (util::has_uri_field(u, UF_PORT))
-                        {
-                            new_request.string_collection.back().append(":").append(util::utos(u.port));
-                        }
-                        new_request.authority = &(new_request.string_collection.back());
-                    }
-                    else
-                    {
-                        new_request.string_collection.emplace_back(*finished_request.schema);
-                        new_request.schema = &(new_request.string_collection.back());
-                        new_request.string_collection.emplace_back(*finished_request.authority);
-                        new_request.authority = &(new_request.string_collection.back());
-                    }
+                    new_request.string_collection.emplace_back(*finished_request.schema);
+                    new_request.schema = &(new_request.string_collection.back());
+                    new_request.string_collection.emplace_back(*finished_request.authority);
+                    new_request.authority = &(new_request.string_collection.back());
                 }
             }
             else
@@ -1067,6 +1101,16 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
             }
             break;
         }
+        case INPUT_WITH_VARIABLE:
+        {
+            auto uri = assemble_string(request_template.tokenized_path_with_vars, new_request.scenario_data);
+            if (!parse_uri_and_poupate_request(uri, new_request))
+            {
+                std::cerr << "abort whole scenario sequence, as uri is invalid:" << uri << std::endl;
+                return false;
+            }
+            break;
+        }
         default:
         {
 
@@ -1074,24 +1118,20 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
 
     }
 
-    if (!request_template.clear_old_cookies)
-    {
-        parse_and_save_cookies(finished_request);
-        move_cookies_to_new_request(finished_request, new_request);
-        produce_request_cookie_header(new_request);
-    }
+    produce_request_cookie_header(new_request);
 
     run_pre_request_action(new_request);
 
     if (request_template.luaScript.size())
     {
-        if (!update_request_with_lua(lua_states[scenario_index][curr_index], finished_request, new_request))
+        if (!update_request_with_lua(lua_states[scenario_index][curr_req_index], finished_request, new_request))
         {
             return false; // lua script returns error or kills the request, abort this scenario
         }
     }
 
     update_content_length(new_request);
+    sanitize_request(new_request);
 
     enqueue_request(finished_request, std::move(new_request));
 
@@ -1120,7 +1160,7 @@ void base_client::parse_and_save_cookies(Request_Data& finished_request)
             {
                 if (Cookie::is_cookie_acceptable(cookie))
                 {
-                    finished_request.saved_cookies[cookie.cookie_key] = std::move(cookie);
+                    finished_request.scenario_data.saved_cookies[cookie.cookie_key] = std::move(cookie);
                 }
             }
         }
@@ -1137,11 +1177,7 @@ void base_client::populate_request_from_config_template(Request_Data& new_reques
     new_request.method = &request_template.method;
     new_request.schema = &request_template.schema;
     new_request.authority = &request_template.authority;
-    new_request.string_collection.emplace_back(reassemble_str_with_variable(config, scenario_index,
-                                                                            index_in_config_template,
-                                                                            request_template.tokenized_payload,
-                                                                            new_request.user_id));
-    //new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_payload_with_vars, new_request.scenario_data));
+    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_payload_with_vars, new_request.scenario_data));
 
     new_request.req_payload = &(new_request.string_collection.back());
 
@@ -1149,12 +1185,6 @@ void base_client::populate_request_from_config_template(Request_Data& new_reques
     new_request.expected_status_code = request_template.expected_status_code;
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
 }
-
-void base_client::move_cookies_to_new_request(Request_Data& finished_request, Request_Data& new_request)
-{
-    new_request.saved_cookies.swap(finished_request.saved_cookies);
-}
-
 
 void base_client::terminate_sub_clients()
 {
@@ -1391,7 +1421,7 @@ void base_client::submit_ping()
 
 void base_client::produce_request_cookie_header(Request_Data& req_to_be_sent)
 {
-    if (req_to_be_sent.saved_cookies.empty())
+    if (req_to_be_sent.scenario_data.saved_cookies.empty())
     {
         return;
     }
@@ -1407,7 +1437,7 @@ void base_client::produce_request_cookie_header(Request_Data& req_to_be_sent)
     }
     const std::string cookie_delimeter = "; ";
     std::string cookies_to_append;
-    for (auto& cookie : req_to_be_sent.saved_cookies)
+    for (auto& cookie : req_to_be_sent.scenario_data.saved_cookies)
     {
         if (cookies_from_config.count(cookie.first))
         {
@@ -2160,8 +2190,8 @@ Request_Data base_client::prepare_first_request()
     Request_Data new_request;
     new_request.scenario_index = scenario_index;
 
-    size_t curr_index = 0;
-    new_request.curr_request_idx = curr_index;
+    size_t curr_req_index = 0;
+    new_request.curr_request_idx = curr_req_index;
 
     new_request.user_id = controller->runtime_scenario_data[scenario_index].curr_req_variable_value;
     new_request.scenario_data.user_varibles[config->json_config_schema.scenarios[scenario_index].variable_name_in_path_and_data] =
@@ -2179,26 +2209,23 @@ Request_Data base_client::prepare_first_request()
         }
     }
 
-    populate_request_from_config_template(new_request, scenario_index, curr_index);
+    populate_request_from_config_template(new_request, scenario_index, curr_req_index);
 
-    auto& request_template = scenario.requests[curr_index];
-    new_request.string_collection.emplace_back(reassemble_str_with_variable(config, scenario_index, curr_index,
-                                                                            request_template.tokenized_path,
-                                                                            new_request.user_id));
-
-    //new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_payload_with_vars, new_request.scenario_data));
+    auto& request_template = scenario.requests[curr_req_index];
+    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, new_request.scenario_data));
 
     new_request.path = &(new_request.string_collection.back());
 
-    if (scenario.requests[curr_index].make_request_function_present)
+    if (scenario.requests[curr_req_index].make_request_function_present)
     {
-        if (!update_request_with_lua(lua_states[scenario_index][curr_index], dummy_data, new_request))
+        if (!update_request_with_lua(lua_states[scenario_index][curr_req_index], dummy_data, new_request))
         {
             std::cerr << "lua script failure for first request, cannot continue, exit" << std::endl;
             exit(EXIT_FAILURE);
         }
     }
     update_content_length(new_request);
+    sanitize_request(new_request);
 
     return new_request;
 }
@@ -2617,8 +2644,10 @@ void base_client::pass_response_to_lua(int32_t stream_id, lua_State* L)
 std::string base_client::assemble_string(const String_With_Variables_In_Between& source, Scenario_Data& scenario_data)
 {
     const std::string value_not_found = ": value_not_found";
+    assert(source.string_segments.size() - source.variables_in_between.size() == 1);
     std::stringstream outputStream;
-    for (size_t index = 0; index < source.variables_in_between.size(); index++)
+    size_t index = 0;
+    for (index = 0; index < source.variables_in_between.size(); index++)
     {
         outputStream<<source.string_segments[index];
         auto iter = scenario_data.user_varibles.find(source.variables_in_between[index]);
@@ -2631,6 +2660,7 @@ std::string base_client::assemble_string(const String_With_Variables_In_Between&
             outputStream<<source.variables_in_between[index]<<value_not_found;
         }
     }
+    outputStream<<source.string_segments[index];
     return outputStream.str();
 }
 

@@ -160,7 +160,6 @@ public:
     bool update_request_with_lua(lua_State* L, const Request_Data& finished_request, Request_Data& request_to_send);
     void produce_request_cookie_header(Request_Data& req_to_be_sent);
     void parse_and_save_cookies(Request_Data& finished_request);
-    void move_cookies_to_new_request(Request_Data& finished_request, Request_Data& new_request);
     void populate_request_from_config_template(Request_Data& new_request,
                                                size_t scenario_index,
                                                size_t index_in_config_template);
@@ -198,6 +197,8 @@ public:
     void run_post_response_action(Request_Data& finished_request);
     void run_pre_request_action(Request_Data& new_request);
     std::string assemble_string(const String_With_Variables_In_Between& source, Scenario_Data& scenario_data);
+    bool parse_uri_and_poupate_request(const std::string& uri, Request_Data& new_request);
+    void sanitize_request(Request_Data& new_request);
 
 
     base_worker* worker;

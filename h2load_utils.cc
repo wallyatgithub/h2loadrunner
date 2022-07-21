@@ -826,21 +826,7 @@ void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
     }
 }
 
-void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config)
-{
-    for (auto& scenario : config.json_config_schema.scenarios)
-    {
-        assert(scenario.requests.size());
-        for (auto& request : scenario.requests)
-        {
-            request.tokenized_path = tokenize_string(request.path, scenario.variable_name_in_path_and_data);
-            request.tokenized_payload = tokenize_string(request.payload, scenario.variable_name_in_path_and_data);
-        }
-    }
-}
-
-
-void tokenize_path_and_payload_for_fast_var_replace_new(h2load::Config& config)
+void tokenize_path_and_payload(h2load::Config& config)
 {
     for (auto& scenario : config.json_config_schema.scenarios)
     {
@@ -853,7 +839,7 @@ void tokenize_path_and_payload_for_fast_var_replace_new(h2load::Config& config)
             for (i = 0; i < (tokenized_path.size() - 1); i++)
             {
                 split_string(tokenized_path[i], request.tokenized_path_with_vars);
-                request.tokenized_path_with_vars.string_segments.push_back(scenario.variable_name_in_path_and_data);
+                request.tokenized_path_with_vars.variables_in_between.push_back(scenario.variable_name_in_path_and_data);
             }
             split_string(tokenized_path[i], request.tokenized_path_with_vars);
 
@@ -862,7 +848,7 @@ void tokenize_path_and_payload_for_fast_var_replace_new(h2load::Config& config)
             for (i = 0; i < (tokenized_payload.size() - 1); i++)
             {
                 split_string(tokenized_payload[i], request.tokenized_payload_with_vars);
-                request.tokenized_payload_with_vars.string_segments.push_back(scenario.variable_name_in_path_and_data);
+                request.tokenized_payload_with_vars.variables_in_between.push_back(scenario.variable_name_in_path_and_data);
             }
             split_string(tokenized_payload[i], request.tokenized_payload_with_vars);
         }
@@ -1460,7 +1446,7 @@ void post_process_json_config_schema(h2load::Config& config)
             }
             load_file_content(request.payload);
             load_file_content(request.luaScript);
-            if (request.uri.typeOfAction == "input")
+            if (request.uri.typeOfAction == input_uri)
             {
                 http_parser_url u {};
                 if (http_parser_parse_url(request.uri.input.c_str(), request.uri.input.size(), 0, &u) != 0)
@@ -1482,6 +1468,11 @@ void post_process_json_config_schema(h2load::Config& config)
                     }
                 }
             }
+            else if (request.uri.typeOfAction == input_with_variable)
+            {
+                request.path = request.uri.input;
+            }
+
             for (auto& schema_header_match : request.response_match.header_match)
             {
                 request.response_match_rules.emplace_back(Match_Rule(schema_header_match));
@@ -1526,6 +1517,7 @@ void post_process_json_config_schema(h2load::Config& config)
     load_file_content(config.json_config_schema.ca_cert);
     load_file_content(config.json_config_schema.client_cert);
     load_file_content(config.json_config_schema.private_key);
+    tokenize_path_and_payload(config);
 }
 
 std::vector<std::vector<std::string>> read_csv_file(const std::string& csv_file_name)

@@ -23,6 +23,8 @@ const std::string from_response_header = "fromResponseHeader";
 const std::string from_lua_script = "fromLuaScript";
 const std::string from_x_path = "fromXPath";
 const std::string from_json_pointer = "fromJsonPointer";
+const std::string input_with_variable = "InputWithVariable";
+
 
 const std::string request_header = "Request-Header";
 const std::string response_header = "Response-Header";
@@ -41,7 +43,8 @@ enum URI_ACTION
     FROM_RESPONSE_HEADER,
     FROM_LUA_SCRIPT,
     FROM_X_PATH,
-    FROM_JSON_POINTER
+    FROM_JSON_POINTER,
+    INPUT_WITH_VARIABLE
 };
 
 enum VALUE_SOURCE_TYPE
@@ -55,8 +58,8 @@ enum VALUE_SOURCE_TYPE
 const std::map<std::string, VALUE_SOURCE_TYPE> value_pickup_action_map =
 {
     {request_header, SOURCE_TYPE_REQ_HEADER},
-    {response_header, SOURCE_TYPE_REQ_POINTER},
-    {json_ptr_of_req_payload, SOURCE_TYPE_RES_HEADER},
+    {response_header, SOURCE_TYPE_RES_HEADER},
+    {json_ptr_of_req_payload, SOURCE_TYPE_REQ_POINTER},
     {json_ptr_of_resp_payload, SOURCE_TYPE_RES_POINTER}
 };
 
@@ -67,7 +70,8 @@ const std::map<std::string, URI_ACTION> uri_action_map =
     {from_response_header, FROM_RESPONSE_HEADER},
     {from_lua_script, FROM_LUA_SCRIPT},
     {from_x_path, FROM_X_PATH},
-    {from_json_pointer, FROM_JSON_POINTER}
+    {from_json_pointer, FROM_JSON_POINTER},
+    {input_with_variable, INPUT_WITH_VARIABLE}
 };
 
 class Uri
@@ -164,8 +168,6 @@ public:
     Schema_Response_Match response_match;
     std::vector<Match_Rule> response_match_rules; // filled by post_process_json_config_schema
     std::map<std::string, std::string, ci_less> headers_in_map;
-    std::vector<std::string> tokenized_path;
-    std::vector<std::string> tokenized_payload;
     String_With_Variables_In_Between tokenized_path_with_vars;
     String_With_Variables_In_Between tokenized_payload_with_vars;
 

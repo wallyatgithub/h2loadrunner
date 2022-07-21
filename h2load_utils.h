@@ -95,9 +95,7 @@ void populate_config_from_json(h2load::Config& config);
 
 void insert_customized_headers_to_Json_scenarios(h2load::Config& config);
 
-void tokenize_path_and_payload_for_fast_var_replace(h2load::Config& config);
-
-void tokenize_path_and_payload_for_fast_var_replace_new(h2load::Config& config);
+void tokenize_path_and_payload(h2load::Config& config);
 
 std::string reassemble_str_with_variable(h2load::Config* config,
                                          size_t scenario_index,

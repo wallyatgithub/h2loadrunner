@@ -1134,16 +1134,13 @@ int main(int argc, char** argv)
 
     insert_customized_headers_to_Json_scenarios(config);
 
-    normalize_request_templates(&config);
+    //normalize_request_templates(&config);
 
     if (config.verbose)
     {
         std::cerr << "Configuration dump:" << std::endl << staticjson::to_pretty_json_string(config.json_config_schema)
                   << std::endl;
     }
-
-    tokenize_path_and_payload_for_fast_var_replace(config);
-    tokenize_path_and_payload_for_fast_var_replace_new(config);
 
     resolve_host(config);
 

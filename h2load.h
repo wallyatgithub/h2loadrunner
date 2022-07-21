@@ -57,6 +57,7 @@ class base_client;
 struct Scenario_Data
 {
     std::map<std::string, std::string> user_varibles;
+    std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
 };
 
 struct Request_Data
@@ -76,7 +77,6 @@ struct Request_Data
     uint16_t status_code;
     uint16_t expected_status_code;
     uint32_t delay_before_executing_next;
-    std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
     size_t curr_request_idx;
     size_t scenario_index;
     std::vector<std::string> string_collection;
@@ -133,7 +133,7 @@ struct Request_Data
                 o << "response header name: " << it.first << ", header value: " << it.second << std::endl;
             }
         }
-        for (auto& it : request_data.saved_cookies)
+        for (auto& it : request_data.scenario_data.saved_cookies)
         {
             o << "cookie name: " << it.first << ", cookie content: " << it.second << std::endl;
         }
