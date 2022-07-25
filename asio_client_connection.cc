@@ -67,6 +67,7 @@ asio_client_connection::asio_client_connection
 asio_client_connection::~asio_client_connection()
 {
     std::cerr << "deallocate connection: " << schema << "://" << authority << std::endl;
+    //printBacktrace();
     disconnect();
     final_cleanup();
 }

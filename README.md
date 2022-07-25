@@ -80,7 +80,7 @@
 
 # How to build on Windows
 
-  cmake 3.20 or later, Visual Studio 2022 MSVC x86/x64 build tool, and windows 10 SDK need to be installed first
+  cmake 3.20 or later, Visual Studio 2022, and windows 10 SDK need to be installed first
 
   vcpkg is also needed. Please follow https://vcpkg.io/en/getting-started.html to install and set up vcpkg
   

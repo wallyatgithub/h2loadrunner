@@ -60,7 +60,7 @@
     "connection-retry":
     {
       "description": "false: upon disconnect from host, h2loadrunner will not try open new connection; true: h2loadrunner will try to open new connections upon host disconnect, either to another host in the load share group above, or to the same host if no other host is available; note: after reconnection is made due to peer disconnect, load balance is no longer guaranteed, see next field for more information",
-      "default": false,
+      "default": true,
       "type":"boolean"
     },
     "switch-back-after-connection-retry":

@@ -443,7 +443,7 @@ void base_client::init_connection_targert()
             buffer.append(host).append("]");
             host = buffer;
         }
-
+/*
         if (config->port != config->default_port)
         {
             authority = host + ":" + util::utos(config->port);
@@ -452,6 +452,8 @@ void base_client::init_connection_targert()
         {
             authority = host;
         }
+*/
+        authority = host + ":" + util::utos(config->port);
     }
 
     if (is_controller_client() && (config->no_tls_proto != Config::PROTO_HTTP1_1) &&
