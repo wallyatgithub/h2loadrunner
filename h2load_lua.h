@@ -7,6 +7,8 @@
 #include <vector>
 #include <sstream>
 #include <stdlib.h>
+#include <mutex>
+
 extern "C" {
 #include "lua.h"
 #include "lualib.h"
