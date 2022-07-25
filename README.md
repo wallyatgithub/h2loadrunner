@@ -154,7 +154,7 @@
     
 # How to build h2loadrunner docker image
 
-  https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Dockerfile_CentOS7 is the Dockerfile to build a CentOS7 based image with h2loadrunner installed in /usr/bin
+  https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Dockerfile_Alpine_Static is the Dockerfile to build a Alpine based image with static-linked h2loadrunner installed in /usr/bin
 
   https://raw.githubusercontent.com/wallyatgithub/h2loadrunner/main/Dockerfile_Ubuntu is the Dockerfile to build a latest Ubuntu based image with h2loadrunner installed in /usr/bin
 
