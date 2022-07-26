@@ -122,7 +122,8 @@ public:
     std::string source;
     std::regex picker_regexp;
     std::string variable_name;
-    Regex_Picker(const Response_Value_Regex_Picker& picker_schema)
+    size_t unique_id;
+    Regex_Picker(const Response_Value_Regex_Picker& picker_schema, size_t id)
     {
         auto iter = value_pickup_action_map.find(picker_schema.where_to_pickup_from);
         if (iter == value_pickup_action_map.end())
@@ -133,6 +134,7 @@ public:
         where_to_pick_up_from = iter->second;
         source = picker_schema.source;
         variable_name = picker_schema.save_to_variable_name;
+        unique_id = id;
         try
         {
             picker_regexp.assign(picker_schema.picker_regexp, std::regex_constants::ECMAScript|std::regex_constants::optimize);
@@ -147,8 +149,23 @@ public:
 struct String_With_Variables_In_Between
 {
     std::vector<std::string> string_segments;
-    std::vector<std::string> variables_in_between;
+    std::vector<size_t> variable_ids_in_between;
 };
+
+inline std::ostream& operator<<(std::ostream& o, const String_With_Variables_In_Between& r)
+{
+    o<<"string_segments.size(): "<<r.string_segments.size()<<std::endl;
+    for (size_t i = 0; i < r.string_segments.size(); i++)
+    {
+        o<<"index: "<<i<<": "<<r.string_segments[i]<<std::endl;
+    }
+    o<<"variable_ids_in_between.size(): "<<r.variable_ids_in_between.size()<<std::endl;
+    for (size_t i = 0; i < r.variable_ids_in_between.size(); i++)
+    {
+        o<<"index: "<<i<<": "<<r.variable_ids_in_between[i]<<std::endl;
+    }
+    return o;
+}
 
 class Request
 {
@@ -212,6 +229,8 @@ public:
     uint64_t variable_range_end;
     bool variable_range_slicing;
     std::vector<Request> requests;
+    size_t number_of_variables; // populated by post_process_json_config_schema
+    std::map<std::string, size_t> variable_ids; // populated by post_process_json_config_schema
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("name", &this->name);

@@ -35,6 +35,8 @@
 #endif
 #include "template.h"
 #include "H2Server_Request.h"
+#include "config_schema.h"
+
 
 using namespace nghttp2;
 
@@ -56,8 +58,11 @@ class base_client;
 
 struct Scenario_Data
 {
-    std::map<std::string, std::string> user_varibles;
+    std::vector<std::string> variable_index_to_value;
     std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
+    Scenario_Data(size_t number_of_var = 1):variable_index_to_value(number_of_var, "")
+    {
+    }
 };
 
 struct Request_Data
@@ -99,7 +104,25 @@ struct Request_Data
         scenario_index = 0;
         req_payload_cursor = 0;
         string_collection.reserve(12); // (path, authority, method, schema, payload, xx) * 2
-    };
+    }
+    explicit Request_Data(size_t number_of_vars):
+        schema(&emptyString),
+        authority(&emptyString),
+        req_payload(&emptyString),
+        path(&emptyString),
+        method(&emptyString),
+        stream_timeout_in_ms(0),
+        scenario_data(number_of_vars)
+    {
+        user_id = 0;
+        status_code = 0;
+        expected_status_code = 0;
+        delay_before_executing_next = 0;
+        curr_request_idx = 0;
+        scenario_index = 0;
+        req_payload_cursor = 0;
+        string_collection.reserve(12); // (path, authority, method, schema, payload, xx) * 2
+    }
 
     friend std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
     {

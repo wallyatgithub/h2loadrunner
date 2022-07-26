@@ -967,14 +967,15 @@ void base_client::run_post_response_action(Request_Data& finished_request)
         {
             result.clear();
         }
-        finished_request.scenario_data.user_varibles[value_picker.variable_name] = result;
+        //finished_request.scenario_data.user_varibles[value_picker.variable_name] = result;
+        finished_request.scenario_data.variable_index_to_value[value_picker.unique_id] = result;
     }
     if (config->verbose)
     {
         std::cout<<"variable list of current user: "<<std::endl;
-        for (auto& var: finished_request.scenario_data.user_varibles)
+        for (auto& var: finished_request.scenario_data.variable_index_to_value)
         {
-            std::cout<<"variable name = "<<var.first<<", value = "<<var.second<<std::endl;
+            std::cout<<var<<std::endl;
         }
     }
 }
@@ -2195,15 +2196,14 @@ Request_Data base_client::prepare_first_request()
 
     static thread_local Request_Data dummy_data;
 
-    Request_Data new_request;
+    Request_Data new_request(scenario.variable_ids.size());
     new_request.scenario_index = scenario_index;
 
     size_t curr_req_index = 0;
     new_request.curr_request_idx = curr_req_index;
 
     new_request.user_id = controller->runtime_scenario_data[scenario_index].curr_req_variable_value;
-    new_request.scenario_data.user_varibles[config->json_config_schema.scenarios[scenario_index].variable_name_in_path_and_data] =
-    get_current_user_id_string(config, new_request.scenario_index, new_request.curr_request_idx, new_request.user_id);
+    new_request.scenario_data.variable_index_to_value[0] = get_current_user_id_string(config, new_request.scenario_index, new_request.curr_request_idx, new_request.user_id);
     if (controller->runtime_scenario_data[scenario_index].req_variable_value_end)
     {
         controller->runtime_scenario_data[scenario_index].curr_req_variable_value++;
@@ -2651,25 +2651,22 @@ void base_client::pass_response_to_lua(int32_t stream_id, lua_State* L)
 
 std::string base_client::assemble_string(const String_With_Variables_In_Between& source, Scenario_Data& scenario_data)
 {
-    const std::string value_not_found = ": value_not_found";
-    assert(source.string_segments.size() - source.variables_in_between.size() == 1);
-    std::stringstream outputStream;
-    size_t index = 0;
-    for (index = 0; index < source.variables_in_between.size(); index++)
+    std::string result;
+    auto string_size = std::accumulate(source.string_segments.begin(), source.string_segments.end(), 0, [](size_t count, const std::string& s){ return count + s.size();});
+    for (auto& i: source.variable_ids_in_between)
     {
-        outputStream<<source.string_segments[index];
-        auto iter = scenario_data.user_varibles.find(source.variables_in_between[index]);
-        if (iter != scenario_data.user_varibles.end())
-        {
-            outputStream<<iter->second;
-        }
-        else
-        {
-            outputStream<<source.variables_in_between[index]<<value_not_found;
-        }
+        string_size += scenario_data.variable_index_to_value[i].size();
     }
-    outputStream<<source.string_segments[index];
-    return outputStream.str();
+    result.reserve(string_size);
+    size_t index = 0;
+    for (index = 0; index < source.variable_ids_in_between.size(); index++)
+    {
+        result.append(source.string_segments[index]);
+        result.append(scenario_data.variable_index_to_value[source.variable_ids_in_between[index]]);
+    }
+    result.append(source.string_segments[index]);
+    return result;
+
 }
 
 

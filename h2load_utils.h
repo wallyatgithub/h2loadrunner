@@ -203,7 +203,7 @@ bool is_null_destination(h2load::Config& config);
 
 void process_delayed_scenario(h2load::Config& config);
 
-void split_string(const std::string& source, String_With_Variables_In_Between& result);
+void split_string(const std::string& source, String_With_Variables_In_Between& result, const std::map<std::string, size_t>& var_id_map);
 
 std::string get_current_user_id_string(h2load::Config* config,
                                          size_t scenario_index,

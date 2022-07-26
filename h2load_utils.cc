@@ -838,19 +838,68 @@ void tokenize_path_and_payload(h2load::Config& config)
             auto tokenized_path = tokenize_string(request.path, scenario.variable_name_in_path_and_data);
             for (i = 0; i < (tokenized_path.size() - 1); i++)
             {
-                split_string(tokenized_path[i], request.tokenized_path_with_vars);
-                request.tokenized_path_with_vars.variables_in_between.push_back(scenario.variable_name_in_path_and_data);
+                split_string(tokenized_path[i], request.tokenized_path_with_vars, scenario.variable_ids);
+                assert(scenario.variable_ids.count(scenario.variable_name_in_path_and_data));
+                request.tokenized_path_with_vars.variable_ids_in_between.push_back(scenario.variable_ids[scenario.variable_name_in_path_and_data]);
             }
-            split_string(tokenized_path[i], request.tokenized_path_with_vars);
+            split_string(tokenized_path[i], request.tokenized_path_with_vars, scenario.variable_ids);
 
+            if (config.verbose)
+            {
+                std::cout<<request.tokenized_path_with_vars<<std::endl;
+            }
 
             auto tokenized_payload = tokenize_string(request.payload, scenario.variable_name_in_path_and_data);
             for (i = 0; i < (tokenized_payload.size() - 1); i++)
             {
-                split_string(tokenized_payload[i], request.tokenized_payload_with_vars);
-                request.tokenized_payload_with_vars.variables_in_between.push_back(scenario.variable_name_in_path_and_data);
+                split_string(tokenized_payload[i], request.tokenized_payload_with_vars, scenario.variable_ids);
+                request.tokenized_payload_with_vars.variable_ids_in_between.push_back(scenario.variable_ids[scenario.variable_name_in_path_and_data]);
             }
-            split_string(tokenized_payload[i], request.tokenized_payload_with_vars);
+            split_string(tokenized_payload[i], request.tokenized_payload_with_vars, scenario.variable_ids);
+
+            if (config.verbose)
+            {
+                std::cout<<request.tokenized_payload_with_vars<<std::endl;
+            }
+
+            for (auto& header_with_value : request.additonalHeaders)
+            {
+                size_t t = header_with_value.find(":", 1);
+                if ((t == std::string::npos) ||
+                    (header_with_value[0] == ':' && 1 == t))
+                {
+                    std::cerr << "invalid header, no name: " << header_with_value << std::endl;
+                    continue;
+                }
+                std::string header_name = header_with_value.substr(0, t);
+                std::string header_value = header_with_value.substr(t + 1);
+                /*
+                header_value.erase(header_value.begin(), std::find_if(header_value.begin(), header_value.end(),
+                                                                      [](unsigned char ch)
+                {
+                    return !std::isspace(ch);
+                }));
+                */
+
+                if (header_value.empty())
+                {
+                    std::cerr << "invalid header - no value: " << header_with_value
+                              << std::endl;
+                    continue;
+                }
+                size_t start, end;
+                if (variable_present(header_name, 0, start, end) || variable_present(header_value, 0, start, end))
+                {
+                    String_With_Variables_In_Between name_result;
+                    split_string(header_name, name_result, scenario.variable_ids);
+                    String_With_Variables_In_Between value_result;
+                    split_string(header_value, value_result, scenario.variable_ids);
+                    request.headers_with_variable.emplace_back(std::make_pair(name_result, value_result));
+                    continue;
+                }
+                request.headers_in_map[header_name] = header_value;
+            }
+
         }
     }
 }
@@ -1388,6 +1437,10 @@ void post_process_json_config_schema(h2load::Config& config)
 
     for (auto& scenario : config.json_config_schema.scenarios)
     {
+        if (scenario.variable_name_in_path_and_data.size())
+        {
+            scenario.variable_ids[scenario.variable_name_in_path_and_data] = 0;
+        }
         if (scenario.user_id_list_file.size())
         {
             scenario.user_ids = read_csv_file(scenario.user_id_list_file);
@@ -1417,45 +1470,7 @@ void post_process_json_config_schema(h2load::Config& config)
                 std::cerr << request.uri.typeOfAction << " is invalid" << std::endl;
                 abort();
             }
-            for (auto& header_with_value : request.additonalHeaders)
-            {
-                size_t t = header_with_value.find(":", 1);
-                if ((t == std::string::npos) ||
-                    (header_with_value[0] == ':' && 1 == t))
-                {
-                    std::cerr << "invalid header, no name: " << header_with_value << std::endl;
-                    continue;
-                }
-                std::string header_name = header_with_value.substr(0, t);
-                std::string header_value = header_with_value.substr(t + 1);
-                /*
-                header_value.erase(header_value.begin(), std::find_if(header_value.begin(), header_value.end(),
-                                                                      [](unsigned char ch)
-                {
-                    return !std::isspace(ch);
-                }));
-                */
 
-                if (header_value.empty())
-                {
-                    std::cerr << "invalid header - no value: " << header_with_value
-                              << std::endl;
-                    continue;
-                }
-                size_t start, end;
-                if (variable_present(header_name, 0, start, end) || variable_present(header_value, 0, start, end))
-                {
-                    String_With_Variables_In_Between name_result;
-                    split_string(header_name, name_result);
-                    String_With_Variables_In_Between value_result;
-                    split_string(header_value, value_result);
-                    request.headers_with_variable.emplace_back(std::make_pair(name_result, value_result));
-                    continue;
-                }
-                request.headers_in_map[header_name] = header_value;
-            }
-            load_file_content(request.payload);
-            load_file_content(request.luaScript);
             size_t start;
             size_t end;
             if (request.uri.uri_action == INPUT_URI && !variable_present(request.uri.input, 0, start, end))
@@ -1504,8 +1519,23 @@ void post_process_json_config_schema(h2load::Config& config)
                 {
                     continue;
                 }
-                request.actual_regex_value_pickers.emplace_back(Regex_Picker(response_value_regex_picker));
+                size_t unique_id_of_variable = 0;
+                auto var_iter = scenario.variable_ids.find(response_value_regex_picker.save_to_variable_name);
+                if (var_iter == scenario.variable_ids.end())
+                {
+                    unique_id_of_variable = scenario.variable_ids.size();
+                    scenario.variable_ids[response_value_regex_picker.save_to_variable_name] = unique_id_of_variable;
+                }
+                else
+                {
+                    unique_id_of_variable =  var_iter->second;
+                }
+
+                request.actual_regex_value_pickers.emplace_back(Regex_Picker(response_value_regex_picker, unique_id_of_variable));
             }
+
+            load_file_content(request.payload);
+            load_file_content(request.luaScript);
             if (request.luaScript.size())
             {
                 lua_State* L = luaL_newstate();
@@ -1961,7 +1991,7 @@ bool variable_present(const std::string& source, size_t start_offset, size_t& va
     return true;
 }
 
-void split_string(const std::string& source, String_With_Variables_In_Between& result)
+void split_string(const std::string& source, String_With_Variables_In_Between& result, const std::map<std::string, size_t>& var_id_map)
 {
     size_t offset = 0;
     size_t var_start = 0;
@@ -1972,7 +2002,9 @@ void split_string(const std::string& source, String_With_Variables_In_Between& r
         auto segment = source.substr(offset, var_start - offset);
         auto var_name = source.substr(var_start + 2, (var_end - (var_start + 2)));
         result.string_segments.push_back(segment);
-        result.variables_in_between.push_back(var_name);
+        assert(var_id_map.count(var_name));
+        auto iter = var_id_map.find(var_name);
+        result.variable_ids_in_between.push_back(iter != var_id_map.end() ? iter->second : 0);
 
         offset = var_end + 1;
     }
