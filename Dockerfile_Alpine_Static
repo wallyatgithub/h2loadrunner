@@ -5,6 +5,12 @@ RUN apk add nghttp2-static nghttp2-dev openssl-libs-static openssl-dev libcrypto
     cd rapidjson-master && cmake . && cmake --build ./ && cmake --install ./ && \
     cd .. && \
     rm rapidjson-master master.zip -rf && \
+    wget https://github.com/microsoft/mimalloc/archive/refs/heads/master.zip && \
+    unzip master.zip && \
+    cmake -S mimalloc-master -B mimalloc-master/build -DCMAKE_BUILD_TYPE=Release .. && \
+    cmake --build mimalloc-master/build && \
+    cp $(find ./ -name libmimalloc.a) /lib/ && \
+    rm -rf mimalloc-master master.zip && \
     wget https://github.com/wallyatgithub/h2loadrunner/archive/refs/heads/main.zip && \
     unzip main.zip && \
     cmake -S h2loadrunner-main -B h2loadrunner-main/build -DCMAKE_BUILD_TYPE=Release .. -DALPINE_STATIC=ON && \

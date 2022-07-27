@@ -24,6 +24,7 @@ find_library(NGHTTP2_LIBRARY NAMES nghttp2)
 if (DEFINED ALPINE_STATIC)
      add_link_options(-static)
      find_library(EXECINFO_LIBRARY execinfo)
+     find_library(MIMALLOC_LIBRARY NAMES libmimalloc.a)
 endif()
 
 include(GNUInstallDirs)
@@ -169,6 +170,7 @@ link_libraries(
   ${Boost_LIBRARIES}
   ${GETOPT_LIBRARY}
   ${EXECINFO_LIBRARY}
+  ${MIMALLOC_LIBRARY}
 )
 
 set (CMAKE_INCLUDE_CURRENT_DIR ON)
