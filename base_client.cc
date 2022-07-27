@@ -456,7 +456,7 @@ void base_client::init_connection_targert()
         authority = host + ":" + util::utos(config->port);
     }
 
-    if (is_controller_client() && (config->no_tls_proto != Config::PROTO_HTTP1_1) &&
+    if (is_controller_client()&&
         config->json_config_schema.load_share_hosts.size())
     {
         auto init_hosts = [this]()
