@@ -1075,7 +1075,7 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
                 }
             }
             new_request.authority = nullptr;
-            if (parse_uri_and_poupate_request(*uri_header_value, new_request))
+            if (uri_header_value && parse_uri_and_poupate_request(*uri_header_value, new_request))
             {
                 if (!new_request.authority)
                 {
