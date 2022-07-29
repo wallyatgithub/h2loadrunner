@@ -22,7 +22,8 @@ find_path(NGHTTP2_INCLUDE_DIR nghttp2/nghttp2.h)
 find_library(NGHTTP2_LIBRARY NAMES nghttp2)
 
 if (DEFINED ALPINE_STATIC)
-     add_link_options(-static -lmimalloc)
+     add_link_options(-static)
+     set(MIMALLOC_LIB mimalloc)
      find_library(EXECINFO_LIBRARY execinfo)
 endif()
 
@@ -169,6 +170,7 @@ link_libraries(
   ${Boost_LIBRARIES}
   ${GETOPT_LIBRARY}
   ${EXECINFO_LIBRARY}
+  ${MIMALLOC_LIB}
 )
 
 set (CMAKE_INCLUDE_CURRENT_DIR ON)
