@@ -231,6 +231,7 @@ public:
     std::vector<Request> requests;
     size_t number_of_variables; // populated by post_process_json_config_schema
     std::map<std::string, size_t> variable_ids; // populated by post_process_json_config_schema
+    bool run_requests_in_parallel;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("name", &this->name);
@@ -242,6 +243,7 @@ public:
         h->add_property("user-id-range-end", &this->variable_range_end, staticjson::Flags::Optional);
         h->add_property("user-id-range-slicing", &this->variable_range_slicing, staticjson::Flags::Optional);
         h->add_property("interval-to-wait-before-start", &this->interval_to_wait_before_start, staticjson::Flags::Optional);
+        h->add_property("run-requests-in-parallel", &this->run_requests_in_parallel, staticjson::Flags::Optional);
         h->add_property("Requests", &this->requests);
     }
     explicit Scenario():

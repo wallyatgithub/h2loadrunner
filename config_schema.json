@@ -312,6 +312,12 @@
             "default": false,
             "type":"boolean"
           },
+          "run-requests-in-parallel":
+          {
+            "description": "true: all the requests of this scenario will be run in parallel, obvious, the request uri typeOfAction cannot be fromResponseHeader or fromJsonPointer in this case; false: the requests of this scenario will be run one after another in the listed order",
+            "default": false,
+            "type":"boolean"
+          },
           "Requests":
           {
             "description":"Array of requests, each request has URI, method, optional payload, optional addtional headers, and optionally an lua script for advanced users to customize the request",

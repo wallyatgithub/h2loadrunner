@@ -1017,139 +1017,6 @@ bool base_client::parse_uri_and_poupate_request(const std::string& uri, Request_
     return true;
 }
 
-bool base_client::prepare_next_request(Request_Data& finished_request)
-{
-    run_post_response_action(finished_request);
-
-    size_t scenario_index = finished_request.scenario_index;
-    Scenario& scenario = config->json_config_schema.scenarios[scenario_index];
-
-    size_t curr_req_index = ((finished_request.curr_request_idx + 1) % scenario.requests.size());
-    if (curr_req_index == 0)
-    {
-        return false;
-    }
-    auto& request_template = scenario.requests[curr_req_index];
-    if (!request_template.clear_old_cookies)
-    {
-        parse_and_save_cookies(finished_request);
-    }
-
-    Request_Data new_request;
-    new_request.scenario_data = std::move(finished_request.scenario_data);
-
-    new_request.scenario_index = scenario_index;
-    new_request.curr_request_idx = curr_req_index;
-    new_request.user_id = finished_request.user_id;
-
-    populate_request_from_config_template(new_request, scenario_index, curr_req_index);
-
-    switch (request_template.uri.uri_action)
-    {
-        case INPUT_URI:
-        {
-            new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, new_request.scenario_data));
-            new_request.path = &(new_request.string_collection.back());
-
-            break;
-        }
-        case SAME_WITH_LAST_ONE:
-        {
-            new_request.string_collection.emplace_back(*finished_request.path);
-            new_request.path = &(new_request.string_collection.back());
-            new_request.string_collection.emplace_back(*finished_request.schema);
-            new_request.schema = &(new_request.string_collection.back());
-            new_request.string_collection.emplace_back(*finished_request.authority);
-            new_request.authority = &(new_request.string_collection.back());
-            break;
-        }
-        case FROM_RESPONSE_HEADER:
-        {
-            std::string* uri_header_value = nullptr;
-            for (auto& header_map : finished_request.resp_headers)
-            {
-                auto header = header_map.find(request_template.uri.input);
-                if (header != header_map.end())
-                {
-                    uri_header_value = &header->second;
-                }
-            }
-            new_request.authority = nullptr;
-            if (uri_header_value && parse_uri_and_poupate_request(*uri_header_value, new_request))
-            {
-                if (!new_request.authority)
-                {
-                    new_request.string_collection.emplace_back(*finished_request.schema);
-                    new_request.schema = &(new_request.string_collection.back());
-                    new_request.string_collection.emplace_back(*finished_request.authority);
-                    new_request.authority = &(new_request.string_collection.back());
-                }
-            }
-            else
-            {
-                if (config->verbose)
-                {
-                    std::cout << "response status code:" << finished_request.status_code << std::endl;
-                    std::cerr << "abort whole scenario sequence, as header not found: " << request_template.uri.input << std::endl;
-                    for (auto& header_map : finished_request.resp_headers)
-                    {
-                        for (auto& header : header_map)
-                        {
-                            std::cout << header.first << ":" << header.second << std::endl;
-                        }
-                    }
-                    std::cout << "response payload:" << finished_request.resp_payload << std::endl;
-                }
-                return false;
-            }
-            break;
-        }
-        case INPUT_WITH_VARIABLE:
-        {
-            auto uri = assemble_string(request_template.tokenized_path_with_vars, new_request.scenario_data);
-            if (!parse_uri_and_poupate_request(uri, new_request))
-            {
-                std::cerr << "abort whole scenario sequence, as uri is invalid:" << uri << std::endl;
-                return false;
-            }
-            break;
-        }
-        default:
-        {
-
-        }
-
-    }
-
-    produce_request_cookie_header(new_request);
-
-    run_pre_request_action(new_request);
-
-    if (request_template.luaScript.size())
-    {
-        if (!update_request_with_lua(lua_states[scenario_index][curr_req_index], finished_request, new_request))
-        {
-            return false; // lua script returns error or kills the request, abort this scenario
-        }
-    }
-
-    update_content_length(new_request);
-    sanitize_request(new_request);
-
-    enqueue_request(finished_request, std::move(new_request));
-
-    return true;
-}
-
-void base_client::update_content_length(Request_Data& data)
-{
-    if (data.req_payload->size())
-    {
-        std::string content_length = "content-length";
-        data.req_headers_of_individual[content_length] = std::to_string(data.req_payload->size());
-    }
-}
-
 void base_client::parse_and_save_cookies(Request_Data& finished_request)
 {
     for (auto& header_map : finished_request.resp_headers)
@@ -1792,7 +1659,12 @@ void base_client::on_stream_close(int32_t stream_id, bool success, bool final)
 
     if (finished_request != requests_awaiting_response.end())
     {
-        prepare_next_request(finished_request->second);
+        size_t scenario_index = finished_request->second.scenario_index;
+        Scenario& scenario = config->json_config_schema.scenarios[scenario_index];
+        if (!scenario.run_requests_in_parallel)
+        {
+            prepare_next_request(finished_request->second);
+        }
         process_stream_user_callback(stream_id);
         requests_awaiting_response.erase(finished_request);
     }
@@ -2235,8 +2107,149 @@ Request_Data base_client::prepare_first_request()
     update_content_length(new_request);
     sanitize_request(new_request);
 
+    if (scenario.run_requests_in_parallel)
+    {
+        for (auto req_idx = curr_req_index; req_idx < scenario.requests.size() - 1; req_idx++)
+        {
+            prepare_next_request(new_request);
+        }
+    }
     return new_request;
 }
+
+bool base_client::prepare_next_request(Request_Data& finished_request)
+{
+    run_post_response_action(finished_request);
+
+    size_t scenario_index = finished_request.scenario_index;
+    Scenario& scenario = config->json_config_schema.scenarios[scenario_index];
+
+    size_t curr_req_index = ((finished_request.curr_request_idx + 1) % scenario.requests.size());
+    if (curr_req_index == 0)
+    {
+        return false;
+    }
+    auto& request_template = scenario.requests[curr_req_index];
+    if (!request_template.clear_old_cookies)
+    {
+        parse_and_save_cookies(finished_request);
+    }
+
+    Request_Data new_request;
+    new_request.scenario_data = std::move(finished_request.scenario_data);
+
+    new_request.scenario_index = scenario_index;
+    new_request.curr_request_idx = curr_req_index;
+    new_request.user_id = finished_request.user_id;
+
+    populate_request_from_config_template(new_request, scenario_index, curr_req_index);
+
+    switch (request_template.uri.uri_action)
+    {
+        case INPUT_URI:
+        {
+            new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, new_request.scenario_data));
+            new_request.path = &(new_request.string_collection.back());
+
+            break;
+        }
+        case SAME_WITH_LAST_ONE:
+        {
+            new_request.string_collection.emplace_back(*finished_request.path);
+            new_request.path = &(new_request.string_collection.back());
+            new_request.string_collection.emplace_back(*finished_request.schema);
+            new_request.schema = &(new_request.string_collection.back());
+            new_request.string_collection.emplace_back(*finished_request.authority);
+            new_request.authority = &(new_request.string_collection.back());
+            break;
+        }
+        case FROM_RESPONSE_HEADER:
+        {
+            std::string* uri_header_value = nullptr;
+            for (auto& header_map : finished_request.resp_headers)
+            {
+                auto header = header_map.find(request_template.uri.input);
+                if (header != header_map.end())
+                {
+                    uri_header_value = &header->second;
+                }
+            }
+            new_request.authority = nullptr;
+            if (uri_header_value && parse_uri_and_poupate_request(*uri_header_value, new_request))
+            {
+                if (!new_request.authority)
+                {
+                    new_request.string_collection.emplace_back(*finished_request.schema);
+                    new_request.schema = &(new_request.string_collection.back());
+                    new_request.string_collection.emplace_back(*finished_request.authority);
+                    new_request.authority = &(new_request.string_collection.back());
+                }
+            }
+            else
+            {
+                if (config->verbose)
+                {
+                    std::cout << "response status code:" << finished_request.status_code << std::endl;
+                    std::cerr << "abort whole scenario sequence, as header not found: " << request_template.uri.input << std::endl;
+                    for (auto& header_map : finished_request.resp_headers)
+                    {
+                        for (auto& header : header_map)
+                        {
+                            std::cout << header.first << ":" << header.second << std::endl;
+                        }
+                    }
+                    std::cout << "response payload:" << finished_request.resp_payload << std::endl;
+                }
+                return false;
+            }
+            break;
+        }
+        case INPUT_WITH_VARIABLE:
+        {
+            auto uri = assemble_string(request_template.tokenized_path_with_vars, new_request.scenario_data);
+            if (!parse_uri_and_poupate_request(uri, new_request))
+            {
+                std::cerr << "abort whole scenario sequence, as uri is invalid:" << uri << std::endl;
+                return false;
+            }
+            break;
+        }
+        default:
+        {
+
+        }
+
+    }
+
+    produce_request_cookie_header(new_request);
+
+    run_pre_request_action(new_request);
+
+    if (request_template.luaScript.size())
+    {
+        if (!update_request_with_lua(lua_states[scenario_index][curr_req_index], finished_request, new_request))
+        {
+            return false; // lua script returns error or kills the request, abort this scenario
+        }
+    }
+
+    update_content_length(new_request);
+    sanitize_request(new_request);
+
+    enqueue_request(finished_request, std::move(new_request));
+
+    return true;
+}
+
+void base_client::update_content_length(Request_Data& data)
+{
+    if (data.req_payload->size())
+    {
+        std::string content_length = "content-length";
+        data.req_headers_of_individual[content_length] = std::to_string(data.req_payload->size());
+    }
+}
+
 
 int base_client::submit_request()
 {
