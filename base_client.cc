@@ -968,12 +968,12 @@ void base_client::run_post_response_action(Request_Data& finished_request)
             result.clear();
         }
         //finished_request.scenario_data.user_varibles[value_picker.variable_name] = result;
-        finished_request.scenario_data.variable_index_to_value[value_picker.unique_id] = result;
+        finished_request.scenario_data->variable_index_to_value[value_picker.unique_id] = result;
     }
     if (config->verbose)
     {
         std::cout<<"variable list of current user: "<<std::endl;
-        for (auto& var: finished_request.scenario_data.variable_index_to_value)
+        for (auto& var: finished_request.scenario_data->variable_index_to_value)
         {
             std::cout<<var<<std::endl;
         }
@@ -1030,7 +1030,7 @@ void base_client::parse_and_save_cookies(Request_Data& finished_request)
             {
                 if (Cookie::is_cookie_acceptable(cookie))
                 {
-                    finished_request.scenario_data.saved_cookies[cookie.cookie_key] = std::move(cookie);
+                    finished_request.scenario_data->saved_cookies[cookie.cookie_key] = std::move(cookie);
                 }
             }
         }
@@ -1047,7 +1047,7 @@ void base_client::populate_request_from_config_template(Request_Data& new_reques
     new_request.method = &request_template.method;
     new_request.schema = &request_template.schema;
     new_request.authority = &request_template.authority;
-    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_payload_with_vars, new_request.scenario_data));
+    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_payload_with_vars, *new_request.scenario_data));
 
     new_request.req_payload = &(new_request.string_collection.back());
 
@@ -1056,8 +1056,8 @@ void base_client::populate_request_from_config_template(Request_Data& new_reques
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
     for (auto& h: request_template.headers_with_variable)
     {
-        auto name = assemble_string(h.first, new_request.scenario_data);
-        auto value = assemble_string(h.second, new_request.scenario_data);
+        auto name = assemble_string(h.first, *new_request.scenario_data);
+        auto value = assemble_string(h.second, *new_request.scenario_data);
         new_request.req_headers_of_individual[name] = value;
     }
 }
@@ -1135,7 +1135,7 @@ void base_client::slice_user_id()
         for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
         {
             auto& scenario = config->json_config_schema.scenarios[index];
-            Runtime_Scenario_Data scenario_data;
+            Scenario_Data_Per_Client scenario_data;
             if (!scenario.variable_range_slicing)
             {
                 std::random_device                  rand_dev;
@@ -1189,7 +1189,7 @@ void base_client::slice_user_id()
         for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
         {
             auto& scenario = config->json_config_schema.scenarios[index];
-            Runtime_Scenario_Data scenario_data;
+            Scenario_Data_Per_Client  scenario_data;
             scenario_data.curr_req_variable_value = scenario.variable_range_start;
             scenario_data.req_variable_value_start = scenario.variable_range_start;
             scenario_data.req_variable_value_end = scenario.variable_range_end;
@@ -1297,7 +1297,7 @@ void base_client::submit_ping()
 
 void base_client::produce_request_cookie_header(Request_Data& req_to_be_sent)
 {
-    if (req_to_be_sent.scenario_data.saved_cookies.empty())
+    if (req_to_be_sent.scenario_data->saved_cookies.empty())
     {
         return;
     }
@@ -1313,7 +1313,7 @@ void base_client::produce_request_cookie_header(Request_Data& req_to_be_sent)
     }
     const std::string cookie_delimeter = "; ";
     std::string cookies_to_append;
-    for (auto& cookie : req_to_be_sent.scenario_data.saved_cookies)
+    for (auto& cookie : req_to_be_sent.scenario_data->saved_cookies)
     {
         if (cookies_from_config.count(cookie.first))
         {
@@ -2075,7 +2075,19 @@ Request_Data base_client::prepare_first_request()
     new_request.curr_request_idx = curr_req_index;
 
     new_request.user_id = controller->runtime_scenario_data[scenario_index].curr_req_variable_value;
-    new_request.scenario_data.variable_index_to_value[0] = get_current_user_id_string(config, new_request.scenario_index, new_request.curr_request_idx, new_request.user_id);
+
+    new_request.scenario_data->variable_index_to_value[0] = get_current_user_id_string(config, new_request.scenario_index, new_request.curr_request_idx, new_request.user_id);
+
+    if ((new_request.user_id >= scenario.variable_range_start) &&
+        (scenario.user_variables.size() > (new_request.user_id - scenario.variable_range_start)))
+    {
+        auto& user_variables_values_of_this_user = scenario.user_variables[new_request.user_id - scenario.variable_range_start];
+        for (size_t index = 1; index < user_variables_values_of_this_user.size() + 1; index++)
+        {
+            new_request.scenario_data->variable_index_to_value[index] = user_variables_values_of_this_user[index - 1];
+        }
+    }
+
     if (controller->runtime_scenario_data[scenario_index].req_variable_value_end)
     {
         controller->runtime_scenario_data[scenario_index].curr_req_variable_value++;
@@ -2092,7 +2104,7 @@ Request_Data base_client::prepare_first_request()
     populate_request_from_config_template(new_request, scenario_index, curr_req_index);
 
     auto& request_template = scenario.requests[curr_req_index];
-    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, new_request.scenario_data));
+    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, *new_request.scenario_data));
 
     new_request.path = &(new_request.string_collection.back());
 
@@ -2134,33 +2146,39 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
     {
         parse_and_save_cookies(finished_request);
     }
+    std::unique_ptr<Request_Data> new_request;
+    if (scenario.run_requests_in_parallel)
+    {
+        new_request = std::make_unique<Request_Data>(finished_request.scenario_data);
+    }
+    else
+    {
+        new_request = std::make_unique<Request_Data>(std::move(finished_request.scenario_data));
+    }
 
-    Request_Data new_request;
-    new_request.scenario_data = std::move(finished_request.scenario_data);
+    new_request->scenario_index = scenario_index;
+    new_request->curr_request_idx = curr_req_index;
+    new_request->user_id = finished_request.user_id;
 
-    new_request.scenario_index = scenario_index;
-    new_request.curr_request_idx = curr_req_index;
-    new_request.user_id = finished_request.user_id;
-
-    populate_request_from_config_template(new_request, scenario_index, curr_req_index);
+    populate_request_from_config_template(*new_request, scenario_index, curr_req_index);
 
     switch (request_template.uri.uri_action)
     {
         case INPUT_URI:
         {
-            new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, new_request.scenario_data));
-            new_request.path = &(new_request.string_collection.back());
+            new_request->string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, *new_request->scenario_data));
+            new_request->path = &(new_request->string_collection.back());
 
             break;
         }
         case SAME_WITH_LAST_ONE:
         {
-            new_request.string_collection.emplace_back(*finished_request.path);
-            new_request.path = &(new_request.string_collection.back());
-            new_request.string_collection.emplace_back(*finished_request.schema);
-            new_request.schema = &(new_request.string_collection.back());
-            new_request.string_collection.emplace_back(*finished_request.authority);
-            new_request.authority = &(new_request.string_collection.back());
+            new_request->string_collection.emplace_back(*finished_request.path);
+            new_request->path = &(new_request->string_collection.back());
+            new_request->string_collection.emplace_back(*finished_request.schema);
+            new_request->schema = &(new_request->string_collection.back());
+            new_request->string_collection.emplace_back(*finished_request.authority);
+            new_request->authority = &(new_request->string_collection.back());
             break;
         }
         case FROM_RESPONSE_HEADER:
@@ -2174,15 +2192,15 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
                     uri_header_value = &header->second;
                 }
             }
-            new_request.authority = nullptr;
-            if (uri_header_value && parse_uri_and_poupate_request(*uri_header_value, new_request))
+            new_request->authority = nullptr;
+            if (uri_header_value && parse_uri_and_poupate_request(*uri_header_value, *new_request))
             {
-                if (!new_request.authority)
+                if (!new_request->authority)
                 {
-                    new_request.string_collection.emplace_back(*finished_request.schema);
-                    new_request.schema = &(new_request.string_collection.back());
-                    new_request.string_collection.emplace_back(*finished_request.authority);
-                    new_request.authority = &(new_request.string_collection.back());
+                    new_request->string_collection.emplace_back(*finished_request.schema);
+                    new_request->schema = &(new_request->string_collection.back());
+                    new_request->string_collection.emplace_back(*finished_request.authority);
+                    new_request->authority = &(new_request->string_collection.back());
                 }
             }
             else
@@ -2206,8 +2224,8 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
         }
         case INPUT_WITH_VARIABLE:
         {
-            auto uri = assemble_string(request_template.tokenized_path_with_vars, new_request.scenario_data);
-            if (!parse_uri_and_poupate_request(uri, new_request))
+            auto uri = assemble_string(request_template.tokenized_path_with_vars, *new_request->scenario_data);
+            if (!parse_uri_and_poupate_request(uri, *new_request))
             {
                 std::cerr << "abort whole scenario sequence, as uri is invalid:" << uri << std::endl;
                 return false;
@@ -2221,22 +2239,22 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
 
     }
 
-    produce_request_cookie_header(new_request);
+    produce_request_cookie_header(*new_request);
 
-    run_pre_request_action(new_request);
+    run_pre_request_action(*new_request);
 
     if (request_template.luaScript.size())
     {
-        if (!update_request_with_lua(lua_states[scenario_index][curr_req_index], finished_request, new_request))
+        if (!update_request_with_lua(lua_states[scenario_index][curr_req_index], finished_request, *new_request))
         {
             return false; // lua script returns error or kills the request, abort this scenario
         }
     }
 
-    update_content_length(new_request);
-    sanitize_request(new_request);
+    update_content_length(*new_request);
+    sanitize_request(*new_request);
 
-    enqueue_request(finished_request, std::move(new_request));
+    enqueue_request(finished_request, std::move(*new_request));
 
     return true;
 }
@@ -2662,7 +2680,7 @@ void base_client::pass_response_to_lua(int32_t stream_id, lua_State* L)
     }
 }
 
-std::string base_client::assemble_string(const String_With_Variables_In_Between& source, Scenario_Data& scenario_data)
+std::string base_client::assemble_string(const String_With_Variables_In_Between& source, Scenario_Data_Per_User& scenario_data)
 {
     std::string result;
     auto string_size = std::accumulate(source.string_segments.begin(), source.string_segments.end(), 0, [](size_t count, const std::string& s){ return count + s.size();});

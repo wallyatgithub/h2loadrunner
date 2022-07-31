@@ -303,7 +303,7 @@
           },
           "user-id-range-end":
           {
-            "description":"Specify variable user id range end.",
+            "description":"Specify variable user id range end; actual range does this include the end, which is: [user-id-range-start, user-id-range-end)",
             "type":"integer"
           },
           "user-id-range-slicing":
@@ -317,6 +317,11 @@
             "description": "true: all the requests of this scenario will be run in parallel, obvious, the request uri typeOfAction cannot be fromResponseHeader or fromJsonPointer in this case; false: the requests of this scenario will be run one after another in the listed order",
             "default": false,
             "type":"boolean"
+          },
+          "user-variables-input-file":
+          {
+            "description":"path of a UTF-8 CSV file; the first row must be the list of column names, and each colume name is interpreted as a variable name; the value of this variable is given from the second row and after, with each row representing a specific user; suppose the CSV files has M columns and N rows, then it represents N-1 users: each row represents the M variable values of a single user; each variable value can be referred to in user message definition by wrapping the variable name with ${}, where variable name is given in the corresponding column at the first row",
+            "type":"string"
           },
           "Requests":
           {
@@ -337,8 +342,8 @@
                     "typeOfAction":
                     {
                       "type":"string",
-                      "description": "Specifies how to generate the URI. input: direct input in input field followed next; sameWithLastOne: same URI with last request; fromResponseHeader: extract the URI for this request from a specific header (name specified in input field) of last response; fromLuaScript: provide URI by lua script (see field luaScript); fromXpath: Search XML body of last response for the XPATH value given in input field (to be implemented); fromJsonPointer: Search Json body of last response body for the Json pointer value given in input field (to be implemented)",
-                      "enum": ["input", "InputWithVariable", "sameWithLastOne", "fromResponseHeader", "fromLuaScript", "fromXPath", "fromJsonPointer"]
+                      "description": "Specifies how to generate the URI. input: direct input into input field, and the input can include variables wrapped with ${}; sameWithLastOne: same URI with last request; fromResponseHeader: extract the URI for this request from a specific header (name specified in input field) of last response; fromLuaScript: provide URI by lua script (see field luaScript); fromXpath: Search XML body of last response for the XPATH value given in input field (to be implemented); fromJsonPointer: Search Json body of last response body for the Json pointer value given in input field (to be implemented)",
+                      "enum": ["input", "sameWithLastOne", "fromResponseHeader", "fromLuaScript", "fromXPath", "fromJsonPointer"]
                     },
                     "input":
                     {

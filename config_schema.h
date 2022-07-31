@@ -23,7 +23,7 @@ const std::string from_response_header = "fromResponseHeader";
 const std::string from_lua_script = "fromLuaScript";
 const std::string from_x_path = "fromXPath";
 const std::string from_json_pointer = "fromJsonPointer";
-const std::string input_with_variable = "InputWithVariable";
+const std::string input_with_variable = "inputWithVariable";
 
 
 const std::string request_header = "Request-Header";
@@ -223,7 +223,7 @@ public:
     uint32_t weight;
     std::string variable_name_in_path_and_data;
     std::string user_id_list_file;
-    std::vector<std::vector<std::string>> user_ids;
+    std::vector<std::vector<std::string>> user_ids; // populated by post_process_json_config_schema
     uint32_t interval_to_wait_before_start;
     uint64_t variable_range_start;
     uint64_t variable_range_end;
@@ -232,6 +232,8 @@ public:
     size_t number_of_variables; // populated by post_process_json_config_schema
     std::map<std::string, size_t> variable_ids; // populated by post_process_json_config_schema
     bool run_requests_in_parallel;
+    std::string user_variables_input_file;
+    std::vector<std::vector<std::string>> user_variables; // populated by post_process_json_config_schema
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("name", &this->name);
@@ -244,6 +246,7 @@ public:
         h->add_property("user-id-range-slicing", &this->variable_range_slicing, staticjson::Flags::Optional);
         h->add_property("interval-to-wait-before-start", &this->interval_to_wait_before_start, staticjson::Flags::Optional);
         h->add_property("run-requests-in-parallel", &this->run_requests_in_parallel, staticjson::Flags::Optional);
+        h->add_property("user-variables-input-file", &this->user_variables_input_file, staticjson::Flags::Optional);
         h->add_property("Requests", &this->requests);
     }
     explicit Scenario():
@@ -252,7 +255,8 @@ public:
         variable_range_end(0),
         variable_range_slicing(false),
         weight(100),
-        interval_to_wait_before_start(0)
+        interval_to_wait_before_start(0),
+        run_requests_in_parallel(false)
     {
     }
 };

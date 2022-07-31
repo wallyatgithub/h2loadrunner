@@ -56,11 +56,11 @@ static std::string emptyString;
 
 class base_client;
 
-struct Scenario_Data
+struct Scenario_Data_Per_User
 {
     std::vector<std::string> variable_index_to_value;
     std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
-    Scenario_Data(size_t number_of_var = 1):variable_index_to_value(number_of_var, "")
+    Scenario_Data_Per_User(size_t number_of_var = 1):variable_index_to_value(number_of_var, "")
     {
     }
 };
@@ -87,15 +87,16 @@ struct Request_Data
     std::vector<std::string> string_collection;
     std::function<void(int32_t, h2load::base_client*)> request_sent_callback;
     uint32_t stream_timeout_in_ms;
-    Scenario_Data scenario_data;
-    explicit Request_Data():
-        schema(&emptyString),
-        authority(&emptyString),
-        req_payload(&emptyString),
-        path(&emptyString),
-        method(&emptyString),
-        stream_timeout_in_ms(0)
+    std::shared_ptr<Scenario_Data_Per_User> scenario_data;
+
+    void init()
     {
+        schema = &emptyString;
+        authority = &emptyString;
+        req_payload = &emptyString;
+        path = &emptyString;
+        method = &emptyString;
+        stream_timeout_in_ms = 0;
         user_id = 0;
         status_code = 0;
         expected_status_code = 0;
@@ -105,23 +106,21 @@ struct Request_Data
         req_payload_cursor = 0;
         string_collection.reserve(12); // (path, authority, method, schema, payload, xx) * 2
     }
-    explicit Request_Data(size_t number_of_vars):
-        schema(&emptyString),
-        authority(&emptyString),
-        req_payload(&emptyString),
-        path(&emptyString),
-        method(&emptyString),
-        stream_timeout_in_ms(0),
-        scenario_data(number_of_vars)
+    explicit Request_Data(size_t number_of_vars = 0)
     {
-        user_id = 0;
-        status_code = 0;
-        expected_status_code = 0;
-        delay_before_executing_next = 0;
-        curr_request_idx = 0;
-        scenario_index = 0;
-        req_payload_cursor = 0;
-        string_collection.reserve(12); // (path, authority, method, schema, payload, xx) * 2
+        init();
+        scenario_data = std::make_shared<Scenario_Data_Per_User>(number_of_vars);
+    }
+    explicit Request_Data(std::shared_ptr<Scenario_Data_Per_User>& scenario_data_from_sibling)
+    {
+        init();
+        scenario_data = scenario_data_from_sibling;
+    }
+
+    explicit Request_Data(std::shared_ptr<Scenario_Data_Per_User>&& scenario_data_from_sibling)
+    {
+        init();
+        scenario_data = std::move(scenario_data_from_sibling);
     }
 
     friend std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
@@ -156,7 +155,7 @@ struct Request_Data
                 o << "response header name: " << it.first << ", header value: " << it.second << std::endl;
             }
         }
-        for (auto& it : request_data.scenario_data.saved_cookies)
+        for (auto& it : request_data.scenario_data->saved_cookies)
         {
             o << "cookie name: " << it.first << ", cookie content: " << it.second << std::endl;
         }
@@ -175,12 +174,12 @@ struct Request_Data
 
 };
 
-struct Runtime_Scenario_Data
+struct Scenario_Data_Per_Client
 {
     uint64_t req_variable_value_start;
     uint64_t req_variable_value_end;
     uint64_t curr_req_variable_value;
-    explicit Runtime_Scenario_Data():
+    explicit Scenario_Data_Per_Client ():
         req_variable_value_start(0),
         req_variable_value_end(0),
         curr_req_variable_value(0)

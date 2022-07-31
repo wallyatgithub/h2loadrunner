@@ -212,4 +212,7 @@ std::string get_current_user_id_string(h2load::Config* config,
 
 bool variable_present(const std::string& source, size_t start_offset, size_t& var_start, size_t& var_end);
 
+void load_user_variables(Scenario& scenario);
+
+
 #endif

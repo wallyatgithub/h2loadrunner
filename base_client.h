@@ -196,7 +196,7 @@ public:
     void set_prefered_authority(const std::string& authority);
     void run_post_response_action(Request_Data& finished_request);
     void run_pre_request_action(Request_Data& new_request);
-    std::string assemble_string(const String_With_Variables_In_Between& source, Scenario_Data& scenario_data);
+    std::string assemble_string(const String_With_Variables_In_Between& source, Scenario_Data_Per_User& scenario_data);
     bool parse_uri_and_poupate_request(const std::string& uri, Request_Data& new_request);
     void sanitize_request(Request_Data& new_request);
 
@@ -248,7 +248,7 @@ public:
     std::deque<std::string> used_addresses;
     Unique_Id this_client_id;
     std::function<void()> write_clear_callback;
-    std::vector<Runtime_Scenario_Data> runtime_scenario_data;
+    std::vector<Scenario_Data_Per_Client> runtime_scenario_data;
     time_point_in_seconds_double rps_duration_started;
     SSL* ssl;
     std::vector<std::function<void(bool, h2load::base_client*)>> connected_callbacks;

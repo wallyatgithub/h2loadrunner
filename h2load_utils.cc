@@ -11,6 +11,7 @@
 #include <string>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#include <boost/algorithm/string.hpp>
 
 #ifdef USE_LIBEV
 extern "C" {
@@ -1439,7 +1440,8 @@ void post_process_json_config_schema(h2load::Config& config)
     {
         if (scenario.variable_name_in_path_and_data.size())
         {
-            scenario.variable_ids[scenario.variable_name_in_path_and_data] = 0;
+            size_t curr_map_size = scenario.variable_ids.size();
+            scenario.variable_ids[scenario.variable_name_in_path_and_data] = curr_map_size;
         }
         if (scenario.user_id_list_file.size())
         {
@@ -1451,6 +1453,10 @@ void post_process_json_config_schema(h2load::Config& config)
             }
             scenario.variable_range_start = 0;
             scenario.variable_range_end = scenario.user_ids.size();
+        }
+        if (scenario.user_variables_input_file.size())
+        {
+            load_user_variables(scenario);
         }
         if (scenario.variable_range_end < scenario.variable_range_start)
         {
@@ -1591,6 +1597,81 @@ std::vector<std::vector<std::string>> read_csv_file(const std::string& csv_file_
     }
 
     return result;
+}
+
+void load_user_variables(Scenario& scenario)
+{
+    const std::string utf8_bom = {char(0xEF), char(0xBB), char(0xBF)};
+    std::ifstream infile(scenario.user_variables_input_file);
+    if (!infile)
+    {
+        std::cerr << "cannot open file: " << scenario.user_variables_input_file << std::endl;
+        return;
+    }
+    std::string line;
+    std::getline(infile, line);
+    std::vector<std::string> variable_names;
+    if (line.find(utf8_bom) == 0)
+    {
+        line = line.substr(utf8_bom.size(), std::string::npos);
+    }
+    std::vector<std::string> row;
+    std::stringstream lineStream(line);
+    std::string cell;
+    while (std::getline(lineStream, cell, ','))
+    {
+        boost::trim(cell);
+        variable_names.push_back(cell);
+        size_t unique_id_of_variable = 0;
+        auto var_iter = scenario.variable_ids.find(cell);
+        if (var_iter == scenario.variable_ids.end())
+        {
+            unique_id_of_variable = scenario.variable_ids.size();
+            scenario.variable_ids[cell] = unique_id_of_variable;
+        }
+    }
+    std::vector<std::vector<std::string>> variable_values;
+    while (std::getline(infile, line))
+    {
+        if (line.size() && line[line.size() - 1] == '\r')
+        {
+            line = line.substr(0, line.size() - 1);
+        }
+        std::vector<std::string> row;
+        std::stringstream lineStream(line);
+        std::string cell;
+        while (std::getline(lineStream, cell, ','))
+        {
+            row.push_back(cell);
+        }
+        if (row.size() < variable_names.size())
+        {
+            for (size_t i = 0; i < variable_names.size() - row.size(); i++)
+            {
+                row.push_back("");
+            }
+        }
+        else
+        {
+            for (size_t i = 0; i < row.size() - variable_names.size(); i++)
+            {
+                row.pop_back();
+            }
+        }
+        variable_values.push_back(std::move(row));
+    }
+    scenario.user_variables = std::move(variable_values);
+    if (scenario.variable_range_end - scenario.variable_range_start > scenario.user_variables.size())
+    {
+        scenario.variable_range_end = scenario.variable_range_start + scenario.user_variables.size();
+        std::cerr<<"number of record in "<<scenario.user_variables_input_file
+                 <<" is less than user id range end - range start; reduce the range to match number of records"<<std::endl;
+    }
+    if (scenario.user_variables.size() && scenario.variable_range_end == 0)
+    {
+        scenario.variable_range_start = 0;
+        scenario.variable_range_end = scenario.user_variables.size();
+    }
 }
 
 void rpsUpdateFunc(std::atomic<bool>& workers_stopped, h2load::Config& config)

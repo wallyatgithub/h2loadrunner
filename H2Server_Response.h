@@ -53,6 +53,11 @@ inline std::vector<std::string> tokenize_string(const std::string& source, const
         retVec.emplace_back(source);
     }
     return retVec;
+    if (debug_mode)
+    {
+        std::for_each(retVec.begin(), retVec.end(), [](const std::string& s){std::cout<<"token: "<<s<<std::endl;});
+        std::cout<<"delimeter: "<<delimeter<<std::endl;
+    }
 }
 
 template<typename RapidJsonType>
@@ -275,21 +280,19 @@ public:
     std::string header_name;
     std::regex reg_exp;
     std::string regex;
-    bool regex_present;
-    bool random_hex;
-    bool timestamp;
+    bool regex_present = false;
+    bool random_hex = false;
+    bool timestamp = false;
     Argument(const Schema_Argument& payload_argument)
     {
         if (payload_argument.type_of_value == "JsonPointer")
         {
             json_pointer = payload_argument.value_identifier;
             header_name = "";
-            random_hex = false;
         }
         else if (payload_argument.type_of_value == "Header")
         {
             json_pointer = "";
-            random_hex = false;
             header_name = payload_argument.value_identifier;
         }
         else if (payload_argument.type_of_value == "RandomHex")
@@ -301,7 +304,6 @@ public:
         else if (payload_argument.type_of_value == "TimeStamp")
         {
             json_pointer = "";
-            random_hex = false;
             header_name = "";
             timestamp = true;
         }
@@ -313,7 +315,7 @@ public:
             {
                 reg_exp.assign(payload_argument.regex, std::regex_constants::ECMAScript|std::regex_constants::optimize);
             }
-            catch (std::regex_error& e)
+            catch (std::regex_error e)
             {
                 std::cerr<<"invalid reg exp: "<<payload_argument.regex<<" "<<e.what()<<std::endl;
             }
