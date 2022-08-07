@@ -196,7 +196,7 @@ public:
     void set_prefered_authority(const std::string& authority);
     void run_post_response_action(Request_Data& finished_request);
     void run_pre_request_action(Request_Data& new_request);
-    std::string assemble_string(const String_With_Variables_In_Between& source, Scenario_Data_Per_User& scenario_data);
+    std::string assemble_string(const String_With_Variables_In_Between& source, size_t scenario_index, size_t user_id, Scenario_Data_Per_User& scenario_data);
     bool parse_uri_and_poupate_request(const std::string& uri, Request_Data& new_request);
     void sanitize_request(Request_Data& new_request);
 

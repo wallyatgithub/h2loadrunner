@@ -957,37 +957,6 @@ std::string get_current_user_id_string(h2load::Config* config,
     return curr_var_value_str;
 }
 
-std::string reassemble_str_with_variable(h2load::Config* config,
-                                         size_t scenario_index,
-                                         size_t request_index,
-                                         const std::vector<std::string>& tokenized_source,
-                                         uint64_t variable_value)
-
-{
-    std::string retStr = tokenized_source[0];
-    auto& config_scenario = config->json_config_schema.scenarios[scenario_index];
-
-    if (tokenized_source.size() > 1)
-    {
-        auto curr_var_value_str = get_current_user_id_string(config, scenario_index, request_index, variable_value);
-
-        size_t target_size = std::accumulate(tokenized_source.begin(), tokenized_source.end(), 0,
-                                             [](uint64_t sum, const std::string& val)
-                                             {
-                                                 return sum + val.size();
-                                             });
-        target_size += (curr_var_value_str.size() * (tokenized_source.size() - 1) + 1);
-        retStr.reserve(target_size);
-
-        for (size_t i = 1; i < tokenized_source.size(); i++)
-        {
-            retStr.append(curr_var_value_str);
-            retStr.append(tokenized_source[i]);
-        }
-    }
-    return retStr;
-}
-
 void normalize_request_templates(h2load::Config* config)
 {
     for (auto& scenario : config->json_config_schema.scenarios)

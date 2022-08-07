@@ -952,12 +952,6 @@ void base_client::run_post_response_action(Request_Data& finished_request)
             {
             }
         }
-        if (config->verbose)
-        {
-            std::cout<<"where_to_pick_up_from: "<<value_picker.where_to_pick_up_from<<std::endl;
-            std::cout<<"target:"<<value_picker.source<<std::endl;
-            std::cout<<"target value located: "<<source<<std::endl;
-        }
         std::smatch match_result;
         if (std::regex_search(source, match_result, value_picker.picker_regexp))
         {
@@ -967,15 +961,22 @@ void base_client::run_post_response_action(Request_Data& finished_request)
         {
             result.clear();
         }
-        //finished_request.scenario_data.user_varibles[value_picker.variable_name] = result;
-        finished_request.scenario_data->variable_index_to_value[value_picker.unique_id] = result;
+        finished_request.scenario_data->variable_index_to_value[value_picker.unique_id] = std::move(result);
+        if (config->verbose)
+        {
+            std::cout<<"where_to_pick_up_from: "<<value_picker.where_to_pick_up_from<<std::endl;
+            std::cout<<"target:"<<value_picker.source<<std::endl;
+            std::cout<<"var id:"<<value_picker.unique_id<<std::endl;
+            std::cout<<"target value located: "<<source<<std::endl;
+            std::cout<<"target value match result: "<<finished_request.scenario_data->variable_index_to_value[value_picker.unique_id]<<std::endl;
+        }
     }
     if (config->verbose)
     {
-        std::cout<<"variable list of current user: "<<std::endl;
-        for (auto& var: finished_request.scenario_data->variable_index_to_value)
+        std::cout<<"variable_index_to_value size: "<<finished_request.scenario_data->variable_index_to_value.size()<<std::endl;
+        for (auto i = 0; i < finished_request.scenario_data->variable_index_to_value.size(); i++)
         {
-            std::cout<<var<<std::endl;
+            std::cout<<"var: "<<finished_request.scenario_data->variable_index_to_value[i]<<std::endl;
         }
     }
 }
@@ -1047,8 +1048,7 @@ void base_client::populate_request_from_config_template(Request_Data& new_reques
     new_request.method = &request_template.method;
     new_request.schema = &request_template.schema;
     new_request.authority = &request_template.authority;
-    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_payload_with_vars, *new_request.scenario_data));
-
+    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_payload_with_vars, scenario_index, new_request.user_id, *new_request.scenario_data));
     new_request.req_payload = &(new_request.string_collection.back());
 
     new_request.req_headers_from_config = &request_template.headers_in_map;
@@ -1056,8 +1056,8 @@ void base_client::populate_request_from_config_template(Request_Data& new_reques
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
     for (auto& h: request_template.headers_with_variable)
     {
-        auto name = assemble_string(h.first, *new_request.scenario_data);
-        auto value = assemble_string(h.second, *new_request.scenario_data);
+        auto name = assemble_string(h.first, scenario_index, new_request.user_id, *new_request.scenario_data);
+        auto value = assemble_string(h.second, scenario_index, new_request.user_id, *new_request.scenario_data);
         new_request.req_headers_of_individual[name] = value;
     }
 }
@@ -2076,18 +2076,22 @@ Request_Data base_client::prepare_first_request()
 
     new_request.user_id = controller->runtime_scenario_data[scenario_index].curr_req_variable_value;
 
-    new_request.scenario_data->variable_index_to_value[0] = get_current_user_id_string(config, new_request.scenario_index, new_request.curr_request_idx, new_request.user_id);
-
+    if (scenario.variable_name_in_path_and_data.size())
+    {
+        new_request.scenario_data->variable_index_to_value[0] = get_current_user_id_string(config, new_request.scenario_index, new_request.curr_request_idx, new_request.user_id);
+    }
+/*
     if ((new_request.user_id >= scenario.variable_range_start) &&
         (scenario.user_variables.size() > (new_request.user_id - scenario.variable_range_start)))
     {
         auto& user_variables_values_of_this_user = scenario.user_variables[new_request.user_id - scenario.variable_range_start];
-        for (size_t index = 1; index < user_variables_values_of_this_user.size() + 1; index++)
+        auto curr_number_of_vars = new_request.scenario_data->variable_index_to_value.size();
+        for (size_t index = 0; index < user_variables_values_of_this_user.size(); index++)
         {
-            new_request.scenario_data->variable_index_to_value[index] = user_variables_values_of_this_user[index - 1];
+            new_request.scenario_data->variable_index_to_value[curr_number_of_vars + index] = user_variables_values_of_this_user[index];
         }
     }
-
+*/
     if (controller->runtime_scenario_data[scenario_index].req_variable_value_end)
     {
         controller->runtime_scenario_data[scenario_index].curr_req_variable_value++;
@@ -2104,7 +2108,7 @@ Request_Data base_client::prepare_first_request()
     populate_request_from_config_template(new_request, scenario_index, curr_req_index);
 
     auto& request_template = scenario.requests[curr_req_index];
-    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, *new_request.scenario_data));
+    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, scenario_index, new_request.user_id, *new_request.scenario_data));
 
     new_request.path = &(new_request.string_collection.back());
 
@@ -2166,7 +2170,7 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
     {
         case INPUT_URI:
         {
-            new_request->string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, *new_request->scenario_data));
+            new_request->string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, scenario_index, new_request->user_id, *new_request->scenario_data));
             new_request->path = &(new_request->string_collection.back());
 
             break;
@@ -2224,7 +2228,7 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
         }
         case INPUT_WITH_VARIABLE:
         {
-            auto uri = assemble_string(request_template.tokenized_path_with_vars, *new_request->scenario_data);
+            auto uri = assemble_string(request_template.tokenized_path_with_vars, scenario_index, new_request->user_id, *new_request->scenario_data);
             if (!parse_uri_and_poupate_request(uri, *new_request))
             {
                 std::cerr << "abort whole scenario sequence, as uri is invalid:" << uri << std::endl;
@@ -2680,20 +2684,49 @@ void base_client::pass_response_to_lua(int32_t stream_id, lua_State* L)
     }
 }
 
-std::string base_client::assemble_string(const String_With_Variables_In_Between& source, Scenario_Data_Per_User& scenario_data)
+std::string base_client::assemble_string(const String_With_Variables_In_Between& source, size_t scenario_index, size_t user_id, Scenario_Data_Per_User& scenario_data)
 {
     std::string result;
+    Scenario& scenario_template = config->json_config_schema.scenarios[scenario_index];
+    static std::vector<std::string> dummy_user_vars;
+    auto& user_vars = user_id  < scenario_template.user_variables.size() ? scenario_template.user_variables[user_id] : dummy_user_vars;
     auto string_size = std::accumulate(source.string_segments.begin(), source.string_segments.end(), 0, [](size_t count, const std::string& s){ return count + s.size();});
-    for (auto& i: source.variable_ids_in_between)
+    size_t range_left = (scenario_template.variable_name_in_path_and_data.size() ? 1 : 0);
+    size_t range_right = range_left + user_vars.size();
+    if (config->verbose)
     {
-        string_size += scenario_data.variable_index_to_value[i].size();
+        std::cout<<source<<std::endl;
+        std::cout<<"variable_index_to_value size: "<<scenario_data.variable_index_to_value.size()<<std::endl;
+        for (auto i = 0; i < scenario_data.variable_index_to_value.size(); i++)
+        {
+            std::cout<<"var: "<<scenario_data.variable_index_to_value[i]<<std::endl;
+        }
+    }
+    for (auto& var_id: source.variable_ids_in_between)
+    {
+        if (range_left <= var_id && var_id < range_right)
+        {
+            string_size += user_vars[var_id - range_left].size();
+        }
+        else
+        {
+            string_size += scenario_data.variable_index_to_value[var_id].size();
+        }
     }
     result.reserve(string_size);
     size_t index = 0;
     for (index = 0; index < source.variable_ids_in_between.size(); index++)
     {
         result.append(source.string_segments[index]);
-        result.append(scenario_data.variable_index_to_value[source.variable_ids_in_between[index]]);
+        auto var_id = source.variable_ids_in_between[index];
+        if (range_left <= var_id && var_id < range_right)
+        {
+            result.append(user_vars[var_id - range_left]);
+        }
+        else
+        {
+            result.append(scenario_data.variable_index_to_value[var_id]);
+        }
     }
     result.append(source.string_segments[index]);
     return result;

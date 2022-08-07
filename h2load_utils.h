@@ -97,12 +97,6 @@ void insert_customized_headers_to_Json_scenarios(h2load::Config& config);
 
 void tokenize_path_and_payload(h2load::Config& config);
 
-std::string reassemble_str_with_variable(h2load::Config* config,
-                                         size_t scenario_index,
-                                         size_t request_index,
-                                         const std::vector<std::string>& tokenized_source,
-                                         uint64_t variable_value);
-
 std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string, const std::string& origin_authority,
                                                 const std::string& origin_schema);
 #ifdef USE_LIBEV
