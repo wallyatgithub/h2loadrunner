@@ -40,9 +40,13 @@ asio_client_connection::asio_client_connection
 )
     : base_client(id, wrker, req_todo, conf, parent, dest_schema, dest_authority),
       io_context(io_ctx),
-      dns_resolver(io_ctx),
-      client_socket(io_ctx),
-      client_probe_socket(io_ctx),
+      tcp_dns_resolver(io_ctx),
+      tcp_client_socket(io_ctx),
+#ifdef ENABLE_HTTP3
+      udp_dns_resolver(io_ctx),
+      udp_client_socket(io_ctx),
+#endif
+      tcp_client_probe_socket(io_ctx),
       input_buffer(16 * 1024, 0),
       output_buffers(2, std::vector<uint8_t>(64 * 1024, 0)),
       connect_timer(io_ctx),
@@ -62,6 +66,14 @@ asio_client_connection::asio_client_connection
       do_write_fn(&asio_client_connection::do_tcp_write)
 {
     init_connection_targert();
+#ifdef ENABLE_HTTP3
+    setup_quic_pkt_timer();
+    if (conf->is_quic())
+    {
+        boost::asio::ip::udp::endpoint local_endpoint = boost::asio::ip::udp::endpoint();
+    }
+#endif // ENABLE_HTTP3
+
 }
 
 asio_client_connection::~asio_client_connection()
@@ -316,25 +328,40 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
     {
         exit(1);
     }
-
-    if (schema == "https")
+#ifdef ENABLE_HTTP3
+    if (config->is_quic())
     {
-        do_read_fn = &asio_client_connection::do_ssl_read;
-        do_write_fn = &asio_client_connection::do_ssl_write;
-        ssl = ssl_socket.native_handle();
+        do_read_fn = &asio_client_connection::do_udp_read;
+        do_write_fn = &asio_client_connection::do_udp_write;
+        boost::asio::ip::udp::resolver::query query(host, port);
+        udp_dns_resolver.async_resolve(query,
+                                   [this](const boost::system::error_code & err, boost::asio::ip::udp::resolver::iterator endpoint_iterator)
+        {
+            on_udp_resolve_result_event(err, endpoint_iterator);
+        });
     }
     else
+#endif
     {
-        do_read_fn = &asio_client_connection::do_tcp_read;
-        do_write_fn = &asio_client_connection::do_tcp_write;
-    }
+        if (schema == "https")
+        {
+            do_read_fn = &asio_client_connection::do_ssl_read;
+            do_write_fn = &asio_client_connection::do_ssl_write;
+            ssl = ssl_socket.native_handle();
+        }
+        else
+        {
+            do_read_fn = &asio_client_connection::do_tcp_read;
+            do_write_fn = &asio_client_connection::do_tcp_write;
+        }
 
-    boost::asio::ip::tcp::resolver::query query(host, port);
-    dns_resolver.async_resolve(query,
-                               [this](const boost::system::error_code & err, boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
-    {
-        on_resolve_result_event(err, endpoint_iterator);
-    });
+        boost::asio::ip::tcp::resolver::query query(host, port);
+        tcp_dns_resolver.async_resolve(query,
+                                   [this](const boost::system::error_code & err, boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
+        {
+            on_resolve_result_event(err, endpoint_iterator);
+        });
+    }
     start_connect_timeout_timer();
     schema = dest_schema;
     authority = dest_authority;
@@ -354,7 +381,7 @@ void asio_client_connection::probe_and_connect_to(const std::string& schema, con
     }
 
     boost::asio::ip::tcp::resolver::query query(host, port);
-    dns_resolver.async_resolve(query,
+    tcp_dns_resolver.async_resolve(query,
                                [this](const boost::system::error_code & err, boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
     {
         on_probe_resolve_result_event(err, endpoint_iterator);
@@ -600,7 +627,7 @@ void asio_client_connection::on_probe_connected_event(const boost::system::error
                                                       boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
 {
     boost::system::error_code ignored_ec;
-    client_probe_socket.lowest_layer().close(ignored_ec);
+    tcp_client_probe_socket.lowest_layer().close(ignored_ec);
     if (!err)
     {
         on_prefered_host_up();
@@ -775,7 +802,7 @@ void asio_client_connection::common_read(SOCKET& socket)
 
 void asio_client_connection::do_tcp_read()
 {
-    common_read(client_socket);
+    common_read(tcp_client_socket);
 }
 
 void asio_client_connection::do_ssl_read()
@@ -865,7 +892,7 @@ void asio_client_connection::common_write(SOCKET& socket)
 
 void asio_client_connection::do_tcp_write()
 {
-    common_write(client_socket);
+    common_write(tcp_client_socket);
 }
 
 void asio_client_connection::do_ssl_write()
@@ -886,7 +913,7 @@ void asio_client_connection::stop()
     }
     is_client_stopped = true;
     boost::system::error_code ignored_ec;
-    client_socket.lowest_layer().close(ignored_ec);
+    tcp_client_socket.lowest_layer().close(ignored_ec);
     ssl_socket.lowest_layer().close(ignored_ec);
     connect_timer.cancel();
     rps_timer.cancel();
@@ -924,7 +951,7 @@ void asio_client_connection::on_resolve_result_event(const boost::system::error_
     {
         if (schema != "https")
         {
-            start_async_connect(endpoint_iterator, client_socket);
+            start_async_connect(endpoint_iterator, tcp_client_socket);
         }
         else
         {
@@ -944,7 +971,7 @@ void asio_client_connection::on_probe_resolve_result_event(const boost::system::
     {
         boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
         auto next_endpoint_iterator = ++endpoint_iterator;
-        client_probe_socket.lowest_layer().async_connect(endpoint,
+        tcp_client_probe_socket.lowest_layer().async_connect(endpoint,
                                                          [this, next_endpoint_iterator](const boost::system::error_code & err)
         {
             on_probe_connected_event(err, next_endpoint_iterator);
@@ -957,5 +984,59 @@ void asio_client_connection::on_probe_resolve_result_event(const boost::system::
 }
 
 
+#ifdef ENABLE_HTTP3
+
+void asio_client_connection::setup_quic_pkt_timer()
+{
+    
+}
+void asio_client_connection::do_udp_read()
+{
+}
+void asio_client_connection::do_udp_write()
+{
+}
+
+void asio_client_connection::on_udp_resolve_result_event(const boost::system::error_code& err,
+                                                                    boost::asio::ip::udp::resolver::iterator endpoint_iterator)
+{
+    if (config->verbose)
+    {
+        std::cerr << __FUNCTION__ << ":" << authority << std::endl;
+    }
+    if (!err)
+    {
+        start_udp_connect(endpoint_iterator);
+    }
+    else
+    {
+        std::cerr << "Error: " << err.message() << "\n";
+    }
+}
+
+void asio_client_connection::start_udp_connect(boost::asio::ip::udp::resolver::iterator endpoint_iterator)
+{
+    boost::asio::ip::udp::endpoint endpoint = *endpoint_iterator;
+    auto next_endpoint_iterator = ++endpoint_iterator;
+    if (endpoint.address().is_v4())
+    {
+         boost::asio::ip::udp::endpoint local_endpoint(boost::asio::ip::udp::v4(), 0);
+         udp_client_socket.open(boost::asio::ip::udp::v4());
+         udp_client_socket.bind(local_endpoint);
+    }
+    else
+    {
+        boost::asio::ip::udp::endpoint local_endpoint(boost::asio::ip::udp::v6(), 0);
+        udp_client_socket.open(boost::asio::ip::udp::v6());
+        udp_client_socket.bind(local_endpoint);
+    }
+
+    auto local_ep = udp_client_socket.local_endpoint();
+    // call quic_init with the local address and remote address
+    
+    
+}
+
+#endif;
 
 }

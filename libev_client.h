@@ -100,6 +100,11 @@ public:
 
     template<class T>
     int make_socket(T* addr);
+#ifdef ENABLE_HTTP3
+
+    virtual void setup_quic_pkt_timer();
+
+#endif
 
     DefaultMemchunks wb;
     ev_io wev;

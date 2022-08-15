@@ -56,6 +56,9 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
     rps(conf->rps),
     this_client_id(),
     rps_duration_started(),
+#ifdef ENABLE_HTTP3
+    quic{},
+#endif
     ssl(nullptr)
 {
     init_req_left();
@@ -65,6 +68,25 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
     init_lua_states();
 
     update_this_in_dest_client_map();
+
+#ifdef ENABLE_HTTP3
+
+    if (config.is_quic()) {
+    quic.tx.data = std::make_unique<uint8_t[]>(64_k);
+    }
+
+    ngtcp2_connection_close_error_default(&quic.last_error);
+#endif // ENABLE_HTTP3
+
+}
+
+base_client::~base_client()
+{
+#ifdef ENABLE_HTTP3
+      if (config.is_quic()) {
+        quic_free();
+      }
+#endif // ENABLE_HTTP3
 
 }
 
@@ -2733,5 +2755,19 @@ std::string base_client::assemble_string(const String_With_Variables_In_Between&
 
 }
 
+#ifdef ENABLE_HTTP3
+
+void on_quic_pkt_timeout()
+{
+    if (quic_pkt_timeout() != 0)
+    {
+        fail();
+        worker->free_client(c);
+        delete c;
+        return;
+    }
+}
+
+#endif // ENABLE_HTTP3
 
 }

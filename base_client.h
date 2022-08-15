@@ -57,7 +57,7 @@ public:
     base_client(uint32_t id, base_worker* wrker, size_t req_todo, Config* conf,
                      base_client* parent = nullptr, const std::string& dest_schema = "",
                      const std::string& dest_authority = "");
-    virtual ~base_client() {}
+    virtual ~base_client();
     virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length) = 0;
     virtual void signal_write() = 0;
     virtual bool any_pending_data_to_write() = 0;
@@ -200,6 +200,39 @@ public:
     bool parse_uri_and_poupate_request(const std::string& uri, Request_Data& new_request);
     void sanitize_request(Request_Data& new_request);
 
+#ifdef ENABLE_HTTP3
+      // QUIC
+      int quic_init(const sockaddr *local_addr, socklen_t local_addrlen,
+                    const sockaddr *remote_addr, socklen_t remote_addrlen);
+      void quic_free();
+      int read_quic();
+      int write_quic();
+      int write_udp(const sockaddr *addr, socklen_t addrlen, const uint8_t *data,
+                    size_t datalen, size_t gso_size);
+      void on_send_blocked(const ngtcp2_addr &remote_addr, const uint8_t *data,
+                           size_t datalen, size_t gso_size);
+      int send_blocked_packet();
+      void quic_close_connection();
+    
+      int quic_handshake_completed();
+      int quic_recv_stream_data(uint32_t flags, int64_t stream_id,
+                                const uint8_t *data, size_t datalen);
+      int quic_acked_stream_data_offset(int64_t stream_id, size_t datalen);
+      int quic_stream_close(int64_t stream_id, uint64_t app_error_code);
+      int quic_stream_reset(int64_t stream_id, uint64_t app_error_code);
+      int quic_stream_stop_sending(int64_t stream_id, uint64_t app_error_code);
+      int quic_extend_max_local_streams();
+    
+      int quic_write_client_handshake(ngtcp2_crypto_level level,
+                                      const uint8_t *data, size_t datalen);
+      int quic_pkt_timeout();
+      void quic_restart_pkt_timer();
+      void quic_write_qlog(const void *data, size_t datalen);
+      int quic_make_http3_session();
+      void on_quic_pkt_timeout();
+
+      virtual void setup_quic_pkt_timer() = 0;
+#endif // ENABLE_HTTP3
 
     base_worker* worker;
     ClientStat cstat;
@@ -253,6 +286,29 @@ public:
     SSL* ssl;
     std::vector<std::function<void(bool, h2load::base_client*)>> connected_callbacks;
     std::map<int32_t, Stream_Callback_Data> stream_user_callback_queue;
+#ifdef ENABLE_HTTP3
+      struct {
+        ngtcp2_crypto_conn_ref conn_ref;
+        ev_timer pkt_timer;
+        ngtcp2_conn *conn;
+        ngtcp2_connection_close_error last_error;
+        bool close_requested;
+        FILE *qlog_file;
+    
+        struct {
+          bool send_blocked;
+          size_t num_blocked;
+          size_t num_blocked_sent;
+          struct {
+            Address remote_addr;
+            const uint8_t *data;
+            size_t datalen;
+            size_t gso_size;
+          } blocked[2];
+          std::unique_ptr<uint8_t[]> data;
+        } tx;
+      } quic;
+#endif // ENABLE_HTTP3
 };
 
 }

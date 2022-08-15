@@ -81,6 +81,7 @@ struct Config
     bool is_timing_based_mode() const;
     bool has_base_uri() const;
     bool rps_enabled() const;
+    bool is_quic() const;
 };
 
 }

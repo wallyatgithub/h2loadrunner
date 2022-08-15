@@ -99,6 +99,20 @@ extern "C" {
 #include "config_schema.h"
 #include "h2load_lua.h"
 
+#ifdef ENABLE_HTTP3
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#    include <ngtcp2/ngtcp2_crypto_openssl.h>
+#  endif // HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+#    include <ngtcp2/ngtcp2_crypto_boringssl.h>
+#  endif // HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+#endif   // ENABLE_HTTP3
+
+#ifdef ENABLE_HTTP3
+#  include "h2load_http3_session.h"
+#  include "h2load_quic.h"
+#endif // ENABLE_HTTP3
+
 
 #ifndef O_BINARY
 #  define O_BINARY (0)

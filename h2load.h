@@ -37,6 +37,15 @@
 #include "H2Server_Request.h"
 #include "config_schema.h"
 
+#ifdef ENABLE_HTTP3
+#  include <ngtcp2/ngtcp2.h>
+#  include <ngtcp2/ngtcp2_crypto.h>
+#endif // ENABLE_HTTP3
+
+#ifdef ENABLE_HTTP3
+#  include "quic.h"
+#endif // ENABLE_HTTP3
+
 
 using namespace nghttp2;
 

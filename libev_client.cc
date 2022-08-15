@@ -58,6 +58,10 @@ libev_client::libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Co
     init_ares();
     // TODO: move this to base class, but this calls a virtual func
     init_connection_targert();
+#ifdef ENABLE_HTTP3
+    setup_quic_pkt_timer();
+#endif // ENABLE_HTTP3
+
 }
 
 void libev_client::init_ares()
@@ -822,5 +826,13 @@ bool libev_client::any_pending_data_to_write()
 {
     return (wb.rleft() > 0);
 }
+
+#ifdef ENABLE_HTTP3
+void libev_client::setup_quic_pkt_timer()
+{
+    ev_timer_init(&quic.pkt_timer, quic_pkt_timeout_cb, 0., 0.);
+    quic.pkt_timer.data = this;
+}
+
 
 }

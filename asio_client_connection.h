@@ -116,6 +116,12 @@ public:
 
     virtual void setup_graceful_shutdown();
 
+#ifdef ENABLE_HTTP3
+
+    virtual void setup_quic_pkt_timer();
+
+#endif;
+
 private:
 
     bool is_error_due_to_aborted_operation(const boost::system::error_code& e);
@@ -202,11 +208,23 @@ private:
 
     void on_probe_resolve_result_event(const boost::system::error_code& err,
                                        boost::asio::ip::tcp::resolver::iterator endpoint_iterator);
+#ifdef ENABLE_HTTP3
+    void do_udp_read();
+    void do_udp_write();
+    void on_udp_resolve_result_event(const boost::system::error_code& err,
+                                 boost::asio::ip::udp::resolver::iterator endpoint_iterator);
+    void start_udp_connect(boost::asio::ip::udp::resolver::iterator endpoint_iterator);
+
+#endif
 
     boost::asio::io_service& io_context;
-    boost::asio::ip::tcp::resolver dns_resolver;
-    boost::asio::ip::tcp::socket client_socket;
-    boost::asio::ip::tcp::socket client_probe_socket;
+    boost::asio::ip::tcp::resolver tcp_dns_resolver;
+    boost::asio::ip::tcp::socket tcp_client_socket;
+#ifdef ENABLE_HTTP3
+    boost::asio::ip::udp::resolver udp_dns_resolver;
+    boost::asio::ip::udp::socket udp_client_socket;
+#endif
+    boost::asio::ip::tcp::socket tcp_client_probe_socket;
     boost::asio::ssl::context& ssl_ctx;
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket> ssl_socket;
     bool is_write_in_progress = false;

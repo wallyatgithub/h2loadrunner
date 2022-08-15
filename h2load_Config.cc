@@ -84,5 +84,12 @@ Config::~Config()
         }
     }
 }
+bool Config::is_quic() const {
+#ifdef ENABLE_HTTP3
+  return !npn_list.empty() &&
+         (npn_list[0] == NGHTTP3_ALPN_H3 || npn_list[0] == "\x5h3-29");
+#else  // !ENABLE_HTTP3
+  return false;
+#endif // !ENABLE_HTTP3
 
 }
