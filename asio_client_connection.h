@@ -213,7 +213,9 @@ private:
     void do_udp_write();
     void on_udp_resolve_result_event(const boost::system::error_code& err,
                                  boost::asio::ip::udp::resolver::iterator endpoint_iterator);
-    void start_udp_connect(boost::asio::ip::udp::resolver::iterator endpoint_iterator);
+    void start_udp_async_connect(boost::asio::ip::udp::resolver::iterator endpoint_iterator);
+    int write_udp(const sockaddr *addr, socklen_t addrlen,
+                      const uint8_t *data, size_t datalen, size_t gso_size);
 
 #endif
 

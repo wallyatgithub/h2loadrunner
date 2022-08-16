@@ -140,37 +140,68 @@ int libev_client::do_write()
 template<class T>
 int libev_client::make_socket(T* addr)
 {
-    fd = util::create_nonblock_socket(addr->ai_family);
-    if (fd == -1)
+    if (config.is_quic())
     {
-        return -1;
-    }
-    if (schema.empty())
-    {
-        schema = config->scheme;
-    }
-    if (schema == "https")
-    {
-        if (!ssl)
-        {
-            ssl = SSL_new(static_cast<libev_worker*>(worker)->ssl_ctx);
+#ifdef ENABLE_HTTP3
+        fd = util::create_nonblock_udp_socket(addr->ai_family);
+        if (fd == -1) {
+          return -1;
         }
 
-        std::string host = tokenize_string(authority, ":")[0];
-        if (host.empty())
-        {
-            host = config->host;
+        rv = util::bind_any_addr_udp(fd, addr->ai_family);
+        if (rv != 0) {
+          close(fd);
+          fd = -1;
+          return -1;
         }
 
-        if (!util::numeric_host(host.c_str()))
-        {
-            SSL_set_tlsext_host_name(ssl, host.c_str());
+        socklen_t addrlen = sizeof(local_addr.su.storage);
+        rv = getsockname(fd, &local_addr.su.sa, &addrlen);
+        if (rv == -1) {
+          return -1;
         }
+        local_addr.len = addrlen;
 
-        SSL_set_fd(ssl, fd);
-        SSL_set_connect_state(ssl);
+        if (quic_init(&local_addr.su.sa, local_addr.len, addr->ai_addr,
+                      addr->ai_addrlen) != 0) {
+          std::cerr << "quic_init failed" << std::endl;
+          return -1;
+        }
     }
+#endif // ENABLE_HTTP3
+    else
+    {
+        fd = util::create_nonblock_socket(addr->ai_family);
+        if (fd == -1)
+        {
+            return -1;
+        }
+        if (schema.empty())
+        {
+            schema = config->scheme;
+        }
+        if (schema == "https")
+        {
+            if (!ssl)
+            {
+                ssl = SSL_new(static_cast<libev_worker*>(worker)->ssl_ctx);
+            }
 
+            std::string host = tokenize_string(authority, ":")[0];
+            if (host.empty())
+            {
+                host = config->host;
+            }
+
+            if (!util::numeric_host(host.c_str()))
+            {
+                SSL_set_tlsext_host_name(ssl, host.c_str());
+            }
+
+            SSL_set_fd(ssl, fd);
+            SSL_set_connect_state(ssl);
+        }
+    }
     auto rv = ::connect(fd, addr->ai_addr, addr->ai_addrlen);
     if (rv != 0 && errno != EINPROGRESS)
     {
@@ -251,13 +282,26 @@ int libev_client::make_async_connection()
         return -1;
     }
 
-    writefn = &libev_client::connected;
+
     state = CLIENT_CONNECTING;
 
     ev_io_set(&rev, fd, EV_READ);
     ev_io_set(&wev, fd, EV_WRITE);
 
     ev_io_start(static_cast<libev_worker*>(worker)->loop, &wev);
+    if (config.is_quic())
+    {
+#ifdef ENABLE_HTTP3
+        ev_io_start(worker->loop, &rev);
+
+        readfn = &libev_client::read_quic;
+        writefn = &libev_client::write_quic;
+#endif // ENABLE_HTTP3
+    }
+    else
+    {
+        writefn = &libev_client::connected;
+    }
     return 0;
 }
 
@@ -834,5 +878,277 @@ void libev_client::setup_quic_pkt_timer()
     quic.pkt_timer.data = this;
 }
 
+int libev_client::read_quic() {
+  std::array<uint8_t, 65536> buf;
+  sockaddr_union su;
+  socklen_t addrlen = sizeof(su);
+  int rv;
+  size_t pktcnt = 0;
+  ngtcp2_pkt_info pi{};
+
+  for (;;) {
+    auto nread =
+        recvfrom(fd, buf.data(), buf.size(), MSG_DONTWAIT, &su.sa, &addrlen);
+    if (nread == -1) {
+      return 0;
+    }
+
+    assert(quic.conn);
+
+    ++worker->stats.udp_dgram_recv;
+
+    auto path = ngtcp2_path{
+        {
+            &local_addr.su.sa,
+            static_cast<socklen_t>(local_addr.len),
+        },
+        {
+            &su.sa,
+            addrlen,
+        },
+    };
+
+    rv = ngtcp2_conn_read_pkt(quic.conn, &path, &pi, buf.data(), nread,
+                              timestamp(worker->loop));
+    if (rv != 0) {
+      std::cerr << "ngtcp2_conn_read_pkt: " << ngtcp2_strerror(rv) << std::endl;
+
+      if (!quic.last_error.error_code) {
+        if (rv == NGTCP2_ERR_CRYPTO) {
+          ngtcp2_connection_close_error_set_transport_error_tls_alert(
+              &quic.last_error, ngtcp2_conn_get_tls_alert(quic.conn), nullptr,
+              0);
+        } else {
+          ngtcp2_connection_close_error_set_transport_error_liberr(
+              &quic.last_error, rv, nullptr, 0);
+        }
+      }
+
+      return -1;
+    }
+
+    if (++pktcnt == 100) {
+      break;
+    }
+  }
+
+  return 0;
+}
+
+int libev_client::write_quic() {
+  int rv;
+
+  ev_io_stop(worker->loop, &wev);
+
+  if (quic.close_requested) {
+    return -1;
+  }
+
+  if (quic.tx.send_blocked) {
+    rv = send_blocked_packet();
+    if (rv != 0) {
+      return -1;
+    }
+
+    if (quic.tx.send_blocked) {
+      return 0;
+    }
+  }
+
+  std::array<nghttp3_vec, 16> vec;
+  size_t pktcnt = 0;
+  auto max_udp_payload_size = ngtcp2_conn_get_max_udp_payload_size(quic.conn);
+#ifdef UDP_SEGMENT
+  auto path_max_udp_payload_size =
+      ngtcp2_conn_get_path_max_udp_payload_size(quic.conn);
+#endif // UDP_SEGMENT
+  size_t max_pktcnt =
+      std::min(static_cast<size_t>(10),
+               static_cast<size_t>(64_k / max_udp_payload_size));
+  uint8_t *bufpos = quic.tx.data.get();
+  ngtcp2_path_storage ps;
+  size_t gso_size = 0;
+
+  ngtcp2_path_storage_zero(&ps);
+
+  auto s = static_cast<Http3Session *>(session.get());
+
+  for (;;) {
+    int64_t stream_id = -1;
+    int fin = 0;
+    ssize_t sveccnt = 0;
+
+    if (session && ngtcp2_conn_get_max_data_left(quic.conn)) {
+      sveccnt = s->write_stream(stream_id, fin, vec.data(), vec.size());
+      if (sveccnt == -1) {
+        return -1;
+      }
+    }
+
+    ngtcp2_ssize ndatalen;
+    auto v = vec.data();
+    auto vcnt = static_cast<size_t>(sveccnt);
+
+    uint32_t flags = NGTCP2_WRITE_STREAM_FLAG_MORE;
+    if (fin) {
+      flags |= NGTCP2_WRITE_STREAM_FLAG_FIN;
+    }
+
+    auto nwrite = ngtcp2_conn_writev_stream(
+        quic.conn, &ps.path, nullptr, bufpos, max_udp_payload_size, &ndatalen,
+        flags, stream_id, reinterpret_cast<const ngtcp2_vec *>(v), vcnt,
+        timestamp(worker->loop));
+    if (nwrite < 0) {
+      switch (nwrite) {
+      case NGTCP2_ERR_STREAM_DATA_BLOCKED:
+        assert(ndatalen == -1);
+        s->block_stream(stream_id);
+        continue;
+      case NGTCP2_ERR_STREAM_SHUT_WR:
+        assert(ndatalen == -1);
+        s->shutdown_stream_write(stream_id);
+        continue;
+      case NGTCP2_ERR_WRITE_MORE:
+        assert(ndatalen >= 0);
+        if (s->add_write_offset(stream_id, ndatalen) != 0) {
+          return -1;
+        }
+        continue;
+      }
+
+      ngtcp2_connection_close_error_set_transport_error_liberr(
+          &quic.last_error, nwrite, nullptr, 0);
+      return -1;
+    } else if (ndatalen >= 0 && s->add_write_offset(stream_id, ndatalen) != 0) {
+      return -1;
+    }
+
+    quic_restart_pkt_timer();
+
+    if (nwrite == 0) {
+      if (bufpos - quic.tx.data.get()) {
+        auto data = quic.tx.data.get();
+        auto datalen = bufpos - quic.tx.data.get();
+        rv = write_udp(ps.path.remote.addr, ps.path.remote.addrlen, data,
+                       datalen, gso_size);
+        if (rv == 1) {
+          on_send_blocked(ps.path.remote, data, datalen, gso_size);
+          signal_write();
+          return 0;
+        }
+      }
+      return 0;
+    }
+
+    bufpos += nwrite;
+
+#ifdef UDP_SEGMENT
+    if (worker->config->no_udp_gso) {
+#endif // UDP_SEGMENT
+      auto data = quic.tx.data.get();
+      auto datalen = bufpos - quic.tx.data.get();
+      rv = write_udp(ps.path.remote.addr, ps.path.remote.addrlen, data, datalen,
+                     0);
+      if (rv == 1) {
+        on_send_blocked(ps.path.remote, data, datalen, 0);
+        signal_write();
+        return 0;
+      }
+
+      if (++pktcnt == max_pktcnt) {
+        signal_write();
+        return 0;
+      }
+
+      bufpos = quic.tx.data.get();
+
+#ifdef UDP_SEGMENT
+      continue;
+    }
+#endif // UDP_SEGMENT
+
+#ifdef UDP_SEGMENT
+    if (pktcnt == 0) {
+      gso_size = nwrite;
+    } else if (static_cast<size_t>(nwrite) > gso_size ||
+               (gso_size > path_max_udp_payload_size &&
+                static_cast<size_t>(nwrite) != gso_size)) {
+      auto data = quic.tx.data.get();
+      auto datalen = bufpos - quic.tx.data.get() - nwrite;
+      rv = write_udp(ps.path.remote.addr, ps.path.remote.addrlen, data, datalen,
+                     gso_size);
+      if (rv == 1) {
+        on_send_blocked(ps.path.remote, data, datalen, gso_size);
+        on_send_blocked(ps.path.remote, bufpos - nwrite, nwrite, 0);
+      } else {
+        auto data = bufpos - nwrite;
+        rv = write_udp(ps.path.remote.addr, ps.path.remote.addrlen, data,
+                       nwrite, 0);
+        if (rv == 1) {
+          on_send_blocked(ps.path.remote, data, nwrite, 0);
+        }
+      }
+
+      signal_write();
+      return 0;
+    }
+
+    // Assume that the path does not change.
+    if (++pktcnt == max_pktcnt || static_cast<size_t>(nwrite) < gso_size) {
+      auto data = quic.tx.data.get();
+      auto datalen = bufpos - quic.tx.data.get();
+      rv = write_udp(ps.path.remote.addr, ps.path.remote.addrlen, data, datalen,
+                     gso_size);
+      if (rv == 1) {
+        on_send_blocked(ps.path.remote, data, datalen, gso_size);
+      }
+      signal_write();
+      return 0;
+    }
+#endif // UDP_SEGMENT
+  }
+}
+
+int libev_client::write_udp(const sockaddr *addr, socklen_t addrlen,
+                      const uint8_t *data, size_t datalen, size_t gso_size) {
+  iovec msg_iov;
+  msg_iov.iov_base = const_cast<uint8_t *>(data);
+  msg_iov.iov_len = datalen;
+
+  msghdr msg{};
+  msg.msg_name = const_cast<sockaddr *>(addr);
+  msg.msg_namelen = addrlen;
+  msg.msg_iov = &msg_iov;
+  msg.msg_iovlen = 1;
+
+#  ifdef UDP_SEGMENT
+  std::array<uint8_t, CMSG_SPACE(sizeof(uint16_t))> msg_ctrl{};
+  if (gso_size && datalen > gso_size) {
+    msg.msg_control = msg_ctrl.data();
+    msg.msg_controllen = msg_ctrl.size();
+
+    auto cm = CMSG_FIRSTHDR(&msg);
+    cm->cmsg_level = SOL_UDP;
+    cm->cmsg_type = UDP_SEGMENT;
+    cm->cmsg_len = CMSG_LEN(sizeof(uint16_t));
+    *(reinterpret_cast<uint16_t *>(CMSG_DATA(cm))) = gso_size;
+  }
+#  endif // UDP_SEGMENT
+
+  auto nwrite = sendmsg(fd, &msg, 0);
+  if (nwrite < 0) {
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      return 1;
+    }
+
+    std::cerr << "sendmsg: errno=" << errno << std::endl;
+  } else {
+    ++worker->stats.udp_dgram_sent;
+  }
+
+  ev_io_stop(worker->loop, &wev);
+
+  return 0;
+}
 
 }

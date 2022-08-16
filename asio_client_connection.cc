@@ -932,6 +932,13 @@ template <typename SOCKET>
 void asio_client_connection::start_async_connect(boost::asio::ip::tcp::resolver::iterator endpoint_iterator,
                                                  SOCKET& socket)
 {
+    static thread_local boost::asio::ip::tcp::resolver::iterator end_of_resolve_result;
+    if (endpoint_iterator == end_of_resolve_result)
+    {
+        handle_connection_error();
+        return;
+    }
+
     boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
     auto next_endpoint_iterator = ++endpoint_iterator;
     socket.lowest_layer().async_connect(endpoint,
@@ -1006,7 +1013,7 @@ void asio_client_connection::on_udp_resolve_result_event(const boost::system::er
     }
     if (!err)
     {
-        start_udp_connect(endpoint_iterator);
+        start_udp_async_connect(endpoint_iterator);
     }
     else
     {
@@ -1014,11 +1021,19 @@ void asio_client_connection::on_udp_resolve_result_event(const boost::system::er
     }
 }
 
-void asio_client_connection::start_udp_connect(boost::asio::ip::udp::resolver::iterator endpoint_iterator)
+void asio_client_connection::start_udp_async_connect(boost::asio::ip::udp::resolver::iterator endpoint_iterator)
 {
-    boost::asio::ip::udp::endpoint endpoint = *endpoint_iterator;
+    static thread_local boost::asio::ip::udp::resolver::iterator end_of_resolve_result;
+    if (endpoint_iterator == end_of_resolve_result)
+    {
+        std::cerr << __FUNCTION__ << " err: " << err << std::endl;
+        handle_connection_error();
+        return;
+    }
+
+    boost::asio::ip::udp::endpoint remote_endpoint = *endpoint_iterator;
     auto next_endpoint_iterator = ++endpoint_iterator;
-    if (endpoint.address().is_v4())
+    if (remote_endpoint.address().is_v4())
     {
          boost::asio::ip::udp::endpoint local_endpoint(boost::asio::ip::udp::v4(), 0);
          udp_client_socket.open(boost::asio::ip::udp::v4());
@@ -1031,10 +1046,227 @@ void asio_client_connection::start_udp_connect(boost::asio::ip::udp::resolver::i
         udp_client_socket.bind(local_endpoint);
     }
 
-    auto local_ep = udp_client_socket.local_endpoint();
-    // call quic_init with the local address and remote address
+    udp_client_socket.lowest_layer().async_connect(remote_endpoint,
+                                        [this, endpoint_iterator](const boost::system::error_code & err)
+    {
+        if (!err)
+        {
+            auto remote_endpoint = *endpoint_iterator;
+            auto local_sockaddr = udp_client_socket.local_endpoint().data();
+            auto local_addr_len = udp_client_socket.local_endpoint().data().capacity();
+            
+            auto remote_sockaddr = remote_endpoint.data();
+            auto remote_addr_len = remote_endpoint.data().capacity();
+            
+            if (quic_init(local_sockaddr, local_addr_len, remote_sockaddr,
+                          remote_addr_len) != 0) {
+              std::cerr << "quic_init failed" << std::endl;
+              exit(1);
+            }
+            write_quic();
+        }
+        else
+        {
+            if (config->verbose)
+            {
+                std::cerr << __FUNCTION__ << " err: " << err << std::endl;
+            }
+            auto next_endpoint_iterator = ++endpoint_iterator;
+            if (next_endpoint_iterator != end_of_resolve_result)
+            {
+                udp_client_socket.close();
+                start_udp_async_connect(next_endpoint_iterator);
+            }
+            else
+            {
+                handle_connection_error();
+            }
+        }
+
+    });
+
     
-    
+}
+
+int asio_client_connection::write_quic() {
+  int rv;
+
+  if (quic.close_requested) {
+    return -1;
+  }
+
+  if (quic.tx.send_blocked) {
+    rv = send_blocked_packet();
+    if (rv != 0) {
+      return -1;
+    }
+
+    if (quic.tx.send_blocked) {
+      return 0;
+    }
+  }
+
+  std::array<nghttp3_vec, 16> vec;
+  size_t pktcnt = 0;
+  auto max_udp_payload_size = ngtcp2_conn_get_max_udp_payload_size(quic.conn);
+#ifdef UDP_SEGMENT
+  auto path_max_udp_payload_size =
+      ngtcp2_conn_get_path_max_udp_payload_size(quic.conn);
+#endif // UDP_SEGMENT
+  size_t max_pktcnt =
+      std::min(static_cast<size_t>(10),
+               static_cast<size_t>(64_k / max_udp_payload_size));
+  uint8_t *bufpos = quic.tx.data.get();
+  ngtcp2_path_storage ps;
+  size_t gso_size = 0;
+
+  ngtcp2_path_storage_zero(&ps);
+
+  auto s = static_cast<Http3Session *>(session.get());
+
+  for (;;) {
+    int64_t stream_id = -1;
+    int fin = 0;
+    ssize_t sveccnt = 0;
+
+    if (session && ngtcp2_conn_get_max_data_left(quic.conn)) {
+      sveccnt = s->write_stream(stream_id, fin, vec.data(), vec.size());
+      if (sveccnt == -1) {
+        return -1;
+      }
+    }
+
+    ngtcp2_ssize ndatalen;
+    auto v = vec.data();
+    auto vcnt = static_cast<size_t>(sveccnt);
+
+    uint32_t flags = NGTCP2_WRITE_STREAM_FLAG_MORE;
+    if (fin) {
+      flags |= NGTCP2_WRITE_STREAM_FLAG_FIN;
+    }
+
+    auto now = std::chrono::steady_clock::now().time_since_epoch();
+
+    auto nwrite = ngtcp2_conn_writev_stream(
+        quic.conn, &ps.path, nullptr, bufpos, max_udp_payload_size, &ndatalen,
+        flags, stream_id, reinterpret_cast<const ngtcp2_vec *>(v), vcnt,
+        std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
+    if (nwrite < 0) {
+      switch (nwrite) {
+      case NGTCP2_ERR_STREAM_DATA_BLOCKED:
+        assert(ndatalen == -1);
+        s->block_stream(stream_id);
+        continue;
+      case NGTCP2_ERR_STREAM_SHUT_WR:
+        assert(ndatalen == -1);
+        s->shutdown_stream_write(stream_id);
+        continue;
+      case NGTCP2_ERR_WRITE_MORE:
+        assert(ndatalen >= 0);
+        if (s->add_write_offset(stream_id, ndatalen) != 0) {
+          return -1;
+        }
+        continue;
+      }
+
+      ngtcp2_connection_close_error_set_transport_error_liberr(
+          &quic.last_error, nwrite, nullptr, 0);
+      return -1;
+    } else if (ndatalen >= 0 && s->add_write_offset(stream_id, ndatalen) != 0) {
+      return -1;
+    }
+
+    quic_restart_pkt_timer();
+
+    if (nwrite == 0) {
+      if (bufpos - quic.tx.data.get()) {
+        auto data = quic.tx.data.get();
+        auto datalen = bufpos - quic.tx.data.get();
+        rv = write_udp(ps.path.remote.addr, ps.path.remote.addrlen, data,
+                       datalen, gso_size);
+        if (rv == 1) {
+          on_send_blocked(ps.path.remote, data, datalen, gso_size);
+          signal_write();
+          return 0;
+        }
+      }
+      return 0;
+    }
+
+    bufpos += nwrite;
+
+#ifdef UDP_SEGMENT
+    if (worker->config->no_udp_gso) {
+#endif // UDP_SEGMENT
+      auto data = quic.tx.data.get();
+      auto datalen = bufpos - quic.tx.data.get();
+      rv = write_udp(ps.path.remote.addr, ps.path.remote.addrlen, data, datalen,
+                     0);
+      if (rv == 1) {
+        on_send_blocked(ps.path.remote, data, datalen, 0);
+        signal_write();
+        return 0;
+      }
+
+      if (++pktcnt == max_pktcnt) {
+        signal_write();
+        return 0;
+      }
+
+      bufpos = quic.tx.data.get();
+
+#ifdef UDP_SEGMENT
+      continue;
+    }
+#endif // UDP_SEGMENT
+
+#ifdef UDP_SEGMENT
+    if (pktcnt == 0) {
+      gso_size = nwrite;
+    } else if (static_cast<size_t>(nwrite) > gso_size ||
+               (gso_size > path_max_udp_payload_size &&
+                static_cast<size_t>(nwrite) != gso_size)) {
+      auto data = quic.tx.data.get();
+      auto datalen = bufpos - quic.tx.data.get() - nwrite;
+      rv = write_udp(ps.path.remote.addr, ps.path.remote.addrlen, data, datalen,
+                     gso_size);
+      if (rv == 1) {
+        on_send_blocked(ps.path.remote, data, datalen, gso_size);
+        on_send_blocked(ps.path.remote, bufpos - nwrite, nwrite, 0);
+      } else {
+        auto data = bufpos - nwrite;
+        rv = write_udp(ps.path.remote.addr, ps.path.remote.addrlen, data,
+                       nwrite, 0);
+        if (rv == 1) {
+          on_send_blocked(ps.path.remote, data, nwrite, 0);
+        }
+      }
+
+      signal_write();
+      return 0;
+    }
+
+    // Assume that the path does not change.
+    if (++pktcnt == max_pktcnt || static_cast<size_t>(nwrite) < gso_size) {
+      auto data = quic.tx.data.get();
+      auto datalen = bufpos - quic.tx.data.get();
+      rv = write_udp(ps.path.remote.addr, ps.path.remote.addrlen, data, datalen,
+                     gso_size);
+      if (rv == 1) {
+        on_send_blocked(ps.path.remote, data, datalen, gso_size);
+      }
+      signal_write();
+      return 0;
+    }
+#endif // UDP_SEGMENT
+  }
+}
+
+int asio_client_connection::write_udp(const sockaddr *addr, socklen_t addrlen,
+                      const uint8_t *data, size_t datalen, size_t gso_size)
+{
+    push_data_to_output_buffer(data, datalen);
+    // TODO: call async_send
 }
 
 #endif;

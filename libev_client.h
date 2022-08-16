@@ -100,7 +100,12 @@ public:
 
     template<class T>
     int make_socket(T* addr);
+
 #ifdef ENABLE_HTTP3
+    int read_quic();
+    int write_quic();
+    int write_udp(const sockaddr *addr, socklen_t addrlen, const uint8_t *data,
+                  size_t datalen, size_t gso_size);
 
     virtual void setup_quic_pkt_timer();
 

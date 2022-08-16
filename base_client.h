@@ -205,10 +205,6 @@ public:
       int quic_init(const sockaddr *local_addr, socklen_t local_addrlen,
                     const sockaddr *remote_addr, socklen_t remote_addrlen);
       void quic_free();
-      int read_quic();
-      int write_quic();
-      int write_udp(const sockaddr *addr, socklen_t addrlen, const uint8_t *data,
-                    size_t datalen, size_t gso_size);
       void on_send_blocked(const ngtcp2_addr &remote_addr, const uint8_t *data,
                            size_t datalen, size_t gso_size);
       int send_blocked_packet();
@@ -226,7 +222,7 @@ public:
       int quic_write_client_handshake(ngtcp2_crypto_level level,
                                       const uint8_t *data, size_t datalen);
       int quic_pkt_timeout();
-      void quic_restart_pkt_timer();
+      virtual void quic_restart_pkt_timer()  = 0;
       void quic_write_qlog(const void *data, size_t datalen);
       int quic_make_http3_session();
       void on_quic_pkt_timeout();
