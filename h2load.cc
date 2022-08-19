@@ -255,7 +255,7 @@ Options:
               connections per period.  When the rate is 0, the program
               will run  as it  normally does, creating  connections at
               whatever variable rate it  wants.  The default value for
-              this option is 0.  -r and -D are mutually exclusive.
+              this option is 0.
   --rate-period=<DURATION>
               Specifies the time  period between creating connections.
               The period  must be a positive  number, representing the
@@ -264,8 +264,7 @@ Options:
               option is 1s.
   -D, --duration=<DURATION>
               Specifies the main duration for the measurements in case
-              of timing-based  benchmarking.  -D  and -r  are mutually
-              exclusive.
+              of timing-based  benchmarking.
   --warm-up-time=<DURATION>
               Specifies the  time  period  before  starting the actual
               measurements, in  case  of  timing-based benchmarking.

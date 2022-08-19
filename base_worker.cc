@@ -215,6 +215,7 @@ void base_worker::duration_timeout_handler()
         std::cerr << "Main benchmark duration is over for thread #" << id
                   << ". Stopping all clients." << std::endl;
         stop_all_clients();
+        stop_rate_mode_period_timer();
         std::cerr << "Stopped all clients for thread #" << id << std::endl;
     }
 }
