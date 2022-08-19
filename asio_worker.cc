@@ -127,8 +127,8 @@ void asio_worker::handle_rate_mode_period_timer_timeout(const boost::system::err
     {
         return;
     }
-    rate_period_timeout_handler();
     start_rate_mode_period_timer();
+    rate_period_timeout_handler();
 }
 
 void asio_worker::start_warmup_timer()

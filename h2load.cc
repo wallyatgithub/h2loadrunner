@@ -909,11 +909,11 @@ int main(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
 
-    if (config.is_timing_based_mode() && config.is_rate_mode())
-    {
-        std::cerr << "-r, -D: they are mutually exclusive." << std::endl;
-        exit(EXIT_FAILURE);
-    }
+    //if (config.is_timing_based_mode() && config.is_rate_mode())
+    //{
+    //    std::cerr << "-r, -D: they are mutually exclusive." << std::endl;
+    //    exit(EXIT_FAILURE);
+    //}
 
     if (config.timing_script && config.rps_enabled())
     {
