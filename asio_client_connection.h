@@ -235,6 +235,7 @@ private:
 
     std::vector<uint8_t> input_buffer;
     std::vector<std::vector<uint8_t>> output_buffers;
+    std::vector<std::vector<uint8_t>> quic_output_buffers;
     size_t output_data_length = 0;
     size_t output_buffer_index = 0;
 

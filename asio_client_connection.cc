@@ -49,6 +49,7 @@ asio_client_connection::asio_client_connection
       tcp_client_probe_socket(io_ctx),
       input_buffer(16 * 1024, 0),
       output_buffers(2, std::vector<uint8_t>(64 * 1024, 0)),
+      quic_output_buffers(10, std::vector<uint8_t>(64 * 1024, 0)),
       connect_timer(io_ctx),
       delay_request_execution_timer(io_ctx),
       rps_timer(io_ctx),
