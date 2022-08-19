@@ -1672,6 +1672,7 @@ void base_client::on_stream_close(int32_t stream_id, bool success, bool final)
 
     if (req_left == 0 && req_inflight == 0)
     {
+        setup_graceful_shutdown();
         terminate_session();
         return;
     }

@@ -29,7 +29,8 @@ struct RequestStat
 
     explicit RequestStat(size_t scenario_id, size_t request_id):
         scenario_index(scenario_id),
-        request_index(request_id)
+        request_index(request_id),
+        status(0x1FFF)
     {};
 };
 

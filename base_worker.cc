@@ -146,7 +146,6 @@ void base_worker::run()
     else if (config->is_rate_mode())
     {
         start_rate_mode_period_timer();
-
         // call callback so that we don't waste the first rate_period
         rate_period_timeout_handler();
     }
@@ -162,9 +161,8 @@ void base_worker::rate_period_timeout_handler()
 {
     auto nclients_per_second = rate;
     auto conns_remaining = nclients - nconns_made;
-    auto nclients = std::min(nclients_per_second, conns_remaining);
-
-    for (size_t i = 0; i < nclients; ++i)
+    auto nclients_to_create = std::min(nclients_per_second, conns_remaining);
+    for (size_t i = 0; i < nclients_to_create; ++i)
     {
         auto req_todo = nreqs_per_client;
         if (nreqs_rem > 0)
@@ -191,17 +189,11 @@ void base_worker::rate_period_timeout_handler()
         }
         report_rate_progress();
     }
-    if (!config->is_timing_based_mode())
+    if (nconns_made >= nclients)
     {
-        if (nconns_made >= nclients)
-        {
-            stop_rate_mode_period_timer();
-        }
-    }
-    else
-    {
+        stop_rate_mode_period_timer();
         // To check whether all created clients are pushed correctly
-        if (nclients != clients.size())
+        if (config->is_timing_based_mode() && nclients != clients.size())
         {
             std::cerr << "client not started successfully, exit" << id << std::endl;
             exit(EXIT_FAILURE);

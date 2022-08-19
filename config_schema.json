@@ -83,7 +83,7 @@
     },
     "duration":
     {
-      "description":"Specifies the duration (in second) for timing-based benchmarking. The duration field and the rate field are mutually exclusive.",
+      "description":"Specifies the duration (in second) for timing-based benchmarking.",
       "default": 60,
       "type":"number"
     },
@@ -116,7 +116,7 @@
     },
     "rate":
     {
-      "description":"Specifies a fixed rate at which connections are created. If given, it must be a positive integer, representing the number of connections to be made per rate-period. The maximum number of connections to be made is given in clients field. This rate will be distributed among threads as evenly as possible. For example, with thread=2 and rate=4, each thread gets 2 connections per rate-period, until total number of connections specified in clients field is reached.  When the rate is 0, the program will run as it normally does, creating connections at whatever variable rate it wants. The duration field and the rate field are mutually exclusive.",
+      "description":"Specifies a fixed rate at which connections are created. If given, it must be a positive integer, representing the number of connections to be made per rate-period. The maximum number of connections to be made is given in clients field. This rate will be distributed among threads as evenly as possible. For example, with thread=2 and rate=4, each thread gets 2 connections per rate-period, until total number of connections specified in clients field is reached.  When the rate is 0, the program will run as it normally does, creating connections at whatever variable rate it wants.",
       "default": 0,
       "type":"integer"
     },

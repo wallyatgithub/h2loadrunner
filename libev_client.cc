@@ -376,7 +376,7 @@ void libev_client::graceful_restart_connection()
 
 void libev_client::start_rps_timer()
 {
-    rps_watcher.repeat = std::max(0.1, 1. / rps);
+    rps_watcher.repeat = std::max(0.01, 1. / rps);
     ev_timer_again(static_cast<libev_worker*>(worker)->loop, &rps_watcher);
 }
 
