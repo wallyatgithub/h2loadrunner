@@ -1675,6 +1675,8 @@ void integrated_http2_server(std::stringstream& dataStream, h2load::Config& conf
     uint32_t serverPort = config.json_config_schema.builtin_server_port;
     std::cerr << "builtin server listening at port: " << serverPort << std::endl;
     H2Server_Config_Schema config_schema;
+    config_schema.no_tls_proto = "http/1.1";
+    config_schema.config_post_process();
 
     nghttp2::asio_http2::server::asio_httpx_server server(config_schema);
     boost::system::error_code ec;

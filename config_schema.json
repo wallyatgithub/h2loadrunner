@@ -229,7 +229,7 @@
     },
     "builtin-server-listening-port":
     {
-      "description":"h2loadrunner has a builtin http2 server, which would handle incoming request to /stat to get the latest statistics report, and to /config to update configuration options; currently, the only supported configuration option update is rps, e.g., /config?rps=100 will update rps to 100",
+      "description":"h2loadrunner has a builtin http/1.1 server, which would handle incoming request from an http client like curl or a browser, to /stat to get the latest statistics report, and to /config to update configuration options; currently, the only supported configuration option update is rps, e.g., /config?rps=100 will update rps to 100",
       "default": 8888,
       "type":"integer"
     },
