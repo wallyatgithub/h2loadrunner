@@ -413,6 +413,7 @@ int Http2Session::on_write()
 void Http2Session::terminate()
 {
     nghttp2_session_terminate_session(session_, NGHTTP2_NO_ERROR);
+    client_->signal_write();
 }
 
 size_t Http2Session::max_concurrent_streams()

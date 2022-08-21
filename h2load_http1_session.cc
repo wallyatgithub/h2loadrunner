@@ -473,6 +473,7 @@ int Http1Session::_on_write()
 void Http1Session::terminate()
 {
     complete_ = true;
+    client_->signal_write();
 }
 
 base_client* Http1Session::get_client()

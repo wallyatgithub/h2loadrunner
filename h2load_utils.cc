@@ -1914,7 +1914,24 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
         max_tls_version = TLS1_2_VERSION;
     }
 
-    if (nghttp2::tls::ssl_ctx_set_proto_versions(
+    if (config.is_quic()) {
+#ifdef ENABLE_HTTP3
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+    if (ngtcp2_crypto_openssl_configure_client_context(ssl_ctx) != 0) {
+      std::cerr << "ngtcp2_crypto_openssl_configure_client_context failed"
+                << std::endl;
+      exit(EXIT_FAILURE);
+    }
+#  endif // HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+    if (ngtcp2_crypto_boringssl_configure_client_context(ssl_ctx) != 0) {
+      std::cerr << "ngtcp2_crypto_boringssl_configure_client_context failed"
+                << std::endl;
+      exit(EXIT_FAILURE);
+    }
+#  endif // HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+#endif   // ENABLE_HTTP3
+    } else if (nghttp2::tls::ssl_ctx_set_proto_versions(
             ssl_ctx, nghttp2::tls::NGHTTP2_TLS_MIN_VERSION,
             max_tls_version) != 0)
     {

@@ -26,6 +26,7 @@
 #include <boost/asio.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/asio/ssl.hpp>
+#include "util.h"
 
 #include "h2load_http2_session.h"
 #include "h2load_http1_session.h"
@@ -37,6 +38,9 @@
 
 namespace h2load
 {
+
+const auto single_buffer_size = 64 * 1024;
+const auto max_quic_pkt_to_send = 10;
 
 class asio_client_connection
     : public h2load::base_client, private boost::noncopyable
@@ -116,11 +120,7 @@ public:
 
     virtual void setup_graceful_shutdown();
 
-#ifdef ENABLE_HTTP3
-
-    virtual void setup_quic_pkt_timer();
-
-#endif;
+    virtual bool is_write_signaled() {return write_signaled};
 
 private:
 
@@ -214,8 +214,22 @@ private:
     void on_udp_resolve_result_event(const boost::system::error_code& err,
                                  boost::asio::ip::udp::resolver::iterator endpoint_iterator);
     void start_udp_async_connect(boost::asio::ip::udp::resolver::iterator endpoint_iterator);
-    int write_udp(const sockaddr *addr, socklen_t addrlen,
-                      const uint8_t *data, size_t datalen, size_t gso_size);
+
+    int do_udp_write();
+
+    int handle_http3_write_signal();
+
+    void handle_quic_pkt_timer_timeout(const boost::system::error_code& ec);
+
+struct Quic_Data_Buffer
+{
+    nghttp2::Address remote_addr;
+    std::vector<uint8_t> data_to_send;
+    explicit Quic_Data_Buffer(size_t size)
+    :data_to_send(size, 0)
+    {
+    };
+};
 
 #endif
 
@@ -225,6 +239,13 @@ private:
 #ifdef ENABLE_HTTP3
     boost::asio::ip::udp::resolver udp_dns_resolver;
     boost::asio::ip::udp::socket udp_client_socket;
+    std::vector<std::vector<std::vector<uint8_t>>> quic_output_buffers;
+    std::vector<std::vector<nghttp2::Address>> quic_remote_addresses;
+    std::vector<std::vector<uint8_t>> quic_buffer_to_send;
+    size_t quic_output_pkt_count = 0;
+    boost::asio::ip::udp::endpoint remote_addr;
+    boost::asio::deadline_timer quic_pkt_timer;
+    bool quic_close_sent = false;
 #endif
     boost::asio::ip::tcp::socket tcp_client_probe_socket;
     boost::asio::ssl::context& ssl_ctx;
@@ -235,7 +256,6 @@ private:
 
     std::vector<uint8_t> input_buffer;
     std::vector<std::vector<uint8_t>> output_buffers;
-    std::vector<std::vector<uint8_t>> quic_output_buffers;
     size_t output_data_length = 0;
     size_t output_buffer_index = 0;
 

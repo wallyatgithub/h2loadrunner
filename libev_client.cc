@@ -58,8 +58,14 @@ libev_client::libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Co
     init_ares();
     // TODO: move this to base class, but this calls a virtual func
     init_connection_targert();
+
 #ifdef ENABLE_HTTP3
-    setup_quic_pkt_timer();
+      ev_timer_init(&quic.pkt_timer, quic_pkt_timeout_cb, 0., 0.);
+      quic.pkt_timer.data = this;
+    
+      if (config.is_quic()) {
+        quic.tx.data = std::make_unique<uint8_t[]>(64_k);
+      }
 #endif // ENABLE_HTTP3
 
 }
@@ -736,6 +742,11 @@ int libev_client::write_tls()
     ev_io_stop(static_cast<libev_worker*>(worker)->loop, &wev);
 
     return 0;
+}
+
+bool libev_client::is_write_signaled()
+{
+    return ev_is_active(&wev);
 }
 
 void libev_client::signal_write()

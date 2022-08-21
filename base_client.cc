@@ -57,7 +57,7 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
     this_client_id(),
     rps_duration_started(),
 #ifdef ENABLE_HTTP3
-    quic{},
+    quic {},
 #endif
     ssl(nullptr)
 {
@@ -70,11 +70,6 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
     update_this_in_dest_client_map();
 
 #ifdef ENABLE_HTTP3
-
-    if (config.is_quic()) {
-    quic.tx.data = std::make_unique<uint8_t[]>(64_k);
-    }
-
     ngtcp2_connection_close_error_default(&quic.last_error);
 #endif // ENABLE_HTTP3
 
@@ -83,9 +78,10 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
 base_client::~base_client()
 {
 #ifdef ENABLE_HTTP3
-      if (config.is_quic()) {
+    if (config.is_quic())
+    {
         quic_free();
-      }
+    }
 #endif // ENABLE_HTTP3
 
 }
@@ -465,20 +461,20 @@ void base_client::init_connection_targert()
             buffer.append(host).append("]");
             host = buffer;
         }
-/*
-        if (config->port != config->default_port)
-        {
-            authority = host + ":" + util::utos(config->port);
-        }
-        else
-        {
-            authority = host;
-        }
-*/
+        /*
+                if (config->port != config->default_port)
+                {
+                    authority = host + ":" + util::utos(config->port);
+                }
+                else
+                {
+                    authority = host;
+                }
+        */
         authority = host + ":" + util::utos(config->port);
     }
 
-    if (is_controller_client()&&
+    if (is_controller_client() &&
         config->json_config_schema.load_share_hosts.size())
     {
         auto init_hosts = [this]()
@@ -897,7 +893,7 @@ void base_client::run_post_response_action(Request_Data& finished_request)
     rapidjson::Document resp_json_payload;
     bool req_json_decoded = false;
     bool resp_json_decoded = false;
-    for (auto& value_picker: actual_regex_value_pickers)
+    for (auto& value_picker : actual_regex_value_pickers)
     {
         std::string result;
         std::string source;
@@ -905,7 +901,7 @@ void base_client::run_post_response_action(Request_Data& finished_request)
         {
             case SOURCE_TYPE_RES_HEADER:
             {
-                for (auto& header_map: finished_request.resp_headers)
+                for (auto& header_map : finished_request.resp_headers)
                 {
                     auto iter = header_map.find(value_picker.source);
                     if (iter != header_map.end())
@@ -986,19 +982,21 @@ void base_client::run_post_response_action(Request_Data& finished_request)
         finished_request.scenario_data->variable_index_to_value[value_picker.unique_id] = std::move(result);
         if (config->verbose)
         {
-            std::cout<<"where_to_pick_up_from: "<<value_picker.where_to_pick_up_from<<std::endl;
-            std::cout<<"target:"<<value_picker.source<<std::endl;
-            std::cout<<"var id:"<<value_picker.unique_id<<std::endl;
-            std::cout<<"target value located: "<<source<<std::endl;
-            std::cout<<"target value match result: "<<finished_request.scenario_data->variable_index_to_value[value_picker.unique_id]<<std::endl;
+            std::cout << "where_to_pick_up_from: " << value_picker.where_to_pick_up_from << std::endl;
+            std::cout << "target:" << value_picker.source << std::endl;
+            std::cout << "var id:" << value_picker.unique_id << std::endl;
+            std::cout << "target value located: " << source << std::endl;
+            std::cout << "target value match result: " <<
+                      finished_request.scenario_data->variable_index_to_value[value_picker.unique_id] << std::endl;
         }
     }
     if (config->verbose)
     {
-        std::cout<<"variable_index_to_value size: "<<finished_request.scenario_data->variable_index_to_value.size()<<std::endl;
+        std::cout << "variable_index_to_value size: " << finished_request.scenario_data->variable_index_to_value.size() <<
+                  std::endl;
         for (auto i = 0; i < finished_request.scenario_data->variable_index_to_value.size(); i++)
         {
-            std::cout<<"var: "<<finished_request.scenario_data->variable_index_to_value[i]<<std::endl;
+            std::cout << "var: " << finished_request.scenario_data->variable_index_to_value[i] << std::endl;
         }
     }
 }
@@ -1070,13 +1068,14 @@ void base_client::populate_request_from_config_template(Request_Data& new_reques
     new_request.method = &request_template.method;
     new_request.schema = &request_template.schema;
     new_request.authority = &request_template.authority;
-    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_payload_with_vars, scenario_index, new_request.user_id, *new_request.scenario_data));
+    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_payload_with_vars, scenario_index,
+                                                               new_request.user_id, *new_request.scenario_data));
     new_request.req_payload = &(new_request.string_collection.back());
 
     new_request.req_headers_from_config = &request_template.headers_in_map;
     new_request.expected_status_code = request_template.expected_status_code;
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
-    for (auto& h: request_template.headers_with_variable)
+    for (auto& h : request_template.headers_with_variable)
     {
         auto name = assemble_string(h.first, scenario_index, new_request.user_id, *new_request.scenario_data);
         auto value = assemble_string(h.second, scenario_index, new_request.user_id, *new_request.scenario_data);
@@ -1501,8 +1500,18 @@ bool base_client::update_request_with_lua(lua_State* L, const Request_Data& fini
 void base_client::terminate_session()
 {
     session->terminate();
-    // http1 session needs writecb to tear down session.
-    signal_write();
+
+#ifdef ENABLE_HTTP3
+    if (config.is_quic())
+    {
+        quic.close_requested = true;
+        if (!is_write_signaled() && write_clear_callback)
+        {
+            auto func = std::move(write_clear_callback);
+            func();
+        }
+    }
+#endif // ENABLE_HTTP3
 }
 
 void base_client::reset_timeout_requests()
@@ -2101,20 +2110,21 @@ Request_Data base_client::prepare_first_request()
 
     if (scenario.variable_name_in_path_and_data.size())
     {
-        new_request.scenario_data->variable_index_to_value[0] = get_current_user_id_string(config, new_request.scenario_index, new_request.curr_request_idx, new_request.user_id);
+        new_request.scenario_data->variable_index_to_value[0] = get_current_user_id_string(config, new_request.scenario_index,
+                                                                                           new_request.curr_request_idx, new_request.user_id);
     }
-/*
-    if ((new_request.user_id >= scenario.variable_range_start) &&
-        (scenario.user_variables.size() > (new_request.user_id - scenario.variable_range_start)))
-    {
-        auto& user_variables_values_of_this_user = scenario.user_variables[new_request.user_id - scenario.variable_range_start];
-        auto curr_number_of_vars = new_request.scenario_data->variable_index_to_value.size();
-        for (size_t index = 0; index < user_variables_values_of_this_user.size(); index++)
+    /*
+        if ((new_request.user_id >= scenario.variable_range_start) &&
+            (scenario.user_variables.size() > (new_request.user_id - scenario.variable_range_start)))
         {
-            new_request.scenario_data->variable_index_to_value[curr_number_of_vars + index] = user_variables_values_of_this_user[index];
+            auto& user_variables_values_of_this_user = scenario.user_variables[new_request.user_id - scenario.variable_range_start];
+            auto curr_number_of_vars = new_request.scenario_data->variable_index_to_value.size();
+            for (size_t index = 0; index < user_variables_values_of_this_user.size(); index++)
+            {
+                new_request.scenario_data->variable_index_to_value[curr_number_of_vars + index] = user_variables_values_of_this_user[index];
+            }
         }
-    }
-*/
+    */
     if (controller->runtime_scenario_data[scenario_index].req_variable_value_end)
     {
         controller->runtime_scenario_data[scenario_index].curr_req_variable_value++;
@@ -2131,7 +2141,8 @@ Request_Data base_client::prepare_first_request()
     populate_request_from_config_template(new_request, scenario_index, curr_req_index);
 
     auto& request_template = scenario.requests[curr_req_index];
-    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, scenario_index, new_request.user_id, *new_request.scenario_data));
+    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, scenario_index,
+                                                               new_request.user_id, *new_request.scenario_data));
 
     new_request.path = &(new_request.string_collection.back());
 
@@ -2193,7 +2204,8 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
     {
         case INPUT_URI:
         {
-            new_request->string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, scenario_index, new_request->user_id, *new_request->scenario_data));
+            new_request->string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, scenario_index,
+                                                                        new_request->user_id, *new_request->scenario_data));
             new_request->path = &(new_request->string_collection.back());
 
             break;
@@ -2251,7 +2263,8 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
         }
         case INPUT_WITH_VARIABLE:
         {
-            auto uri = assemble_string(request_template.tokenized_path_with_vars, scenario_index, new_request->user_id, *new_request->scenario_data);
+            auto uri = assemble_string(request_template.tokenized_path_with_vars, scenario_index, new_request->user_id,
+                                       *new_request->scenario_data);
             if (!parse_uri_and_poupate_request(uri, *new_request))
             {
                 std::cerr << "abort whole scenario sequence, as uri is invalid:" << uri << std::endl;
@@ -2449,7 +2462,15 @@ int base_client::select_protocol_and_allocate_session()
         if (next_proto)
         {
             auto proto = StringRef {next_proto, next_proto_len};
-            if (util::check_h2_is_selected(proto))
+            if (config.is_quic()) {
+#ifdef ENABLE_HTTP3
+            assert(session);
+            if (!util::streq(StringRef{&NGHTTP3_ALPN_H3[1]}, proto) &&
+                !util::streq_l("h3-29", proto)) {
+              return -1;
+            }
+#endif // ENABLE_HTTP3
+            else if (util::check_h2_is_selected(proto))
             {
                 session = std::make_unique<Http2Session>(this);
             }
@@ -2707,25 +2728,31 @@ void base_client::pass_response_to_lua(int32_t stream_id, lua_State* L)
     }
 }
 
-std::string base_client::assemble_string(const String_With_Variables_In_Between& source, size_t scenario_index, size_t user_id, Scenario_Data_Per_User& scenario_data)
+std::string base_client::assemble_string(const String_With_Variables_In_Between& source, size_t scenario_index,
+                                         size_t user_id, Scenario_Data_Per_User& scenario_data)
 {
     std::string result;
     Scenario& scenario_template = config->json_config_schema.scenarios[scenario_index];
     static std::vector<std::string> dummy_user_vars;
-    auto& user_vars = user_id  < scenario_template.user_variables.size() ? scenario_template.user_variables[user_id] : dummy_user_vars;
-    auto string_size = std::accumulate(source.string_segments.begin(), source.string_segments.end(), 0, [](size_t count, const std::string& s){ return count + s.size();});
+    auto& user_vars = user_id  < scenario_template.user_variables.size() ? scenario_template.user_variables[user_id] :
+                      dummy_user_vars;
+    auto string_size = std::accumulate(source.string_segments.begin(), source.string_segments.end(), 0, [](size_t count,
+                                                                                                           const std::string & s)
+    {
+        return count + s.size();
+    });
     size_t range_left = (scenario_template.variable_name_in_path_and_data.size() ? 1 : 0);
     size_t range_right = range_left + user_vars.size();
     if (config->verbose)
     {
-        std::cout<<source<<std::endl;
-        std::cout<<"variable_index_to_value size: "<<scenario_data.variable_index_to_value.size()<<std::endl;
+        std::cout << source << std::endl;
+        std::cout << "variable_index_to_value size: " << scenario_data.variable_index_to_value.size() << std::endl;
         for (auto i = 0; i < scenario_data.variable_index_to_value.size(); i++)
         {
-            std::cout<<"var: "<<scenario_data.variable_index_to_value[i]<<std::endl;
+            std::cout << "var: " << scenario_data.variable_index_to_value[i] << std::endl;
         }
     }
-    for (auto& var_id: source.variable_ids_in_between)
+    for (auto& var_id : source.variable_ids_in_between)
     {
         if (range_left <= var_id && var_id < range_right)
         {

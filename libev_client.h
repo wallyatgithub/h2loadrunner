@@ -71,6 +71,7 @@ public:
     virtual void start_delayed_reconnect_timer();
     virtual void probe_and_connect_to(const std::string& schema, const std::string& authority);
     virtual void setup_graceful_shutdown();
+    virtual bool is_write_signaled();
 
     int do_read();
     int do_write();
@@ -107,7 +108,7 @@ public:
     int write_udp(const sockaddr *addr, socklen_t addrlen, const uint8_t *data,
                   size_t datalen, size_t gso_size);
 
-    virtual void setup_quic_pkt_timer();
+    void setup_quic_pkt_timer();
 
 #endif
 

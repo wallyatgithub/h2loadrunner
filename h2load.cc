@@ -451,6 +451,12 @@ int main(int argc, char** argv)
             {"log-file", required_argument, &flag, 10},
             {"connect-to", required_argument, &flag, 11},
             {"rps", required_argument, &flag, 12},
+            {"groups", required_argument, &flag, 13},
+            {"tls13-ciphers", required_argument, &flag, 14},
+            {"no-udp-gso", no_argument, &flag, 15},
+            {"qlog-file-base", required_argument, &flag, 16},
+            {"max-udp-payload-size", required_argument, &flag, 17},
+            {"ktls", no_argument, &flag, 18},
             {"stream-timeout-interval-ms", required_argument, &flag, 23},
             {"rps-input-file", required_argument, &flag, 24},
             {"config-file", required_argument, &flag, 25},
@@ -743,6 +749,45 @@ int main(int argc, char** argv)
                         config.rps = v;
                         break;
                     }
+                    case 13:
+                      // --groups
+                      config.groups = optarg;
+                      break;
+                    case 14:
+                      // --tls13-ciphers
+                      config.tls13_ciphers = optarg;
+                      break;
+                    case 15:
+                      // --no-udp-gso
+                      config.no_udp_gso = true;
+                      break;
+                    case 16:
+                      // --qlog-file-base
+                      qlog_base = optarg;
+                      break;
+                    case 17: {
+                      // --max-udp-payload-size
+                      auto n = util::parse_uint_with_unit(optarg);
+                      if (n == -1) {
+                        std::cerr << "--max-udp-payload-size: bad option value: " << optarg
+                                  << std::endl;
+                        exit(EXIT_FAILURE);
+                      }
+                      if (static_cast<uint64_t>(n) > 64_k) {
+                        std::cerr << "--max-udp-payload-size: must not exceed 65536"
+                                  << std::endl;
+                        exit(EXIT_FAILURE);
+                      }
+                      config.max_udp_payload_size = n;
+                      break;
+                    }
+                    case 18:
+                      // --ktls
+                      config.ktls = true;
+                      break;
+                    }
+                    break;
+
                     case 23:
                     {
                         config.stream_timeout_in_ms = (uint16_t)strtoul(optarg, nullptr, 10);
@@ -1021,7 +1066,7 @@ int main(int argc, char** argv)
 
     setup_SSL_CTX(ssl_ctx, config);
 
-    std::string user_agent = "h2load nghttp2/" NGHTTP2_VERSION;
+    std::string user_agent = "h2loadrunner";
     Headers shared_nva;
     shared_nva.emplace_back(scheme_header, config.scheme);
     if (config.port != config.default_port)
@@ -1379,8 +1424,17 @@ traffic: )" << util::utos_funit(stats.bytes_total)
               << util::utos_funit(stats.bytes_head) << "B (" << stats.bytes_head
               << ") headers (space savings " << header_space_savings * 100
               << "%), " << util::utos_funit(stats.bytes_body) << "B ("
-              << stats.bytes_body << R"() data
-min         max         mean         sd        +/- sd
+              << stats.bytes_body << R"() data)" << std::endl;
+
+#ifdef ENABLE_HTTP3
+  if (config.is_quic()) {
+    std::cout << "UDP datagram: " << stats.udp_dgram_sent << " sent, "
+              << stats.udp_dgram_recv << " received" << std::endl;
+  }
+#endif // ENABLE_HTTP3
+        
+std::cout
+      <<R"() data << min         max         mean         sd        +/- sd
 time for request: )"
               << std::setw(10) << util::format_duration(ts.request.min) << "  "
               << std::setw(10) << util::format_duration(ts.request.max) << "  "
