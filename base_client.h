@@ -55,14 +55,14 @@ class base_client
 {
 public:
     base_client(uint32_t id, base_worker* wrker, size_t req_todo, Config* conf,
-                     base_client* parent = nullptr, const std::string& dest_schema = "",
-                     const std::string& dest_authority = "");
+                base_client* parent = nullptr, const std::string& dest_schema = "",
+                const std::string& dest_authority = "");
     virtual ~base_client();
     virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length) = 0;
     virtual void signal_write() = 0;
     virtual bool any_pending_data_to_write() = 0;
     virtual std::shared_ptr<base_client> create_dest_client(const std::string& dst_sch,
-                                                                 const std::string& dest_authority) = 0;
+                                                            const std::string& dest_authority) = 0;
 
 
     virtual void start_conn_active_watcher() = 0;
@@ -192,41 +192,31 @@ public:
     void queue_stream_for_user_callback(int32_t stream_id);
     void process_stream_user_callback(int32_t stream_id);
     void on_header_frame_begin(int32_t stream_id, uint8_t flags);
-    void pass_response_to_lua(int32_t stream_id, lua_State *L);
+    void pass_response_to_lua(int32_t stream_id, lua_State* L);
     uint64_t get_client_unique_id();
     void set_prefered_authority(const std::string& authority);
     void run_post_response_action(Request_Data& finished_request);
     void run_pre_request_action(Request_Data& new_request);
-    std::string assemble_string(const String_With_Variables_In_Between& source, size_t scenario_index, size_t user_id, Scenario_Data_Per_User& scenario_data);
+    std::string assemble_string(const String_With_Variables_In_Between& source, size_t scenario_index, size_t user_id,
+                                Scenario_Data_Per_User& scenario_data);
     bool parse_uri_and_poupate_request(const std::string& uri, Request_Data& new_request);
     void sanitize_request(Request_Data& new_request);
 
 #ifdef ENABLE_HTTP3
-      // QUIC
-      int quic_init(const sockaddr *local_addr, socklen_t local_addrlen,
-                    const sockaddr *remote_addr, socklen_t remote_addrlen);
-      void quic_free();
-      void on_send_blocked(const ngtcp2_addr &remote_addr, const uint8_t *data,
-                           size_t datalen, size_t gso_size);
-      int send_blocked_packet();
-      void quic_close_connection();
-    
-      int quic_handshake_completed();
-      int quic_recv_stream_data(uint32_t flags, int64_t stream_id,
-                                const uint8_t *data, size_t datalen);
-      int quic_acked_stream_data_offset(int64_t stream_id, size_t datalen);
-      int quic_stream_close(int64_t stream_id, uint64_t app_error_code);
-      int quic_stream_reset(int64_t stream_id, uint64_t app_error_code);
-      int quic_stream_stop_sending(int64_t stream_id, uint64_t app_error_code);
-      int quic_extend_max_local_streams();
-    
-      int quic_write_client_handshake(ngtcp2_crypto_level level,
-                                      const uint8_t *data, size_t datalen);
-      int quic_pkt_timeout();
-      virtual void quic_restart_pkt_timer()  = 0;
-      void quic_write_qlog(const void *data, size_t datalen);
-      int quic_make_http3_session();
-      void on_quic_pkt_timeout();
+    // QUIC
+    int quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
+                  const sockaddr* remote_addr, socklen_t remote_addrlen);
+    void quic_free();
+    int quic_handshake_completed();
+    int quic_recv_stream_data(uint32_t flags, int64_t stream_id,
+                              const uint8_t* data, size_t datalen);
+    int quic_acked_stream_data_offset(int64_t stream_id, size_t datalen);
+    int quic_stream_close(int64_t stream_id, uint64_t app_error_code);
+    int quic_stream_reset(int64_t stream_id, uint64_t app_error_code);
+    int quic_stream_stop_sending(int64_t stream_id, uint64_t app_error_code);
+    int quic_extend_max_local_streams();
+    void quic_write_qlog(const void* data, size_t datalen);
+    int quic_make_http3_session();
 
 #endif // ENABLE_HTTP3
 
@@ -276,34 +266,37 @@ public:
     std::deque<std::string> candidate_addresses;
     std::deque<std::string> used_addresses;
     Unique_Id this_client_id;
-    std::function<void()> write_clear_callback;
+    std::function<bool(void)> write_clear_callback;
     std::vector<Scenario_Data_Per_Client> runtime_scenario_data;
     time_point_in_seconds_double rps_duration_started;
     SSL* ssl;
     std::vector<std::function<void(bool, h2load::base_client*)>> connected_callbacks;
     std::map<int32_t, Stream_Callback_Data> stream_user_callback_queue;
 #ifdef ENABLE_HTTP3
-      struct {
+    struct
+    {
         ngtcp2_crypto_conn_ref conn_ref;
         ev_timer pkt_timer;
-        ngtcp2_conn *conn;
+        ngtcp2_conn* conn;
         ngtcp2_connection_close_error last_error;
         bool close_requested;
-        FILE *qlog_file;
-    
-        struct {
-          bool send_blocked;
-          size_t num_blocked;
-          size_t num_blocked_sent;
-          struct {
-            Address remote_addr;
-            const uint8_t *data;
-            size_t datalen;
-            size_t gso_size;
-          } blocked[2];
-          std::unique_ptr<uint8_t[]> data;
+        FILE* qlog_file;
+
+        struct
+        {
+            bool send_blocked;
+            size_t num_blocked;
+            size_t num_blocked_sent;
+            struct
+            {
+                Address remote_addr;
+                const uint8_t* data;
+                size_t datalen;
+                size_t gso_size;
+            } blocked[2];
+            std::unique_ptr<uint8_t[]> data;
         } tx;
-      } quic;
+    } quic;
 #endif // ENABLE_HTTP3
 };
 

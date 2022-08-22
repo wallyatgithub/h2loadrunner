@@ -35,15 +35,15 @@ public:
     enum { ERR_CONNECT_FAIL = -100 };
 
     libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Config* conf,
-           libev_client* parent = nullptr, const std::string& dest_schema = "",
-           const std::string& dest_authority = "");
+                 libev_client* parent = nullptr, const std::string& dest_schema = "",
+                 const std::string& dest_authority = "");
     virtual ~libev_client();
     virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length);
     virtual void signal_write() ;
     virtual bool any_pending_data_to_write();
     virtual void start_conn_active_watcher();
     virtual std::shared_ptr<base_client> create_dest_client(const std::string& dst_sch,
-                                                                 const std::string& dest_authority);
+                                                            const std::string& dest_authority);
     virtual int connect_to_host(const std::string& schema, const std::string& authority);
     virtual void disconnect();
     virtual void clear_default_addr_info();
@@ -105,10 +105,15 @@ public:
 #ifdef ENABLE_HTTP3
     int read_quic();
     int write_quic();
-    int write_udp(const sockaddr *addr, socklen_t addrlen, const uint8_t *data,
+    int write_udp(const sockaddr* addr, socklen_t addrlen, const uint8_t* data,
                   size_t datalen, size_t gso_size);
+    void quic_restart_pkt_timer();
 
     void setup_quic_pkt_timer();
+    void quic_close_connection();
+    void on_send_blocked(const ngtcp2_addr& remote_addr, const uint8_t* data,
+                         size_t datalen, size_t gso_size);
+    int send_blocked_packet();
 
 #endif
 

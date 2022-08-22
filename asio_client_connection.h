@@ -110,7 +110,7 @@ public:
     virtual bool any_pending_data_to_write();
 
     virtual std::shared_ptr<base_client> create_dest_client(const std::string& dst_sch,
-                                                                 const std::string& dest_authority);
+                                                            const std::string& dest_authority);
 
     virtual void setup_connect_with_async_fqdn_lookup();
 
@@ -120,7 +120,10 @@ public:
 
     virtual void setup_graceful_shutdown();
 
-    virtual bool is_write_signaled() {return write_signaled};
+    virtual bool is_write_signaled()
+    {
+        return write_signaled;
+    };
 
 private:
 
@@ -212,24 +215,17 @@ private:
     void do_udp_read();
     void do_udp_write();
     void on_udp_resolve_result_event(const boost::system::error_code& err,
-                                 boost::asio::ip::udp::resolver::iterator endpoint_iterator);
+                                     boost::asio::ip::udp::resolver::iterator endpoint_iterator);
     void start_udp_async_connect(boost::asio::ip::udp::resolver::iterator endpoint_iterator);
 
     int do_udp_write();
 
     int handle_http3_write_signal();
+    int quic_pkt_timeout();
+    void quic_restart_pkt_timer();
 
     void handle_quic_pkt_timer_timeout(const boost::system::error_code& ec);
-
-struct Quic_Data_Buffer
-{
-    nghttp2::Address remote_addr;
-    std::vector<uint8_t> data_to_send;
-    explicit Quic_Data_Buffer(size_t size)
-    :data_to_send(size, 0)
-    {
-    };
-};
+    void quic_close_connection();
 
 #endif
 
@@ -271,8 +267,6 @@ struct Quic_Data_Buffer
     boost::asio::deadline_timer delayed_reconnect_timer;
     boost::asio::deadline_timer ssl_handshake_timer;
     std::function<void(asio_client_connection&)> do_read_fn, do_write_fn;
-
-    std::function<bool(void)> write_clear_callback;
 };
 
 

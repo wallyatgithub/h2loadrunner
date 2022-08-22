@@ -30,6 +30,9 @@ bool Config::rps_enabled() const
 
 Config::Config()
     : ciphers(tls::DEFAULT_CIPHER_LIST),
+      tls13_ciphers("TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_"
+                    "CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256"),
+      groups("X25519:P-256:P-384:P-521"),
       data_length(0),
       addrs(nullptr),
       nreqs(1),
@@ -84,12 +87,15 @@ Config::~Config()
         }
     }
 }
-bool Config::is_quic() const {
+bool Config::is_quic() const
+{
 #ifdef ENABLE_HTTP3
-  return !npn_list.empty() &&
-         (npn_list[0] == NGHTTP3_ALPN_H3 || npn_list[0] == "\x5h3-29");
+    return !npn_list.empty() &&
+           (npn_list[0] == NGHTTP3_ALPN_H3 || npn_list[0] == "\x5h3-29");
 #else  // !ENABLE_HTTP3
-  return false;
+    return false;
 #endif // !ENABLE_HTTP3
+
+}
 
 }

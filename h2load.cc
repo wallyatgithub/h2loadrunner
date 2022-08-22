@@ -417,6 +417,7 @@ int main(int argc, char** argv)
     std::string datafile;
     std::vector<std::string> script_files;
     bool nreqs_set_manually = false;
+    std::string qlog_base;
     while (1)
     {
         static int flag = 0;
@@ -750,44 +751,54 @@ int main(int argc, char** argv)
                         break;
                     }
                     case 13:
-                      // --groups
-                      config.groups = optarg;
-                      break;
+                    {
+                        // --groups
+                        config.groups = optarg;
+                        break;
+                    }
                     case 14:
-                      // --tls13-ciphers
-                      config.tls13_ciphers = optarg;
-                      break;
+                    {
+                        // --tls13-ciphers
+                        config.tls13_ciphers = optarg;
+                        break;
+                    }
                     case 15:
-                      // --no-udp-gso
-                      config.no_udp_gso = true;
-                      break;
+                    {
+                        // --no-udp-gso
+                        config.no_udp_gso = true;
+                        break;
+                    }
                     case 16:
-                      // --qlog-file-base
-                      qlog_base = optarg;
-                      break;
-                    case 17: {
-                      // --max-udp-payload-size
-                      auto n = util::parse_uint_with_unit(optarg);
-                      if (n == -1) {
-                        std::cerr << "--max-udp-payload-size: bad option value: " << optarg
-                                  << std::endl;
-                        exit(EXIT_FAILURE);
-                      }
-                      if (static_cast<uint64_t>(n) > 64_k) {
-                        std::cerr << "--max-udp-payload-size: must not exceed 65536"
-                                  << std::endl;
-                        exit(EXIT_FAILURE);
-                      }
-                      config.max_udp_payload_size = n;
-                      break;
+                    {
+                        // --qlog-file-base
+                        qlog_base = optarg;
+                        break;
+                    }
+                    case 17:
+                    {
+                        // --max-udp-payload-size
+                        auto n = util::parse_uint_with_unit(optarg);
+                        if (n == -1)
+                        {
+                            std::cerr << "--max-udp-payload-size: bad option value: " << optarg
+                                      << std::endl;
+                            exit(EXIT_FAILURE);
+                        }
+                        if (static_cast<uint64_t>(n) > 64_k)
+                        {
+                            std::cerr << "--max-udp-payload-size: must not exceed 65536"
+                                      << std::endl;
+                            exit(EXIT_FAILURE);
+                        }
+                        config.max_udp_payload_size = n;
+                        break;
                     }
                     case 18:
-                      // --ktls
-                      config.ktls = true;
-                      break;
+                    {
+                        // --ktls
+                        config.ktls = true;
+                        break;
                     }
-                    break;
-
                     case 23:
                     {
                         config.stream_timeout_in_ms = (uint16_t)strtoul(optarg, nullptr, 10);
@@ -831,15 +842,15 @@ int main(int argc, char** argv)
     if (script_files.size())
     {
         std::vector<std::string> lua_scripts;
-        for (auto& script_file: script_files)
+        for (auto& script_file : script_files)
         {
             std::ifstream buffer(script_file);
             if (!buffer.is_open())
             {
-                std::cerr << "file open error: " << script_file<<std::endl;
+                std::cerr << "file open error: " << script_file << std::endl;
             }
             std::string lua_script((std::istreambuf_iterator<char>(buffer)),
-                                    std::istreambuf_iterator<char>());
+                                   std::istreambuf_iterator<char>());
             lua_scripts.push_back(lua_script);
         }
         load_and_run_lua_script(lua_scripts, config);
@@ -1050,6 +1061,22 @@ int main(int argc, char** argv)
         }
     }
 
+    if (!qlog_base.empty())
+    {
+        if (!config.is_quic())
+        {
+            std::cerr
+                    << "Warning: --qlog-file-base: only effective in quic, ignoring."
+                    << std::endl;
+        }
+        else
+        {
+#ifdef ENABLE_HTTP3
+            config.qlog_file_base = qlog_base;
+#endif // ENABLE_HTTP3
+        }
+    }
+
 #ifndef _WINDOWS
     struct sigaction act {};
     act.sa_handler = SIG_IGN;
@@ -1078,7 +1105,7 @@ int main(int argc, char** argv)
     {
         shared_nva.emplace_back(authority_header, config.host);
     }
-    shared_nva.emplace_back(method_header, config.data_length > 0 ? "POST": "GET");
+    shared_nva.emplace_back(method_header, config.data_length > 0 ? "POST" : "GET");
     shared_nva.emplace_back("user-agent", user_agent);
 
     // list header fields that can be overridden.
@@ -1311,7 +1338,7 @@ int main(int argc, char** argv)
         {
             fut.get();
         }
-        catch(const std::exception& e)
+        catch (const std::exception& e)
         {
             std::cerr << " caught exception " << e.what()
                       << ", future.valid() == " << fut.valid() << "\n";
@@ -1427,40 +1454,41 @@ traffic: )" << util::utos_funit(stats.bytes_total)
               << stats.bytes_body << R"() data)" << std::endl;
 
 #ifdef ENABLE_HTTP3
-  if (config.is_quic()) {
-    std::cout << "UDP datagram: " << stats.udp_dgram_sent << " sent, "
-              << stats.udp_dgram_recv << " received" << std::endl;
-  }
+    if (config.is_quic())
+    {
+        std::cout << "UDP datagram: " << stats.udp_dgram_sent << " sent, "
+                  << stats.udp_dgram_recv << " received" << std::endl;
+    }
 #endif // ENABLE_HTTP3
-        
-std::cout
-      <<R"() data << min         max         mean         sd        +/- sd
+
+    std::cout
+            << R"() data << min         max         mean         sd        +/- sd
 time for request: )"
-              << std::setw(10) << util::format_duration(ts.request.min) << "  "
-              << std::setw(10) << util::format_duration(ts.request.max) << "  "
-              << std::setw(10) << util::format_duration(ts.request.mean) << "  "
-              << std::setw(10) << util::format_duration(ts.request.sd)
-              << std::setw(9) << util::dtos(ts.request.within_sd) << "%"
-              << "\ntime for connect: " << std::setw(10)
-              << util::format_duration(ts.connect.min) << "  " << std::setw(10)
-              << util::format_duration(ts.connect.max) << "  " << std::setw(10)
-              << util::format_duration(ts.connect.mean) << "  " << std::setw(10)
-              << util::format_duration(ts.connect.sd) << std::setw(9)
-              << util::dtos(ts.connect.within_sd) << "%"
-              << "\ntime to 1st byte: " << std::setw(10)
-              << util::format_duration(ts.ttfb.min) << "  " << std::setw(10)
-              << util::format_duration(ts.ttfb.max) << "  " << std::setw(10)
-              << util::format_duration(ts.ttfb.mean) << "  " << std::setw(10)
-              << util::format_duration(ts.ttfb.sd) << std::setw(9)
-              << util::dtos(ts.ttfb.within_sd) << "%"
-              // this is misleading, comment it
-              /*
-              << "\nreq/s           : " << std::setw(10) << ts.rps.min << "  "
-              << std::setw(10) << ts.rps.max << "  " << std::setw(10)
-              << ts.rps.mean << "  " << std::setw(10) << ts.rps.sd << std::setw(9)
-              << util::dtos(ts.rps.within_sd) << "%"
-              */
-              << std::endl;
+            << std::setw(10) << util::format_duration(ts.request.min) << "  "
+            << std::setw(10) << util::format_duration(ts.request.max) << "  "
+            << std::setw(10) << util::format_duration(ts.request.mean) << "  "
+            << std::setw(10) << util::format_duration(ts.request.sd)
+            << std::setw(9) << util::dtos(ts.request.within_sd) << "%"
+            << "\ntime for connect: " << std::setw(10)
+            << util::format_duration(ts.connect.min) << "  " << std::setw(10)
+            << util::format_duration(ts.connect.max) << "  " << std::setw(10)
+            << util::format_duration(ts.connect.mean) << "  " << std::setw(10)
+            << util::format_duration(ts.connect.sd) << std::setw(9)
+            << util::dtos(ts.connect.within_sd) << "%"
+            << "\ntime to 1st byte: " << std::setw(10)
+            << util::format_duration(ts.ttfb.min) << "  " << std::setw(10)
+            << util::format_duration(ts.ttfb.max) << "  " << std::setw(10)
+            << util::format_duration(ts.ttfb.mean) << "  " << std::setw(10)
+            << util::format_duration(ts.ttfb.sd) << std::setw(9)
+            << util::dtos(ts.ttfb.within_sd) << "%"
+            // this is misleading, comment it
+            /*
+            << "\nreq/s           : " << std::setw(10) << ts.rps.min << "  "
+            << std::setw(10) << ts.rps.max << "  " << std::setw(10)
+            << ts.rps.mean << "  " << std::setw(10) << ts.rps.sd << std::setw(9)
+            << util::dtos(ts.rps.within_sd) << "%"
+            */
+            << std::endl;
 
     print_extended_stats_summary(stats, config, workers);
 
