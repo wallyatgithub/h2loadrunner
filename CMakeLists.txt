@@ -102,6 +102,12 @@ set(C_ARES_INCLUDE
 "."
 )
 
+if(DEFINED ENABLE_HTTP3)
+
+add_definitions(-DENABLE_HTTP3=1)
+
+endif()
+
 if(DEFINED USE_LIBEV)
     find_package(Libev 4.11)
 
@@ -155,6 +161,7 @@ include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/llhttp/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/StaticJSON/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/nghttp3/lib/includes"
+  "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/lib/includes"
   "${LUA_INCLUDE_DIR}"
   "${LIBEV_INCLUDE_DIR}"
   "${C_ARES_INCLUDE}"
@@ -172,7 +179,6 @@ link_libraries(
   ${GETOPT_LIBRARY}
   ${EXECINFO_LIBRARY}
   ${MIMALLOC_LIB}
-  ${CMAKE_CURRENT_SOURCE_DIR}/nghttp3/lib
 )
 
 set (CMAKE_INCLUDE_CURRENT_DIR ON)

@@ -29,8 +29,9 @@
 #include <openssl/err.h>
 #include <openssl/rand.h>
 
+#ifdef ENABLE_HTTP3
 #include "h2load_http3_session.h"
-
+#endif
 
 #include "tls.h"
 #include "base_client.h"
