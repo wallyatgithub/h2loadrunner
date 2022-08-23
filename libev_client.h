@@ -115,6 +115,10 @@ public:
                          size_t datalen, size_t gso_size);
     int send_blocked_packet();
 
+    ev_timer pkt_timer;
+    
+    int quic_pkt_timeout();
+
 #endif
 
     DefaultMemchunks wb;

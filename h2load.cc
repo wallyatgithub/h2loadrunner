@@ -110,7 +110,6 @@ extern "C" {
 
 #ifdef ENABLE_HTTP3
 #  include "h2load_http3_session.h"
-#  include "h2load_quic.h"
 #endif // ENABLE_HTTP3
 
 

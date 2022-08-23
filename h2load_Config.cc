@@ -6,7 +6,9 @@
 #include "template.h"
 #include "h2load_utils.h"
 #include "h2load_Config.h"
-
+#ifdef ENABLE_HTTP3
+#include <nghttp3/nghttp3.h>
+#endif
 
 namespace h2load
 {

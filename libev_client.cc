@@ -16,6 +16,13 @@ extern "C" {
 #include "memchunk.h"
 #endif
 
+#ifdef ENABLE_HTTP3
+#ifdef USE_LIBEV
+#  include "h2load_quic.h"
+#endif
+#endif
+
+
 #include "h2load.h"
 #include "libev_client.h"
 #include "h2load_Config.h"
@@ -60,8 +67,8 @@ libev_client::libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Co
     init_connection_targert();
 
 #ifdef ENABLE_HTTP3
-    ev_timer_init(&quic.pkt_timer, quic_pkt_timeout_cb, 0., 0.);
-    quic.pkt_timer.data = this;
+    ev_timer_init(&pkt_timer, quic_pkt_timeout_cb, 0., 0.);
+    pkt_timer.data = this;
 
     if (config.is_quic())
     {
@@ -898,11 +905,6 @@ bool libev_client::any_pending_data_to_write()
 }
 
 #ifdef ENABLE_HTTP3
-void libev_client::setup_quic_pkt_timer()
-{
-    ev_timer_init(&quic.pkt_timer, quic_pkt_timeout_cb, 0., 0.);
-    quic.pkt_timer.data = this;
-}
 
 void quic_pkt_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 {
@@ -915,6 +917,12 @@ void quic_pkt_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
         delete c;
         return;
     }
+}
+
+void libev_client::setup_quic_pkt_timer()
+{
+    ev_timer_init(&pkt_timer, quic_pkt_timeout_cb, 0., 0.);
+    pkt_timer.data = this;
 }
 
 int libev_client::quic_pkt_timeout()
@@ -939,8 +947,8 @@ void libev_client::quic_restart_pkt_timer()
     auto now = timestamp(worker->loop);
     auto t = expiry > now ? static_cast<ev_tstamp>(expiry - now) / NGTCP2_SECONDS
              : 1e-9;
-    quic.pkt_timer.repeat = t;
-    ev_timer_again(worker->loop, &quic.pkt_timer);
+    pkt_timer.repeat = t;
+    ev_timer_again(worker->loop, &pkt_timer);
 }
 
 int libev_client::read_quic()

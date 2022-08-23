@@ -103,9 +103,12 @@ set(C_ARES_INCLUDE
 )
 
 if(DEFINED ENABLE_HTTP3)
+    add_definitions(-DENABLE_HTTP3=1)
 
-add_definitions(-DENABLE_HTTP3=1)
-
+    set(HTTP3_SOURCES
+      quic.cc
+      h2load_http3_session.cc
+    )
 endif()
 
 if(DEFINED USE_LIBEV)
@@ -162,6 +165,7 @@ include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/StaticJSON/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/nghttp3/lib/includes"
   "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/lib/includes"
+  "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/crypto/includes/"
   "${LUA_INCLUDE_DIR}"
   "${LIBEV_INCLUDE_DIR}"
   "${C_ARES_INCLUDE}"
@@ -224,6 +228,7 @@ set(H2LOAD_SOURCES
   h2load_lua.cc
   ${H2LOAD_SOURCE_USING_LIBEV}
   ${ASIO_SV_SOURCES}
+  ${HTTP3_SOURCES}
 )
 
 add_executable(h2loadrunner ${H2LOAD_SOURCES} $<TARGET_OBJECTS:llhttp>

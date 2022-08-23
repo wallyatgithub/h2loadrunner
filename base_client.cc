@@ -96,7 +96,7 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
 base_client::~base_client()
 {
 #ifdef ENABLE_HTTP3
-    if (config.is_quic())
+    if (config->is_quic())
     {
         quic_free();
     }
@@ -1520,7 +1520,7 @@ void base_client::terminate_session()
     session->terminate();
 
 #ifdef ENABLE_HTTP3
-    if (config.is_quic())
+    if (config->is_quic())
     {
         quic.close_requested = true;
         if (!is_write_signaled() && write_clear_callback)
@@ -2806,23 +2806,11 @@ std::string base_client::assemble_string(const String_With_Variables_In_Between&
 
 #ifdef ENABLE_HTTP3
 
-void base_client::on_quic_pkt_timeout()
-{
-    if (quic_pkt_timeout() != 0)
-    {
-        fail();
-        worker->free_client(c);
-        delete c;
-        return;
-    }
-}
-
-
 namespace
 {
 int handshake_completed(ngtcp2_conn* conn, void* user_data)
 {
-    auto c = static_cast<Client*>(user_data);
+    auto c = static_cast<base_client*>(user_data);
 
     if (c->quic_handshake_completed() != 0)
     {
@@ -2844,7 +2832,7 @@ int recv_stream_data(ngtcp2_conn* conn, uint32_t flags, int64_t stream_id,
                      uint64_t offset, const uint8_t* data, size_t datalen,
                      void* user_data, void* stream_user_data)
 {
-    auto c = static_cast<Client*>(user_data);
+    auto c = static_cast<base_client*>(user_data);
     if (c->quic_recv_stream_data(flags, stream_id, data, datalen) != 0)
     {
         // TODO Better to do this gracefully rather than
@@ -2883,7 +2871,7 @@ int acked_stream_data_offset(ngtcp2_conn* conn, int64_t stream_id,
                              uint64_t offset, uint64_t datalen, void* user_data,
                              void* stream_user_data)
 {
-    auto c = static_cast<Client*>(user_data);
+    auto c = static_cast<base_client*>(user_data);
     if (c->quic_acked_stream_data_offset(stream_id, datalen) != 0)
     {
         return NGTCP2_ERR_CALLBACK_FAILURE;
@@ -2908,7 +2896,7 @@ int stream_close(ngtcp2_conn* conn, uint32_t flags, int64_t stream_id,
                  uint64_t app_error_code, void* user_data,
                  void* stream_user_data)
 {
-    auto c = static_cast<Client*>(user_data);
+    auto c = static_cast<base_client*>(user_data);
 
     if (!(flags & NGTCP2_STREAM_CLOSE_FLAG_APP_ERROR_CODE_SET))
     {
@@ -2939,7 +2927,7 @@ int stream_reset(ngtcp2_conn* conn, int64_t stream_id, uint64_t final_size,
                  uint64_t app_error_code, void* user_data,
                  void* stream_user_data)
 {
-    auto c = static_cast<Client*>(user_data);
+    auto c = static_cast<base_client*>(user_data);
     if (c->quic_stream_reset(stream_id, app_error_code) != 0)
     {
         return NGTCP2_ERR_CALLBACK_FAILURE;
@@ -2964,7 +2952,7 @@ int stream_stop_sending(ngtcp2_conn* conn, int64_t stream_id,
                         uint64_t app_error_code, void* user_data,
                         void* stream_user_data)
 {
-    auto c = static_cast<Client*>(user_data);
+    auto c = static_cast<base_client*>(user_data);
     if (c->quic_stream_stop_sending(stream_id, app_error_code) != 0)
     {
         return NGTCP2_ERR_CALLBACK_FAILURE;
@@ -2989,7 +2977,7 @@ namespace
 int extend_max_local_streams_bidi(ngtcp2_conn* conn, uint64_t max_streams,
                                   void* user_data)
 {
-    auto c = static_cast<Client*>(user_data);
+    auto c = static_cast<base_client*>(user_data);
 
     if (c->quic_extend_max_local_streams() != 0)
     {
@@ -3074,7 +3062,7 @@ namespace
 void qlog_write_cb(void* user_data, uint32_t flags, const void* data,
                    size_t datalen)
 {
-    auto c = static_cast<Client*>(user_data);
+    auto c = static_cast<base_client*>(user_data);
     c->quic_write_qlog(data, datalen);
 }
 } // namespace
@@ -3103,7 +3091,7 @@ int recv_rx_key(ngtcp2_conn* conn, ngtcp2_crypto_level level, void* user_data)
         return 0;
     }
 
-    auto c = static_cast<Client*>(user_data);
+    auto c = static_cast<base_client*>(user_data);
 
     if (c->quic_make_http3_session() != 0)
     {
@@ -3130,7 +3118,7 @@ namespace
 {
 ngtcp2_conn* get_conn(ngtcp2_crypto_conn_ref* conn_ref)
 {
-    auto c = static_cast<Client*>(conn_ref->user_data);
+    auto c = static_cast<base_client*>(conn_ref->user_data);
     return c->quic.conn;
 }
 } // namespace
