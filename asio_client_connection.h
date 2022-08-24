@@ -213,12 +213,11 @@ private:
                                        boost::asio::ip::tcp::resolver::iterator endpoint_iterator);
 #ifdef ENABLE_HTTP3
     void do_udp_read();
-    void do_udp_write();
     void on_udp_resolve_result_event(const boost::system::error_code& err,
                                      boost::asio::ip::udp::resolver::iterator endpoint_iterator);
     void start_udp_async_connect(boost::asio::ip::udp::resolver::iterator endpoint_iterator);
 
-    int do_udp_write();
+    void do_udp_write();
 
     int handle_http3_write_signal();
     int quic_pkt_timeout();
@@ -266,7 +265,7 @@ private:
     boost::asio::deadline_timer connect_back_to_preferred_host_timer;
     boost::asio::deadline_timer delayed_reconnect_timer;
     boost::asio::deadline_timer ssl_handshake_timer;
-    std::function<void(asio_client_connection&)> do_read_fn, do_write_fn;
+    std::function<void(asio_client_connection*)> do_read_fn, do_write_fn;
 };
 
 

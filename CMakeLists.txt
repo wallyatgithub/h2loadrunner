@@ -11,7 +11,7 @@ set(Boost_USE_STATIC_LIBS ON)
 
 add_subdirectory(third-party)
 
-find_package(OpenSSL 1.0.1)
+#find_package(OpenSSL 1.0.1)
 find_package(Boost 1.53.0 REQUIRED system thread)
 find_package(LuaJIT)
 
@@ -165,7 +165,8 @@ include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/StaticJSON/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/nghttp3/lib/includes"
   "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/lib/includes"
-  "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/crypto/includes/"
+  "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/crypto/includes"
+  "${CMAKE_CURRENT_SOURCE_DIR}/openssl/build/include"
   "${LUA_INCLUDE_DIR}"
   "${LIBEV_INCLUDE_DIR}"
   "${C_ARES_INCLUDE}"

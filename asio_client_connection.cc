@@ -774,17 +774,17 @@ void asio_client_connection::handle_read_complete(const boost::system::error_cod
     worker->stats.bytes_total += bytes_transferred;
     restart_timeout_timer();
 #ifdef ENABLE_HTTP3
-    if (do_read_fn == &asio_client_connection::do_udp_read)
+    if (udp_client_socket.is_open())
     {
         assert(quic.conn);
         int rv;
         ngtcp2_pkt_info pi{};
         ++worker->stats.udp_dgram_recv;
-        auto& local_sockaddr = udp_client_socket.local_endpoint().data();
-        auto local_addr_len = udp_client_socket.local_endpoint().data().size();
+        auto local_sockaddr = udp_client_socket.local_endpoint().data();
+        auto local_addr_len = udp_client_socket.local_endpoint().size();
 
-        auto& remote_sockaddr = remote_addr.data();
-        auto remote_addr_len = remote_addr.data().size();
+        auto remote_sockaddr = remote_addr.data();
+        auto remote_addr_len = remote_addr.size();
 
         auto path = ngtcp2_path
         {
@@ -866,7 +866,7 @@ void asio_client_connection::do_ssl_read()
 
 void asio_client_connection::do_read()
 {
-    do_read_fn(*this);
+    do_read_fn(this);
 }
 
 void asio_client_connection::handle_write_complete(const boost::system::error_code& e, std::size_t bytes_transferred)
@@ -909,8 +909,7 @@ void asio_client_connection::handle_write_signal()
         return;
     }
 #ifdef ENABLE_HTTP3
-    // TODO:
-    if (do_write_fn == &asio_client_connection::do_udp_write)
+    if (udp_client_socket.is_open())
     {
         handle_http3_write_signal();
     }
@@ -966,7 +965,7 @@ void asio_client_connection::do_ssl_write()
 
 void asio_client_connection::do_write()
 {
-    do_write_fn(*this);
+    do_write_fn(this);
 }
 
 void asio_client_connection::stop()
@@ -1089,8 +1088,8 @@ int asio_client_connection::quic_pkt_timeout()
                                                                  rv, nullptr, 0);
         return -1;
     }
-
-    return signal_write();
+    signal_write();
+    return 0;
 }
 
 void asio_client_connection::handle_quic_pkt_timer_timeout(const boost::system::error_code& ec)
@@ -1142,7 +1141,7 @@ void asio_client_connection::start_udp_async_connect(boost::asio::ip::udp::resol
     static thread_local boost::asio::ip::udp::resolver::iterator end_of_resolve_result;
     if (endpoint_iterator == end_of_resolve_result)
     {
-        std::cerr << __FUNCTION__ << " err: " << err << std::endl;
+        std::cerr << __FUNCTION__ << ": start_udp_async_connect failed "<< std::endl;
         handle_connection_error();
         return;
     }
@@ -1169,12 +1168,11 @@ void asio_client_connection::start_udp_async_connect(boost::asio::ip::udp::resol
     {
         if (!err)
         {
-            auto remote_endpoint = *endpoint_iterator;
             auto local_sockaddr = udp_client_socket.local_endpoint().data();
-            auto local_addr_len = udp_client_socket.local_endpoint().data().size();
+            auto local_addr_len = udp_client_socket.local_endpoint().size();
 
             auto remote_sockaddr = remote_endpoint.data();
-            auto remote_addr_len = remote_endpoint.data().size();
+            auto remote_addr_len = remote_endpoint.size();
 
             if (quic_init(&local_sockaddr, local_addr_len, &remote_sockaddr,
                           remote_addr_len) != 0)
@@ -1191,7 +1189,8 @@ void asio_client_connection::start_udp_async_connect(boost::asio::ip::udp::resol
             {
                 std::cerr << __FUNCTION__ << " err: " << err << std::endl;
             }
-            auto next_endpoint_iterator = ++endpoint_iterator;
+            auto iter = endpoint_iterator;
+            auto next_endpoint_iterator = ++iter;
             if (next_endpoint_iterator != end_of_resolve_result)
             {
                 udp_client_socket.close();
@@ -1313,7 +1312,7 @@ int asio_client_connection::handle_http3_write_signal()
     }
 }
 
-int asio_client_connection::do_udp_write()
+void asio_client_connection::do_udp_write()
 {
     if (is_write_in_progress || is_client_stopped || quic_output_pkt_count <= 0
         || quic_output_buffers[output_buffer_index][0].empty())
@@ -1350,7 +1349,7 @@ int asio_client_connection::do_udp_write()
 
 void asio_client_connection::quic_close_connection()
 {
-    if (do_write_fn == &asio_client_connection::do_udp_write && quic.conn && (!quic_close_sent))
+    if (udp_client_socket.is_open() && quic.conn && (!quic_close_sent))
     {
         quic_close_sent = true;
         auto buffer_to_send = std::make_shared<uint8_t[]>(single_buffer_size);
@@ -1380,6 +1379,6 @@ void asio_client_connection::quic_close_connection()
     }
 }
 
-#endif;
+#endif
 
 }

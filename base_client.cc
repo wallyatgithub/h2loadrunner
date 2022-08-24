@@ -3130,7 +3130,7 @@ int base_client::quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
 
     if (!ssl)
     {
-        ssl = SSL_new(worker->ssl_ctx);
+        ssl = SSL_new(worker->get_ssl_ctx());
 
         quic.conn_ref.get_conn = get_conn;
         quic.conn_ref.user_data = this;
@@ -3201,7 +3201,8 @@ int base_client::quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
     {
         settings.log_printf = debug_log_printf;
     }
-    settings.initial_ts = timestamp(worker->loop);
+    settings.initial_ts = std::chrono::duration_cast<std::chrono::nanoseconds>
+                          (std::chrono::steady_clock::now().time_since_epoch()).count();
     settings.rand_ctx.native_handle = &worker->randgen;
     if (!config->qlog_file_base.empty())
     {
