@@ -23,6 +23,11 @@
 #include "asio_client_connection.h"
 #include "base_worker.h"
 
+#ifdef ENABLE_HTTP3
+#include <nghttp3/nghttp3.h>
+#include "h2load_http3_session.h"
+#endif
+
 namespace h2load
 {
 
@@ -789,11 +794,11 @@ void asio_client_connection::handle_read_complete(const boost::system::error_cod
         auto path = ngtcp2_path
         {
             {
-                &local_sockaddr,
+                local_sockaddr,
                 local_addr_len,
             },
             {
-                &remote_sockaddr,
+                remote_sockaddr,
                 remote_addr_len,
             },
         };
@@ -1168,13 +1173,14 @@ void asio_client_connection::start_udp_async_connect(boost::asio::ip::udp::resol
     {
         if (!err)
         {
+            boost::asio::ip::udp::endpoint remote_endpoint = *endpoint_iterator;
             auto local_sockaddr = udp_client_socket.local_endpoint().data();
             auto local_addr_len = udp_client_socket.local_endpoint().size();
 
             auto remote_sockaddr = remote_endpoint.data();
             auto remote_addr_len = remote_endpoint.size();
 
-            if (quic_init(&local_sockaddr, local_addr_len, &remote_sockaddr,
+            if (quic_init(local_sockaddr, local_addr_len, remote_sockaddr,
                           remote_addr_len) != 0)
             {
                 std::cerr << "quic_init failed" << std::endl;
@@ -1326,8 +1332,8 @@ void asio_client_connection::do_udp_write()
         std::swap(quic_buffer_to_send[i], quic_output_buffers[output_buffer_index][i]);
     }
     boost::asio::ip::udp::endpoint remote_addr;
-    remote_addr.data() = quic_remote_addresses[output_buffer_index][0].su;
     remote_addr.resize(quic_remote_addresses[output_buffer_index][0].len);
+    memcpy(remote_addr.data(), &quic_remote_addresses[output_buffer_index][0].su, quic_remote_addresses[output_buffer_index][0].len);
 
     output_buffer_index = ((++output_buffer_index) % quic_output_buffers.size());
     quic_output_pkt_count = 0;
@@ -1341,7 +1347,7 @@ void asio_client_connection::do_udp_write()
         auto orig_buffer_index = (output_buffer_index ? output_buffer_index - 1 : quic_output_buffers.size() - 1);
         for (size_t i = 0; i < quic_buffer_to_send.size(); i++)
         {
-            std::swap(quic_buffer_to_send[i], quic_output_buffers[orig_buffer_index]);
+            std::swap(quic_buffer_to_send[i], quic_output_buffers[orig_buffer_index][i]);
         }
         handle_write_complete(e, bytes_transferred);
     });
