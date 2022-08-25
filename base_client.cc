@@ -3048,14 +3048,6 @@ int generate_cid(ngtcp2_cid& dest)
 }
 } // namespace
 
-namespace
-{
-ngtcp2_tstamp timestamp(struct ev_loop* loop)
-{
-    return ev_now(loop) * NGTCP2_SECONDS;
-}
-} // namespace
-
 // qlog write callback -- excerpted from ngtcp2/examples/client_base.cc
 namespace
 {
