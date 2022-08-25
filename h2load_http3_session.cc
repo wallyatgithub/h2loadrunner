@@ -83,7 +83,7 @@ void Http3Session::read_data(nghttp3_vec *vec, size_t veccnt,
 
   auto config = client_->worker->config;
 
-  vec[0].base = (uint8_t*)(config->payload_data.c_str()); // TODO: remove const_cast
+  vec[0].base = (uint8_t*)(config->payload_data.c_str());
   vec[0].len = config->payload_data.size();
   *pflags |= NGHTTP3_DATA_FLAG_EOF;
 }
