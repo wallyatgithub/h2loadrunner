@@ -229,7 +229,12 @@ Options:
               Max concurrent streams  to issue  per session.  Not used
               for http/1.1
               Default: 1
-  -w, --window-bits=<N>
+  -f, --max-frame-size=<SIZE>
+              Maximum frame size that the local endpoint is willing to
+              receive.
+              Default: )"
+      << util::utos_unit(config.max_frame_size) << R"(
+   -w, --window-bits=<N>
               Sets the stream level initial window size to (2**<N>)-1.
               Default: )"
         << config.window_bits << R"(
@@ -245,6 +250,11 @@ Options:
               described in OpenSSL ciphers(1).
               Default: )"
         << config.ciphers << R"(
+  --tls13-ciphers=<SUITE>
+              Set allowed cipher list for  TLSv1.3.  The format of the
+              string is described in OpenSSL ciphers(1).
+              Default: )"
+      << config.tls13_ciphers << R"(
   -p, --no-tls-proto=<PROTOID>
               Specify ALPN identifier of the  protocol to be used when
               accessing http URI without SSL/TLS.
@@ -357,6 +367,12 @@ Options:
               response  time when  using  one worker  thread, but  may
               appear slightly  out of order with  multiple threads due
               to buffering.  Status code is -1 for failed streams.
+  --qlog-file-base=<PATH>
+              Enable qlog output and specify base file name for qlogs.
+              Qlog is emitted  for each connection.  For  a given base
+              name   "base",    each   output   file    name   becomes
+              "base.M.N.sqlog" where M is worker ID and N is client ID
+              (e.g. "base.0.3.sqlog").  Only effective in QUIC runs.
   --connect-to=<HOST>[:<PORT>]
               Host and port to connect  instead of using the authority
               in <URI>.
@@ -376,6 +392,16 @@ Options:
               And the actual connection and request will be controlled
               by the script.
               Multiple scripts are acceptable w/ multiple --script arg
+  --groups=<GROUPS>
+              Specify the supported groups.
+              Default: )"
+      << config.groups << R"(
+  --no-udp-gso
+              Disable UDP GSO.
+  --max-udp-payload-size=<SIZE>
+              Specify the maximum outgoing UDP datagram payload size.
+  --ktls      Enable ktls.
+
   -v, --verbose
               Output debug information.
   --version   Display version information and exit.
@@ -519,6 +545,24 @@ int main(int argc, char** argv)
                     exit(EXIT_FAILURE);
                 }
                 break;
+            }
+            case 'f': {
+              auto n = util::parse_uint_with_unit(optarg);
+              if (n == -1) {
+                std::cerr << "--max-frame-size: bad option value: " << optarg
+                          << std::endl;
+                exit(EXIT_FAILURE);
+              }
+              if (static_cast<uint64_t>(n) < 16_k) {
+                std::cerr << "--max-frame-size: minimum 16384" << std::endl;
+                exit(EXIT_FAILURE);
+              }
+              if (static_cast<uint64_t>(n) > 16_m - 1) {
+                std::cerr << "--max-frame-size: maximum 16777215" << std::endl;
+                exit(EXIT_FAILURE);
+              }
+              config.max_frame_size = n;
+              break;
             }
             case 'H':
             {

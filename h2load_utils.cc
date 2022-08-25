@@ -820,6 +820,13 @@ void populate_config_from_json(h2load::Config& config)
     config.window_bits = config.json_config_schema.window_bits;
     config.connection_window_bits = config.json_config_schema.connection_window_bits;
     config.warm_up_time = config.json_config_schema.warm_up_time;
+    config.max_frame_size = config.json_config_schema.max_frame_size;
+    config.tls13_ciphers= config.json_config_schema.tls13_ciphers;
+    config.groups= config.json_config_schema.groups;
+    config.no_udp_gso= config.json_config_schema.no_udp_gso;
+    config.max_udp_payload_size= config.json_config_schema.max_udp_payload_size;
+    config.ktls= config.json_config_schema.ktls;
+    config.qlog_file_base= config.json_config_schema.qlog_file_base;
 }
 
 void insert_customized_headers_to_Json_scenarios(h2load::Config& config)

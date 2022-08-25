@@ -41,6 +41,7 @@ Config::Config()
       nclients(1),
       nthreads(1),
       max_concurrent_streams(1),
+      max_frame_size(16_k),
       window_bits(30),
       connection_window_bits(30),
       rate(0),
@@ -62,16 +63,11 @@ Config::Config()
       unix_addr {},
 #endif
       rps(0.),
-      //      req_variable_start(0),
-      //      req_variable_end(0),
-      //      req_variable_name(""),
-      //      crud_resource_header_name(""),
-      //      crud_create_method(""),
-      //      crud_update_method(""),
-      //      crud_delete_method(""),
-      //      crud_create_data_file_name(""),
-      //      crud_update_data_file_name(""),
-      stream_timeout_in_ms(5000) {}
+      stream_timeout_in_ms(5000),
+      no_udp_gso(false),
+      max_udp_payload_size(0),
+      ktls(false)
+      {}
 
 Config::~Config()
 {

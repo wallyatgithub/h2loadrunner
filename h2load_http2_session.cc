@@ -327,7 +327,12 @@ void Http2Session::on_connect()
         iv[niv].value = config->header_table_size;
         ++niv;
     }
-
+    if (config->max_frame_size != 16_k)
+    {
+        iv[niv].settings_id = NGHTTP2_SETTINGS_MAX_FRAME_SIZE;
+        iv[niv].value = config->max_frame_size;
+        ++niv;
+    }
     rv = nghttp2_submit_settings(session_, NGHTTP2_FLAG_NONE, iv.data(), niv);
 
     assert(rv == 0);
