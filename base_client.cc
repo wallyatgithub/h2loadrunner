@@ -3201,6 +3201,7 @@ int base_client::quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
     {
         settings.log_printf = debug_log_printf;
     }
+    //settings.cc_algo = config.cc_algo; // TODO: 
     settings.initial_ts = std::chrono::duration_cast<std::chrono::nanoseconds>
                           (std::chrono::steady_clock::now().time_since_epoch()).count();
     settings.rand_ctx.native_handle = &worker->randgen;

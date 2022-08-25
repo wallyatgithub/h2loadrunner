@@ -27,7 +27,7 @@ struct Config
     std::string ifile;
     std::string ciphers;
     // length of upload data
-    int64_t data_length;
+    int64_t data_length; // TODO: remove it
     std::string tls13_ciphers;
     // supported groups (or curves).
     std::string groups;

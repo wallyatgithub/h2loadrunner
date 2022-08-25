@@ -405,6 +405,21 @@ void ares_socket_state_cb(void* data, int s, int read, int write)
     }
 }
 
+#ifdef ENABLE_HTTP3
+void quic_pkt_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
+{
+    auto c = static_cast<libev_client*>(w->data);
+    if (c->quic_pkt_timeout() != 0)
+    {
+        c->fail();
+        c->worker->free_client(c);
+        delete c;
+        return;
+    }
+}
+
+#endif
+
 #endif
 
 bool recorded(const std::chrono::steady_clock::time_point& t)

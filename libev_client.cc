@@ -16,13 +16,6 @@ extern "C" {
 #include "memchunk.h"
 #endif
 
-#ifdef ENABLE_HTTP3
-#ifdef USE_LIBEV
-#  include "h2load_quic.h"
-#endif
-#endif
-
-
 #include "h2load.h"
 #include "libev_client.h"
 #include "h2load_Config.h"
@@ -32,6 +25,11 @@ extern "C" {
 
 #include "h2load_utils.h"
 #include "tls.h"
+
+#ifdef ENABLE_HTTP3
+#include <nghttp3/nghttp3.h>
+#include "h2load_http3_session.h"
+#endif
 
 namespace h2load
 {
@@ -70,7 +68,7 @@ libev_client::libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Co
     ev_timer_init(&pkt_timer, quic_pkt_timeout_cb, 0., 0.);
     pkt_timer.data = this;
 
-    if (config.is_quic())
+    if (config->is_quic())
     {
         quic.tx.data = std::make_unique<uint8_t[]>(64_k);
     }
@@ -157,6 +155,8 @@ int libev_client::make_socket(T* addr)
     if (config->is_quic())
     {
 #ifdef ENABLE_HTTP3
+        int rv;
+
         fd = util::create_nonblock_udp_socket(addr->ai_family);
         if (fd == -1)
         {
@@ -310,7 +310,7 @@ int libev_client::make_async_connection()
     if (config->is_quic())
     {
 #ifdef ENABLE_HTTP3
-        ev_io_start(worker->loop, &rev);
+        ev_io_start(static_cast<libev_worker*>(worker)->loop, &rev);
 
         readfn = &libev_client::read_quic;
         writefn = &libev_client::write_quic;
@@ -354,7 +354,7 @@ void libev_client::setup_graceful_shutdown()
 void libev_client::disconnect()
 {
 #ifdef ENABLE_HTTP3
-    if (config.is_quic())
+    if (config->is_quic())
     {
         quic_close_connection();
     }
@@ -906,18 +906,11 @@ bool libev_client::any_pending_data_to_write()
 
 #ifdef ENABLE_HTTP3
 
-void quic_pkt_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
-{
-    auto c = static_cast<Client*>(w->data);
-
-    if (c->quic_pkt_timeout() != 0)
-    {
-        c->fail();
-        c->worker->free_client(c);
-        delete c;
-        return;
-    }
+namespace {
+ngtcp2_tstamp timestamp(struct ev_loop *loop) {
+  return ev_now(loop) * NGTCP2_SECONDS;
 }
+} // namespace
 
 void libev_client::setup_quic_pkt_timer()
 {
@@ -928,7 +921,7 @@ void libev_client::setup_quic_pkt_timer()
 int libev_client::quic_pkt_timeout()
 {
     int rv;
-    auto now = timestamp(worker->loop);
+    auto now = timestamp(static_cast<libev_worker*>(worker)->loop);
 
     rv = ngtcp2_conn_handle_expiry(quic.conn, now);
     if (rv != 0)
@@ -944,11 +937,11 @@ int libev_client::quic_pkt_timeout()
 void libev_client::quic_restart_pkt_timer()
 {
     auto expiry = ngtcp2_conn_get_expiry(quic.conn);
-    auto now = timestamp(worker->loop);
+    auto now = timestamp(static_cast<libev_worker*>(worker)->loop);
     auto t = expiry > now ? static_cast<ev_tstamp>(expiry - now) / NGTCP2_SECONDS
              : 1e-9;
     pkt_timer.repeat = t;
-    ev_timer_again(worker->loop, &pkt_timer);
+    ev_timer_again(static_cast<libev_worker*>(worker)->loop, &pkt_timer);
 }
 
 int libev_client::read_quic()
@@ -986,7 +979,7 @@ int libev_client::read_quic()
         };
 
         rv = ngtcp2_conn_read_pkt(quic.conn, &path, &pi, buf.data(), nread,
-                                  timestamp(worker->loop));
+                                  timestamp(static_cast<libev_worker*>(worker)->loop));
         if (rv != 0)
         {
             std::cerr << "ngtcp2_conn_read_pkt: " << ngtcp2_strerror(rv) << std::endl;
@@ -1022,7 +1015,7 @@ int libev_client::write_quic()
 {
     int rv;
 
-    ev_io_stop(worker->loop, &wev);
+    ev_io_stop(static_cast<libev_worker*>(worker)->loop, &wev);
 
     if (quic.close_requested)
     {
@@ -1089,7 +1082,7 @@ int libev_client::write_quic()
         auto nwrite = ngtcp2_conn_writev_stream(
                           quic.conn, &ps.path, nullptr, bufpos, max_udp_payload_size, &ndatalen,
                           flags, stream_id, reinterpret_cast<const ngtcp2_vec*>(v), vcnt,
-                          timestamp(worker->loop));
+                          timestamp(static_cast<libev_worker*>(worker)->loop));
         if (nwrite < 0)
         {
             switch (nwrite)
@@ -1312,7 +1305,7 @@ int libev_client::write_udp(const sockaddr* addr, socklen_t addrlen,
         ++worker->stats.udp_dgram_sent;
     }
 
-    ev_io_stop(worker->loop, &wev);
+    ev_io_stop(static_cast<libev_worker*>(worker)->loop, &wev);
 
     return 0;
 }
@@ -1330,7 +1323,7 @@ void libev_client::quic_close_connection()
 
     auto nwrite = ngtcp2_conn_write_connection_close(
                       quic.conn, &ps.path, nullptr, buf.data(), buf.size(), &quic.last_error,
-                      timestamp(worker->loop));
+                      timestamp(static_cast<libev_worker*>(worker)->loop));
 
     if (nwrite <= 0)
     {

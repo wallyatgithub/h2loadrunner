@@ -135,6 +135,7 @@ public:
     addrinfo* current_addr;
     ares_addrinfo* ares_address;
     int fd;
+    Address local_addr;
     ev_timer conn_active_watcher;
     ev_timer conn_inactivity_watcher;
     // rps_watcher is a timer to invoke callback periodically to

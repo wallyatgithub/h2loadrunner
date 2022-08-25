@@ -786,10 +786,10 @@ void asio_client_connection::handle_read_complete(const boost::system::error_cod
         ngtcp2_pkt_info pi{};
         ++worker->stats.udp_dgram_recv;
         auto local_sockaddr = udp_client_socket.local_endpoint().data();
-        auto local_addr_len = udp_client_socket.local_endpoint().size();
+        ngtcp2_socklen local_addr_len = udp_client_socket.local_endpoint().size();
 
         auto remote_sockaddr = remote_addr.data();
-        auto remote_addr_len = remote_addr.size();
+        ngtcp2_socklen remote_addr_len = remote_addr.size();
 
         auto path = ngtcp2_path
         {
@@ -1339,8 +1339,7 @@ void asio_client_connection::do_udp_write()
     quic_output_pkt_count = 0;
     is_write_in_progress = true;
 
-    boost::asio::async_write(
-        udp_client_socket, boost::asio::buffer(quic_buffer_to_send), remote_addr,
+    udp_client_socket.async_send_to(boost::asio::buffer(quic_buffer_to_send), remote_addr,
         [this](const boost::system::error_code & e, std::size_t bytes_transferred)
     {
         worker->stats.udp_dgram_sent += quic_buffer_to_send.size();
@@ -1358,7 +1357,7 @@ void asio_client_connection::quic_close_connection()
     if (udp_client_socket.is_open() && quic.conn && (!quic_close_sent))
     {
         quic_close_sent = true;
-        auto buffer_to_send = std::make_shared<uint8_t[]>(single_buffer_size);
+        auto buffer_to_send = std::make_shared<std::vector<uint8_t>>(single_buffer_size, 0);
         ngtcp2_path_storage ps;
         ngtcp2_path_storage_zero(&ps);
         auto nwrite = ngtcp2_conn_write_connection_close(
@@ -1368,14 +1367,13 @@ void asio_client_connection::quic_close_connection()
 
         if (nwrite)
         {
-            buffer->resize(nwrite);
+            buffer_to_send->resize(nwrite);
             boost::asio::ip::udp::endpoint remote_addr;
-            remote_addr.data() = ps.path.remote.addr;
             remote_addr.resize(ps.path.remote.addrlen);
-            auto old_udp_client_socket = std::make_shared<boost::asio::ip::udp::socket>(udp_client_socket);
+            memcpy(remote_addr.data(), &ps.path.remote.addr, ps.path.remote.addrlen);
+            auto old_udp_client_socket = std::make_shared<boost::asio::ip::udp::socket>(std::move(udp_client_socket));
 
-            boost::asio::async_write(
-                *old_udp_client_socket, boost::asio::buffer(buffer_to_send), remote_addr,
+            old_udp_client_socket->async_send_to(boost::asio::buffer(*buffer_to_send), remote_addr,
                 [buffer_to_send, old_udp_client_socket](const boost::system::error_code & e, std::size_t bytes_transferred)
             {
             });
