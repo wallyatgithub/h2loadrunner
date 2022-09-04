@@ -177,7 +177,7 @@ void base_client::record_ttfb()
 }
 
 void base_client::log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req,
-                                     int32_t stream_id)
+                                     int64_t stream_id)
 {
     if (config.json_config_schema.failed_request_log_file.empty())
     {
@@ -280,7 +280,7 @@ bool base_client::validate_response_with_lua(lua_State* L, const Request_Data& f
     return retCode;
 }
 
-void base_client::record_stream_close_time(int32_t stream_id)
+void base_client::record_stream_close_time(int64_t stream_id)
 {
     auto req_stat = get_req_stat(stream_id);
     if (!req_stat)
@@ -396,7 +396,7 @@ void base_client::timing_script_timeout_handler()
     start_timing_script_request_timeout_timer(duration);
 }
 
-void base_client::brief_log_to_file(int32_t stream_id, bool success)
+void base_client::brief_log_to_file(int64_t stream_id, bool success)
 {
     if (!config->json_config_schema.log_file.size())
     {
@@ -542,7 +542,7 @@ void base_client::set_prefered_authority(const std::string& authority)
     preferred_authority = authority;
 }
 
-void base_client::on_status_code(int32_t stream_id, uint16_t status)
+void base_client::on_status_code(int64_t stream_id, uint16_t status)
 {
     auto request_data = requests_awaiting_response.find(stream_id);
     if (request_data != requests_awaiting_response.end())
@@ -604,7 +604,7 @@ bool base_client::should_reconnect_on_disconnect()
     return false;
 }
 
-void base_client::inc_status_counter_and_validate_response(int32_t stream_id)
+void base_client::inc_status_counter_and_validate_response(int64_t stream_id)
 {
     uint16_t status = 0;
     auto itr = streams.find(stream_id);
@@ -1547,7 +1547,7 @@ void base_client::reset_timeout_requests()
         auto stream_it = streams.find(it->second);
         if (stream_it != streams.end())
         {
-            session->submit_rst_stream(it->second);
+            session->reset_stream(it->second);
             if (stream_it->second.statistics_eligible)
             {
                 worker->stats.req_timedout++;
@@ -1636,7 +1636,7 @@ void base_client::process_timedout_streams()
     process_abandoned_streams();
 }
 
-void base_client::on_stream_close(int32_t stream_id, bool success, bool final)
+void base_client::on_stream_close(int64_t stream_id, bool success, bool final)
 {
     record_stream_close_time(stream_id);
 
@@ -1746,7 +1746,7 @@ void base_client::on_stream_close(int32_t stream_id, bool success, bool final)
     }
 }
 
-void base_client::on_header_frame_begin(int32_t stream_id, uint8_t flags)
+void base_client::on_header_frame_begin(int64_t stream_id, uint8_t flags)
 {
     if (requests_awaiting_response.count(stream_id))
     {
@@ -1886,12 +1886,12 @@ int base_client::connection_made()
     return 0;
 }
 
-void base_client::on_data_chunk(int32_t stream_id, const uint8_t* data, size_t len)
+void base_client::on_data_chunk(int64_t stream_id, const uint8_t* data, size_t len)
 {
     auto request = requests_awaiting_response.find(stream_id);
     if (request != requests_awaiting_response.end())
     {
-        request->second.resp_payload.append((const char*)data, len);
+        request->second.resp_payload.append((const char*)data, len); // TODO: handle grpc payload
     }
     if (config->verbose)
     {
@@ -1912,7 +1912,7 @@ void base_client::resume_delayed_request_execution()
     }
 }
 
-RequestStat* base_client::get_req_stat(int32_t stream_id)
+RequestStat* base_client::get_req_stat(int64_t stream_id)
 {
     auto it = streams.find(stream_id);
     if (it == std::end(streams))
@@ -1923,7 +1923,7 @@ RequestStat* base_client::get_req_stat(int32_t stream_id)
     return &(*it).second.req_stat;
 }
 
-void base_client::on_request_start(int32_t stream_id)
+void base_client::on_request_start(int64_t stream_id)
 {
     size_t scenario_index = 0;
     size_t request_index = 0;
@@ -1981,7 +1981,7 @@ Request_Data base_client::get_request_to_submit()
     }
 }
 
-void base_client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
+void base_client::on_header(int64_t stream_id, const uint8_t* name, size_t namelen,
                             const uint8_t* value, size_t valuelen)
 {
     auto itr = streams.find(stream_id);
@@ -2058,7 +2058,7 @@ size_t& base_client::get_current_req_index()
     return reqidx;
 }
 
-std::map<int32_t, Request_Data>& base_client::requests_waiting_for_response()
+std::map<int64_t, Request_Data>& base_client::requests_waiting_for_response()
 {
     return requests_awaiting_response;
 }
@@ -2640,7 +2640,7 @@ void base_client::install_connected_callback(std::function<void(bool, h2load::ba
     connected_callbacks.push_back(callback);
 }
 
-void base_client::queue_stream_for_user_callback(int32_t stream_id)
+void base_client::queue_stream_for_user_callback(int64_t stream_id)
 {
     const size_t MAX_STREAM_SAVED_FOR_CALLBACK = 500;
 
@@ -2651,7 +2651,7 @@ void base_client::queue_stream_for_user_callback(int32_t stream_id)
     stream_user_callback_queue[stream_id].stream_id = stream_id;
 }
 
-void base_client::process_stream_user_callback(int32_t stream_id)
+void base_client::process_stream_user_callback(int64_t stream_id)
 {
     if (requests_awaiting_response.count(stream_id) && stream_user_callback_queue.count(stream_id))
     {
@@ -2667,7 +2667,7 @@ void base_client::process_stream_user_callback(int32_t stream_id)
     }
 }
 
-void base_client::pass_response_to_lua(int32_t stream_id, lua_State* L)
+void base_client::pass_response_to_lua(int64_t stream_id, lua_State* L)
 {
     if (stream_user_callback_queue.count(stream_id))
     {

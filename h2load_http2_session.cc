@@ -51,8 +51,7 @@ Http2Session::Http2Session(base_client* client)
     session_(nullptr),
     curr_stream_id(0),
     config(client->get_config()),
-    stats(client->get_stats()),
-    request_map(client->requests_waiting_for_response())
+    stats(client->get_stats())
 {
 
 }
@@ -426,7 +425,7 @@ size_t Http2Session::max_concurrent_streams()
     return (size_t)config->max_concurrent_streams;
 }
 
-void Http2Session::submit_rst_stream(int32_t stream_id)
+void Http2Session::reset_stream(int64_t stream_id)
 {
     nghttp2_submit_rst_stream(session_, NGHTTP2_FLAG_END_STREAM, stream_id, NGHTTP2_STREAM_CLOSED);
 }
@@ -508,7 +507,7 @@ int Http2Session::_submit_request()
     }
 
     curr_stream_id = stream_id;
-    request_map.insert(std::make_pair(stream_id, std::move(data)));
+    client_->requests_waiting_for_response().insert(std::make_pair(stream_id, std::move(data)));
     client_->on_request_start(stream_id);
     return 0;
 }

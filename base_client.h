@@ -40,7 +40,7 @@ public:
 class Stream_Callback_Data
 {
 public:
-    int32_t stream_id = 0;
+    int64_t stream_id = 0;
     std::function<void(void)> response_callback;
     std::string resp_payload;
     std::vector<std::map<std::string, std::string, ci_less>> resp_headers;
@@ -122,18 +122,18 @@ public:
     void process_abandoned_streams();
     void timeout();
     void terminate_session();
-    void on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
+    void on_header(int64_t stream_id, const uint8_t* name, size_t namelen,
                    const uint8_t* value, size_t valuelen);
     void record_ttfb();
-    void on_data_chunk(int32_t stream_id, const uint8_t* data, size_t len);
-    void on_stream_close(int32_t stream_id, bool success, bool final = false);
-    RequestStat* get_req_stat(int32_t stream_id);
+    void on_data_chunk(int64_t stream_id, const uint8_t* data, size_t len);
+    void on_stream_close(int64_t stream_id, bool success, bool final = false);
+    RequestStat* get_req_stat(int64_t stream_id);
     void record_request_time(RequestStat* req_stat);
-    std::map<int32_t, Request_Data>& requests_waiting_for_response();
+    std::map<int64_t, Request_Data>& requests_waiting_for_response();
     size_t& get_current_req_index();
-    void on_request_start(int32_t stream_id);
+    void on_request_start(int64_t stream_id);
     Request_Data get_request_to_submit();
-    void on_status_code(int32_t stream_id, uint16_t status);
+    void on_status_code(int64_t stream_id, uint16_t status);
     bool is_final();
     void set_final(bool val);
     size_t get_req_left();
@@ -176,12 +176,12 @@ public:
     void slice_user_id();
     void init_lua_states();
     void init_connection_targert();
-    void log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req, int32_t stream_id);
+    void log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req, int64_t stream_id);
     bool validate_response_with_lua(lua_State* L, const Request_Data& finished_request);
-    void record_stream_close_time(int32_t stream_id);
-    void brief_log_to_file(int32_t stream_id, bool success);
+    void record_stream_close_time(int64_t stream_id);
+    void brief_log_to_file(int64_t stream_id, bool success);
     void enqueue_request(Request_Data& finished_request, Request_Data&& new_request);
-    void inc_status_counter_and_validate_response(int32_t stream_id);
+    void inc_status_counter_and_validate_response(int64_t stream_id);
     bool should_reconnect_on_disconnect();
     int select_protocol_and_allocate_session();
     void report_tls_info();
@@ -189,10 +189,10 @@ public:
                                           std::string& port);
     void call_connected_callbacks(bool success);
     void install_connected_callback(std::function<void(bool, h2load::base_client*)> callback);
-    void queue_stream_for_user_callback(int32_t stream_id);
-    void process_stream_user_callback(int32_t stream_id);
-    void on_header_frame_begin(int32_t stream_id, uint8_t flags);
-    void pass_response_to_lua(int32_t stream_id, lua_State* L);
+    void queue_stream_for_user_callback(int64_t stream_id);
+    void process_stream_user_callback(int64_t stream_id);
+    void on_header_frame_begin(int64_t stream_id, uint8_t flags);
+    void pass_response_to_lua(int64_t stream_id, lua_State* L);
     uint64_t get_client_unique_id();
     void set_prefered_authority(const std::string& authority);
     void run_post_response_action(Request_Data& finished_request);
@@ -222,8 +222,8 @@ public:
 
     base_worker* worker;
     ClientStat cstat;
-    std::multimap<std::chrono::steady_clock::time_point, int32_t> stream_timestamp;
-    std::unordered_map<int32_t, Stream> streams;
+    std::multimap<std::chrono::steady_clock::time_point, int64_t> stream_timestamp;
+    std::unordered_map<int64_t, Stream> streams;
     std::unique_ptr<Session> session;
     ClientState state;
     size_t reqidx;
@@ -255,7 +255,7 @@ public:
     Config* config;
     std::deque<Request_Data> requests_to_submit;
     std::multimap<std::chrono::steady_clock::time_point, Request_Data> delayed_requests_to_submit;
-    std::map<int32_t, Request_Data> requests_awaiting_response;
+    std::map<int64_t, Request_Data> requests_awaiting_response;
     std::vector<std::vector<lua_State*>> lua_states;
     std::map<std::string, base_client*> dest_clients;
     base_client* parent_client;

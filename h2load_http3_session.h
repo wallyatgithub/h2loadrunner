@@ -30,52 +30,60 @@
 
 #include <nghttp3/nghttp3.h>
 
-namespace h2load {
+namespace h2load
+{
 
 struct Client;
 
-class Http3Session : public Session {
+class Http3Session : public Session
+{
 public:
-  Http3Session(base_client *client);
-  virtual ~Http3Session();
-  virtual void on_connect();
-  virtual int submit_request();
-  virtual int on_read(const uint8_t *data, size_t len);
-  virtual int on_write();
-  virtual void terminate();
-  virtual size_t max_concurrent_streams();
+    Http3Session(base_client* client);
+    virtual ~Http3Session();
+    virtual void on_connect();
+    virtual int submit_request();
+    virtual int on_read(const uint8_t* data, size_t len);
+    virtual int on_write();
+    virtual void terminate();
+    virtual size_t max_concurrent_streams();
+    virtual void reset_stream(int64_t stream_id);
 
-  int init_conn();
-  int stream_close(int64_t stream_id, uint64_t app_error_code);
-  void recv_data(int64_t stream_id, const uint8_t *data, size_t datalen);
-  void consume(int64_t stream_id, size_t nconsumed);
-  void begin_headers(int64_t stream_id);
-  void recv_header(int64_t stream_id, const nghttp3_vec *name,
-                   const nghttp3_vec *value);
-  int stop_sending(int64_t stream_id, uint64_t app_error_code);
-  int reset_stream(int64_t stream_id, uint64_t app_error_code);
+    int init_conn();
+    int stream_close(int64_t stream_id, uint64_t app_error_code);
+    void recv_data(int64_t stream_id, const uint8_t* data, size_t datalen);
+    void consume(int64_t stream_id, size_t nconsumed);
+    void begin_headers(int64_t stream_id);
+    void recv_header(int64_t stream_id, const nghttp3_vec* name,
+                     const nghttp3_vec* value);
+    int stop_sending(int64_t stream_id, uint64_t app_error_code);
+    int reset_stream(int64_t stream_id, uint64_t app_error_code);
 
-  int close_stream(int64_t stream_id, uint64_t app_error_code);
-  int shutdown_stream_read(int64_t stream_id);
-  int extend_max_local_streams();
-  int64_t submit_request_internal();
+    int close_stream(int64_t stream_id, uint64_t app_error_code);
+    int shutdown_stream_read(int64_t stream_id);
+    int extend_max_local_streams();
+    int64_t submit_request_internal();
 
-  ssize_t read_stream(uint32_t flags, int64_t stream_id, const uint8_t *data,
-                      size_t datalen);
-  ssize_t write_stream(int64_t &stream_id, int &fin, nghttp3_vec *vec,
-                       size_t veccnt);
-  void block_stream(int64_t stream_id);
-  void shutdown_stream_write(int64_t stream_id);
-  int add_write_offset(int64_t stream_id, size_t ndatalen);
-  int add_ack_offset(int64_t stream_id, size_t datalen);
+    ssize_t read_stream(uint32_t flags, int64_t stream_id, const uint8_t* data,
+                        size_t datalen);
+    ssize_t write_stream(int64_t& stream_id, int& fin, nghttp3_vec* vec,
+                         size_t veccnt);
+    void block_stream(int64_t stream_id);
+    void shutdown_stream_write(int64_t stream_id);
+    int add_write_offset(int64_t stream_id, size_t ndatalen);
+    int add_ack_offset(int64_t stream_id, size_t datalen);
 
-  void read_data(nghttp3_vec *vec, size_t veccnt, uint32_t *pflags);
+    void read_data(nghttp3_vec* vec, size_t veccnt, uint32_t* pflags);
+
+    void _read_data(int64_t stream_id, nghttp3_vec* vec, size_t veccnt, uint32_t* pflags);
+    virtual void submit_ping();
 
 private:
-  base_client *client_;
-  nghttp3_conn *conn_;
-  size_t npending_request_;
-  size_t reqidx_;
+    int _submit_request();
+    base_client* client_;
+    nghttp3_conn* conn_;
+    size_t npending_request_;
+    size_t reqidx_;
+    int32_t curr_stream_id = 0;
 };
 
 } // namespace h2load

@@ -217,8 +217,7 @@ Http1Session::Http1Session(base_client* client)
       htp_(),
       complete_(false),
       config(client->get_config()),
-      stats(client->get_stats()),
-      request_map(client->requests_waiting_for_response())
+      stats(client->get_stats())
 {
     llhttp_init(&htp_, HTTP_RESPONSE, &htp_hooks);
     htp_.data = this;
@@ -401,7 +400,7 @@ int Http1Session::_submit_request()
         std::cout << "sending headers:" << req << std::endl;
     }
 
-    request_map[stream_req_counter_] = std::move(data);
+    client_->requests_waiting_for_response()[stream_req_counter_] = std::move(data);
 
     client_->on_request_start(stream_req_counter_);
 
@@ -433,9 +432,9 @@ int Http1Session::_on_write()
     {
         return 0;
     }
-    auto request = request_map.find(stream_req_counter_);
-    assert(request != request_map.end());
-    std::string& stream_buffer = *(request_map[stream_req_counter_].req_payload);
+    auto request = client_->requests_waiting_for_response().find(stream_req_counter_);
+    assert(request != client_->requests_waiting_for_response().end());
+    std::string& stream_buffer = *(client_->requests_waiting_for_response()[stream_req_counter_].req_payload);
 
     if (!stream_buffer.empty())
     {
