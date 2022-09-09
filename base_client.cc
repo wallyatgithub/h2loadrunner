@@ -1261,6 +1261,11 @@ size_t base_client::get_index_of_next_scenario_to_run()
                 schedule_map[totalWeight] = scenario_index;
             }
         }
+        if (schedule_map.empty())
+        {
+            std::cerr<<"all scenarios have weight of 0, cannot continue"<<std::endl;
+            exit(1);
+        }
         return schedule_map;
     };
     static thread_local auto seq_no = config->json_config_schema.config_update_sequence_number;

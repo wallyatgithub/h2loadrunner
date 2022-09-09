@@ -46,6 +46,10 @@ const static std::string dummy_string = "";
 thread_local static bool need_to_return_from_c_function = false;
 thread_local static size_t number_of_result_to_return;
 
+// global data shared across worker threads
+static std::map<std::string, std::string> global_data;
+static std::mutex global_data_mutex;
+
 
 void set_group_id(lua_State* L, size_t group_id)
 {
@@ -266,6 +270,9 @@ void init_new_lua_state(lua_State* L)
     lua_register(L, "forward_response", forward_response);
     lua_register(L, "wait_for_message", wait_for_message);
     lua_register(L, "resolve_hostname", resolve_hostname);
+    lua_register(L, "store_value", store_value);
+    lua_register(L, "get_value", get_value);
+    lua_register(L, "delete_value", delete_value);
     register_3rd_party_lib_func_to_lua(L);
 }
 
@@ -1440,6 +1447,90 @@ int resolve_hostname(lua_State* L)
     return leave_c_function(L);
 }
 
+int store_value(lua_State* L)
+{
+    std::string key;
+    std::string value;
+    if ((lua_gettop(L) == 2))
+    {
+        size_t len;
+        const char* str = lua_tolstring(L, -1, &len);
+        lua_pop(L, 1);
+        value.assign(str, len);
+        str = lua_tolstring(L, -1, &len);
+        key.assign(str, len);
+        lua_pop(L, 1);
+    }
+    else
+    {
+        std::cerr << __FUNCTION__ << " invalid arguments" << std::endl;
+        lua_settop(L, 0);
+    }
+
+    std::lock_guard<std::mutex> guard(global_data_mutex);
+    global_data[key] = value;
+    return 0;
+}
+
+int get_value(lua_State* L)
+{
+    std::string key;
+    std::string value;
+    if ((lua_gettop(L) == 1))
+    {
+        size_t len;
+        const char* str = lua_tolstring(L, -1, &len);
+        key.assign(str, len);
+        lua_pop(L, 1);
+    }
+    else
+    {
+        std::cerr << __FUNCTION__ << " invalid arguments" << std::endl;
+        lua_settop(L, 0);
+    }
+    std::lock_guard<std::mutex> guard(global_data_mutex);
+    auto it = global_data.find(key);
+    if (it != global_data.end())
+    {
+        lua_pushlstring(L, it->second.c_str(), it->second.size());
+        return 1;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+int delete_value(lua_State* L)
+{
+    std::string key;
+    std::string value;
+    if ((lua_gettop(L) == 1))
+    {
+        size_t len;
+        const char* str = lua_tolstring(L, -1, &len);
+        key.assign(str, len);
+        lua_pop(L, 1);
+    }
+    else
+    {
+        std::cerr << __FUNCTION__ << " invalid arguments" << std::endl;
+        lua_settop(L, 0);
+    }
+
+    std::lock_guard<std::mutex> guard(global_data_mutex);
+    auto it = global_data.find(key);
+    if (it != global_data.end())
+    {
+        lua_pushlstring(L, it->second.c_str(), it->second.size());
+        global_data.erase(it);
+        return 1;
+    }
+    else
+    {
+        return 0;
+    }
+}
 
 void register_3rd_party_lib_func_to_lua(lua_State* L)
 {
@@ -1461,6 +1552,10 @@ void register_3rd_party_lib_func_to_lua(lua_State* L)
 
     const std::string pbbuffer = "pb.buffer";
     luaopen_pb_buffer(L);
+    lua_setglobal(L, pbbuffer.c_str());
+
+    const std::string lua_rapidJson = "rapidjson";
+    luaopen_rapidjson(L);
     lua_setglobal(L, pbbuffer.c_str());
 
 }
