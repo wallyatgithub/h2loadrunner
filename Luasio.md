@@ -148,6 +148,25 @@ Stop server specified by the server id
 
 It takes 2 arguments, the host name which is a string, and the ttl which is an integer. It returns a table with interger as the key and string as the value, each value is a resolved address. The ttl is in milliseconds, it specifies the interval Luasio would cache the resolution result, i.e., a next call to resolve_hostname within ttl, would return the previous resolution result directly.
 
+**store_value**
+
+It takes 2 arguments, first is the key which is a string, second is also a string which is the value. This function will store the key-value pair into the global map shared by by all worker threads. Note: this global map is protected by a mutex, and would result in performance degradation, so use this only if it is indeed necessary, e.g., data sharing accross differernt worker threads.
+
+**get_value**
+
+It takes 1 arguments, the key, which is a string; it returns the value, which is a string, if the key-value exists in the global map shared by all worker threads, otherwise, it returns nil.
+
+**delete_value**
+
+It takes 1 arguments, the key, which is a string; if the key-value pair exists in the global map shared by all worker threads, it will delete the key-value pair from the global map and return the value as a string, otherwise, it returns nil.
+
+## Third party modules in **Luasio**
+
+**Luasio** has lua-protobuf modules built-in and pre-loaded, which can be used directly (without "require"), like pb.encode, etc.
+Refer to https://github.com/starwing/lua-protobuf/blob/master/README.md for the usage of these modules.
+
+**Luasio** has lua-rapidjson module built-in and pre-loaded as well. Refer to https://github.com/xpol/lua-rapidjson/blob/master/API.md for usage.
+
 ## How to run Luasio
 As mentioned at the beginning, Luasio is the program mode of h2loadrunner; so once you have prepared your script, just run the script with h2loadrunner:
 

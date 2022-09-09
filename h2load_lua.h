@@ -70,7 +70,11 @@ extern "C"
 
     int resolve_hostname(lua_State* L);
 
+    int store_value(lua_State* L);
 
+    int get_value(lua_State* L);
+
+    int delete_value(lua_State* L);
 }
 
 int _send_response(lua_State* L, bool updatePayload);
@@ -210,13 +214,15 @@ uint64_t leave_c_function(lua_State* L);
 
 extern "C"
 {
-    // functions from pb.so
+    // from pb.so
     LUALIB_API int luaopen_pb_io(lua_State* L);
     LUALIB_API int luaopen_pb_conv(lua_State* L);
     LUALIB_API int luaopen_pb_buffer(lua_State* L);
     LUALIB_API int luaopen_pb_slice(lua_State* L);
     LUALIB_API int luaopen_pb(lua_State* L);
     LUALIB_API int luaopen_pb_unsafe(lua_State* L);
+    //from lua-rapidJson
+    LUALIB_API int luaopen_rapidjson(lua_State* L);
 }
 
 #endif

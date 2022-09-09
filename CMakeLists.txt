@@ -231,6 +231,17 @@ set(ASIO_SV_SOURCES
   asio_util.cc
 )
 
+set(LUA_RAPIDJSON_SOURCES
+    third-party/lua-rapidJson/Document.cpp
+    third-party/lua-rapidJson/Schema.cpp
+    third-party/lua-rapidJson/Userdata.hpp
+    third-party/lua-rapidJson/file.hpp
+    third-party/lua-rapidJson/luax.hpp
+    third-party/lua-rapidJson/rapidjson.cpp
+    third-party/lua-rapidJson/values.cpp
+    third-party/lua-rapidJson/values.hpp
+)
+
 # h2load
 set(H2LOAD_SOURCES
   util.cc
@@ -252,7 +263,9 @@ set(H2LOAD_SOURCES
   ${H2LOAD_SOURCE_USING_LIBEV}
   ${ASIO_SV_SOURCES}
   ${HTTP3_SOURCES}
+  ${LUA_RAPIDJSON_SOURCES}
 )
+
 
 add_executable(h2loadrunner ${H2LOAD_SOURCES} $<TARGET_OBJECTS:llhttp>
   $<TARGET_OBJECTS:url-parser> $<TARGET_OBJECTS:staticjson>)
