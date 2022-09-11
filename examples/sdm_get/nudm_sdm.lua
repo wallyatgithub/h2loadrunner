@@ -90,12 +90,16 @@ function handle_request(response_addr, headers, payload)
     headers[":authority"] = nUDRs[index]
     
     headers[":method"] = "GET"
-    
+
     udr_response_header, response_body = send_http_request_and_await_response(headers, "")
+    
+    local doc = rapidjson.Document()
+    local ok, message = doc:parse(response_body)
+    local activeTime = doc:get("/activeTime")
     
     multiple_dataset_get_resp_amdata[2] = response_body;
 	
-    udm_resp_header = {[":status"] = "200", ["x-who-am-I"] = "I am a powerful UDM-SDM instance running Lua script"}
+    local udm_resp_header = {[":status"] = "200", ["x-who-am-I"] = "I am a powerful UDM-SDM instance running Lua script", ["activeTime-from-json"] = tostring(activeTime)}
     
     send_response(response_addr, udm_resp_header, table.concat(multiple_dataset_get_resp_amdata))
 end

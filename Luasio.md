@@ -162,10 +162,16 @@ It takes 1 arguments, the key, which is a string; if the key-value pair exists i
 
 ## Third party modules in **Luasio**
 
-**Luasio** has lua-protobuf modules built-in and pre-loaded, which can be used directly (without "require"), like pb.encode, etc.
-Refer to https://github.com/starwing/lua-protobuf/blob/master/README.md for the usage of these modules.
+**Luasio** has lua-protobuf modules built-in and pre-loaded, which can be used directly (no "require" calls needed), like pb.encode, etc.
+Refer to https://github.com/starwing/lua-protobuf/blob/master/README.md for details of the APIs.
+Example of the usage of pb APIs:
+https://github.com/wallyatgithub/h2loadrunner/blob/main/examples/grpc_hello_client.lua
+https://github.com/wallyatgithub/h2loadrunner/blob/main/examples/grpc_hello_server.lua
 
-**Luasio** has lua-rapidjson module built-in and pre-loaded as well. Refer to https://github.com/xpol/lua-rapidjson/blob/master/API.md for usage.
+**Luasio** has lua-rapidjson module built-in and pre-loaded as well; again, no need to require('rapidjson'), directly call APIs offered by rapidjson.
+Refer to https://github.com/xpol/lua-rapidjson/blob/master/API.md for details of the APIs.
+Example of the usage of lua-rapidjson APIs:
+https://github.com/wallyatgithub/h2loadrunner/blob/main/examples/sdm_get/nudm_sdm.lua
 
 ## How to run Luasio
 As mentioned at the beginning, Luasio is the program mode of h2loadrunner; so once you have prepared your script, just run the script with h2loadrunner:

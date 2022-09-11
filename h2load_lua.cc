@@ -1556,6 +1556,6 @@ void register_3rd_party_lib_func_to_lua(lua_State* L)
 
     const std::string lua_rapidJson = "rapidjson";
     luaopen_rapidjson(L);
-    lua_setglobal(L, pbbuffer.c_str());
+    lua_setglobal(L, lua_rapidJson.c_str());
 
 }
