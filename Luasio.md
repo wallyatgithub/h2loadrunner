@@ -160,6 +160,9 @@ It takes 1 arguments, the key, which is a string; it returns the value, which is
 
 It takes 1 arguments, the key, which is a string; if the key-value pair exists in the global map shared by all worker threads, it will delete the key-value pair from the global map and return the value as a string, otherwise, it returns nil.
 
+**generate_uuid_v4**
+It takes no argument, returning 1 string, which is a v4 uuid of 32 bits randomness.
+
 ## Third party modules in **Luasio**
 
 **Luasio** has lua-protobuf modules built-in and pre-loaded, which can be used directly (no "require" calls needed), like pb.encode, etc.
