@@ -75,6 +75,8 @@ extern "C"
     int get_value(lua_State* L);
 
     int delete_value(lua_State* L);
+
+    int generate_uuid(lua_State* L);
 }
 
 int _send_response(lua_State* L, bool updatePayload);

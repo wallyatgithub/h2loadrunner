@@ -47,8 +47,8 @@ thread_local static bool need_to_return_from_c_function = false;
 thread_local static size_t number_of_result_to_return;
 
 // global data shared across worker threads
-static std::map<std::string, std::string> global_data;
-static std::mutex global_data_mutex;
+static std::map<std::string, std::string> global_datas[0xFF][0xFF];
+static std::mutex global_data_mutexes[0xFF][0xFF];
 
 
 void set_group_id(lua_State* L, size_t group_id)
@@ -273,6 +273,7 @@ void init_new_lua_state(lua_State* L)
     lua_register(L, "store_value", store_value);
     lua_register(L, "get_value", get_value);
     lua_register(L, "delete_value", delete_value);
+    lua_register(L, "generate_uuid_v4", generate_uuid);
     register_3rd_party_lib_func_to_lua(L);
 }
 
@@ -1447,6 +1448,48 @@ int resolve_hostname(lua_State* L)
     return leave_c_function(L);
 }
 
+namespace
+{
+std::map<std::string, std::string>& get_global_data(const std::string& key)
+{
+    switch(key.size())
+    {
+        case 0:
+        {
+            return global_datas[0][0];
+        }
+        case 1:
+        {
+            return global_datas[uint8_t(key[0])][0];
+        }
+        default:
+        {
+            return global_datas[uint8_t(key[0])][uint8_t(key[1])];
+        }
+    }
+}
+
+std::mutex& get_global_data_mutex(const std::string& key)
+{
+    switch(key.size())
+    {
+        case 0:
+        {
+            return global_data_mutexes[0][0];
+        }
+        case 1:
+        {
+            return global_data_mutexes[uint8_t(key[0])][0];
+        }
+        default:
+        {
+            return global_data_mutexes[uint8_t(key[0])][uint8_t(key[1])];
+        }
+    }
+}
+
+}
+
 int store_value(lua_State* L)
 {
     std::string key;
@@ -1467,7 +1510,8 @@ int store_value(lua_State* L)
         lua_settop(L, 0);
     }
 
-    std::lock_guard<std::mutex> guard(global_data_mutex);
+    std::lock_guard<std::mutex> guard(get_global_data_mutex(key));
+    auto& global_data = get_global_data(key);
     global_data[key] = value;
     return 0;
 }
@@ -1488,7 +1532,8 @@ int get_value(lua_State* L)
         std::cerr << __FUNCTION__ << " invalid arguments" << std::endl;
         lua_settop(L, 0);
     }
-    std::lock_guard<std::mutex> guard(global_data_mutex);
+    std::lock_guard<std::mutex> guard(get_global_data_mutex(key));
+    auto& global_data = get_global_data(key);
     auto it = global_data.find(key);
     if (it != global_data.end())
     {
@@ -1518,7 +1563,8 @@ int delete_value(lua_State* L)
         lua_settop(L, 0);
     }
 
-    std::lock_guard<std::mutex> guard(global_data_mutex);
+    std::lock_guard<std::mutex> guard(get_global_data_mutex(key));
+    auto& global_data = get_global_data(key);
     auto it = global_data.find(key);
     if (it != global_data.end())
     {
@@ -1530,6 +1576,39 @@ int delete_value(lua_State* L)
     {
         return 0;
     }
+}
+
+int generate_uuid(lua_State* L)
+{
+    static thread_local std::random_device              rd;
+    static thread_local std::mt19937                    gen(rd());
+    static thread_local std::uniform_int_distribution<> dis(0, 15);
+    static thread_local std::uniform_int_distribution<> dis2(8, 11);
+    std::stringstream ss;
+    int i;
+    ss << std::hex;
+    for (i = 0; i < 8; i++) {
+        ss << dis(gen);
+    }
+    ss << "-";
+    for (i = 0; i < 4; i++) {
+        ss << dis(gen);
+    }
+    ss << "-4";
+    for (i = 0; i < 3; i++) {
+        ss << dis(gen);
+    }
+    ss << "-";
+    ss << dis2(gen);
+    for (i = 0; i < 3; i++) {
+        ss << dis(gen);
+    }
+    ss << "-";
+    for (i = 0; i < 12; i++) {
+        ss << dis(gen);
+    };
+    lua_pushlstring(L, ss.str().c_str(), ss.str().size());
+    return 1;
 }
 
 void register_3rd_party_lib_func_to_lua(lua_State* L)
