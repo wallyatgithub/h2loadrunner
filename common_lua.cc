@@ -10,6 +10,7 @@
 #include <fstream>
 #include <string>
 #include <random>
+#include <sstream>
 
 extern "C" {
 #include "lua.h"
