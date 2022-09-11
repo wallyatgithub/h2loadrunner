@@ -1156,6 +1156,7 @@ void base_client::init_lua_states()
             auto& request = config->json_config_schema.scenarios[scenario_index].requests[request_index];
             lua_State* L = luaL_newstate();
             luaL_openlibs(L);
+            register_3rd_party_lib_func_to_lua(L);
             if (request.luaScript.size())
             {
                 luaL_dostring(L, request.luaScript.c_str());
