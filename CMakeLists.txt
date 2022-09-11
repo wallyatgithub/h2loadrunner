@@ -229,9 +229,10 @@ set(ASIO_SV_SOURCES
   asio_server_base_handler.cc
   asio_server_http1_handler.cc
   asio_util.cc
+  common_lua.cc
 )
 
-set(LUA_RAPIDJSON_SOURCES
+set(THIRD_PARTY_LUA_MOD_SOURCE
     third-party/lua-rapidJson/Document.cpp
     third-party/lua-rapidJson/Schema.cpp
     third-party/lua-rapidJson/Userdata.hpp
@@ -240,8 +241,8 @@ set(LUA_RAPIDJSON_SOURCES
     third-party/lua-rapidJson/rapidjson.cpp
     third-party/lua-rapidJson/values.cpp
     third-party/lua-rapidJson/values.hpp
+    pb.c
 )
-
 # h2load
 set(H2LOAD_SOURCES
   util.cc
@@ -258,12 +259,11 @@ set(H2LOAD_SOURCES
   base_worker.cc
   asio_client_connection.cc
   asio_worker.cc
-  pb.c
   h2load_lua.cc
   ${H2LOAD_SOURCE_USING_LIBEV}
   ${ASIO_SV_SOURCES}
   ${HTTP3_SOURCES}
-  ${LUA_RAPIDJSON_SOURCES}
+  ${THIRD_PARTY_LUA_MOD_SOURCE}
 )
 
 

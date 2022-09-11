@@ -20,6 +20,7 @@ extern "C" {
 #include "h2load.h"
 #include "h2load_Config.h"
 #include "asio_worker.h"
+#include "common_lua.h"
 
 
 using Request_Preprocessor = std::function<void(std::map<std::string, std::string, ci_less>& headers,
@@ -54,8 +55,6 @@ extern "C"
 
     int sleep_for_ms(lua_State* L);
 
-    int time_since_epoch(lua_State* L);
-
     int start_server(lua_State* L);
 
     int stop_server(lua_State* L);
@@ -69,14 +68,6 @@ extern "C"
     int wait_for_message(lua_State* L);
 
     int resolve_hostname(lua_State* L);
-
-    int store_value(lua_State* L);
-
-    int get_value(lua_State* L);
-
-    int delete_value(lua_State* L);
-
-    int generate_uuid(lua_State* L);
 }
 
 int _send_response(lua_State* L, bool updatePayload);
@@ -103,10 +94,6 @@ void update_orig_dst_and_proto(std::map<std::string, std::string, ci_less>& head
                                std::string& proto);
 
 int lua_resume_if_yielded(lua_State* L, int nargs);
-
-void register_functions_to_lua(lua_State* L);
-
-void register_3rd_party_lib_func_to_lua(lua_State* L);
 
 void init_new_lua_state(lua_State* L);
 
@@ -214,17 +201,5 @@ void format_length_prefixed_message(std::string& payload);
  */
 uint64_t leave_c_function(lua_State* L);
 
-extern "C"
-{
-    // from pb.so
-    LUALIB_API int luaopen_pb_io(lua_State* L);
-    LUALIB_API int luaopen_pb_conv(lua_State* L);
-    LUALIB_API int luaopen_pb_buffer(lua_State* L);
-    LUALIB_API int luaopen_pb_slice(lua_State* L);
-    LUALIB_API int luaopen_pb(lua_State* L);
-    LUALIB_API int luaopen_pb_unsafe(lua_State* L);
-    //from lua-rapidJson
-    LUALIB_API int luaopen_rapidjson(lua_State* L);
-}
 
 #endif
