@@ -1,7 +1,7 @@
 /*
  * nghttp2 - HTTP/2 C Library
  *
- * Copyright (c) 2014 Tatsuhiro Tsujikawa
+ * Copyright (c) 2019 nghttp2 contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -22,43 +22,35 @@
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#ifndef H2LOAD_SESSION_H
-#define H2LOAD_SESSION_H
+#ifndef QUIC_H
+#define QUIC_H
 
 #include "nghttp2_config.h"
 
-#include <sys/types.h>
+#include "stdint.h"
 
-#include <cinttypes>
+namespace quic {
 
-#include "h2load.h"
-
-namespace h2load
-{
-
-class Session
-{
-public:
-    virtual ~Session() {}
-    // Called when the connection was made.
-    virtual void on_connect() = 0;
-    // Called when one request must be issued.
-    virtual int submit_request() = 0;
-    // Called when incoming bytes are available. The subclass has to
-    // return the number of bytes read.
-    virtual int on_read(const uint8_t* data, size_t len) = 0;
-    // Called when write is available. Returns 0 on success, otherwise
-    // return -1.
-    virtual int on_write() = 0;
-    // Called when the underlying session must be terminated.
-    virtual void terminate() = 0;
-    // Return the maximum concurrency per connection
-    virtual size_t max_concurrent_streams() = 0;
-    virtual void reset_stream(int64_t stream_id) {};
-
-    virtual void submit_ping() {};
+enum class ErrorType {
+  Transport,
+  TransportVersionNegotiation,
+  TransportIdleTimeout,
+  Application,
 };
 
-} // namespace h2load
+struct Error {
+  Error(ErrorType type, uint64_t code) : type(type), code(code) {}
+  Error() : type(ErrorType::Transport), code(0) {}
 
-#endif // H2LOAD_SESSION_H
+  ErrorType type;
+  uint64_t code;
+};
+
+Error err_transport(int liberr);
+Error err_transport_idle_timeout();
+Error err_transport_tls(int alert);
+Error err_application(int liberr);
+
+} // namespace quic
+
+#endif // QUIC_H

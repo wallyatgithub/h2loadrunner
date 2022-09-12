@@ -28,7 +28,8 @@ base_worker::base_worker(uint32_t id, size_t req_todo, size_t nclients,
       nreqs_rem(req_todo % nclients),
       rate(rate),
       max_samples(max_samples),
-      next_client_id(0)
+      next_client_id(0),
+      randgen(util::make_mt19937())
 {
     if (!config->is_rate_mode() && !config->is_timing_based_mode())
     {

@@ -11,7 +11,7 @@ set(Boost_USE_STATIC_LIBS ON)
 
 add_subdirectory(third-party)
 
-find_package(OpenSSL 1.0.1)
+#find_package(OpenSSL 1.0.1)
 find_package(Boost 1.53.0 REQUIRED system thread)
 find_package(LuaJIT)
 
@@ -102,6 +102,29 @@ set(C_ARES_INCLUDE
 "."
 )
 
+if(DEFINED ENABLE_HTTP3)
+    add_definitions(-DENABLE_HTTP3=1)
+
+    set(HTTP3_SOURCES
+      quic.cc
+      h2load_http3_session.cc
+    )
+    set(http3_link_directories
+    "${CMAKE_CURRENT_SOURCE_DIR}/openssl/build/lib"
+    "${CMAKE_CURRENT_SOURCE_DIR}/nghttp3/build/lib"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/lib/.libs/"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/crypto/openssl/.libs"
+    )
+    
+    set(http3_libraries
+    ngtcp2
+    nghttp3
+    crypto
+    ssl
+    ngtcp2_crypto_openssl
+    )
+endif()
+
 if(DEFINED USE_LIBEV)
     find_package(Libev 4.11)
 
@@ -117,10 +140,12 @@ if(DEFINED USE_LIBEV)
 
     add_definitions(-DUSE_LIBEV=1)
 
-    link_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib
-    ${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib64
+    set (ares_link_directories
+    "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib64"
     )
+    
+    
 endif()
 
 if (NOT DEFINED LIBEV_INCLUDE_DIR)
@@ -154,12 +179,21 @@ include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party"
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/llhttp/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/StaticJSON/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/nghttp3/lib/includes"
+  "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/lib/includes"
+  "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/crypto/includes"
+  "${CMAKE_CURRENT_SOURCE_DIR}/openssl/build/include"
   "${LUA_INCLUDE_DIR}"
   "${LIBEV_INCLUDE_DIR}"
   "${C_ARES_INCLUDE}"
   "${Boost_INCLUDE_DIRS}"
   "${GETOPT_INCLUDE_DIR}"
   "${NGHTTP2_INCLUDE_DIR}"
+)
+
+link_directories(
+    ${ares_link_directories}
+    ${http3_link_directories}
 )
 
 link_libraries(
@@ -171,6 +205,7 @@ link_libraries(
   ${GETOPT_LIBRARY}
   ${EXECINFO_LIBRARY}
   ${MIMALLOC_LIB}
+  ${http3_libraries}
 )
 
 set (CMAKE_INCLUDE_CURRENT_DIR ON)
@@ -227,6 +262,7 @@ set(H2LOAD_SOURCES
   h2load_lua.cc
   ${H2LOAD_SOURCE_USING_LIBEV}
   ${ASIO_SV_SOURCES}
+  ${HTTP3_SOURCES}
   ${THIRD_PARTY_LUA_MOD_SOURCE}
 )
 
@@ -236,10 +272,6 @@ add_executable(h2loadrunner ${H2LOAD_SOURCES} $<TARGET_OBJECTS:llhttp>
 
 if(DEFINED USE_LIBEV)
     target_link_libraries(h2loadrunner cares_static)
-    target_include_directories(h2loadrunner PUBLIC 
-    "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares"
-    )
 endif()
 
 install(TARGETS h2loadrunner

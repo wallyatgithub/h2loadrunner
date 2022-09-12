@@ -405,6 +405,21 @@ void ares_socket_state_cb(void* data, int s, int read, int write)
     }
 }
 
+#ifdef ENABLE_HTTP3
+void quic_pkt_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
+{
+    auto c = static_cast<libev_client*>(w->data);
+    if (c->quic_pkt_timeout() != 0)
+    {
+        c->fail();
+        c->worker->free_client(c);
+        delete c;
+        return;
+    }
+}
+
+#endif
+
 #endif
 
 bool recorded(const std::chrono::steady_clock::time_point& t)
@@ -805,6 +820,13 @@ void populate_config_from_json(h2load::Config& config)
     config.window_bits = config.json_config_schema.window_bits;
     config.connection_window_bits = config.json_config_schema.connection_window_bits;
     config.warm_up_time = config.json_config_schema.warm_up_time;
+    config.max_frame_size = config.json_config_schema.max_frame_size;
+    config.tls13_ciphers= config.json_config_schema.tls13_ciphers;
+    config.groups= config.json_config_schema.groups;
+    config.no_udp_gso= config.json_config_schema.no_udp_gso;
+    config.max_udp_payload_size= config.json_config_schema.max_udp_payload_size;
+    config.ktls= config.json_config_schema.ktls;
+    config.qlog_file_base= config.json_config_schema.qlog_file_base;
 }
 
 void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
@@ -841,26 +863,28 @@ void tokenize_path_and_payload(h2load::Config& config)
             {
                 split_string(tokenized_path[i], request.tokenized_path_with_vars, scenario.variable_ids);
                 assert(scenario.variable_ids.count(scenario.variable_name_in_path_and_data));
-                request.tokenized_path_with_vars.variable_ids_in_between.push_back(scenario.variable_ids[scenario.variable_name_in_path_and_data]);
+                request.tokenized_path_with_vars.variable_ids_in_between.push_back(
+                    scenario.variable_ids[scenario.variable_name_in_path_and_data]);
             }
             split_string(tokenized_path[i], request.tokenized_path_with_vars, scenario.variable_ids);
 
             if (config.verbose)
             {
-                std::cout<<request.tokenized_path_with_vars<<std::endl;
+                std::cout << request.tokenized_path_with_vars << std::endl;
             }
 
             auto tokenized_payload = tokenize_string(request.payload, scenario.variable_name_in_path_and_data);
             for (i = 0; i < (tokenized_payload.size() - 1); i++)
             {
                 split_string(tokenized_payload[i], request.tokenized_payload_with_vars, scenario.variable_ids);
-                request.tokenized_payload_with_vars.variable_ids_in_between.push_back(scenario.variable_ids[scenario.variable_name_in_path_and_data]);
+                request.tokenized_payload_with_vars.variable_ids_in_between.push_back(
+                    scenario.variable_ids[scenario.variable_name_in_path_and_data]);
             }
             split_string(tokenized_payload[i], request.tokenized_payload_with_vars, scenario.variable_ids);
 
             if (config.verbose)
             {
-                std::cout<<request.tokenized_payload_with_vars<<std::endl;
+                std::cout << request.tokenized_payload_with_vars << std::endl;
             }
 
             for (auto& header_with_value : request.additonalHeaders)
@@ -907,9 +931,9 @@ void tokenize_path_and_payload(h2load::Config& config)
 
 
 std::string get_current_user_id_string(h2load::Config* config,
-                                         size_t scenario_index,
-                                         size_t request_index,
-                                         uint64_t variable_value)
+                                       size_t scenario_index,
+                                       size_t request_index,
+                                       uint64_t variable_value)
 {
     auto init_full_var_len = [config]()
     {
@@ -1429,8 +1453,8 @@ void post_process_json_config_schema(h2load::Config& config)
         }
         if (scenario.variable_range_end < scenario.variable_range_start)
         {
-            std::cerr << "scenario " << scenario.name <<" user id range end "<<scenario.variable_range_end
-                      <<" is smaller than range start "<<scenario.variable_range_start<<std::endl;
+            std::cerr << "scenario " << scenario.name << " user id range end " << scenario.variable_range_end
+                      << " is smaller than range start " << scenario.variable_range_start << std::endl;
             abort();
         }
         for (auto& request : scenario.requests)
@@ -1485,7 +1509,7 @@ void post_process_json_config_schema(h2load::Config& config)
             {
                 request.response_match_rules.emplace_back(Match_Rule(schema_payload_match));
             }
-            for (auto& response_value_regex_picker: request.response_value_regex_pickers)
+            for (auto& response_value_regex_picker : request.response_value_regex_pickers)
             {
                 if (response_value_regex_picker.where_to_pickup_from.empty() ||
                     response_value_regex_picker.source.empty() ||
@@ -1633,8 +1657,8 @@ void load_user_variables(Scenario& scenario)
     if (scenario.variable_range_end - scenario.variable_range_start > scenario.user_variables.size())
     {
         scenario.variable_range_end = scenario.variable_range_start + scenario.user_variables.size();
-        std::cerr<<"number of record in "<<scenario.user_variables_input_file
-                 <<" is less than user id range end - range start; reduce the range to match number of records"<<std::endl;
+        std::cerr << "number of record in " << scenario.user_variables_input_file
+                  << " is less than user id range end - range start; reduce the range to match number of records" << std::endl;
     }
     if (scenario.user_variables.size() && scenario.variable_range_end == 0)
     {
@@ -1914,9 +1938,30 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
         max_tls_version = TLS1_2_VERSION;
     }
 
-    if (nghttp2::tls::ssl_ctx_set_proto_versions(
-            ssl_ctx, nghttp2::tls::NGHTTP2_TLS_MIN_VERSION,
-            max_tls_version) != 0)
+    if (config.is_quic())
+    {
+#ifdef ENABLE_HTTP3
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+        if (ngtcp2_crypto_openssl_configure_client_context(ssl_ctx) != 0)
+        {
+            std::cerr << "ngtcp2_crypto_openssl_configure_client_context failed"
+                      << std::endl;
+            exit(EXIT_FAILURE);
+        }
+#  endif // HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+        if (ngtcp2_crypto_boringssl_configure_client_context(ssl_ctx) != 0)
+        {
+            std::cerr << "ngtcp2_crypto_boringssl_configure_client_context failed"
+                      << std::endl;
+            exit(EXIT_FAILURE);
+        }
+#  endif // HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+#endif   // ENABLE_HTTP3
+    }
+    else if (nghttp2::tls::ssl_ctx_set_proto_versions(
+                 ssl_ctx, nghttp2::tls::NGHTTP2_TLS_MIN_VERSION,
+                 max_tls_version) != 0)
     {
         std::cerr << "Could not set TLS versions" << std::endl;
         exit(EXIT_FAILURE);
@@ -1929,6 +1974,30 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
                   << std::endl;
         exit(EXIT_FAILURE);
     }
+
+#if OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL)
+    if (SSL_CTX_set_ciphersuites(ssl_ctx, config.tls13_ciphers.c_str()) == 0)
+    {
+        std::cerr << "SSL_CTX_set_ciphersuites with " << config.tls13_ciphers
+                  << " failed: " << ERR_error_string(ERR_get_error(), nullptr)
+                  << std::endl;
+        exit(EXIT_FAILURE);
+    }
+#endif // OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL)
+
+#if OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL)
+    if (SSL_CTX_set1_groups_list(ssl_ctx, config.groups.c_str()) != 1)
+    {
+        std::cerr << "SSL_CTX_set1_groups_list failed" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+#else  // !(OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL))
+    if (SSL_CTX_set1_curves_list(ssl_ctx, config.groups.c_str()) != 1)
+    {
+        std::cerr << "SSL_CTX_set1_curves_list failed" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+#endif // !(OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL))
 
 #ifndef OPENSSL_NO_NEXTPROTONEG
     SSL_CTX_set_next_proto_select_cb(ssl_ctx, client_select_next_proto_cb,
@@ -2028,7 +2097,7 @@ void process_delayed_scenario(h2load::Config& config)
 
 bool variable_present(const std::string& source, size_t start_offset, size_t& var_start, size_t& var_end)
 {
-    if (start_offset >= (source.size()-1))
+    if (start_offset >= (source.size() - 1))
     {
         return false;
     }
@@ -2043,7 +2112,8 @@ bool variable_present(const std::string& source, size_t start_offset, size_t& va
     return true;
 }
 
-void split_string(const std::string& source, String_With_Variables_In_Between& result, const std::map<std::string, size_t>& var_id_map)
+void split_string(const std::string& source, String_With_Variables_In_Between& result,
+                  const std::map<std::string, size_t>& var_id_map)
 {
     size_t offset = 0;
     size_t var_start = 0;

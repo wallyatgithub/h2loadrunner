@@ -124,6 +124,10 @@ struct Stats
     //    std::atomic<uint64_t> max_resp_time_ms;
     //    std::atomic<uint64_t> min_resp_time_ms;
     //    std::atomic<uint64_t> total_resp_time_ms;
+    // The number of UDP datagrams received.
+    size_t udp_dgram_recv;
+    // The number of UDP datagrams sent.
+    size_t udp_dgram_sent;
 };
 
 

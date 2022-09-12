@@ -147,6 +147,11 @@ void connect_to_prefered_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
 
 void probe_writecb(struct ev_loop* loop, ev_io* w, int revents);
 
+#ifdef ENABLE_HTTP3
+void quic_pkt_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
+
+#endif
+
 #endif
 
 void normalize_request_templates(h2load::Config* config);

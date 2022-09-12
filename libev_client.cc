@@ -26,13 +26,18 @@ extern "C" {
 #include "h2load_utils.h"
 #include "tls.h"
 
+#ifdef ENABLE_HTTP3
+#include <nghttp3/nghttp3.h>
+#include "h2load_http3_session.h"
+#endif
+
 namespace h2load
 {
 
 
 libev_client::libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Config* conf,
-               libev_client* parent, const std::string& dest_schema,
-               const std::string& dest_authority)
+                           libev_client* parent, const std::string& dest_schema,
+                           const std::string& dest_authority)
     : base_client(id, wrker, req_todo, conf, parent, dest_schema, dest_authority),
       wb(&static_cast<libev_worker*>(worker)->mcpool),
       next_addr(conf->addrs),
@@ -58,6 +63,17 @@ libev_client::libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Co
     init_ares();
     // TODO: move this to base class, but this calls a virtual func
     init_connection_targert();
+
+#ifdef ENABLE_HTTP3
+    ev_timer_init(&pkt_timer, quic_pkt_timeout_cb, 0., 0.);
+    pkt_timer.data = this;
+
+    if (config->is_quic())
+    {
+        quic.tx.data = std::make_unique<uint8_t[]>(64_k);
+    }
+#endif // ENABLE_HTTP3
+
 }
 
 void libev_client::init_ares()
@@ -136,37 +152,74 @@ int libev_client::do_write()
 template<class T>
 int libev_client::make_socket(T* addr)
 {
-    fd = util::create_nonblock_socket(addr->ai_family);
-    if (fd == -1)
+    if (config->is_quic())
     {
-        return -1;
-    }
-    if (schema.empty())
-    {
-        schema = config->scheme;
-    }
-    if (schema == "https")
-    {
-        if (!ssl)
+#ifdef ENABLE_HTTP3
+        int rv;
+
+        fd = util::create_nonblock_udp_socket(addr->ai_family);
+        if (fd == -1)
         {
-            ssl = SSL_new(static_cast<libev_worker*>(worker)->ssl_ctx);
+            return -1;
         }
 
-        std::string host = tokenize_string(authority, ":")[0];
-        if (host.empty())
+        rv = util::bind_any_addr_udp(fd, addr->ai_family);
+        if (rv != 0)
         {
-            host = config->host;
+            close(fd);
+            fd = -1;
+            return -1;
         }
 
-        if (!util::numeric_host(host.c_str()))
+        socklen_t addrlen = sizeof(local_addr.su.storage);
+        rv = getsockname(fd, &local_addr.su.sa, &addrlen);
+        if (rv == -1)
         {
-            SSL_set_tlsext_host_name(ssl, host.c_str());
+            return -1;
         }
+        local_addr.len = addrlen;
 
-        SSL_set_fd(ssl, fd);
-        SSL_set_connect_state(ssl);
+        if (quic_init(&local_addr.su.sa, local_addr.len, addr->ai_addr,
+                      addr->ai_addrlen) != 0)
+        {
+            std::cerr << "quic_init failed" << std::endl;
+            return -1;
+        }
+#endif // ENABLE_HTTP3
     }
+    else
+    {
+        fd = util::create_nonblock_socket(addr->ai_family);
+        if (fd == -1)
+        {
+            return -1;
+        }
+        if (schema.empty())
+        {
+            schema = config->scheme;
+        }
+        if (schema == "https")
+        {
+            if (!ssl)
+            {
+                ssl = SSL_new(static_cast<libev_worker*>(worker)->ssl_ctx);
+            }
 
+            std::string host = tokenize_string(authority, ":")[0];
+            if (host.empty())
+            {
+                host = config->host;
+            }
+
+            if (!util::numeric_host(host.c_str()))
+            {
+                SSL_set_tlsext_host_name(ssl, host.c_str());
+            }
+
+            SSL_set_fd(ssl, fd);
+            SSL_set_connect_state(ssl);
+        }
+    }
     auto rv = ::connect(fd, addr->ai_addr, addr->ai_addrlen);
     if (rv != 0 && errno != EINPROGRESS)
     {
@@ -247,13 +300,26 @@ int libev_client::make_async_connection()
         return -1;
     }
 
-    writefn = &libev_client::connected;
+
     state = CLIENT_CONNECTING;
 
     ev_io_set(&rev, fd, EV_READ);
     ev_io_set(&wev, fd, EV_WRITE);
 
     ev_io_start(static_cast<libev_worker*>(worker)->loop, &wev);
+    if (config->is_quic())
+    {
+#ifdef ENABLE_HTTP3
+        ev_io_start(static_cast<libev_worker*>(worker)->loop, &rev);
+
+        readfn = &libev_client::read_quic;
+        writefn = &libev_client::write_quic;
+#endif // ENABLE_HTTP3
+    }
+    else
+    {
+        writefn = &libev_client::connected;
+    }
     return 0;
 }
 
@@ -280,12 +346,20 @@ void libev_client::setup_graceful_shutdown()
     auto write_clear_callback = [this]()
     {
         disconnect();
+        return false;
     };
     writefn = &libev_client::write_clear_with_callback;
 }
 
 void libev_client::disconnect()
 {
+#ifdef ENABLE_HTTP3
+    if (config->is_quic())
+    {
+        quic_close_connection();
+    }
+#endif // ENABLE_HTTP3
+
     cleanup_due_to_disconnect();
 
     auto stop_timer_watcher = [this](ev_timer & watcher)
@@ -369,6 +443,7 @@ void libev_client::graceful_restart_connection()
     {
         disconnect();
         resolve_fqdn_and_connect(schema, authority);
+        return true;
     };
     writefn = &libev_client::write_clear_with_callback;
     terminate_session();
@@ -690,21 +765,27 @@ int libev_client::write_tls()
     return 0;
 }
 
+bool libev_client::is_write_signaled()
+{
+    return ev_is_active(&wev);
+}
+
 void libev_client::signal_write()
 {
     ev_io_start(static_cast<libev_worker*>(worker)->loop, &wev);
 }
 
 std::shared_ptr<base_client> libev_client::create_dest_client(const std::string& dst_sch,
-                                                             const std::string& dest_authority)
+                                                              const std::string& dest_authority)
 {
-    auto new_client = std::make_shared<libev_client>(this->id, static_cast<libev_worker*>(worker), this->req_todo, this->config,
-                                               this, dst_sch, dest_authority);
+    auto new_client = std::make_shared<libev_client>(this->id, static_cast<libev_worker*>(worker), this->req_todo,
+                                                     this->config,
+                                                     this, dst_sch, dest_authority);
     return new_client;
 }
 
 int libev_client::resolve_fqdn_and_connect(const std::string& schema, const std::string& authority,
-                                     ares_addrinfo_callback callback)
+                                           ares_addrinfo_callback callback)
 {
     std::string port;
     std::string host;
@@ -822,5 +903,437 @@ bool libev_client::any_pending_data_to_write()
 {
     return (wb.rleft() > 0);
 }
+
+#ifdef ENABLE_HTTP3
+
+namespace {
+ngtcp2_tstamp timestamp(struct ev_loop *loop) {
+  return ev_now(loop) * NGTCP2_SECONDS;
+}
+} // namespace
+
+void libev_client::setup_quic_pkt_timer()
+{
+    ev_timer_init(&pkt_timer, quic_pkt_timeout_cb, 0., 0.);
+    pkt_timer.data = this;
+}
+
+int libev_client::quic_pkt_timeout()
+{
+    int rv;
+    auto now = timestamp(static_cast<libev_worker*>(worker)->loop);
+
+    rv = ngtcp2_conn_handle_expiry(quic.conn, now);
+    if (rv != 0)
+    {
+        ngtcp2_connection_close_error_set_transport_error_liberr(&quic.last_error,
+                                                                 rv, nullptr, 0);
+        return -1;
+    }
+
+    return write_quic();
+}
+
+void libev_client::quic_restart_pkt_timer()
+{
+    auto expiry = ngtcp2_conn_get_expiry(quic.conn);
+    auto now = timestamp(static_cast<libev_worker*>(worker)->loop);
+    auto t = expiry > now ? static_cast<ev_tstamp>(expiry - now) / NGTCP2_SECONDS
+             : 1e-9;
+    pkt_timer.repeat = t;
+    ev_timer_again(static_cast<libev_worker*>(worker)->loop, &pkt_timer);
+}
+
+int libev_client::read_quic()
+{
+    std::array<uint8_t, 65536> buf;
+    sockaddr_union su;
+    socklen_t addrlen = sizeof(su);
+    int rv;
+    size_t pktcnt = 0;
+    ngtcp2_pkt_info pi{};
+
+    for (;;)
+    {
+        auto nread =
+            recvfrom(fd, buf.data(), buf.size(), MSG_DONTWAIT, &su.sa, &addrlen);
+        if (nread == -1)
+        {
+            return 0;
+        }
+
+        assert(quic.conn);
+
+        ++worker->stats.udp_dgram_recv;
+
+        auto path = ngtcp2_path
+        {
+            {
+                &local_addr.su.sa,
+                static_cast<socklen_t>(local_addr.len),
+            },
+            {
+                &su.sa,
+                addrlen,
+            },
+        };
+
+        rv = ngtcp2_conn_read_pkt(quic.conn, &path, &pi, buf.data(), nread,
+                                  timestamp(static_cast<libev_worker*>(worker)->loop));
+        if (rv != 0)
+        {
+            std::cerr << "ngtcp2_conn_read_pkt: " << ngtcp2_strerror(rv) << std::endl;
+
+            if (!quic.last_error.error_code)
+            {
+                if (rv == NGTCP2_ERR_CRYPTO)
+                {
+                    ngtcp2_connection_close_error_set_transport_error_tls_alert(
+                        &quic.last_error, ngtcp2_conn_get_tls_alert(quic.conn), nullptr,
+                        0);
+                }
+                else
+                {
+                    ngtcp2_connection_close_error_set_transport_error_liberr(
+                        &quic.last_error, rv, nullptr, 0);
+                }
+            }
+
+            return -1;
+        }
+
+        if (++pktcnt == 100)
+        {
+            break;
+        }
+    }
+
+    return 0;
+}
+
+int libev_client::write_quic()
+{
+    int rv;
+
+    ev_io_stop(static_cast<libev_worker*>(worker)->loop, &wev);
+
+    if (quic.close_requested)
+    {
+        return -1;
+    }
+
+    if (quic.tx.send_blocked)
+    {
+        rv = send_blocked_packet();
+        if (rv != 0)
+        {
+            return -1;
+        }
+
+        if (quic.tx.send_blocked)
+        {
+            return 0;
+        }
+    }
+
+    std::array<nghttp3_vec, 16> vec;
+    size_t pktcnt = 0;
+    auto max_udp_payload_size = ngtcp2_conn_get_max_udp_payload_size(quic.conn);
+#ifdef UDP_SEGMENT
+    auto path_max_udp_payload_size =
+        ngtcp2_conn_get_path_max_udp_payload_size(quic.conn);
+#endif // UDP_SEGMENT
+    size_t max_pktcnt =
+        std::min(static_cast<size_t>(10),
+                 static_cast<size_t>(64_k / max_udp_payload_size));
+    uint8_t* bufpos = quic.tx.data.get();
+    ngtcp2_path_storage ps;
+    size_t gso_size = 0;
+
+    ngtcp2_path_storage_zero(&ps);
+
+    auto s = static_cast<Http3Session*>(session.get());
+
+    for (;;)
+    {
+        int64_t stream_id = -1;
+        int fin = 0;
+        ssize_t sveccnt = 0;
+
+        if (session && ngtcp2_conn_get_max_data_left(quic.conn))
+        {
+            sveccnt = s->write_stream(stream_id, fin, vec.data(), vec.size());
+            if (sveccnt == -1)
+            {
+                return -1;
+            }
+        }
+
+        ngtcp2_ssize ndatalen;
+        auto v = vec.data();
+        auto vcnt = static_cast<size_t>(sveccnt);
+
+        uint32_t flags = NGTCP2_WRITE_STREAM_FLAG_MORE;
+        if (fin)
+        {
+            flags |= NGTCP2_WRITE_STREAM_FLAG_FIN;
+        }
+
+        auto nwrite = ngtcp2_conn_writev_stream(
+                          quic.conn, &ps.path, nullptr, bufpos, max_udp_payload_size, &ndatalen,
+                          flags, stream_id, reinterpret_cast<const ngtcp2_vec*>(v), vcnt,
+                          timestamp(static_cast<libev_worker*>(worker)->loop));
+        if (nwrite < 0)
+        {
+            switch (nwrite)
+            {
+                case NGTCP2_ERR_STREAM_DATA_BLOCKED:
+                    assert(ndatalen == -1);
+                    s->block_stream(stream_id);
+                    continue;
+                case NGTCP2_ERR_STREAM_SHUT_WR:
+                    assert(ndatalen == -1);
+                    s->shutdown_stream_write(stream_id);
+                    continue;
+                case NGTCP2_ERR_WRITE_MORE:
+                    assert(ndatalen >= 0);
+                    if (s->add_write_offset(stream_id, ndatalen) != 0)
+                    {
+                        return -1;
+                    }
+                    continue;
+            }
+
+            ngtcp2_connection_close_error_set_transport_error_liberr(
+                &quic.last_error, nwrite, nullptr, 0);
+            return -1;
+        }
+        else if (ndatalen >= 0 && s->add_write_offset(stream_id, ndatalen) != 0)
+        {
+            return -1;
+        }
+
+        quic_restart_pkt_timer();
+
+        if (nwrite == 0)
+        {
+            if (bufpos - quic.tx.data.get())
+            {
+                auto data = quic.tx.data.get();
+                auto datalen = bufpos - quic.tx.data.get();
+                rv = write_udp(ps.path.remote.addr, ps.path.remote.addrlen, data,
+                               datalen, gso_size);
+                if (rv == 1)
+                {
+                    on_send_blocked(ps.path.remote, data, datalen, gso_size);
+                    signal_write();
+                    return 0;
+                }
+            }
+            return 0;
+        }
+
+        bufpos += nwrite;
+
+#ifdef UDP_SEGMENT
+        if (worker->config->no_udp_gso)
+        {
+#endif // UDP_SEGMENT
+            auto data = quic.tx.data.get();
+            auto datalen = bufpos - quic.tx.data.get();
+            rv = write_udp(ps.path.remote.addr, ps.path.remote.addrlen, data, datalen,
+                           0);
+            if (rv == 1)
+            {
+                on_send_blocked(ps.path.remote, data, datalen, 0);
+                signal_write();
+                return 0;
+            }
+
+            if (++pktcnt == max_pktcnt)
+            {
+                signal_write();
+                return 0;
+            }
+
+            bufpos = quic.tx.data.get();
+
+#ifdef UDP_SEGMENT
+            continue;
+        }
+#endif // UDP_SEGMENT
+
+#ifdef UDP_SEGMENT
+        if (pktcnt == 0)
+        {
+            gso_size = nwrite;
+        }
+        else if (static_cast<size_t>(nwrite) > gso_size ||
+                 (gso_size > path_max_udp_payload_size &&
+                  static_cast<size_t>(nwrite) != gso_size))
+        {
+            auto data = quic.tx.data.get();
+            auto datalen = bufpos - quic.tx.data.get() - nwrite;
+            rv = write_udp(ps.path.remote.addr, ps.path.remote.addrlen, data, datalen,
+                           gso_size);
+            if (rv == 1)
+            {
+                on_send_blocked(ps.path.remote, data, datalen, gso_size);
+                on_send_blocked(ps.path.remote, bufpos - nwrite, nwrite, 0);
+            }
+            else
+            {
+                auto data = bufpos - nwrite;
+                rv = write_udp(ps.path.remote.addr, ps.path.remote.addrlen, data,
+                               nwrite, 0);
+                if (rv == 1)
+                {
+                    on_send_blocked(ps.path.remote, data, nwrite, 0);
+                }
+            }
+
+            signal_write();
+            return 0;
+        }
+
+        // Assume that the path does not change.
+        if (++pktcnt == max_pktcnt || static_cast<size_t>(nwrite) < gso_size)
+        {
+            auto data = quic.tx.data.get();
+            auto datalen = bufpos - quic.tx.data.get();
+            rv = write_udp(ps.path.remote.addr, ps.path.remote.addrlen, data, datalen,
+                           gso_size);
+            if (rv == 1)
+            {
+                on_send_blocked(ps.path.remote, data, datalen, gso_size);
+            }
+            signal_write();
+            return 0;
+        }
+#endif // UDP_SEGMENT
+    }
+}
+
+void libev_client::on_send_blocked(const ngtcp2_addr& remote_addr,
+                                   const uint8_t* data, size_t datalen,
+                                   size_t gso_size)
+{
+    assert(quic.tx.num_blocked || !quic.tx.send_blocked);
+    assert(quic.tx.num_blocked < 2);
+
+    quic.tx.send_blocked = true;
+
+    auto& p = quic.tx.blocked[quic.tx.num_blocked++];
+
+    memcpy(&p.remote_addr.su, remote_addr.addr, remote_addr.addrlen);
+
+    p.remote_addr.len = remote_addr.addrlen;
+    p.data = data;
+    p.datalen = datalen;
+    p.gso_size = gso_size;
+}
+
+int libev_client::send_blocked_packet()
+{
+    int rv;
+
+    assert(quic.tx.send_blocked);
+
+    for (; quic.tx.num_blocked_sent < quic.tx.num_blocked;
+         ++quic.tx.num_blocked_sent)
+    {
+        auto& p = quic.tx.blocked[quic.tx.num_blocked_sent];
+
+        rv = write_udp(&p.remote_addr.su.sa, p.remote_addr.len, p.data, p.datalen,
+                       p.gso_size);
+        if (rv == 1)
+        {
+            signal_write();
+
+            return 0;
+        }
+    }
+
+    quic.tx.send_blocked = false;
+    quic.tx.num_blocked = 0;
+    quic.tx.num_blocked_sent = 0;
+
+    return 0;
+}
+
+
+int libev_client::write_udp(const sockaddr* addr, socklen_t addrlen,
+                            const uint8_t* data, size_t datalen, size_t gso_size)
+{
+    iovec msg_iov;
+    msg_iov.iov_base = const_cast<uint8_t*>(data);
+    msg_iov.iov_len = datalen;
+
+    msghdr msg{};
+    msg.msg_name = const_cast<sockaddr*>(addr);
+    msg.msg_namelen = addrlen;
+    msg.msg_iov = &msg_iov;
+    msg.msg_iovlen = 1;
+
+#  ifdef UDP_SEGMENT
+    std::array<uint8_t, CMSG_SPACE(sizeof(uint16_t))> msg_ctrl {};
+    if (gso_size && datalen > gso_size)
+    {
+        msg.msg_control = msg_ctrl.data();
+        msg.msg_controllen = msg_ctrl.size();
+
+        auto cm = CMSG_FIRSTHDR(&msg);
+        cm->cmsg_level = SOL_UDP;
+        cm->cmsg_type = UDP_SEGMENT;
+        cm->cmsg_len = CMSG_LEN(sizeof(uint16_t));
+        *(reinterpret_cast<uint16_t*>(CMSG_DATA(cm))) = gso_size;
+    }
+#  endif // UDP_SEGMENT
+
+    auto nwrite = sendmsg(fd, &msg, 0);
+    if (nwrite < 0)
+    {
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+        {
+            return 1;
+        }
+
+        std::cerr << "sendmsg: errno=" << errno << std::endl;
+    }
+    else
+    {
+        ++worker->stats.udp_dgram_sent;
+    }
+
+    ev_io_stop(static_cast<libev_worker*>(worker)->loop, &wev);
+
+    return 0;
+}
+
+void libev_client::quic_close_connection()
+{
+    if (!quic.conn)
+    {
+        return;
+    }
+
+    std::array<uint8_t, NGTCP2_MAX_UDP_PAYLOAD_SIZE> buf;
+    ngtcp2_path_storage ps;
+    ngtcp2_path_storage_zero(&ps);
+
+    auto nwrite = ngtcp2_conn_write_connection_close(
+                      quic.conn, &ps.path, nullptr, buf.data(), buf.size(), &quic.last_error,
+                      timestamp(static_cast<libev_worker*>(worker)->loop));
+
+    if (nwrite <= 0)
+    {
+        return;
+    }
+
+    write_udp(reinterpret_cast<sockaddr*>(ps.path.remote.addr),
+              ps.path.remote.addrlen, buf.data(), nwrite, 0);
+}
+
+#endif
 
 }

@@ -57,6 +57,7 @@ public:
 
     std::map<std::string, std::set<base_client*>> client_pool;
     std::map<size_t, base_client*> client_ids;
+    std::mt19937 randgen;
 
     base_worker(uint32_t id, size_t nreq_todo, size_t nclients,
                      size_t rate, size_t max_samples, Config* config);
@@ -71,6 +72,7 @@ public:
     virtual void run_event_loop() = 0;
     virtual std::shared_ptr<base_client> create_new_client(size_t req_todo) = 0;
     virtual void start_graceful_stop_timer() = 0;
+    virtual SSL_CTX* get_ssl_ctx() = 0;
 
     void rate_period_timeout_handler();
     void warmup_timeout_handler();
