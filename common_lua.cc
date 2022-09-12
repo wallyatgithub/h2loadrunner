@@ -204,6 +204,7 @@ void register_3rd_party_lib_func_to_lua(lua_State* L)
     luaopen_rapidjson(L);
     lua_setglobal(L, lua_rapidJson.c_str());
 
+    lua_settop(L, 0);
 }
 
 void init_new_lua_state_with_common_apis(lua_State* L)
