@@ -22,8 +22,8 @@ extern "C" {
 
 
 // global data shared across worker threads
-static std::map<std::string, std::string> global_datas[0xFF][0xFF];
-static std::mutex global_data_mutexes[0xFF][0xFF];
+static std::map<std::string, std::string> global_datas[0x100][0x100];
+static std::mutex global_data_mutexes[0x100][0x100];
 
 int time_since_epoch(lua_State* L)
 {
@@ -35,42 +35,16 @@ int time_since_epoch(lua_State* L)
 
 namespace
 {
-std::map<std::string, std::string>& get_global_data(const std::string& key)
-{
-    switch(key.size())
-    {
-        case 0:
-        {
-            return global_datas[0][0];
-        }
-        case 1:
-        {
-            return global_datas[uint8_t(key[0])][0];
-        }
-        default:
-        {
-            return global_datas[uint8_t(key[0])][uint8_t(key[1])];
-        }
-    }
-}
 
-std::mutex& get_global_data_mutex(const std::string& key)
+uint16_t get_u16_sum(const std::string& key)
 {
-    switch(key.size())
-    {
-        case 0:
-        {
-            return global_data_mutexes[0][0];
-        }
-        case 1:
-        {
-            return global_data_mutexes[uint8_t(key[0])][0];
-        }
-        default:
-        {
-            return global_data_mutexes[uint8_t(key[0])][uint8_t(key[1])];
-        }
-    }
+    return (std::accumulate(key.begin(),
+                           key.end(),
+                           0,
+                           [](uint16_t sum, const char& c)
+                           {
+                               return sum + uint8_t(c);
+                           }));
 }
 
 }
@@ -94,9 +68,11 @@ int store_value(lua_State* L)
         std::cerr << __FUNCTION__ << " invalid arguments" << std::endl;
         lua_settop(L, 0);
     }
-
-    std::lock_guard<std::mutex> guard(get_global_data_mutex(key));
-    auto& global_data = get_global_data(key);
+    uint16_t sum = get_u16_sum(key);
+    uint8_t row = sum >> 16;
+    uint8_t col = sum & 0xFF;
+    std::lock_guard<std::mutex> guard(global_data_mutexes[row][col]);
+    auto& global_data = global_datas[row][col];
     global_data[key] = value;
     return 0;
 }
@@ -117,8 +93,11 @@ int get_value(lua_State* L)
         std::cerr << __FUNCTION__ << " invalid arguments" << std::endl;
         lua_settop(L, 0);
     }
-    std::lock_guard<std::mutex> guard(get_global_data_mutex(key));
-    auto& global_data = get_global_data(key);
+    uint16_t sum = get_u16_sum(key);
+    uint8_t row = sum >> 16;
+    uint8_t col = sum & 0xFF;
+    std::lock_guard<std::mutex> guard(global_data_mutexes[row][col]);
+    auto& global_data = global_datas[row][col];
     auto it = global_data.find(key);
     if (it != global_data.end())
     {
@@ -148,8 +127,11 @@ int delete_value(lua_State* L)
         lua_settop(L, 0);
     }
 
-    std::lock_guard<std::mutex> guard(get_global_data_mutex(key));
-    auto& global_data = get_global_data(key);
+    uint16_t sum = get_u16_sum(key);
+    uint8_t row = sum >> 16;
+    uint8_t col = sum & 0xFF;
+    std::lock_guard<std::mutex> guard(global_data_mutexes[row][col]);
+    auto& global_data = global_datas[row][col];
     auto it = global_data.find(key);
     if (it != global_data.end())
     {
