@@ -1439,6 +1439,8 @@ bool base_client::update_request_with_lua(lua_State* L, const Request_Data& fini
                         if ((LUA_TSTRING != lua_type(L, -2)) || (LUA_TSTRING != lua_type(L, -1)))
                         {
                             std::cerr << "invalid http headers returned from lua function make_request" << std::endl;
+                            std::cerr << "key type" << lua_type(L, -2)<<std::endl;
+                            std::cerr << "value type" << lua_type(L, -1)<<std::endl;
                         }
                         const char* k = lua_tolstring(L, -2, &len);
                         std::string key(k, len);
