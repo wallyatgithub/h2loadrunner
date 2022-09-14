@@ -93,7 +93,7 @@ function generate_load()
             local request_headers_to_send = {[":scheme"]="http", [":authority"]="192.168.1.107:8082", [":method"]="PATCH", [":path"]="/nudm-uecm/test"}
             local payload = "hello world again"
             local response_header, response_payload = send_http_request_and_await_response(request_headers_to_send, payload)
-            if (next(resp_headers) ~= nil)
+            if (next(response_header) ~= nil)
             -- validate the response further if you want
             then
                 total_requests_sent = total_requests_sent + 1
