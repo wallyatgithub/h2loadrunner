@@ -19,7 +19,7 @@ extern "C" {
 }
 #include "common_lua.h"
 #include "url-parser/url_parser.h"
-#include "h2load_utils.h"
+#include "util.h"
 
 
 
@@ -233,16 +233,31 @@ int parse_uri(lua_State* L)
         http_parser_url u {};
         if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) == 0)
         {
-            std::string path = get_reqline(uri.c_str(), u);
+            std::string path;
+            if (nghttp2::util::has_uri_field(u, UF_PATH))
+            {
+                path = nghttp2::util::get_uri_field(uri.c_str(), u, UF_PATH).str();
+            }
+            else
+            {
+                path = "/";
+            }
+
+            if (nghttp2::util::has_uri_field(u, UF_QUERY))
+            {
+                path += '?';
+                path += nghttp2::util::get_uri_field(uri.c_str(), u, UF_QUERY);
+            }
+
             std::string schema;
             std::string host;
-            if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
+            if (nghttp2::util::has_uri_field(u, UF_SCHEMA) && nghttp2::util::has_uri_field(u, UF_HOST))
             {
-                schema = util::get_uri_field(uri.c_str(), u, UF_SCHEMA).str();
-                host = util::get_uri_field(uri.c_str(), u, UF_HOST).str();
-                if (util::has_uri_field(u, UF_PORT))
+                schema = nghttp2::util::get_uri_field(uri.c_str(), u, UF_SCHEMA).str();
+                host = nghttp2::util::get_uri_field(uri.c_str(), u, UF_HOST).str();
+                if (nghttp2::util::has_uri_field(u, UF_PORT))
                 {
-                    host.append(":").append(util::utos(u.port));
+                    host.append(":").append(nghttp2::util::utos(u.port));
                 }
             }
             lua_createtable(L, 0, schema.empty() ? 1 : 3);

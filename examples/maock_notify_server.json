@@ -1,0 +1,47 @@
+{
+  "address": "0.0.0.0",
+  "port": 8089,
+  "threads": 2,
+  "_private-key-file": "mtls/server.key",
+  "_cert-file": "mtls/server.crt",
+  "_caCert-file": "mtls/ca.crt",
+  "mTLS": false,
+  "verbose": false,
+  "max-concurrent-streams": 256,
+  "Service": [
+    {
+      "Request": {
+        "name": "notification",
+        "headers": [
+          {
+            "header-name": ":path",
+            "matchType": "StartsWith",
+            "input": "/npcf-policyauthorization/v1/app-sessions"
+          },
+          {
+            "header-name": ":method",
+            "matchType": "EqualsTo",
+            "input": "POST"
+          }
+        ],
+        "payload": [
+        ]
+      },
+      "Responses": [
+        {
+          "name": "notif-204",
+          "weight": 100,
+          "throttle-ratio": 0,
+          "status-code": 204,
+          "payload": {
+            "msg-payload": "",
+            "placeholder": "",
+            "arguments": []
+          },
+          "additonalHeaders": [],
+          "lua-offload": false
+        }
+      ]
+    }
+  ]
+}

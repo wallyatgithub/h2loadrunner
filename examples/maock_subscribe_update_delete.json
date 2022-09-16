@@ -1,0 +1,115 @@
+{
+  "address": "0.0.0.0",
+  "port": 8088,
+  "threads": 4,
+  "_private-key-file": "mtls/server.key",
+  "_cert-file": "mtls/server.crt",
+  "_caCert-file": "mtls/ca.crt",
+  "mTLS": false,
+  "verbose": false,
+  "max-concurrent-streams": 256,
+  "Service": [
+    {
+      "Request": {
+        "name": "subscribe",
+        "headers": [
+          {
+            "header-name": ":path",
+            "matchType": "StartsWith",
+            "input": "/npcf-policyauthorization/v1/app-sessions"
+          },
+          {
+            "header-name": ":method",
+            "matchType": "EqualsTo",
+            "input": "POST"
+          }
+        ],
+        "payload": []
+      },
+      "Responses": [
+        {
+          "name": "resp-201",
+          "weight": 100,
+          "throttle-ratio": 0,
+          "status-code": 201,
+          "payload": {
+            "msg-payload": "",
+            "placeholder": "",
+            "arguments": []
+          },
+          "additonalHeaders": [],
+          "luaScript": "",
+          "lua-offload": false
+        }
+      ]
+    },
+    {
+      "Request": {
+        "name": "subs-update",
+        "headers": [
+          {
+            "header-name": ":path",
+            "matchType": "StartsWith",
+            "input": "/npcf-policyauthorization/v1/app-sessions"
+          },
+          {
+            "header-name": ":method",
+            "matchType": "EqualsTo",
+            "input": "PATCH"
+          }
+        ],
+        "payload": []
+      },
+      "Responses": [
+        {
+          "name": "resp-204",
+          "weight": 100,
+          "throttle-ratio": 0,
+          "status-code": 204,
+          "payload": {
+            "msg-payload": "",
+            "placeholder": "",
+            "arguments": []
+          },
+          "additonalHeaders": [],
+          "luaScript": "",
+          "lua-offload": false
+        }
+      ]
+    },
+    {
+      "Request": {
+        "name": "subs-del",
+        "headers": [
+          {
+            "header-name": ":path",
+            "matchType": "StartsWith",
+            "input": "/npcf-policyauthorization/v1/app-sessions"
+          },
+          {
+            "header-name": ":method",
+            "matchType": "EqualsTo",
+            "input": "DELETE"
+          }
+        ],
+        "payload": []
+      },
+      "Responses": [
+        {
+          "name": "del-204",
+          "weight": 100,
+          "throttle-ratio": 0,
+          "status-code": 204,
+          "payload": {
+            "msg-payload": "",
+            "placeholder": "",
+            "arguments": []
+          },
+          "additonalHeaders": [],
+          "luaScript": "",
+          "lua-offload": false
+        }
+      ]
+    }
+  ]
+}
