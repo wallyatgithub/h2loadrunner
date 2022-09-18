@@ -1,0 +1,115 @@
+{
+  "schema": "http",
+  "host": "127.0.0.1",
+  "port": 8088,
+  "_load-share-hosts":
+  [
+    {
+      "host": "127.0.0.1",
+      "port": 8082
+    },
+    {
+      "host": "127.0.0.1",
+      "port": 8083
+    }
+  ],
+  "open-new-connection-based-on-authority-header": false,
+  "connection-retry": false,
+  "switch-back-after-connection-retry": false,
+  "threads": 1,
+  "clients": 2,
+  "duration": 60,
+  "total-requests": 1,
+  "warm-up-time": 0,
+  "max-concurrent-streams": 32,
+  "request-per-second": 100,
+  "request-per-second-feed-file": "",
+  "rate": 0,
+  "rate-period": 1,
+  "stream-timeout": 5000,
+  "ciphers": "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256",
+  "caCert": "",
+  "cert": "",
+  "privateKey": "",
+  "certVerificationMode": 0,
+  "max-tls-version": "TLSv1.3",
+  "no-tls-proto": "h2c",
+  "connection-active-timeout": 0,
+  "connection-inactivity-timeout": 0,
+  "interval-between-ping-frames": 0,
+  "npn-list": "h2,h2-16,h2-14,http/1.1",
+  "header-table-size": 4096,
+  "encoder-header-table-size": 4096,
+  "log-file": "",
+  "failed-request-log-file": "failed.log",
+  "statistics-interval": 1,
+  "window-bits": 30,
+  "connection-window-bits": 30,
+  "Scenarios": [
+    {
+      "name": "subs-update-delete-get",
+      "weight": 100000,
+      "user-id-variable-in-path-and-data": "-user-name",
+      "user-id-range-start": 1,
+      "user-id-range-end": 99999999999,
+      "user-id-range-slicing": true,
+      "Requests": [
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/npcf-policyauthorization/v1/app-sessions"
+          },
+          "clear-old-cookies": false,
+          "method": "POST",
+          "payload": " { \t\"ascReqData\":  \t{ \t\t\"afChargId\": \"PCSF:1-cfed-0-1-0000000063185a10-0000000000014f35\", \t\t\"gpsi\": \"msisdn--user-name\", \t\t\"medComponents\": \t\t{ \t\t\t\"1\": \t\t\t{ \t\t\t\t\"codecs\": [\"downlink\\r\\noffer\\r\\nm=audio 26512 RTP/AVP 8\\r\\n\", \"uplink\\r\\nanswer\\r\\nm=audio 4001 RTP/AVP 8\\r\\n\"], \t\t\t\t\"fStatus\": \"ENABLED\", \t\t\t\t\"marBwDl\": \"128000 bps\", \t\t\t\t\"marBwUl\": \"128000 bps\", \t\t\t\t\"medCompN\": 1, \t\t\t\t\"medSubComps\": \t\t\t\t{ \t\t\t\t\t\"1\": \t\t\t\t\t{ \t\t\t\t\t\t\"fDescs\": [\"permit in 17 from 135.2.207.203 4001 to 135.248.246.57 26512\", \"permit out 17 from 135.248.246.57 26512 to 135.2.207.203 4001\"], \t\t\t\t\t\t\"fNum\": 1 \t\t\t\t\t}, \t\t\t\t\t\"2\": \t\t\t\t\t{ \t\t\t\t\t\t\"fDescs\": [\"permit in 17 from 135.2.207.203 4002 to 135.248.246.57 26513\", \"permit out 17 from 135.248.246.57 26513 to 135.2.207.203 4002\"], \t\t\t\t\t\t\"fNum\": 2, \t\t\t\t\t\t\"flowUsage\": \t\t\t\t\t\t\"RTCP\"}}, \t\t\t\t\t\t\"medType\": \"AUDIO\" \t\t\t\t\t} \t\t\t}, \t\t\t\t\"notifUri\": \"http://127.0.0.1:8089/npcf-policyauthorization/v1/app-sessions/cngss-6677455584-pbwtt/pcsf-test.61965b530b1a0001;117;1;5.377749659.7.68378\", \t\t\t\t\"servInfStatus\": \"FINAL\", \t\t\t\t\"suppFeat\": \"10\", \t\t\t\t\"ueIpv4\": \"192.168.90.167\" \t\t} }",
+          "additonalHeaders": [
+            "user-agent: magician",
+            "what: ever",
+            "some: how"
+          ],
+          "expected-status-code": 0,
+          "response-match": {
+            "headers": [
+              {
+                "header-name": ":status",
+                "matchType": "EqualsTo",
+                "input": "201"
+              }
+            ]
+          },
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "fromResponseHeader",
+            "input": "location"
+          },
+          "clear-old-cookies": false,
+          "method": "PATCH",
+          "payload": "hello: msisdn--user-name, update.",
+          "additonalHeaders": [
+            "update: true",
+            "update-again: false"
+          ],
+          "expected-status-code": 200,
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "sameWithLastOne",
+            "input": ""
+          },
+          "clear-old-cookies": false,
+          "method": "DELETE",
+          "payload": "hello: msisdn--user-name, delete.",
+          "additonalHeaders": [
+            "user-agent: h2load"
+          ],
+          "luaScript": "",
+          "expected-status-code": 204,
+          "delay-before-executing-next": 0
+        }
+      ]
+    }
+  ]
+}

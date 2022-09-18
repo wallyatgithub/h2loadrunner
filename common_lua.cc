@@ -18,6 +18,8 @@ extern "C" {
 #include "lauxlib.h"
 }
 #include "common_lua.h"
+#include "url-parser/url_parser.h"
+#include "util.h"
 
 
 
@@ -207,6 +209,77 @@ void register_3rd_party_lib_func_to_lua(lua_State* L)
     lua_settop(L, 0);
 }
 
+int parse_uri(lua_State* L)
+{
+    const std::string scheme_header = ":scheme";
+    const std::string path_header = ":path";
+    const std::string authority_header = ":authority";
+
+    std::string uri;
+    if ((lua_gettop(L) == 1))
+    {
+        size_t len;
+        const char* str = lua_tolstring(L, -1, &len);
+        uri.assign(str, len);
+        lua_pop(L, 1);
+    }
+    else
+    {
+        std::cerr << __FUNCTION__ << " invalid arguments" << std::endl;
+        lua_settop(L, 0);
+    }
+    if (uri.size())
+    {
+        http_parser_url u {};
+        if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) == 0)
+        {
+            std::string path;
+            if (nghttp2::util::has_uri_field(u, UF_PATH))
+            {
+                path = nghttp2::util::get_uri_field(uri.c_str(), u, UF_PATH).str();
+            }
+            else
+            {
+                path = "/";
+            }
+
+            if (nghttp2::util::has_uri_field(u, UF_QUERY))
+            {
+                path += '?';
+                path += nghttp2::util::get_uri_field(uri.c_str(), u, UF_QUERY);
+            }
+
+            std::string schema;
+            std::string host;
+            if (nghttp2::util::has_uri_field(u, UF_SCHEMA) && nghttp2::util::has_uri_field(u, UF_HOST))
+            {
+                schema = nghttp2::util::get_uri_field(uri.c_str(), u, UF_SCHEMA).str();
+                host = nghttp2::util::get_uri_field(uri.c_str(), u, UF_HOST).str();
+                if (nghttp2::util::has_uri_field(u, UF_PORT))
+                {
+                    host.append(":").append(nghttp2::util::utos(u.port));
+                }
+            }
+            lua_createtable(L, 0, schema.empty() ? 1 : 3);
+            lua_pushlstring(L, path_header.c_str(), path_header.size());
+            lua_pushlstring(L, path.c_str(), path.size());
+            lua_rawset(L, -3);
+            if (schema.size())
+            {
+                lua_pushlstring(L, scheme_header.c_str(), scheme_header.size());
+                lua_pushlstring(L, schema.c_str(), schema.size());
+                lua_rawset(L, -3);
+                lua_pushlstring(L, authority_header.c_str(), authority_header.size());
+                lua_pushlstring(L, host.c_str(), host.size());
+                lua_rawset(L, -3);
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
 void init_new_lua_state_with_common_apis(lua_State* L)
 {
     lua_register(L, "time_since_epoch", time_since_epoch);
@@ -214,6 +287,7 @@ void init_new_lua_state_with_common_apis(lua_State* L)
     lua_register(L, "get_value", get_value);
     lua_register(L, "delete_value", delete_value);
     lua_register(L, "generate_uuid_v4", generate_uuid);
+    lua_register(L, "parse_uri", parse_uri);
     register_3rd_party_lib_func_to_lua(L);
 }
 

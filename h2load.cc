@@ -1262,8 +1262,6 @@ int main(int argc, char** argv)
 
     insert_customized_headers_to_Json_scenarios(config);
 
-    //normalize_request_templates(&config);
-
     if (config.verbose)
     {
         std::cerr << "Configuration dump:" << std::endl << staticjson::to_pretty_json_string(config.json_config_schema)

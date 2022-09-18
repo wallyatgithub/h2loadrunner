@@ -118,9 +118,9 @@ int on_frame_recv_callback(nghttp2_session* session, const nghttp2_frame* frame,
 namespace
 {
 
-int on_begin_header_callback(nghttp2_session *session,
-                                       const nghttp2_frame *frame,
-                                       void *user_data)
+int on_begin_header_callback(nghttp2_session* session,
+                             const nghttp2_frame* frame,
+                             void* user_data)
 {
     auto client = static_cast<base_client*>(user_data);
     if (frame->hd.type != NGHTTP2_HEADERS ||
@@ -232,7 +232,7 @@ ssize_t buffer_read_callback(nghttp2_session* session, int32_t stream_id,
         if (length >= (stream_buffer.size() - request->second.req_payload_cursor))
         {
             memcpy(buf, (stream_buffer.c_str() + request->second.req_payload_cursor),
-                        (stream_buffer.size() - request->second.req_payload_cursor));
+                   (stream_buffer.size() - request->second.req_payload_cursor));
             *data_flags |= NGHTTP2_DATA_FLAG_EOF;
             size_t buf_size = (stream_buffer.size() - request->second.req_payload_cursor);
             request->second.req_payload_cursor = stream_buffer.size();
@@ -277,7 +277,7 @@ void Http2Session::on_connect()
     auto callbacks_deleter = defer(nghttp2_session_callbacks_del, callbacks);
 
     nghttp2_session_callbacks_set_on_begin_headers_callback(callbacks,
-                                                         on_begin_header_callback);
+                                                            on_begin_header_callback);
 
     nghttp2_session_callbacks_set_on_frame_recv_callback(callbacks,
                                                          on_frame_recv_callback);
@@ -507,7 +507,7 @@ int Http2Session::_submit_request()
     }
 
     curr_stream_id = stream_id;
-    client_->requests_waiting_for_response().insert(std::make_pair(stream_id, std::move(data)));
+    client_->requests_waiting_for_response().emplace(std::make_pair(stream_id, std::move(data)));
     client_->on_request_start(stream_id);
     return 0;
 }

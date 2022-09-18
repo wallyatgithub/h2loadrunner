@@ -41,8 +41,8 @@ namespace h2load
 class libev_client;
 }
 std::shared_ptr<h2load::base_worker> create_worker(uint32_t id, SSL_CTX* ssl_ctx,
-                                                        size_t nreqs, size_t nclients,
-                                                        size_t rate, size_t max_samples, h2load::Config& config);
+                                                   size_t nreqs, size_t nclients,
+                                                   size_t rate, size_t max_samples, h2load::Config& config);
 
 int parse_header_table_size(uint32_t& dst, const char* opt,
                             const char* optarg);
@@ -94,8 +94,6 @@ int client_select_next_proto_cb(SSL* ssl, unsigned char** out,
 void populate_config_from_json(h2load::Config& config);
 
 void insert_customized_headers_to_Json_scenarios(h2load::Config& config);
-
-void tokenize_path_and_payload(h2load::Config& config);
 
 std::vector<h2load::Cookie> parse_cookie_string(const std::string& cookie_string, const std::string& origin_authority,
                                                 const std::string& origin_schema);
@@ -154,8 +152,6 @@ void quic_pkt_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
 
 #endif
 
-void normalize_request_templates(h2load::Config* config);
-
 std::string get_tls_error_string();
 
 void printBacktrace();
@@ -202,16 +198,20 @@ bool is_null_destination(h2load::Config& config);
 
 void process_delayed_scenario(h2load::Config& config);
 
-void split_string(const std::string& source, String_With_Variables_In_Between& result, const std::map<std::string, size_t>& var_id_map);
-
-std::string get_current_user_id_string(h2load::Config* config,
-                                         size_t scenario_index,
-                                         size_t request_index,
-                                         uint64_t variable_value);
+void split_string(const std::string& source, String_With_Variables_In_Between& result,
+                  const std::map<std::string, size_t>& var_id_map);
 
 bool variable_present(const std::string& source, size_t start_offset, size_t& var_start, size_t& var_end);
 
-void load_user_variables(Scenario& scenario);
+void process_variables(h2load::Config& config);
 
+void split_string_and_var(const std::string& source, String_With_Variables_In_Between& result,
+                          const Variable_Manager& variable_manager);
+
+void transform_old_style_variable(h2load::Config& config);
+
+void load_generic_variables_from_csv_file(Scenario& scenario);
+
+void load_file_content(std::string& source);
 
 #endif

@@ -849,175 +849,6 @@ void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
     }
 }
 
-void tokenize_path_and_payload(h2load::Config& config)
-{
-    for (auto& scenario : config.json_config_schema.scenarios)
-    {
-        assert(scenario.requests.size());
-        for (auto& request : scenario.requests)
-        {
-            size_t i = 0;
-
-            auto tokenized_path = tokenize_string(request.path, scenario.variable_name_in_path_and_data);
-            for (i = 0; i < (tokenized_path.size() - 1); i++)
-            {
-                split_string(tokenized_path[i], request.tokenized_path_with_vars, scenario.variable_ids);
-                assert(scenario.variable_ids.count(scenario.variable_name_in_path_and_data));
-                request.tokenized_path_with_vars.variable_ids_in_between.push_back(
-                    scenario.variable_ids[scenario.variable_name_in_path_and_data]);
-            }
-            split_string(tokenized_path[i], request.tokenized_path_with_vars, scenario.variable_ids);
-
-            if (config.verbose)
-            {
-                std::cout << request.tokenized_path_with_vars << std::endl;
-            }
-
-            auto tokenized_payload = tokenize_string(request.payload, scenario.variable_name_in_path_and_data);
-            for (i = 0; i < (tokenized_payload.size() - 1); i++)
-            {
-                split_string(tokenized_payload[i], request.tokenized_payload_with_vars, scenario.variable_ids);
-                request.tokenized_payload_with_vars.variable_ids_in_between.push_back(
-                    scenario.variable_ids[scenario.variable_name_in_path_and_data]);
-            }
-            split_string(tokenized_payload[i], request.tokenized_payload_with_vars, scenario.variable_ids);
-
-            if (config.verbose)
-            {
-                std::cout << request.tokenized_payload_with_vars << std::endl;
-            }
-
-            for (auto& header_with_value : request.additonalHeaders)
-            {
-                size_t t = header_with_value.find(":", 1);
-                if ((t == std::string::npos) ||
-                    (header_with_value[0] == ':' && 1 == t))
-                {
-                    std::cerr << "invalid header, no name: " << header_with_value << std::endl;
-                    continue;
-                }
-                std::string header_name = header_with_value.substr(0, t);
-                std::string header_value = header_with_value.substr(t + 1);
-                /*
-                header_value.erase(header_value.begin(), std::find_if(header_value.begin(), header_value.end(),
-                                                                      [](unsigned char ch)
-                {
-                    return !std::isspace(ch);
-                }));
-                */
-
-                if (header_value.empty())
-                {
-                    std::cerr << "invalid header - no value: " << header_with_value
-                              << std::endl;
-                    continue;
-                }
-                size_t start, end;
-                if (variable_present(header_name, 0, start, end) || variable_present(header_value, 0, start, end))
-                {
-                    String_With_Variables_In_Between name_result;
-                    split_string(header_name, name_result, scenario.variable_ids);
-                    String_With_Variables_In_Between value_result;
-                    split_string(header_value, value_result, scenario.variable_ids);
-                    request.headers_with_variable.emplace_back(std::make_pair(name_result, value_result));
-                    continue;
-                }
-                request.headers_in_map[header_name] = header_value;
-            }
-
-        }
-    }
-}
-
-
-std::string get_current_user_id_string(h2load::Config* config,
-                                       size_t scenario_index,
-                                       size_t request_index,
-                                       uint64_t variable_value)
-{
-    auto init_full_var_len = [config]()
-    {
-        std::vector<size_t> str_len_vec;
-        for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
-        {
-            if (config->json_config_schema.scenarios[index].user_ids.size())
-            {
-                str_len_vec.push_back(0);
-            }
-            else
-            {
-                str_len_vec.push_back(std::to_string(config->json_config_schema.scenarios[index].variable_range_end).size());
-            }
-        }
-        return str_len_vec;
-    };
-    static thread_local auto str_len_vec = init_full_var_len();
-    auto& config_scenario = config->json_config_schema.scenarios[scenario_index];
-
-    std::string curr_var_value_str;
-    if (config_scenario.user_ids.size())
-    {
-        assert(variable_value < config_scenario.user_ids.size());
-        if (request_index < config_scenario.user_ids[variable_value].size())
-        {
-            curr_var_value_str = config_scenario.user_ids[variable_value][request_index];
-        }
-        else
-        {
-            curr_var_value_str = config_scenario.user_ids[variable_value][0];
-        }
-    }
-    else
-    {
-        curr_var_value_str = std::to_string(variable_value);
-        std::string padding;
-        padding.reserve(str_len_vec[scenario_index] - curr_var_value_str.size());
-        for (size_t i = 0; i < str_len_vec[scenario_index] - curr_var_value_str.size(); i++)
-        {
-            padding.append("0");
-        }
-        curr_var_value_str.insert(0, padding);
-    }
-    return curr_var_value_str;
-}
-
-void normalize_request_templates(h2load::Config* config)
-{
-    for (auto& scenario : config->json_config_schema.scenarios)
-    {
-        for (auto& request : scenario.requests)
-        {
-            if (request.uri.typeOfAction != "input")
-            {
-                continue;
-            }
-            bool uri_updated = false;
-            if (request.schema.empty())
-            {
-                request.schema = config->scheme;
-                uri_updated = true;
-            }
-            if (request.authority.empty())
-            {
-                if (config->port != config->default_port)
-                {
-                    request.authority = config->host + ":" + util::utos(config->port);
-                }
-                else
-                {
-                    request.authority = config->host;
-                }
-                uri_updated = true;
-            }
-            if (uri_updated)
-            {
-                // for output to user to let user know the actual scenario to execute
-                request.uri.input = request.schema + "://" + request.authority + request.path;
-            }
-        }
-    }
-}
-
 std::string get_tls_error_string()
 {
     unsigned long   error_code = 0;
@@ -1395,204 +1226,20 @@ std::vector<std::vector<h2load::SDStat>>
 }
 
 
-void post_process_json_config_schema(h2load::Config& config)
+void load_file_content(std::string& source)
 {
-    if (config.json_config_schema.host.size() && config.json_config_schema.host[0] == '['
-        && config.json_config_schema.host[config.json_config_schema.host.size() - 1] == ']')
+    if (source.size())
     {
-        config.json_config_schema.host = config.json_config_schema.host.substr(1, config.json_config_schema.host.size() - 2);
-    }
-
-    for (auto& host_item : config.json_config_schema.load_share_hosts)
-    {
-        auto& host = host_item.host;
-        if (host.size() && host[0] == '[' && host[host.size() - 1] == ']')
+        std::ifstream f(source);
+        if (f.good())
         {
-            host = host.substr(1, host.size() - 2);
-        }
-        util::inp_strlower(host);
-    }
-
-    util::inp_strlower(config.json_config_schema.host);
-    util::inp_strlower(config.json_config_schema.schema);
-
-    auto load_file_content = [](std::string & source)
-    {
-        if (source.size())
-        {
-            std::ifstream f(source);
-            if (f.good())
-            {
-                std::string dest((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-                source = dest;
-            }
-        }
-    };
-
-    for (auto& scenario : config.json_config_schema.scenarios)
-    {
-        if (scenario.variable_name_in_path_and_data.size())
-        {
-            size_t curr_map_size = scenario.variable_ids.size();
-            scenario.variable_ids[scenario.variable_name_in_path_and_data] = curr_map_size;
-        }
-        if (scenario.user_id_list_file.size())
-        {
-            scenario.user_ids = read_csv_file(scenario.user_id_list_file);
-            if (scenario.user_ids.empty())
-            {
-                std::cerr << "cannot read user IDs from: " << scenario.user_id_list_file << std::endl;
-                exit(EXIT_FAILURE);
-            }
-            scenario.variable_range_start = 0;
-            scenario.variable_range_end = scenario.user_ids.size();
-        }
-        if (scenario.user_variables_input_file.size())
-        {
-            load_user_variables(scenario);
-        }
-        if (scenario.variable_range_end < scenario.variable_range_start)
-        {
-            std::cerr << "scenario " << scenario.name << " user id range end " << scenario.variable_range_end
-                      << " is smaller than range start " << scenario.variable_range_start << std::endl;
-            abort();
-        }
-        for (auto& request : scenario.requests)
-        {
-            auto iter = uri_action_map.find(request.uri.typeOfAction);
-            if (iter != uri_action_map.end())
-            {
-                request.uri.uri_action = iter->second;
-            }
-            else
-            {
-                std::cerr << request.uri.typeOfAction << " is invalid" << std::endl;
-                abort();
-            }
-
-            size_t start;
-            size_t end;
-            if (request.uri.uri_action == INPUT_URI && !variable_present(request.uri.input, 0, start, end))
-            {
-                http_parser_url u {};
-                if (http_parser_parse_url(request.uri.input.c_str(), request.uri.input.size(), 0, &u) != 0)
-                {
-                    std::cerr << "invalid URI given: " << request.uri.input << std::endl;
-                    std::cerr << "Please check this request: " << std::endl << staticjson::to_pretty_json_string(request) << std::endl;
-                    exit(EXIT_FAILURE);
-                }
-                request.path = get_reqline(request.uri.input.c_str(), u);
-                if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
-                {
-                    request.schema = util::get_uri_field(request.uri.input.c_str(), u, UF_SCHEMA).str();
-                    util::inp_strlower(request.schema);
-                    request.authority = util::get_uri_field(request.uri.input.c_str(), u, UF_HOST).str();
-                    util::inp_strlower(request.authority);
-                    if (util::has_uri_field(u, UF_PORT))
-                    {
-                        request.authority.append(":").append(util::utos(u.port));
-                    }
-                }
-            }
-            else if (variable_present(request.uri.input, 0, start, end))
-            {
-                request.path = request.uri.input;
-                request.uri.uri_action = INPUT_WITH_VARIABLE;
-            }
-
-            for (auto& schema_header_match : request.response_match.header_match)
-            {
-                request.response_match_rules.emplace_back(Match_Rule(schema_header_match));
-            }
-
-            for (auto& schema_payload_match : request.response_match.payload_match)
-            {
-                request.response_match_rules.emplace_back(Match_Rule(schema_payload_match));
-            }
-            for (auto& response_value_regex_picker : request.response_value_regex_pickers)
-            {
-                if (response_value_regex_picker.where_to_pickup_from.empty() ||
-                    response_value_regex_picker.source.empty() ||
-                    response_value_regex_picker.picker_regexp.empty() ||
-                    response_value_regex_picker.save_to_variable_name.empty())
-                {
-                    continue;
-                }
-                size_t unique_id_of_variable = 0;
-                auto var_iter = scenario.variable_ids.find(response_value_regex_picker.save_to_variable_name);
-                if (var_iter == scenario.variable_ids.end())
-                {
-                    unique_id_of_variable = scenario.variable_ids.size();
-                    scenario.variable_ids[response_value_regex_picker.save_to_variable_name] = unique_id_of_variable;
-                }
-                else
-                {
-                    unique_id_of_variable =  var_iter->second;
-                }
-
-                request.actual_regex_value_pickers.emplace_back(Regex_Picker(response_value_regex_picker, unique_id_of_variable));
-            }
-
-            load_file_content(request.payload);
-            load_file_content(request.luaScript);
-            if (request.luaScript.size())
-            {
-                lua_State* L = luaL_newstate();
-                luaL_openlibs(L);
-                luaL_dostring(L, request.luaScript.c_str());
-                lua_getglobal(L, make_request);
-                if (lua_isfunction(L, -1))
-                {
-                    request.make_request_function_present = true;
-                }
-                lua_settop(L, 0);
-                lua_getglobal(L, validate_response);
-                if (lua_isfunction(L, -1))
-                {
-                    request.validate_response_function_present = true;
-                }
-                lua_settop(L, 0);
-                lua_close(L);
-            }
+            std::string dest((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+            source = dest;
         }
     }
-    load_file_content(config.json_config_schema.ca_cert);
-    load_file_content(config.json_config_schema.client_cert);
-    load_file_content(config.json_config_schema.private_key);
-    tokenize_path_and_payload(config);
 }
 
-std::vector<std::vector<std::string>> read_csv_file(const std::string& csv_file_name)
-{
-    std::vector<std::vector<std::string>> result;
-    std::ifstream infile(csv_file_name);
-    if (!infile)
-    {
-        std::cerr << "cannot open file: " << csv_file_name << std::endl;
-        return result;
-    }
-    std::string line;
-    std::getline(infile, line); // remove first row which is column name;
-    while (std::getline(infile, line))
-    {
-        if (line.size() && line[line.size() - 1] == '\r')
-        {
-            line = line.substr(0, line.size() - 1);
-        }
-        std::vector<std::string> row;
-        std::stringstream lineStream(line);
-        std::string cell;
-        while (std::getline(lineStream, cell, ','))
-        {
-            row.push_back(cell);
-        }
-        result.push_back(row);
-    }
-
-    return result;
-}
-
-void load_user_variables(Scenario& scenario)
+void load_generic_variables_from_csv_file(Scenario& scenario)
 {
     const std::string utf8_bom = {char(0xEF), char(0xBB), char(0xBF)};
     std::ifstream infile(scenario.user_variables_input_file);
@@ -1608,20 +1255,13 @@ void load_user_variables(Scenario& scenario)
     {
         line = line.substr(utf8_bom.size(), std::string::npos);
     }
-    std::vector<std::string> row;
+
     std::stringstream lineStream(line);
     std::string cell;
     while (std::getline(lineStream, cell, ','))
     {
         boost::trim(cell);
         variable_names.push_back(cell);
-        size_t unique_id_of_variable = 0;
-        auto var_iter = scenario.variable_ids.find(cell);
-        if (var_iter == scenario.variable_ids.end())
-        {
-            unique_id_of_variable = scenario.variable_ids.size();
-            scenario.variable_ids[cell] = unique_id_of_variable;
-        }
     }
     std::vector<std::vector<std::string>> variable_values;
     while (std::getline(infile, line))
@@ -1653,18 +1293,339 @@ void load_user_variables(Scenario& scenario)
         }
         variable_values.push_back(std::move(row));
     }
-    scenario.user_variables = std::move(variable_values);
-    if (scenario.variable_range_end - scenario.variable_range_start > scenario.user_variables.size())
+    for (size_t index = 0; index < variable_names.size(); index++)
     {
-        scenario.variable_range_end = scenario.variable_range_start + scenario.user_variables.size();
-        std::cerr << "number of record in " << scenario.user_variables_input_file
-                  << " is less than user id range end - range start; reduce the range to match number of records" << std::endl;
+        std::vector<std::vector<std::string>> one_column(1, std::vector<std::string>(0));
+        for (auto& each_row : variable_values)
+        {
+            one_column[0].push_back(each_row[index]);
+        }
+
+        Generic_Variable generic_var(variable_names[index], one_column);
+        scenario.variable_manager.insert(generic_var);
     }
-    if (scenario.user_variables.size() && scenario.variable_range_end == 0)
+}
+
+void transform_old_style_variable(h2load::Config& config)
+{
+    auto transform_variable = [](std::string & target, const std::string & var_name)
     {
-        scenario.variable_range_start = 0;
-        scenario.variable_range_end = scenario.user_variables.size();
+        auto tokenized_target = tokenize_string(target, var_name);
+        target.clear();
+        for (size_t i = 0; i < (tokenized_target.size() - 1); i++)
+        {
+            target.append(tokenized_target[i]);
+            target.append("${").append(var_name).append("}");
+        }
+        target.append(tokenized_target.back());
+    };
+
+    for (auto& scenario : config.json_config_schema.scenarios)
+    {
+        if (scenario.variable_name_in_path_and_data.size())
+        {
+            for (auto& request : scenario.requests)
+            {
+                transform_variable(request.uri.input, scenario.variable_name_in_path_and_data);
+                load_file_content(request.payload);
+                transform_variable(request.payload, scenario.variable_name_in_path_and_data);
+            }
+            if (scenario.user_id_list_file.size())
+            {
+                Two_Dimensioning_Variable two_d_v(scenario.variable_name_in_path_and_data, scenario.user_id_list_file);
+                scenario.two_dim_variables.push_back(two_d_v);
+            }
+            else
+            {
+                Range_Based_Variable rv(scenario.variable_name_in_path_and_data, scenario.variable_range_start,
+                                        scenario.variable_range_end);
+                scenario.range_based_variables.push_back(rv);
+            }
+            scenario.variable_name_in_path_and_data.clear();
+            scenario.variable_range_start = 0;
+            scenario.variable_range_end = 0;
+            scenario.user_id_list_file.clear();
+        }
     }
+}
+
+void split_string_and_var(const std::string& source, String_With_Variables_In_Between& result,
+                          const Variable_Manager& variable_manager)
+{
+    size_t offset = 0;
+    size_t var_start = 0;
+    size_t var_end = 0;
+    size_t var_unique_id;
+
+    while (variable_present(source, offset, var_start, var_end))
+    {
+        auto segment = source.substr(offset, var_start - offset);
+        auto var_name = source.substr(var_start + 2, (var_end - (var_start + 2)));
+        result.string_segments.push_back(segment);
+        if (variable_manager.get_gen_var_id(var_name, var_unique_id))
+        {
+            result.variable_ids_in_between.push_back(var_unique_id);
+        }
+        else
+        {
+            std::cerr << "variable ${" << var_name << "} appeared in" << std::endl << source << std::endl <<
+                      "but it has no definition on how to get the value" << std::endl;
+            exit(1);
+        }
+        offset = var_end + 1;
+    }
+    result.string_segments.push_back(source.substr(offset, std::string::npos));
+}
+
+
+void process_variables(h2load::Config& config)
+{
+    transform_old_style_variable(config);
+
+    for (auto& scenario : config.json_config_schema.scenarios)
+    {
+        // TODO:  do not rely on insertion order
+        for (auto& request : scenario.requests)
+        {
+            for (auto& response_value_regex_picker : request.response_value_regex_pickers)
+            {
+                size_t unique_id_of_variable;
+                if (!scenario.variable_manager.get_gen_var_id(response_value_regex_picker.save_to_variable_name, unique_id_of_variable))
+                {
+                    Generic_Variable var(response_value_regex_picker.save_to_variable_name, 0, 0);
+                    scenario.variable_manager.insert(var);
+                    scenario.variable_manager.get_gen_var_id(response_value_regex_picker.save_to_variable_name, unique_id_of_variable);
+                }
+                request.actual_regex_value_pickers.emplace_back(Regex_Picker(response_value_regex_picker, unique_id_of_variable));
+            }
+        }
+
+        // TODO: find some better design to avoid using this number_of_variables_from_value_pickers
+        scenario.number_of_variables_from_value_pickers = scenario.variable_manager.get_number_of_generic_variables();
+
+        for (auto& r : scenario.range_based_variables)
+        {
+            Generic_Variable generic_var(r.variable_name, r.variable_range_start, r.variable_range_end);
+            scenario.variable_manager.insert(generic_var);
+        }
+
+        for (auto& dv : scenario.two_dim_variables)
+        {
+            auto raw_data = read_csv_file(dv.id_list_file_name);
+            if (raw_data.empty())
+            {
+                std::cerr << "cannot read user IDs from: " << dv.id_list_file_name << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            size_t max_size = std::max_element(std::begin(raw_data),
+                                               std::end(raw_data),
+                                               [](const std::vector<std::string>& lhs,
+                                                  const std::vector<std::string>& rhs)
+            {
+                return lhs.size() < rhs.size();
+            })->size();
+            std::cout << "max size:" << max_size << std::endl;
+            std::vector<std::vector<std::string>> two_d_vals(max_size, std::vector<std::string>(0));
+            for (size_t i = 0; i < raw_data.size(); i++)
+            {
+                for (size_t j = 0; j < raw_data[i].size(); j++)
+                {
+                    two_d_vals[j].emplace_back(raw_data[i][j]);
+                }
+            }
+
+            Generic_Variable generic_var(dv.variable_name, two_d_vals);
+            scenario.variable_manager.insert(generic_var);
+        }
+
+        if (scenario.user_variables_input_file.size())
+        {
+            load_generic_variables_from_csv_file(scenario);
+        }
+
+        for (auto& request : scenario.requests)
+        {
+            auto iter = uri_action_map.find(request.uri.typeOfAction);
+            if (iter != uri_action_map.end())
+            {
+                request.uri.uri_action = iter->second;
+            }
+            else
+            {
+                std::cerr << request.uri.typeOfAction << " is invalid" << std::endl;
+                exit(1);
+            }
+
+            size_t start;
+            size_t end;
+            std::string path;
+            if (request.uri.uri_action == INPUT_URI && !variable_present(request.uri.input, 0, start, end))
+            {
+                http_parser_url u {};
+                if (http_parser_parse_url(request.uri.input.c_str(), request.uri.input.size(), 0, &u) != 0)
+                {
+                    std::cerr << "invalid URI given: " << request.uri.input << std::endl;
+                    std::cerr << "Please check this request: " << std::endl << staticjson::to_pretty_json_string(request) << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                path = get_reqline(request.uri.input.c_str(), u);
+                if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
+                {
+                    request.schema = util::get_uri_field(request.uri.input.c_str(), u, UF_SCHEMA).str();
+                    util::inp_strlower(request.schema);
+                    request.authority = util::get_uri_field(request.uri.input.c_str(), u, UF_HOST).str();
+                    util::inp_strlower(request.authority);
+                    if (util::has_uri_field(u, UF_PORT))
+                    {
+                        request.authority.append(":").append(util::utos(u.port));
+                    }
+                }
+            }
+            else if (variable_present(request.uri.input, 0, start, end))
+            {
+                path = request.uri.input;
+                request.uri.uri_action = INPUT_WITH_VARIABLE;
+            }
+
+            split_string_and_var(path, request.tokenized_path_with_vars, scenario.variable_manager);
+
+            split_string_and_var(request.payload, request.tokenized_payload_with_vars, scenario.variable_manager);
+
+            for (auto& header_with_value : request.additonalHeaders)
+            {
+                size_t t = header_with_value.find(":", 1);
+                if ((t == std::string::npos) ||
+                    (header_with_value[0] == ':' && 1 == t))
+                {
+                    std::cerr << "invalid header, no name: " << header_with_value << std::endl;
+                    continue;
+                }
+                std::string header_name = header_with_value.substr(0, t);
+                std::string header_value = header_with_value.substr(t + 1);
+                /*
+                header_value.erase(header_value.begin(), std::find_if(header_value.begin(), header_value.end(),
+                                                                      [](unsigned char ch)
+                {
+                    return !std::isspace(ch);
+                }));
+                */
+
+                if (header_value.empty())
+                {
+                    std::cerr << "invalid header - no value: " << header_with_value
+                              << std::endl;
+                    continue;
+                }
+                size_t start, end;
+                if (variable_present(header_name, 0, start, end) || variable_present(header_value, 0, start, end))
+                {
+                    String_With_Variables_In_Between name_result;
+                    split_string_and_var(header_name, name_result, scenario.variable_manager);
+                    String_With_Variables_In_Between value_result;
+                    split_string_and_var(header_value, value_result, scenario.variable_manager);
+                    request.headers_with_variable.emplace_back(std::make_pair(name_result, value_result));
+                    continue;
+                }
+                request.headers_in_map[header_name] = header_value;
+            }
+        }
+    }
+}
+
+void post_process_json_config_schema(h2load::Config& config)
+{
+    if (config.json_config_schema.host.size() && config.json_config_schema.host[0] == '['
+        && config.json_config_schema.host[config.json_config_schema.host.size() - 1] == ']')
+    {
+        config.json_config_schema.host = config.json_config_schema.host.substr(1, config.json_config_schema.host.size() - 2);
+    }
+
+    for (auto& host_item : config.json_config_schema.load_share_hosts)
+    {
+        auto& host = host_item.host;
+        if (host.size() && host[0] == '[' && host[host.size() - 1] == ']')
+        {
+            host = host.substr(1, host.size() - 2);
+        }
+        util::inp_strlower(host);
+    }
+
+    util::inp_strlower(config.json_config_schema.host);
+    util::inp_strlower(config.json_config_schema.schema);
+
+    process_variables(config);
+
+    for (auto& scenario : config.json_config_schema.scenarios)
+    {
+        for (auto& request : scenario.requests)
+        {
+
+            for (auto& schema_header_match : request.response_match.header_match)
+            {
+                request.response_match_rules.emplace_back(Match_Rule(schema_header_match));
+            }
+
+            for (auto& schema_payload_match : request.response_match.payload_match)
+            {
+                request.response_match_rules.emplace_back(Match_Rule(schema_payload_match));
+            }
+
+            load_file_content(request.luaScript);
+
+            if (request.luaScript.size())
+            {
+                lua_State* L = luaL_newstate();
+                luaL_openlibs(L);
+                luaL_dostring(L, request.luaScript.c_str());
+                lua_getglobal(L, make_request);
+                if (lua_isfunction(L, -1))
+                {
+                    request.make_request_function_present = true;
+                }
+                lua_settop(L, 0);
+                lua_getglobal(L, validate_response);
+                if (lua_isfunction(L, -1))
+                {
+                    request.validate_response_function_present = true;
+                }
+                lua_settop(L, 0);
+                lua_close(L);
+            }
+        }
+    }
+    load_file_content(config.json_config_schema.ca_cert);
+    load_file_content(config.json_config_schema.client_cert);
+    load_file_content(config.json_config_schema.private_key);
+}
+
+std::vector<std::vector<std::string>> read_csv_file(const std::string& csv_file_name)
+{
+    std::vector<std::vector<std::string>> result;
+    std::ifstream infile(csv_file_name);
+    if (!infile)
+    {
+        std::cerr << "cannot open file: " << csv_file_name << std::endl;
+        return result;
+    }
+    std::string line;
+    std::getline(infile, line); // remove first row which is column name;
+    while (std::getline(infile, line))
+    {
+        if (line.size() && line[line.size() - 1] == '\r')
+        {
+            line = line.substr(0, line.size() - 1);
+        }
+        std::vector<std::string> row;
+        std::stringstream lineStream(line);
+        std::string cell;
+        while (std::getline(lineStream, cell, ','))
+        {
+            row.push_back(cell);
+        }
+        result.push_back(row);
+    }
+
+    return result;
 }
 
 void rpsUpdateFunc(std::atomic<bool>& workers_stopped, h2load::Config& config)
@@ -2124,9 +2085,9 @@ void split_string(const std::string& source, String_With_Variables_In_Between& r
         auto segment = source.substr(offset, var_start - offset);
         auto var_name = source.substr(var_start + 2, (var_end - (var_start + 2)));
         result.string_segments.push_back(segment);
-        assert(var_id_map.count(var_name));
         auto iter = var_id_map.find(var_name);
-        result.variable_ids_in_between.push_back(iter != var_id_map.end() ? iter->second : 0);
+        assert(iter != var_id_map.end());
+        result.variable_ids_in_between.push_back(iter->second);
 
         offset = var_end + 1;
     }

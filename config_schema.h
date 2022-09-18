@@ -128,7 +128,7 @@ public:
         auto iter = value_pickup_action_map.find(picker_schema.where_to_pickup_from);
         if (iter == value_pickup_action_map.end())
         {
-            std::cerr<<"invalid value: "<<picker_schema.where_to_pickup_from<<std::endl;
+            std::cerr << "invalid value: " << picker_schema.where_to_pickup_from << std::endl;
             exit(1);
         }
         where_to_pick_up_from = iter->second;
@@ -137,11 +137,11 @@ public:
         unique_id = id;
         try
         {
-            picker_regexp.assign(picker_schema.picker_regexp, std::regex_constants::ECMAScript|std::regex_constants::optimize);
+            picker_regexp.assign(picker_schema.picker_regexp, std::regex_constants::ECMAScript | std::regex_constants::optimize);
         }
         catch (std::regex_error& e)
         {
-            std::cerr<<"invalid reg exp: "<<picker_schema.picker_regexp<<" reason: "<<e.what()<<std::endl;
+            std::cerr << "invalid reg exp: " << picker_schema.picker_regexp << " reason: " << e.what() << std::endl;
         }
     }
 };
@@ -154,15 +154,15 @@ struct String_With_Variables_In_Between
 
 inline std::ostream& operator<<(std::ostream& o, const String_With_Variables_In_Between& r)
 {
-    o<<"string_segments.size(): "<<r.string_segments.size()<<std::endl;
+    o << "string_segments.size(): " << r.string_segments.size() << std::endl;
     for (size_t i = 0; i < r.string_segments.size(); i++)
     {
-        o<<"index: "<<i<<": "<<r.string_segments[i]<<std::endl;
+        o << "index: " << i << ": " << r.string_segments[i] << std::endl;
     }
-    o<<"variable_ids_in_between.size(): "<<r.variable_ids_in_between.size()<<std::endl;
+    o << "variable_ids_in_between.size(): " << r.variable_ids_in_between.size() << std::endl;
     for (size_t i = 0; i < r.variable_ids_in_between.size(); i++)
     {
-        o<<"index: "<<i<<": "<<r.variable_ids_in_between[i]<<std::endl;
+        o << "index: " << i << ": " << r.variable_ids_in_between[i] << std::endl;
     }
     return o;
 }
@@ -176,7 +176,7 @@ public:
     bool validate_response_function_present;
     std::string schema;
     std::string authority;
-    std::string path; // filled by post_process_json_config_schema
+    //    std::string path; // filled by post_process_json_config_schema
     Uri uri;
     std::string method;
     std::string payload;
@@ -185,7 +185,8 @@ public:
     Schema_Response_Match response_match;
     std::vector<Match_Rule> response_match_rules; // filled by post_process_json_config_schema
     std::map<std::string, std::string, ci_less> headers_in_map; // filled by post_process_json_config_schema
-    std::vector<std::pair<String_With_Variables_In_Between, String_With_Variables_In_Between>> headers_with_variable; // filled by post_process_json_config_schema
+    std::vector<std::pair<String_With_Variables_In_Between, String_With_Variables_In_Between>>
+                                                                                            headers_with_variable; // filled by post_process_json_config_schema
     String_With_Variables_In_Between tokenized_path_with_vars;
     String_With_Variables_In_Between tokenized_payload_with_vars;
 
@@ -216,6 +217,202 @@ public:
     }
 };
 
+class Range_Based_Variable
+{
+public:
+    std::string variable_name;
+    uint64_t variable_range_start = 0;
+    uint64_t variable_range_end = 0;
+    explicit Range_Based_Variable(const std::string& var_name, uint64_t start, uint64_t end):
+        variable_name(var_name),
+        variable_range_start(start),
+        variable_range_end(end)
+    {
+        if (end <= start)
+        {
+            std::cout << "variable: " << variable_name << "range end is not greater than range start" << std::endl;
+            exit(1);
+        }
+    };
+    explicit Range_Based_Variable()
+    {
+        variable_range_start = 0;
+        variable_range_end = 0;
+    }
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("variable-name", &this->variable_name);
+        h->add_property("variable-range-start", &this->variable_range_start);
+        h->add_property("variable-range-end", &this->variable_range_end);
+    }
+};
+
+class Two_Dimensioning_Variable
+{
+public:
+    std::string variable_name;
+    std::string id_list_file_name;
+    explicit Two_Dimensioning_Variable(const std::string& var_name, const std::string& file_name):
+        variable_name(var_name),
+        id_list_file_name(file_name)
+    {
+    };
+    explicit Two_Dimensioning_Variable()
+    {
+    };
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("variable-name", &this->variable_name);
+        h->add_property("file-name", &this->id_list_file_name);
+    }
+};
+
+class Generic_Variable
+{
+public:
+    std::string var_name;
+    uint64_t range_start = 0;
+    uint64_t range_end = 0;
+    std::vector<std::vector<std::string>> var_value_list;
+    size_t full_range_len = 0;
+
+    explicit Generic_Variable(const std::string& name, const std::vector<std::vector<std::string>>& value_list):
+        var_name(name),
+        var_value_list(value_list),
+        range_start(0),
+        range_end(std::max_element(std::begin(value_list),
+                                   std::end(value_list),
+                                   [](const std::vector<std::string> & lhs,
+                                      const std::vector<std::string> & rhs)
+    {
+        return lhs.size() < rhs.size();
+    })->size())
+    {
+    };
+    explicit Generic_Variable(const std::string& name, uint64_t start, uint64_t end):
+        var_name(name),
+        range_start(start),
+        range_end(end),
+        full_range_len(std::to_string(end).size())
+    {
+        if (end != 0 && end <= start)
+        {
+            std::cerr << "variable: " << name << " range end is not greater than range start" << std::endl;
+            exit(1);
+        }
+    };
+    std::string produce_value(size_t col, size_t user_id)
+    {
+        if (var_value_list.size())
+        {
+            size_t colume_id = col % var_value_list.size();
+            if (var_value_list[colume_id].size())
+            {
+                size_t row_id = user_id % var_value_list[colume_id].size();
+                return var_value_list[colume_id][row_id];
+            }
+        }
+        else
+        {
+            if (range_end > range_start)
+            {
+                std::string curr_var_value_str = std::to_string(user_id);
+                std::string padding(full_range_len - curr_var_value_str.size(), '0');
+                curr_var_value_str.insert(0, padding);
+                return curr_var_value_str;
+            }
+        }
+        return "";
+    };
+
+    size_t estimate_value_size(size_t col, size_t user_id)
+    {
+        if (var_value_list.size())
+        {
+            size_t colume_id = col % var_value_list.size();
+            if (var_value_list[colume_id].size())
+            {
+                size_t row_id = user_id % var_value_list[colume_id].size();
+                return var_value_list[colume_id][row_id].size();
+            }
+        }
+        else
+        {
+            if (range_end > range_start)
+            {
+                return full_range_len;
+            }
+        }
+        return 0;
+    }
+};
+
+
+class Variable_Manager
+{
+public:
+    void insert(const Generic_Variable& gen_var)
+    {
+        if (var_name_to_id.count(gen_var.var_name) == 0)
+        {
+            size_t var_id = var_name_to_id.size();
+            var_name_to_id[gen_var.var_name] = var_id;
+            generic_variables.push_back(gen_var);
+        }
+        else
+        {
+            if (gen_var.full_range_len || gen_var.var_value_list.size())
+            {
+                std::cerr << std::endl << "------warning: variable " << gen_var.var_name << " is being redefined, ignore------" <<
+                          std::endl;
+            }
+        }
+    };
+
+    bool get_gen_var_id(const std::string& gen_var_name, size_t& id) const
+    {
+        auto it = var_name_to_id.find(gen_var_name);
+        if (it != var_name_to_id.end())
+        {
+            id = it->second;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    std::string produce_value(size_t var_id, size_t req_id, size_t user_id)
+    {
+        return generic_variables[var_id].produce_value(req_id, user_id);
+    }
+    size_t estimate_value_size(size_t var_id, size_t req_id, size_t user_id)
+    {
+        return generic_variables[var_id].estimate_value_size(req_id, user_id);
+    }
+    size_t get_number_of_generic_variables()
+    {
+        return var_name_to_id.size();
+    }
+    size_t var_range_start(size_t gen_var_id)
+    {
+        return generic_variables[gen_var_id].range_start;
+    }
+    size_t var_range_end(size_t gen_var_id)
+    {
+        return generic_variables[gen_var_id].range_end;
+    }
+    std::string get_var_name(size_t gen_var_id)
+    {
+        return generic_variables[gen_var_id].var_name;
+    }
+
+private:
+    std::vector<Generic_Variable> generic_variables;
+    std::map<std::string, size_t> var_name_to_id;
+};
+
+
 class Scenario
 {
 public:
@@ -223,17 +420,18 @@ public:
     uint32_t weight;
     std::string variable_name_in_path_and_data;
     std::string user_id_list_file;
-    std::vector<std::vector<std::string>> user_ids; // populated by post_process_json_config_schema
+    std::vector<Range_Based_Variable> range_based_variables;
+    std::vector<Two_Dimensioning_Variable> two_dim_variables;
     uint32_t interval_to_wait_before_start;
     uint64_t variable_range_start;
     uint64_t variable_range_end;
     bool variable_range_slicing;
     std::vector<Request> requests;
-    size_t number_of_variables; // populated by post_process_json_config_schema
-    std::map<std::string, size_t> variable_ids; // populated by post_process_json_config_schema
     bool run_requests_in_parallel;
     std::string user_variables_input_file;
-    std::vector<std::vector<std::string>> user_variables; // populated by post_process_json_config_schema
+    Variable_Manager variable_manager; // content populated by post_process_json_config_schema
+    // TODO:  refactor the next line
+    size_t number_of_variables_from_value_pickers;  // set by post_process_json_config_schema
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("name", &this->name);
@@ -247,6 +445,8 @@ public:
         h->add_property("interval-to-wait-before-start", &this->interval_to_wait_before_start, staticjson::Flags::Optional);
         h->add_property("run-requests-in-parallel", &this->run_requests_in_parallel, staticjson::Flags::Optional);
         h->add_property("user-variables-input-file", &this->user_variables_input_file, staticjson::Flags::Optional);
+        h->add_property("range-based-variables", &this->range_based_variables, staticjson::Flags::Optional);
+        h->add_property("two-dimensional-variables", &this->two_dim_variables, staticjson::Flags::Optional);
         h->add_property("Requests", &this->requests);
     }
     explicit Scenario():

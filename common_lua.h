@@ -20,6 +20,8 @@ extern "C"
 
     int generate_uuid(lua_State* L);
 
+    int parse_uri(lua_State* L);
+
 
     // from pb.so
     LUALIB_API int luaopen_pb_io(lua_State* L);
