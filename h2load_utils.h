@@ -198,5 +198,15 @@ void split_string(const std::string& source, String_With_Variables_In_Between& r
 
 bool variable_present(const std::string& source, size_t start_offset, size_t& var_start, size_t& var_end);
 
+void process_variables(h2load::Config& config);
+
+void split_string_and_var(const std::string& source, String_With_Variables_In_Between& result,
+                          const Variable_Manager& variable_manager);
+
+void transform_old_style_variable(h2load::Config& config);
+
+void load_generic_variables_from_csv_file(Scenario& scenario);
+
+void load_file_content(std::string& source);
 
 #endif
