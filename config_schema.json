@@ -288,28 +288,28 @@
           },
           "user-id-variable-in-path-and-data":
           {
-            "description":"Specifies the variable name in uri path and payload, which is considered as a user id, and is to be replaced with an actual value specified by next fields.",
+            "description":"Deprecated, use range-based-variables instead. specifies the variable name in uri path and payload, which is considered as a user id, and is to be replaced with an actual value specified by next fields.",
             "type":"string"
           },
           "user-id-list-file":
           {
-            "description":"path of a CSV file; Suppose this CSV file has M rows and N columns, then each row (except the first row which is column name) represents a list of identities for one user. So, this file will represent M - 1 users, with each user associated with N identities, and these N identities are for the N requests defined in this scenario respectively. It is acceptable that, there are N requests defined, while only 1 column is present in this file, then for each user, all the N requests will share the same identity from this single column. Note: if user-id-range-slicing is enabled, and the number of users (M - 1) from this file is less than the number of clients, the test cannot be done, as some client would have not even a single user. When user-id-list-file has a value, user-id-range-start/end would be ignored",
+            "description":"Deprecated, check two-dimensional-variables instead. Path of a CSV file; Suppose this CSV file has M rows and N columns, then each row (except the first row which is column name) represents a list of identities for one user. So, this file will represent M - 1 users, with each user associated with N identities, and these N identities are for the N requests defined in this scenario respectively. It is acceptable that, there are N requests defined, while only 1 column is present in this file, then for each user, all the N requests will share the same identity from this single column. Note: if user-id-range-slicing is enabled, and the number of users (M - 1) from this file is less than the number of clients, the test cannot be done, as some client would have not even a single user. When user-id-list-file has a value, user-id-range-start/end would be ignored",
             "type":"string"
           },
           "user-id-range-start":
           {
-            "description":"Specify variable user id range start; for example, user-id-range-start = 0, user-id-range-end = 1000, then the actual user id would be 0000, 0001, 0002, ... 0999",
+            "description":"Deprecated, use range-based-variables instead. specify variable user id range start; for example, user-id-range-start = 0, user-id-range-end = 1000, then the actual user id would be 0000, 0001, 0002, ... 0999",
             "type":"integer"
           },
           "user-id-range-end":
           {
-            "description":"Specify variable user id range end; actual range does this include the end, which is: [user-id-range-start, user-id-range-end)",
+            "description":"Deprecated, use range-based-variables instead. specify variable user id range end; actual range does not include the end, which is: [user-id-range-start, user-id-range-end)",
             "type":"integer"
           },
           "user-id-range-slicing":
           {
             "description": "true: Slice the user-id range, each client get a sub range; e.g.: full range 1-1000, with 10 clients, each client gets a sub range of 100 (1-100, 101-200...); if user-id-list-file is given, the full list of the user id list from that file will be sliced up, and each client will take a sub list. false: each client gets a full range",
-            "default": false,
+            "default": true,
             "type":"boolean"
           },
           "run-requests-in-parallel":
@@ -322,6 +322,57 @@
           {
             "description":"path of a UTF-8 CSV file; the first row must be the list of column names, and each colume name is interpreted as a variable name; the value of this variable is given from the second row and after, with each row representing a specific user; suppose the CSV files has M columns and N rows, then it represents N-1 users: each row represents the M variable values of a single user; each variable value can be referred to in user message definition by wrapping the variable name with ${}, where variable name is given in the corresponding column at the first row",
             "type":"string"
+          },
+          "range-based-variables":
+          {
+            "description":"Array of range based variables, each has a name, range start and range end; the name can be referred to in request uri, payload, and header definition, wrapper with ${}, like /some-path/${var_name}, where ${var_name} is to be substituted by an actual value within range start and range end",
+            "type":"array",
+            "minItems":0,
+            "items":
+            {
+              "type":"object",
+              "properties":
+              {
+                "variable-name":
+                {
+                  "description":"Specifies the variable name",
+                  "type":"string"
+                },
+                "variable-range-start":
+                {
+                  "description":"Specify variable range start; for example, variable-range-start = 0, variable-range-end = 1000, then the actual user id would be 0000, 0001, 0002, ... 0999",
+                  "type":"integer"
+                },
+                "variable-range-end":
+                {
+                  "description":"Specify variable range end; actual range does not include the end, which is: [variable-range-start, variable-range-end)",
+                  "type":"integer"
+                }
+              }
+            }
+          },
+          "two-dimensional-variables":
+          {
+            "description":"Array of csv based variables, each variable has a name, and path to a csv file; the name can be referred to in request uri, payload, and header definition, wrapper with ${}, like /some-path/${var_name}, where ${var_name} is to be substituted by an actual value from the csv file",
+            "type":"array",
+            "minItems":0,
+            "items":
+            {
+              "type":"object",
+              "properties":
+              {
+                "variable-name":
+                {
+                  "description":"Specifies the variable name",
+                  "type":"string"
+                },
+                "file-name":
+                {
+                  "description":"path of a csv file; Suppose this csv file has M rows and N columns, then each row (except the first row which is column name and is ignored) represents a list of identities for one user. So, this file will represent M - 1 users, with each user associated with N identities, and these N identities are for the N requests defined in this scenario respectively. Note: if user-id-range-slicing is enabled, and the number of users (M - 1) from this file is less than the number of clients, the test cannot be done, as some client would have not even a single user.",
+                  "type":"string"
+                }
+              }
+            }
           },
           "Requests":
           {

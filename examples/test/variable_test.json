@@ -1,0 +1,150 @@
+{
+  "schema": "http",
+  "host": "127.0.0.1",
+  "port": 8081,
+  "load-share-hosts": [],
+  "open-new-connection-based-on-authority-header": false,
+  "connection-retry": true,
+  "switch-back-after-connection-retry": false,
+  "threads": 1,
+  "clients": 1,
+  "duration": 60,
+  "total-requests": 1,
+  "warm-up-time": 0,
+  "max-concurrent-streams": 32,
+  "request-per-second": 0,
+  "request-per-second-feed-file": "",
+  "rate": 0,
+  "rate-period": 1,
+  "stream-timeout": 5000,
+  "ciphers": "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256",
+  "caCert": "",
+  "cert": "",
+  "privateKey": "",
+  "certVerificationMode": 0,
+  "max-tls-version": "TLSv1.3",
+  "no-tls-proto": "h2c",
+  "connection-active-timeout": 0,
+  "connection-inactivity-timeout": 0,
+  "interval-between-ping-frames": 0,
+  "npn-list": "h2,h2-16,h2-14,http/1.1",
+  "header-table-size": 4096,
+  "encoder-header-table-size": 4096,
+  "log-file": "",
+  "failed-request-log-file": "",
+  "statistics-interval": 1,
+  "statistics-file": "",
+  "builtin-server-listening-port": 8888,
+  "window-bits": 30,
+  "connection-window-bits": 30,
+  "socket-receive-buffer-size": 4194304,
+  "socket-send-buffer-size": 4194304,
+  "Scenarios": [
+    {
+      "name": "subs-update-delete-get",
+      "weight": 100,
+      "interval-to-wait-before-start": 0,
+      "user-id-variable-in-path-and-data": "-user-name",
+      "user-id-list-file": "id.csv",
+      "user-id-range-start": 0,
+      "user-id-range-end": 12345,
+      "user-id-range-slicing": true,
+      "run-requests-in-parallel": false,
+      "user-variables-input-file": "var.csv",
+      "range-based-variables": [
+        {
+          "variable-name": "imsi",
+          "variable-range-start": 0,
+          "variable-range-end": 10000
+        },
+        {
+          "variable-name": "imei",
+          "variable-range-start": 1,
+          "variable-range-end": 1001
+        }
+      ],
+      "two-dimensional-variables": [
+        {
+          "variable-name": "suci",
+          "file-name": "id.csv"
+        }
+      ],
+      "Requests": [
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/udm-ee/subscribe/-user-name/imsi-${imsi}/imei-${imei}/supi-${supi}/suci-${suci}"
+          },
+          "clear-old-cookies": false,
+          "method": "POST",
+          "payload": "hello: ${imsi}-${imei}, subscribe",
+          "additonalHeaders": [
+            "imsi:${imsi}",
+            "imei:${imei}",
+            "suci:${suci}",
+            "user-agent:h2"
+          ],
+          "luaScript": "",
+          "expected-status-code": 201,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [
+            {
+              "where-to-pickup-from": "Response-Header",
+              "source": "location",
+              "regexp": "^.*$",
+              "save-to-variable": "location"
+            }
+          ],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "${location}"
+          },
+          "clear-old-cookies": false,
+          "method": "PATCH",
+          "payload": "hello: ${imsi}-${imei}, location header: ${location}",
+          "additonalHeaders": [
+            "imsi:${imsi}",
+            "imei:${imei}",
+            "suci:${suci}"
+          ],
+          "luaScript": "",
+          "expected-status-code": 204,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "sameWithLastOne",
+            "input": ""
+          },
+          "clear-old-cookies": false,
+          "method": "DELETE",
+          "payload": "",
+          "additonalHeaders": [
+            "imsi:${imsi}",
+            "imei:${imei}",
+            "suci:${suci}"
+          ],
+          "luaScript": "",
+          "expected-status-code": 204,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        }
+      ]
+    }
+  ]
+}

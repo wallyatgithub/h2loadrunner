@@ -55,14 +55,14 @@ class base_client
 {
 public:
     base_client(uint32_t id, base_worker* wrker, size_t req_todo, Config* conf,
-                     base_client* parent = nullptr, const std::string& dest_schema = "",
-                     const std::string& dest_authority = "");
+                base_client* parent = nullptr, const std::string& dest_schema = "",
+                const std::string& dest_authority = "");
     virtual ~base_client() {}
     virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length) = 0;
     virtual void signal_write() = 0;
     virtual bool any_pending_data_to_write() = 0;
     virtual std::shared_ptr<base_client> create_dest_client(const std::string& dst_sch,
-                                                                 const std::string& dest_authority) = 0;
+                                                            const std::string& dest_authority) = 0;
 
 
     virtual void start_conn_active_watcher() = 0;
@@ -162,7 +162,7 @@ public:
     void parse_and_save_cookies(Request_Data& finished_request);
     void populate_request_from_config_template(Request_Data& new_request,
                                                size_t scenario_index,
-                                               size_t index_in_config_template);
+                                               size_t request_index);
 
     void terminate_sub_clients();
     bool is_test_finished();
@@ -172,7 +172,7 @@ public:
     size_t get_index_of_next_scenario_to_run();
     void update_scenario_based_stats(size_t scenario_index, size_t request_index, bool success, bool status_success);
     bool rps_mode();
-    void slice_user_id();
+    void slice_var_ids();
     void init_lua_states();
     void init_connection_targert();
     void log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req, int32_t stream_id);
@@ -191,12 +191,13 @@ public:
     void queue_stream_for_user_callback(int32_t stream_id);
     void process_stream_user_callback(int32_t stream_id);
     void on_header_frame_begin(int32_t stream_id, uint8_t flags);
-    void pass_response_to_lua(int32_t stream_id, lua_State *L);
+    void pass_response_to_lua(int32_t stream_id, lua_State* L);
     uint64_t get_client_unique_id();
     void set_prefered_authority(const std::string& authority);
     void run_post_response_action(Request_Data& finished_request);
     void run_pre_request_action(Request_Data& new_request);
-    std::string assemble_string(const String_With_Variables_In_Between& source, size_t scenario_index, size_t user_id, Scenario_Data_Per_User& scenario_data);
+    std::string assemble_string(const String_With_Variables_In_Between& source, size_t scenario_index, size_t req_index,
+                                Scenario_Data_Per_User& scenario_data_per_user);
     bool parse_uri_and_poupate_request(const std::string& uri, Request_Data& new_request);
     void sanitize_request(Request_Data& new_request);
 
@@ -248,7 +249,7 @@ public:
     std::deque<std::string> used_addresses;
     Unique_Id this_client_id;
     std::function<void()> write_clear_callback;
-    std::vector<Scenario_Data_Per_Client> runtime_scenario_data;
+    std::vector<Scenario_Data_Per_Client> scenario_data_per_connection;
     time_point_in_seconds_double rps_duration_started;
     SSL* ssl;
     std::vector<std::function<void(bool, h2load::base_client*)>> connected_callbacks;

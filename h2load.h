@@ -60,9 +60,29 @@ struct Scenario_Data_Per_User
 {
     std::vector<std::string> variable_index_to_value;
     std::map<std::string, Cookie, std::greater<std::string>> saved_cookies;
-    Scenario_Data_Per_User(size_t number_of_var = 1):variable_index_to_value(number_of_var, "")
+    std::vector<uint64_t> user_ids;
+
+    Scenario_Data_Per_User(const std::vector<uint64_t>& u_ids): variable_index_to_value(u_ids.size(), ""), user_ids(u_ids)
     {
     }
+    friend std::ostream& operator<<(std::ostream& o, const Scenario_Data_Per_User& data)
+    {
+        for (size_t id = 0; id < data.user_ids.size(); id++)
+        {
+            o << "variable id: " << id
+              << ", variable cursor:" << data.user_ids[id]
+              << ", variable string value:" << data.variable_index_to_value[id]
+              << std::endl;
+        }
+        for (auto& c : data.saved_cookies)
+        {
+            o << "cookie key: " << c.first
+              << "cookie value: " << c.second
+              << std::endl;
+        }
+        return o;
+    }
+
 };
 
 struct Request_Data
@@ -71,7 +91,6 @@ struct Request_Data
     std::string* authority;
     std::string* req_payload;
     std::string* path;
-    uint64_t user_id;
     std::string* method;
     size_t req_payload_cursor;
     std::map<std::string, std::string, ci_less>* req_headers_from_config;
@@ -87,7 +106,7 @@ struct Request_Data
     std::vector<std::string> string_collection;
     std::function<void(int32_t, h2load::base_client*)> request_sent_callback;
     uint32_t stream_timeout_in_ms;
-    std::shared_ptr<Scenario_Data_Per_User> scenario_data;
+    std::shared_ptr<Scenario_Data_Per_User> scenario_data_per_user;
 
     void init()
     {
@@ -97,7 +116,6 @@ struct Request_Data
         path = &emptyString;
         method = &emptyString;
         stream_timeout_in_ms = 0;
-        user_id = 0;
         status_code = 0;
         expected_status_code = 0;
         delay_before_executing_next = 0;
@@ -106,21 +124,22 @@ struct Request_Data
         req_payload_cursor = 0;
         string_collection.reserve(12); // (path, authority, method, schema, payload, xx) * 2
     }
-    explicit Request_Data(size_t number_of_vars = 0)
+    explicit Request_Data(const std::vector<uint64_t>& u_ids)
     {
         init();
-        scenario_data = std::make_shared<Scenario_Data_Per_User>(number_of_vars);
+        scenario_data_per_user = std::make_shared<Scenario_Data_Per_User>(u_ids);
     }
+
     explicit Request_Data(std::shared_ptr<Scenario_Data_Per_User>& scenario_data_from_sibling)
     {
         init();
-        scenario_data = scenario_data_from_sibling;
+        scenario_data_per_user = scenario_data_from_sibling;
     }
 
     explicit Request_Data(std::shared_ptr<Scenario_Data_Per_User>&& scenario_data_from_sibling)
     {
         init();
-        scenario_data = std::move(scenario_data_from_sibling);
+        scenario_data_per_user = std::move(scenario_data_from_sibling);
     }
 
     friend std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
@@ -132,8 +151,10 @@ struct Request_Data
           << "authority:" << *request_data.authority << std::endl
           << "req_payload:" << *request_data.req_payload << std::endl
           << "path:" << *request_data.path << std::endl
-          << "user_id:" << request_data.user_id << std::endl
           << "method:" << *request_data.method << std::endl
+          << "scenario data:" << std::endl
+          << *request_data.scenario_data_per_user
+          << std::endl
           << "expected_status_code:" << request_data.expected_status_code << std::endl
           << "delay_before_executing_next:" << request_data.delay_before_executing_next << std::endl;
 
@@ -150,12 +171,12 @@ struct Request_Data
         o << "resp_payload:" << request_data.resp_payload << std::endl;
         for (auto& vit : request_data.resp_headers)
         {
-            for (auto& it: vit)
+            for (auto& it : vit)
             {
                 o << "response header name: " << it.first << ", header value: " << it.second << std::endl;
             }
         }
-        for (auto& it : request_data.scenario_data->saved_cookies)
+        for (auto& it : request_data.scenario_data_per_user->saved_cookies)
         {
             o << "cookie name: " << it.first << ", cookie content: " << it.second << std::endl;
         }
@@ -176,15 +197,39 @@ struct Request_Data
 
 struct Scenario_Data_Per_Client
 {
-    uint64_t req_variable_value_start;
-    uint64_t req_variable_value_end;
-    uint64_t curr_req_variable_value;
-    explicit Scenario_Data_Per_Client ():
-        req_variable_value_start(0),
-        req_variable_value_end(0),
-        curr_req_variable_value(0)
+    uint64_t req_variable_value_start = 0;
+    uint64_t req_variable_value_end = 0;
+    uint64_t curr_req_variable_value = 0;
+    std::vector<uint64_t> req_variable_values_start;
+    std::vector<uint64_t> req_variable_values_end;
+    std::vector<uint64_t> curr_req_variable_values;
+
+    explicit Scenario_Data_Per_Client(const std::vector<uint64_t>& range_start, const std::vector<uint64_t>& range_end,
+                                      const std::vector<uint64_t>& current_var):
+        req_variable_values_start(range_start),
+        req_variable_values_end(range_end),
+        curr_req_variable_values(current_var)
     {
     };
+    void inc_var()
+    {
+        for (size_t i = 0; i < req_variable_values_start.size(); i++)
+        {
+            if (req_variable_values_end[i] <= req_variable_values_start[i])
+            {
+                continue;
+            }
+            curr_req_variable_values[i]++;
+            if (curr_req_variable_values[i] >= req_variable_values_end[i])
+            {
+                curr_req_variable_values[i] = req_variable_values_start[i];
+            }
+        }
+    }
+    const std::vector<uint64_t>& get_curr_vars() const
+    {
+        return curr_req_variable_values;
+    }
 };
 
 constexpr auto BACKOFF_WRITE_BUFFER_THRES = 16_k;

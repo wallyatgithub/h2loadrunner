@@ -589,8 +589,8 @@ void update_orig_dst_and_proto(std::map<std::string, std::string, ci_less>& head
 
 // TODO: this is called every request, should be optimized
 void update_proto(std::map<std::string, std::string, ci_less>& headers, std::string& payload,
-                       std::string& orig_dst,
-                       std::string& proto)
+                  std::string& orig_dst,
+                  std::string& proto)
 {
     if (headers.count(h2load::x_proto_to_use))
     {
@@ -878,7 +878,7 @@ int _send_http_request(lua_State* L, Request_Preprocessor request_preprocessor,
                 request_sent_callback(-1, nullptr);
                 return;
             }
-            h2load::Request_Data request_to_send;
+            h2load::Request_Data request_to_send(0);
             request_to_send.request_sent_callback = request_sent_callback;
             request_to_send.string_collection.emplace_back(payload);
             request_to_send.req_payload = &(request_to_send.string_collection.back());

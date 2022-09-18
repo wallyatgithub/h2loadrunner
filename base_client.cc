@@ -60,7 +60,7 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
 {
     init_req_left();
 
-    slice_user_id();
+    slice_var_ids();
 
     init_lua_states();
 
@@ -443,20 +443,20 @@ void base_client::init_connection_targert()
             buffer.append(host).append("]");
             host = buffer;
         }
-/*
-        if (config->port != config->default_port)
-        {
-            authority = host + ":" + util::utos(config->port);
-        }
-        else
-        {
-            authority = host;
-        }
-*/
+        /*
+                if (config->port != config->default_port)
+                {
+                    authority = host + ":" + util::utos(config->port);
+                }
+                else
+                {
+                    authority = host;
+                }
+        */
         authority = host + ":" + util::utos(config->port);
     }
 
-    if (is_controller_client()&&
+    if (is_controller_client() &&
         config->json_config_schema.load_share_hosts.size())
     {
         auto init_hosts = [this]()
@@ -875,7 +875,7 @@ void base_client::run_post_response_action(Request_Data& finished_request)
     rapidjson::Document resp_json_payload;
     bool req_json_decoded = false;
     bool resp_json_decoded = false;
-    for (auto& value_picker: actual_regex_value_pickers)
+    for (auto& value_picker : actual_regex_value_pickers)
     {
         std::string result;
         std::string source;
@@ -883,7 +883,7 @@ void base_client::run_post_response_action(Request_Data& finished_request)
         {
             case SOURCE_TYPE_RES_HEADER:
             {
-                for (auto& header_map: finished_request.resp_headers)
+                for (auto& header_map : finished_request.resp_headers)
                 {
                     auto iter = header_map.find(value_picker.source);
                     if (iter != header_map.end())
@@ -961,22 +961,24 @@ void base_client::run_post_response_action(Request_Data& finished_request)
         {
             result.clear();
         }
-        finished_request.scenario_data->variable_index_to_value[value_picker.unique_id] = std::move(result);
+        finished_request.scenario_data_per_user->variable_index_to_value[value_picker.unique_id] = std::move(result);
         if (config->verbose)
         {
-            std::cout<<"where_to_pick_up_from: "<<value_picker.where_to_pick_up_from<<std::endl;
-            std::cout<<"target:"<<value_picker.source<<std::endl;
-            std::cout<<"var id:"<<value_picker.unique_id<<std::endl;
-            std::cout<<"target value located: "<<source<<std::endl;
-            std::cout<<"target value match result: "<<finished_request.scenario_data->variable_index_to_value[value_picker.unique_id]<<std::endl;
+            std::cout << "where_to_pick_up_from: " << value_picker.where_to_pick_up_from << std::endl;
+            std::cout << "target:" << value_picker.source << std::endl;
+            std::cout << "var id:" << value_picker.unique_id << std::endl;
+            std::cout << "target value located: " << source << std::endl;
+            std::cout << "target value match result: " <<
+                      finished_request.scenario_data_per_user->variable_index_to_value[value_picker.unique_id] << std::endl;
         }
     }
     if (config->verbose)
     {
-        std::cout<<"variable_index_to_value size: "<<finished_request.scenario_data->variable_index_to_value.size()<<std::endl;
-        for (auto i = 0; i < finished_request.scenario_data->variable_index_to_value.size(); i++)
+        std::cout << "variable_index_to_value size: " << finished_request.scenario_data_per_user->variable_index_to_value.size()
+                  << std::endl;
+        for (auto i = 0; i < finished_request.scenario_data_per_user->variable_index_to_value.size(); i++)
         {
-            std::cout<<"var: "<<finished_request.scenario_data->variable_index_to_value[i]<<std::endl;
+            std::cout << "var: " << finished_request.scenario_data_per_user->variable_index_to_value[i] << std::endl;
         }
     }
 }
@@ -1031,7 +1033,7 @@ void base_client::parse_and_save_cookies(Request_Data& finished_request)
             {
                 if (Cookie::is_cookie_acceptable(cookie))
                 {
-                    finished_request.scenario_data->saved_cookies[cookie.cookie_key] = std::move(cookie);
+                    finished_request.scenario_data_per_user->saved_cookies[cookie.cookie_key] = std::move(cookie);
                 }
             }
         }
@@ -1041,24 +1043,25 @@ void base_client::parse_and_save_cookies(Request_Data& finished_request)
 
 void base_client::populate_request_from_config_template(Request_Data& new_request,
                                                         size_t scenario_index,
-                                                        size_t index_in_config_template)
+                                                        size_t request_index)
 {
-    auto& request_template = config->json_config_schema.scenarios[scenario_index].requests[index_in_config_template];
+    auto& request_template = config->json_config_schema.scenarios[scenario_index].requests[request_index];
 
     new_request.method = &request_template.method;
     new_request.schema = &request_template.schema;
     new_request.authority = &request_template.authority;
-    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_payload_with_vars, scenario_index, new_request.user_id, *new_request.scenario_data));
+    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_payload_with_vars, scenario_index,
+                                                               request_index, *new_request.scenario_data_per_user));
     new_request.req_payload = &(new_request.string_collection.back());
 
     new_request.req_headers_from_config = &request_template.headers_in_map;
     new_request.expected_status_code = request_template.expected_status_code;
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
-    for (auto& h: request_template.headers_with_variable)
+    for (auto& h : request_template.headers_with_variable)
     {
-        auto name = assemble_string(h.first, scenario_index, new_request.user_id, *new_request.scenario_data);
-        auto value = assemble_string(h.second, scenario_index, new_request.user_id, *new_request.scenario_data);
-        new_request.req_headers_of_individual[name] = value;
+        auto name = assemble_string(h.first, scenario_index, request_index, *new_request.scenario_data_per_user);
+        auto value = assemble_string(h.second, scenario_index, request_index, *new_request.scenario_data_per_user);
+        new_request.req_headers_of_individual.emplace(std::make_pair(name, value));
     }
 }
 
@@ -1128,61 +1131,80 @@ void base_client::init_lua_states()
     }
 }
 
-
-void base_client::slice_user_id()
+void base_client::slice_var_ids()
 {
     if (config->nclients > 1 && (is_controller_client()))
     {
         for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
         {
             auto& scenario = config->json_config_schema.scenarios[index];
-            Scenario_Data_Per_Client scenario_data;
-            if (!scenario.variable_range_slicing)
+            std::vector<uint64_t> range_start, curr_vals, range_end;
+            size_t total_vars = scenario.variable_manager.get_number_of_generic_variables();
+            for (size_t var_id = 0; var_id < total_vars; var_id++)
             {
-                std::random_device                  rand_dev;
-                std::mt19937                        generator(rand_dev());
-                std::uniform_int_distribution<uint64_t>  distr(scenario.variable_range_start,
-                                                               scenario.variable_range_end);
-                scenario_data.curr_req_variable_value = distr(generator);
-                scenario_data.req_variable_value_start = scenario.variable_range_start;
-                scenario_data.req_variable_value_end = scenario.variable_range_end;
-            }
-            else
-            {
-                auto tokens_per_client = ((scenario.variable_range_end - scenario.variable_range_start) / (config->nclients));
-                if (tokens_per_client == 0)
+                if (var_id < scenario.number_of_variables_from_value_pickers)
                 {
-                    if (worker->id == 0)
+                    range_start.push_back(0);
+                    range_end.push_back(0);
+                    curr_vals.push_back(0);
+                    continue;
+                }
+                auto variable_range_start = scenario.variable_manager.var_range_start(var_id);
+                auto variable_range_end = scenario.variable_manager.var_range_end(var_id);
+                if (!scenario.variable_range_slicing)
+                {
+                    std::random_device                  rand_dev;
+                    std::mt19937                        generator(rand_dev());
+                    std::uniform_int_distribution<uint64_t>  distr(variable_range_start,
+                                                                   variable_range_end);
+                    range_start.push_back(variable_range_start);
+                    range_end.push_back(variable_range_end);
+                    curr_vals.push_back(distr(generator));
+                }
+                else
+                {
+                    auto tokens_per_client = ((variable_range_end - variable_range_start) / (config->nclients));
+                    if (tokens_per_client == 0)
                     {
-                        std::cerr << "Error: number of user IDs is smaller than number of clients, cannot continue" << std::endl;
-                        exit(EXIT_FAILURE);
+                        if (worker->id == 0)
+                        {
+                            std::cerr <<
+                                      "Error: number of variable values is smaller than number of clients, cannot continue; Please correct this variable definition: "
+                                      << std::endl << scenario.variable_manager.get_var_name(var_id)
+                                      << ", range start:" << variable_range_start
+                                      << ", range end:" << variable_range_end
+                                      << std::endl;
+                            exit(EXIT_FAILURE);
+                        }
+                        else
+                        {
+                            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                            return;
+                        }
                     }
-                    else
+                    auto tokens_left = ((variable_range_end - variable_range_start) % (config->nclients));
+                    range_start.push_back(variable_range_start +
+                                          (this_client_id.my_id * tokens_per_client) +
+                                          std::min(this_client_id.my_id, tokens_left));
+                    range_end.push_back(variable_range_start +
+                                        tokens_per_client +
+                                        (this_client_id.my_id >= tokens_left ? 0 : 1));
+
+                    curr_vals.push_back(range_start.back());
+
+                    if (config->verbose)
                     {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                        return;
+                        std::cerr << ", client Id:" << this_client_id.my_id
+                                  << ", scenario index: " << index
+                                  << ", variable name: " << scenario.variable_manager.get_var_name(var_id)
+                                  << ", variable id start:" << variable_range_start
+                                  << ", variable id end:" << variable_range_end
+                                  << std::endl;
                     }
                 }
-                auto tokens_left = ((scenario.variable_range_end - scenario.variable_range_start) % (config->nclients));
-                scenario_data.req_variable_value_start = scenario.variable_range_start +
-                                                         (this_client_id.my_id * tokens_per_client) +
-                                                         std::min(this_client_id.my_id, tokens_left);
-                scenario_data.req_variable_value_end = scenario_data.req_variable_value_start +
-                                                       tokens_per_client +
-                                                       (this_client_id.my_id >= tokens_left ? 0 : 1);
-
-                scenario_data.curr_req_variable_value = scenario_data.req_variable_value_start;
-
-                if (config->verbose)
-                {
-                    std::cerr << ", client Id:" << this_client_id.my_id
-                              << ", scenario index: " << index
-                              << ", variable id start:" << scenario_data.req_variable_value_start
-                              << ", variable id end:" << scenario_data.req_variable_value_end
-                              << std::endl;
-                }
             }
-            runtime_scenario_data.push_back(scenario_data);
+            Scenario_Data_Per_Client scenario_data_per_conn(range_start, range_end, curr_vals);
+            scenario_data_per_connection.push_back(scenario_data_per_conn);
         }
     }
     else
@@ -1190,15 +1212,20 @@ void base_client::slice_user_id()
         for (size_t index = 0; index < config->json_config_schema.scenarios.size(); index++)
         {
             auto& scenario = config->json_config_schema.scenarios[index];
-            Scenario_Data_Per_Client  scenario_data;
-            scenario_data.curr_req_variable_value = scenario.variable_range_start;
-            scenario_data.req_variable_value_start = scenario.variable_range_start;
-            scenario_data.req_variable_value_end = scenario.variable_range_end;
-            runtime_scenario_data.push_back(scenario_data);
+            std::vector<uint64_t> range_start, curr_vals, range_end;
+            for (size_t var_id = 0; var_id < scenario.variable_manager.get_number_of_generic_variables(); var_id++)
+            {
+                auto variable_range_start = scenario.variable_manager.var_range_start(var_id);
+                auto variable_range_end = scenario.variable_manager.var_range_end(var_id);
+                range_start.push_back(variable_range_start);
+                range_end.push_back(variable_range_end);
+                curr_vals.push_back(variable_range_start);
+            }
+            Scenario_Data_Per_Client scenario_data_per_conn(range_start, range_end, curr_vals);
+            scenario_data_per_connection.push_back(scenario_data_per_conn);
         }
     }
 }
-
 
 bool base_client::rps_mode()
 {
@@ -1264,7 +1291,7 @@ size_t base_client::get_index_of_next_scenario_to_run()
         }
         if (schedule_map.empty())
         {
-            std::cerr<<"all scenarios have weight of 0, cannot continue"<<std::endl;
+            std::cerr << "all scenarios have weight of 0, cannot continue" << std::endl;
             exit(1);
         }
         return schedule_map;
@@ -1303,7 +1330,7 @@ void base_client::submit_ping()
 
 void base_client::produce_request_cookie_header(Request_Data& req_to_be_sent)
 {
-    if (req_to_be_sent.scenario_data->saved_cookies.empty())
+    if (req_to_be_sent.scenario_data_per_user->saved_cookies.empty())
     {
         return;
     }
@@ -1319,7 +1346,7 @@ void base_client::produce_request_cookie_header(Request_Data& req_to_be_sent)
     }
     const std::string cookie_delimeter = "; ";
     std::string cookies_to_append;
-    for (auto& cookie : req_to_be_sent.scenario_data->saved_cookies)
+    for (auto& cookie : req_to_be_sent.scenario_data_per_user->saved_cookies)
     {
         if (cookies_from_config.count(cookie.first))
         {
@@ -1439,8 +1466,8 @@ bool base_client::update_request_with_lua(lua_State* L, const Request_Data& fini
                         if ((LUA_TSTRING != lua_type(L, -2)) || (LUA_TSTRING != lua_type(L, -1)))
                         {
                             std::cerr << "invalid http headers returned from lua function make_request" << std::endl;
-                            std::cerr << "key type" << lua_type(L, -2)<<std::endl;
-                            std::cerr << "value type" << lua_type(L, -1)<<std::endl;
+                            std::cerr << "key type" << lua_type(L, -2) << std::endl;
+                            std::cerr << "value type" << lua_type(L, -1) << std::endl;
                         }
                         const char* k = lua_tolstring(L, -2, &len);
                         std::string key(k, len);
@@ -1707,9 +1734,10 @@ void base_client::on_stream_close(int32_t stream_id, bool success, bool final)
 
 void base_client::on_header_frame_begin(int32_t stream_id, uint8_t flags)
 {
-    if (requests_awaiting_response.count(stream_id))
+    auto it = requests_awaiting_response.find(stream_id);
+    if (it != requests_awaiting_response.end())
     {
-        Request_Data& request_data = requests_awaiting_response[stream_id];
+        Request_Data& request_data = it->second;
         std::map<std::string, std::string, ci_less> dummy;
         request_data.resp_headers.push_back(dummy);
         if (request_data.resp_headers.size() > 1 && (flags & NGHTTP2_FLAG_END_STREAM)) // TODO: add payload check?
@@ -2075,55 +2103,26 @@ Request_Data base_client::prepare_first_request()
 
     auto& scenario = config->json_config_schema.scenarios[scenario_index];
 
-    static thread_local Request_Data dummy_data;
+    Request_Data new_request(controller->scenario_data_per_connection[scenario_index].get_curr_vars());
 
-    Request_Data new_request(scenario.variable_ids.size());
+    controller->scenario_data_per_connection[scenario_index].inc_var();
+
     new_request.scenario_index = scenario_index;
 
-    size_t curr_req_index = 0;
-    new_request.curr_request_idx = curr_req_index;
+    new_request.curr_request_idx = 0;
 
-    new_request.user_id = controller->runtime_scenario_data[scenario_index].curr_req_variable_value;
+    populate_request_from_config_template(new_request, scenario_index, new_request.curr_request_idx);
 
-    if (scenario.variable_name_in_path_and_data.size())
-    {
-        new_request.scenario_data->variable_index_to_value[0] = get_current_user_id_string(config, new_request.scenario_index, new_request.curr_request_idx, new_request.user_id);
-    }
-/*
-    if ((new_request.user_id >= scenario.variable_range_start) &&
-        (scenario.user_variables.size() > (new_request.user_id - scenario.variable_range_start)))
-    {
-        auto& user_variables_values_of_this_user = scenario.user_variables[new_request.user_id - scenario.variable_range_start];
-        auto curr_number_of_vars = new_request.scenario_data->variable_index_to_value.size();
-        for (size_t index = 0; index < user_variables_values_of_this_user.size(); index++)
-        {
-            new_request.scenario_data->variable_index_to_value[curr_number_of_vars + index] = user_variables_values_of_this_user[index];
-        }
-    }
-*/
-    if (controller->runtime_scenario_data[scenario_index].req_variable_value_end)
-    {
-        controller->runtime_scenario_data[scenario_index].curr_req_variable_value++;
-        if (controller->runtime_scenario_data[scenario_index].curr_req_variable_value >=
-            controller->runtime_scenario_data[scenario_index].req_variable_value_end)
-        {
-            //std::cerr << "user id (variable_value) wrapped, start over from range start" << ", scenario index: " << scenario_index
-            //          << std::endl;
-            controller->runtime_scenario_data[scenario_index].curr_req_variable_value =
-                controller->runtime_scenario_data[scenario_index].req_variable_value_start;
-        }
-    }
-
-    populate_request_from_config_template(new_request, scenario_index, curr_req_index);
-
-    auto& request_template = scenario.requests[curr_req_index];
-    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, scenario_index, new_request.user_id, *new_request.scenario_data));
+    auto& request_template = scenario.requests[new_request.curr_request_idx];
+    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, scenario_index,
+                                                               new_request.curr_request_idx, *new_request.scenario_data_per_user));
 
     new_request.path = &(new_request.string_collection.back());
 
-    if (scenario.requests[curr_req_index].make_request_function_present)
+    if (scenario.requests[new_request.curr_request_idx].make_request_function_present)
     {
-        if (!update_request_with_lua(lua_states[scenario_index][curr_req_index], dummy_data, new_request))
+        static thread_local Request_Data dummy_data(0);
+        if (!update_request_with_lua(lua_states[scenario_index][new_request.curr_request_idx], dummy_data, new_request))
         {
             std::cerr << "lua script failure for first request, cannot continue, exit" << std::endl;
             exit(EXIT_FAILURE);
@@ -2134,7 +2133,7 @@ Request_Data base_client::prepare_first_request()
 
     if (scenario.run_requests_in_parallel)
     {
-        for (auto req_idx = curr_req_index; req_idx < scenario.requests.size() - 1; req_idx++)
+        for (auto req_idx = new_request.curr_request_idx; req_idx < scenario.requests.size() - 1; req_idx++)
         {
             prepare_next_request(new_request);
         }
@@ -2162,24 +2161,24 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
     std::unique_ptr<Request_Data> new_request;
     if (scenario.run_requests_in_parallel)
     {
-        new_request = std::make_unique<Request_Data>(finished_request.scenario_data);
+        new_request = std::make_unique<Request_Data>(finished_request.scenario_data_per_user);
     }
     else
     {
-        new_request = std::make_unique<Request_Data>(std::move(finished_request.scenario_data));
+        new_request = std::make_unique<Request_Data>(std::move(finished_request.scenario_data_per_user));
     }
 
     new_request->scenario_index = scenario_index;
     new_request->curr_request_idx = curr_req_index;
-    new_request->user_id = finished_request.user_id;
 
-    populate_request_from_config_template(*new_request, scenario_index, curr_req_index);
+    populate_request_from_config_template(*new_request, scenario_index, new_request->curr_request_idx);
 
     switch (request_template.uri.uri_action)
     {
         case INPUT_URI:
         {
-            new_request->string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, scenario_index, new_request->user_id, *new_request->scenario_data));
+            new_request->string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, scenario_index,
+                                                                        new_request->curr_request_idx, *new_request->scenario_data_per_user));
             new_request->path = &(new_request->string_collection.back());
 
             break;
@@ -2237,7 +2236,8 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
         }
         case INPUT_WITH_VARIABLE:
         {
-            auto uri = assemble_string(request_template.tokenized_path_with_vars, scenario_index, new_request->user_id, *new_request->scenario_data);
+            auto uri = assemble_string(request_template.tokenized_path_with_vars, scenario_index, new_request->curr_request_idx,
+                                       *new_request->scenario_data_per_user);
             if (!parse_uri_and_poupate_request(uri, *new_request))
             {
                 std::cerr << "abort whole scenario sequence, as uri is invalid:" << uri << std::endl;
@@ -2597,12 +2597,13 @@ void base_client::queue_stream_for_user_callback(int32_t stream_id)
 
 void base_client::process_stream_user_callback(int32_t stream_id)
 {
-    if (requests_awaiting_response.count(stream_id) && stream_user_callback_queue.count(stream_id))
+    auto it = requests_awaiting_response.find(stream_id);
+    if (it !=  requests_awaiting_response.end() && stream_user_callback_queue.count(stream_id))
     {
-        stream_user_callback_queue[stream_id].resp_headers = std::move(requests_awaiting_response[stream_id].resp_headers);
-        stream_user_callback_queue[stream_id].resp_payload = std::move(requests_awaiting_response[stream_id].resp_payload);
+        stream_user_callback_queue[stream_id].resp_headers = std::move(it->second.resp_headers);
+        stream_user_callback_queue[stream_id].resp_payload = std::move(it->second.resp_payload);
         stream_user_callback_queue[stream_id].response_available = true;
-        stream_user_callback_queue[stream_id].resp_trailer_present = requests_awaiting_response[stream_id].resp_trailer_present;
+        stream_user_callback_queue[stream_id].resp_trailer_present = it->second.resp_trailer_present;
         if (stream_user_callback_queue[stream_id].response_callback)
         {
             stream_user_callback_queue[stream_id].response_callback();
@@ -2693,53 +2694,72 @@ void base_client::pass_response_to_lua(int32_t stream_id, lua_State* L)
     }
 }
 
-std::string base_client::assemble_string(const String_With_Variables_In_Between& source, size_t scenario_index, size_t user_id, Scenario_Data_Per_User& scenario_data)
+std::string base_client::assemble_string(const String_With_Variables_In_Between& source, size_t scenario_index,
+                                         size_t req_index, Scenario_Data_Per_User& scenario_data_per_user)
 {
     std::string result;
     Scenario& scenario_template = config->json_config_schema.scenarios[scenario_index];
-    static std::vector<std::string> dummy_user_vars;
-    auto& user_vars = user_id  < scenario_template.user_variables.size() ? scenario_template.user_variables[user_id] : dummy_user_vars;
-    auto string_size = std::accumulate(source.string_segments.begin(), source.string_segments.end(), 0, [](size_t count, const std::string& s){ return count + s.size();});
-    size_t range_left = (scenario_template.variable_name_in_path_and_data.size() ? 1 : 0);
-    size_t range_right = range_left + user_vars.size();
-    if (config->verbose)
+    auto string_size = std::accumulate(source.string_segments.begin(), source.string_segments.end(), 0, [](size_t count,
+                                                                                                           const std::string & s)
     {
-        std::cout<<source<<std::endl;
-        std::cout<<"variable_index_to_value size: "<<scenario_data.variable_index_to_value.size()<<std::endl;
-        for (auto i = 0; i < scenario_data.variable_index_to_value.size(); i++)
-        {
-            std::cout<<"var: "<<scenario_data.variable_index_to_value[i]<<std::endl;
-        }
-    }
-    for (auto& var_id: source.variable_ids_in_between)
+        return count + s.size();
+    });
+    for (auto& var_id : source.variable_ids_in_between)
     {
-        if (range_left <= var_id && var_id < range_right)
+        if (var_id < scenario_template.number_of_variables_from_value_pickers)
         {
-            string_size += user_vars[var_id - range_left].size();
+            string_size += scenario_data_per_user.variable_index_to_value[var_id].size();
         }
         else
         {
-            string_size += scenario_data.variable_index_to_value[var_id].size();
+            string_size += scenario_template.variable_manager.estimate_value_size(var_id, req_index,
+                                                                                  scenario_data_per_user.user_ids[var_id]);
         }
     }
+
+    if (config->verbose)
+    {
+        std::cout << source << std::endl;
+        std::cout << "variable_index_to_value size: " << scenario_data_per_user.variable_index_to_value.size() << std::endl;
+        for (size_t index = 0; index < source.variable_ids_in_between.size(); index++)
+        {
+            std::cout << "string: " << source.string_segments[index] << std::endl;
+            auto var_id = source.variable_ids_in_between[index];
+            if (var_id < scenario_template.number_of_variables_from_value_pickers)
+            {
+                std::cout << "var: " << scenario_template.variable_manager.get_var_name(var_id)
+                          << ", value: " << scenario_data_per_user.variable_index_to_value[var_id]
+                          << std::endl;
+            }
+            else
+            {
+                std::cout << "var: " << scenario_template.variable_manager.get_var_name(var_id)
+                          << ", value: "
+                          << scenario_template.variable_manager.produce_value(var_id, req_index, scenario_data_per_user.user_ids[var_id])
+                          << std::endl;
+            }
+        }
+
+    }
+
     result.reserve(string_size);
-    size_t index = 0;
-    for (index = 0; index < source.variable_ids_in_between.size(); index++)
+    for (size_t index = 0; index < source.variable_ids_in_between.size(); index++)
     {
         result.append(source.string_segments[index]);
         auto var_id = source.variable_ids_in_between[index];
-        if (range_left <= var_id && var_id < range_right)
+        if (var_id < scenario_template.number_of_variables_from_value_pickers)
         {
-            result.append(user_vars[var_id - range_left]);
+            result.append(scenario_data_per_user.variable_index_to_value[var_id]);
         }
         else
         {
-            result.append(scenario_data.variable_index_to_value[var_id]);
+            result.append(scenario_template.variable_manager.produce_value(var_id, req_index,
+                                                                           scenario_data_per_user.user_ids[var_id]));
         }
-    }
-    result.append(source.string_segments[index]);
-    return result;
 
+    }
+    result.append(source.string_segments.back());
+    return result;
 }
 
 

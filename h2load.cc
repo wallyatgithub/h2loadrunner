@@ -772,15 +772,15 @@ int main(int argc, char** argv)
     if (script_files.size())
     {
         std::vector<std::string> lua_scripts;
-        for (auto& script_file: script_files)
+        for (auto& script_file : script_files)
         {
             std::ifstream buffer(script_file);
             if (!buffer.is_open())
             {
-                std::cerr << "file open error: " << script_file<<std::endl;
+                std::cerr << "file open error: " << script_file << std::endl;
             }
             std::string lua_script((std::istreambuf_iterator<char>(buffer)),
-                                    std::istreambuf_iterator<char>());
+                                   std::istreambuf_iterator<char>());
             lua_scripts.push_back(lua_script);
         }
         load_and_run_lua_script(lua_scripts, config);
@@ -1019,7 +1019,7 @@ int main(int argc, char** argv)
     {
         shared_nva.emplace_back(authority_header, config.host);
     }
-    shared_nva.emplace_back(method_header, config.data_length > 0 ? "POST": "GET");
+    shared_nva.emplace_back(method_header, config.data_length > 0 ? "POST" : "GET");
     shared_nva.emplace_back("user-agent", user_agent);
 
     // list header fields that can be overridden.
@@ -1132,8 +1132,6 @@ int main(int argc, char** argv)
     }
 
     insert_customized_headers_to_Json_scenarios(config);
-
-    //normalize_request_templates(&config);
 
     if (config.verbose)
     {
@@ -1252,7 +1250,7 @@ int main(int argc, char** argv)
         {
             fut.get();
         }
-        catch(const std::exception& e)
+        catch (const std::exception& e)
         {
             std::cerr << " caught exception " << e.what()
                       << ", future.valid() == " << fut.valid() << "\n";

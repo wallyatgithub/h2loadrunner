@@ -269,7 +269,7 @@ int Http1Session::on_read(const uint8_t* data, size_t len)
     if (config->verbose)
     {
         std::cout.write(reinterpret_cast<const char*>(data), len);
-        std::cout<<std::endl;
+        std::cout << std::endl;
     }
 
     auto htperr =
@@ -401,7 +401,7 @@ int Http1Session::_submit_request()
         std::cout << "sending headers:" << req << std::endl;
     }
 
-    request_map[stream_req_counter_] = std::move(data);
+    request_map.emplace(std::make_pair(stream_req_counter_, std::move(data)));
 
     client_->on_request_start(stream_req_counter_);
 
@@ -435,7 +435,9 @@ int Http1Session::_on_write()
     }
     auto request = request_map.find(stream_req_counter_);
     assert(request != request_map.end());
-    std::string& stream_buffer = *(request_map[stream_req_counter_].req_payload);
+    static std::string empty_str;
+    auto it = request_map.find(stream_req_counter_);
+    std::string& stream_buffer = (it == request_map.end()) ? empty_str : *(it->second.req_payload);
 
     if (!stream_buffer.empty())
     {
