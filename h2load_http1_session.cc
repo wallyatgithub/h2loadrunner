@@ -400,7 +400,7 @@ int Http1Session::_submit_request()
         std::cout << "sending headers:" << req << std::endl;
     }
 
-    request_map.emplace(std::make_pair(stream_req_counter_, std::move(data)));
+    client_->requests_waiting_for_response().emplace(std::make_pair(stream_req_counter_, std::move(data)));
 
     client_->on_request_start(stream_req_counter_);
 
@@ -432,7 +432,7 @@ int Http1Session::_on_write()
     {
         return 0;
     }
-
+    auto& request_map = client_->requests_waiting_for_response();
     auto request = request_map.find(stream_req_counter_);
     assert(request != request_map.end());
     static std::string empty_str;

@@ -266,7 +266,7 @@ public:
     std::deque<std::string> candidate_addresses;
     std::deque<std::string> used_addresses;
     Unique_Id this_client_id;
-    std::function<void()> write_clear_callback;
+    std::function<bool()> write_clear_callback;
     std::vector<Scenario_Data_Per_Client> scenario_data_per_connection;
     time_point_in_seconds_double rps_duration_started;
     SSL* ssl;
