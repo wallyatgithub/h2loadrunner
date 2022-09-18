@@ -405,6 +405,21 @@ void ares_socket_state_cb(void* data, int s, int read, int write)
     }
 }
 
+#ifdef ENABLE_HTTP3
+void quic_pkt_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
+{
+    auto c = static_cast<libev_client*>(w->data);
+    if (c->quic_pkt_timeout() != 0)
+    {
+        c->fail();
+        c->worker->free_client(c);
+        delete c;
+        return;
+    }
+}
+
+#endif
+
 #endif
 
 bool recorded(const std::chrono::steady_clock::time_point& t)
@@ -805,6 +820,13 @@ void populate_config_from_json(h2load::Config& config)
     config.window_bits = config.json_config_schema.window_bits;
     config.connection_window_bits = config.json_config_schema.connection_window_bits;
     config.warm_up_time = config.json_config_schema.warm_up_time;
+    config.max_frame_size = config.json_config_schema.max_frame_size;
+    config.tls13_ciphers= config.json_config_schema.tls13_ciphers;
+    config.groups= config.json_config_schema.groups;
+    config.no_udp_gso= config.json_config_schema.no_udp_gso;
+    config.max_udp_payload_size= config.json_config_schema.max_udp_payload_size;
+    config.ktls= config.json_config_schema.ktls;
+    config.qlog_file_base= config.json_config_schema.qlog_file_base;
 }
 
 void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
@@ -1877,9 +1899,30 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
         max_tls_version = TLS1_2_VERSION;
     }
 
-    if (nghttp2::tls::ssl_ctx_set_proto_versions(
-            ssl_ctx, nghttp2::tls::NGHTTP2_TLS_MIN_VERSION,
-            max_tls_version) != 0)
+    if (config.is_quic())
+    {
+#ifdef ENABLE_HTTP3
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+        if (ngtcp2_crypto_openssl_configure_client_context(ssl_ctx) != 0)
+        {
+            std::cerr << "ngtcp2_crypto_openssl_configure_client_context failed"
+                      << std::endl;
+            exit(EXIT_FAILURE);
+        }
+#  endif // HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+        if (ngtcp2_crypto_boringssl_configure_client_context(ssl_ctx) != 0)
+        {
+            std::cerr << "ngtcp2_crypto_boringssl_configure_client_context failed"
+                      << std::endl;
+            exit(EXIT_FAILURE);
+        }
+#  endif // HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+#endif   // ENABLE_HTTP3
+    }
+    else if (nghttp2::tls::ssl_ctx_set_proto_versions(
+                 ssl_ctx, nghttp2::tls::NGHTTP2_TLS_MIN_VERSION,
+                 max_tls_version) != 0)
     {
         std::cerr << "Could not set TLS versions" << std::endl;
         exit(EXIT_FAILURE);
@@ -1892,6 +1935,30 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
                   << std::endl;
         exit(EXIT_FAILURE);
     }
+
+#if OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL)
+    if (SSL_CTX_set_ciphersuites(ssl_ctx, config.tls13_ciphers.c_str()) == 0)
+    {
+        std::cerr << "SSL_CTX_set_ciphersuites with " << config.tls13_ciphers
+                  << " failed: " << ERR_error_string(ERR_get_error(), nullptr)
+                  << std::endl;
+        exit(EXIT_FAILURE);
+    }
+#endif // OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL)
+
+#if OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL)
+    if (SSL_CTX_set1_groups_list(ssl_ctx, config.groups.c_str()) != 1)
+    {
+        std::cerr << "SSL_CTX_set1_groups_list failed" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+#else  // !(OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL))
+    if (SSL_CTX_set1_curves_list(ssl_ctx, config.groups.c_str()) != 1)
+    {
+        std::cerr << "SSL_CTX_set1_curves_list failed" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+#endif // !(OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL))
 
 #ifndef OPENSSL_NO_NEXTPROTONEG
     SSL_CTX_set_next_proto_select_cb(ssl_ctx, client_select_next_proto_cb,

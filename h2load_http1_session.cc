@@ -217,8 +217,7 @@ Http1Session::Http1Session(base_client* client)
       htp_(),
       complete_(false),
       config(client->get_config()),
-      stats(client->get_stats()),
-      request_map(client->requests_waiting_for_response())
+      stats(client->get_stats())
 {
     llhttp_init(&htp_, HTTP_RESPONSE, &htp_hooks);
     htp_.data = this;
@@ -433,6 +432,7 @@ int Http1Session::_on_write()
     {
         return 0;
     }
+
     auto request = request_map.find(stream_req_counter_);
     assert(request != request_map.end());
     static std::string empty_str;
@@ -475,6 +475,7 @@ int Http1Session::_on_write()
 void Http1Session::terminate()
 {
     complete_ = true;
+    client_->signal_write();
 }
 
 base_client* Http1Session::get_client()

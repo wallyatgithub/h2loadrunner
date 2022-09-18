@@ -99,6 +99,19 @@ extern "C" {
 #include "config_schema.h"
 #include "h2load_lua.h"
 
+#ifdef ENABLE_HTTP3
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#    include <ngtcp2/ngtcp2_crypto_openssl.h>
+#  endif // HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+#    include <ngtcp2/ngtcp2_crypto_boringssl.h>
+#  endif // HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+#endif   // ENABLE_HTTP3
+
+#ifdef ENABLE_HTTP3
+#  include "h2load_http3_session.h"
+#endif // ENABLE_HTTP3
+
 
 #ifndef O_BINARY
 #  define O_BINARY (0)
@@ -216,7 +229,12 @@ Options:
               Max concurrent streams  to issue  per session.  Not used
               for http/1.1
               Default: 1
-  -w, --window-bits=<N>
+  -f, --max-frame-size=<SIZE>
+              Maximum frame size that the local endpoint is willing to
+              receive.
+              Default: )"
+      << util::utos_unit(config.max_frame_size) << R"(
+   -w, --window-bits=<N>
               Sets the stream level initial window size to (2**<N>)-1.
               Default: )"
         << config.window_bits << R"(
@@ -232,6 +250,11 @@ Options:
               described in OpenSSL ciphers(1).
               Default: )"
         << config.ciphers << R"(
+  --tls13-ciphers=<SUITE>
+              Set allowed cipher list for  TLSv1.3.  The format of the
+              string is described in OpenSSL ciphers(1).
+              Default: )"
+      << config.tls13_ciphers << R"(
   -p, --no-tls-proto=<PROTOID>
               Specify ALPN identifier of the  protocol to be used when
               accessing http URI without SSL/TLS.
@@ -344,6 +367,12 @@ Options:
               response  time when  using  one worker  thread, but  may
               appear slightly  out of order with  multiple threads due
               to buffering.  Status code is -1 for failed streams.
+  --qlog-file-base=<PATH>
+              Enable qlog output and specify base file name for qlogs.
+              Qlog is emitted  for each connection.  For  a given base
+              name   "base",    each   output   file    name   becomes
+              "base.M.N.sqlog" where M is worker ID and N is client ID
+              (e.g. "base.0.3.sqlog").  Only effective in QUIC runs.
   --connect-to=<HOST>[:<PORT>]
               Host and port to connect  instead of using the authority
               in <URI>.
@@ -363,6 +392,16 @@ Options:
               And the actual connection and request will be controlled
               by the script.
               Multiple scripts are acceptable w/ multiple --script arg
+  --groups=<GROUPS>
+              Specify the supported groups.
+              Default: )"
+      << config.groups << R"(
+  --no-udp-gso
+              Disable UDP GSO.
+  --max-udp-payload-size=<SIZE>
+              Specify the maximum outgoing UDP datagram payload size.
+  --ktls      Enable ktls.
+
   -v, --verbose
               Output debug information.
   --version   Display version information and exit.
@@ -403,6 +442,7 @@ int main(int argc, char** argv)
     std::string datafile;
     std::vector<std::string> script_files;
     bool nreqs_set_manually = false;
+    std::string qlog_base;
     while (1)
     {
         static int flag = 0;
@@ -437,6 +477,12 @@ int main(int argc, char** argv)
             {"log-file", required_argument, &flag, 10},
             {"connect-to", required_argument, &flag, 11},
             {"rps", required_argument, &flag, 12},
+            {"groups", required_argument, &flag, 13},
+            {"tls13-ciphers", required_argument, &flag, 14},
+            {"no-udp-gso", no_argument, &flag, 15},
+            {"qlog-file-base", required_argument, &flag, 16},
+            {"max-udp-payload-size", required_argument, &flag, 17},
+            {"ktls", no_argument, &flag, 18},
             {"stream-timeout-interval-ms", required_argument, &flag, 23},
             {"rps-input-file", required_argument, &flag, 24},
             {"config-file", required_argument, &flag, 25},
@@ -499,6 +545,24 @@ int main(int argc, char** argv)
                     exit(EXIT_FAILURE);
                 }
                 break;
+            }
+            case 'f': {
+              auto n = util::parse_uint_with_unit(optarg);
+              if (n == -1) {
+                std::cerr << "--max-frame-size: bad option value: " << optarg
+                          << std::endl;
+                exit(EXIT_FAILURE);
+              }
+              if (static_cast<uint64_t>(n) < 16_k) {
+                std::cerr << "--max-frame-size: minimum 16384" << std::endl;
+                exit(EXIT_FAILURE);
+              }
+              if (static_cast<uint64_t>(n) > 16_m - 1) {
+                std::cerr << "--max-frame-size: maximum 16777215" << std::endl;
+                exit(EXIT_FAILURE);
+              }
+              config.max_frame_size = n;
+              break;
             }
             case 'H':
             {
@@ -727,6 +791,55 @@ int main(int argc, char** argv)
                             exit(EXIT_FAILURE);
                         }
                         config.rps = v;
+                        break;
+                    }
+                    case 13:
+                    {
+                        // --groups
+                        config.groups = optarg;
+                        break;
+                    }
+                    case 14:
+                    {
+                        // --tls13-ciphers
+                        config.tls13_ciphers = optarg;
+                        break;
+                    }
+                    case 15:
+                    {
+                        // --no-udp-gso
+                        config.no_udp_gso = true;
+                        break;
+                    }
+                    case 16:
+                    {
+                        // --qlog-file-base
+                        qlog_base = optarg;
+                        break;
+                    }
+                    case 17:
+                    {
+                        // --max-udp-payload-size
+                        auto n = util::parse_uint_with_unit(optarg);
+                        if (n == -1)
+                        {
+                            std::cerr << "--max-udp-payload-size: bad option value: " << optarg
+                                      << std::endl;
+                            exit(EXIT_FAILURE);
+                        }
+                        if (static_cast<uint64_t>(n) > 64_k)
+                        {
+                            std::cerr << "--max-udp-payload-size: must not exceed 65536"
+                                      << std::endl;
+                            exit(EXIT_FAILURE);
+                        }
+                        config.max_udp_payload_size = n;
+                        break;
+                    }
+                    case 18:
+                    {
+                        // --ktls
+                        config.ktls = true;
                         break;
                     }
                     case 23:
@@ -991,6 +1104,22 @@ int main(int argc, char** argv)
         }
     }
 
+    if (!qlog_base.empty())
+    {
+        if (!config.is_quic())
+        {
+            std::cerr
+                    << "Warning: --qlog-file-base: only effective in quic, ignoring."
+                    << std::endl;
+        }
+        else
+        {
+#ifdef ENABLE_HTTP3
+            config.qlog_file_base = qlog_base;
+#endif // ENABLE_HTTP3
+        }
+    }
+
 #ifndef _WINDOWS
     struct sigaction act {};
     act.sa_handler = SIG_IGN;
@@ -1007,7 +1136,7 @@ int main(int argc, char** argv)
 
     setup_SSL_CTX(ssl_ctx, config);
 
-    std::string user_agent = "h2load nghttp2/" NGHTTP2_VERSION;
+    std::string user_agent = "h2loadrunner";
     Headers shared_nva;
     shared_nva.emplace_back(scheme_header, config.scheme);
     if (config.port != config.default_port)
@@ -1363,34 +1492,44 @@ traffic: )" << util::utos_funit(stats.bytes_total)
               << util::utos_funit(stats.bytes_head) << "B (" << stats.bytes_head
               << ") headers (space savings " << header_space_savings * 100
               << "%), " << util::utos_funit(stats.bytes_body) << "B ("
-              << stats.bytes_body << R"() data
-min         max         mean         sd        +/- sd
+              << stats.bytes_body << R"() data)" << std::endl;
+
+#ifdef ENABLE_HTTP3
+    if (config.is_quic())
+    {
+        std::cout << "UDP datagram: " << stats.udp_dgram_sent << " sent, "
+                  << stats.udp_dgram_recv << " received" << std::endl;
+    }
+#endif // ENABLE_HTTP3
+
+    std::cout
+            << R"() data << min         max         mean         sd        +/- sd
 time for request: )"
-              << std::setw(10) << util::format_duration(ts.request.min) << "  "
-              << std::setw(10) << util::format_duration(ts.request.max) << "  "
-              << std::setw(10) << util::format_duration(ts.request.mean) << "  "
-              << std::setw(10) << util::format_duration(ts.request.sd)
-              << std::setw(9) << util::dtos(ts.request.within_sd) << "%"
-              << "\ntime for connect: " << std::setw(10)
-              << util::format_duration(ts.connect.min) << "  " << std::setw(10)
-              << util::format_duration(ts.connect.max) << "  " << std::setw(10)
-              << util::format_duration(ts.connect.mean) << "  " << std::setw(10)
-              << util::format_duration(ts.connect.sd) << std::setw(9)
-              << util::dtos(ts.connect.within_sd) << "%"
-              << "\ntime to 1st byte: " << std::setw(10)
-              << util::format_duration(ts.ttfb.min) << "  " << std::setw(10)
-              << util::format_duration(ts.ttfb.max) << "  " << std::setw(10)
-              << util::format_duration(ts.ttfb.mean) << "  " << std::setw(10)
-              << util::format_duration(ts.ttfb.sd) << std::setw(9)
-              << util::dtos(ts.ttfb.within_sd) << "%"
-              // this is misleading, comment it
-              /*
-              << "\nreq/s           : " << std::setw(10) << ts.rps.min << "  "
-              << std::setw(10) << ts.rps.max << "  " << std::setw(10)
-              << ts.rps.mean << "  " << std::setw(10) << ts.rps.sd << std::setw(9)
-              << util::dtos(ts.rps.within_sd) << "%"
-              */
-              << std::endl;
+            << std::setw(10) << util::format_duration(ts.request.min) << "  "
+            << std::setw(10) << util::format_duration(ts.request.max) << "  "
+            << std::setw(10) << util::format_duration(ts.request.mean) << "  "
+            << std::setw(10) << util::format_duration(ts.request.sd)
+            << std::setw(9) << util::dtos(ts.request.within_sd) << "%"
+            << "\ntime for connect: " << std::setw(10)
+            << util::format_duration(ts.connect.min) << "  " << std::setw(10)
+            << util::format_duration(ts.connect.max) << "  " << std::setw(10)
+            << util::format_duration(ts.connect.mean) << "  " << std::setw(10)
+            << util::format_duration(ts.connect.sd) << std::setw(9)
+            << util::dtos(ts.connect.within_sd) << "%"
+            << "\ntime to 1st byte: " << std::setw(10)
+            << util::format_duration(ts.ttfb.min) << "  " << std::setw(10)
+            << util::format_duration(ts.ttfb.max) << "  " << std::setw(10)
+            << util::format_duration(ts.ttfb.mean) << "  " << std::setw(10)
+            << util::format_duration(ts.ttfb.sd) << std::setw(9)
+            << util::dtos(ts.ttfb.within_sd) << "%"
+            // this is misleading, comment it
+            /*
+            << "\nreq/s           : " << std::setw(10) << ts.rps.min << "  "
+            << std::setw(10) << ts.rps.max << "  " << std::setw(10)
+            << ts.rps.mean << "  " << std::setw(10) << ts.rps.sd << std::setw(9)
+            << util::dtos(ts.rps.within_sd) << "%"
+            */
+            << std::endl;
 
     print_extended_stats_summary(stats, config, workers);
 

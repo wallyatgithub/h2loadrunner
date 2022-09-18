@@ -53,7 +53,6 @@ public:
     int32_t stream_resp_counter_;
     Config* config;
     Stats& stats;
-    std::map<int32_t, Request_Data>& request_map;
     std::string hdr_name; // TODO: move to private
     bool on_header_frame_callback_called = false; // TODO: move to private
     std::string hdr_val;
