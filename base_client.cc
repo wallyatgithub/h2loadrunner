@@ -2114,10 +2114,23 @@ Request_Data base_client::prepare_first_request()
     populate_request_from_config_template(new_request, scenario_index, new_request.curr_request_idx);
 
     auto& request_template = scenario.requests[new_request.curr_request_idx];
-    new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, scenario_index,
-                                                               new_request.curr_request_idx, *new_request.scenario_data_per_user));
 
-    new_request.path = &(new_request.string_collection.back());
+    if (INPUT_WITH_VARIABLE == request_template.uri.uri_action)
+    {
+        auto uri = assemble_string(request_template.tokenized_path_with_vars, scenario_index, new_request.curr_request_idx,
+                                   *new_request.scenario_data_per_user);
+        if (!parse_uri_and_poupate_request(uri, new_request))
+        {
+            std::cerr << "abort whole scenario sequence, as uri is invalid:" << uri << std::endl;
+            abort();
+        }
+    }
+    else
+    {
+        new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, scenario_index,
+                                                                   new_request.curr_request_idx, *new_request.scenario_data_per_user));
+        new_request.path = &(new_request.string_collection.back());
+    }
 
     if (scenario.requests[new_request.curr_request_idx].make_request_function_present)
     {
