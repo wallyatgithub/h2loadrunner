@@ -15,8 +15,6 @@
 #include <numeric>
 #include <cassert>
 
-#include <netinet/udp.h>
-
 #include <iostream>
 
 #ifdef HAVE_LIBNGTCP2_CRYPTO_OPENSSL

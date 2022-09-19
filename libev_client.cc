@@ -27,6 +27,7 @@ extern "C" {
 #include "tls.h"
 
 #ifdef ENABLE_HTTP3
+#include <netinet/udp.h>
 #include <nghttp3/nghttp3.h>
 #include "h2load_http3_session.h"
 #endif
