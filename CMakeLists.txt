@@ -11,7 +11,9 @@ set(Boost_USE_STATIC_LIBS ON)
 
 add_subdirectory(third-party)
 
-#find_package(OpenSSL 1.0.1)
+if (NOT DEFINED ENABLE_HTTP3)
+    find_package(OpenSSL 1.0.1)
+endif()
 find_package(Boost 1.53.0 REQUIRED system thread)
 find_package(LuaJIT)
 
