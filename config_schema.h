@@ -519,6 +519,13 @@ public:
     uint64_t skt_recv_buffer_size;
     uint64_t skt_send_buffer_size;
     uint64_t config_update_sequence_number;
+    uint64_t max_frame_size;
+    std::string tls13_ciphers;
+    std::string groups;
+    bool no_udp_gso;
+    uint64_t max_udp_payload_size;
+    bool ktls;
+    std::string qlog_file_base;
 
     explicit Config_Schema():
         schema("http"),
@@ -553,7 +560,13 @@ public:
         builtin_server_port(8888),
         skt_recv_buffer_size(4194304),
         skt_send_buffer_size(4194304),
-        config_update_sequence_number(0)
+        config_update_sequence_number(0),
+        max_frame_size(16384),
+        tls13_ciphers("TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256"),
+        groups("X25519:P-256:P-384:P-521"),
+        no_udp_gso(false),
+        max_udp_payload_size(0),
+        ktls(false)
     {
     }
 
@@ -602,6 +615,13 @@ public:
         h->add_property("statistics-file", &this->statistics_file, staticjson::Flags::Optional);
         h->add_property("socket-receive-buffer-size", &this->skt_recv_buffer_size, staticjson::Flags::Optional);
         h->add_property("socket-send-buffer-size", &this->skt_send_buffer_size, staticjson::Flags::Optional);
+        h->add_property("max-frame-size", &this->max_frame_size, staticjson::Flags::Optional);
+        h->add_property("tls13_ciphers", &this->tls13_ciphers, staticjson::Flags::Optional);
+        h->add_property("groups", &this->groups, staticjson::Flags::Optional);
+        h->add_property("no-udp-gso", &this->no_udp_gso, staticjson::Flags::Optional);
+        h->add_property("max-udp-payload-size", &this->max_udp_payload_size, staticjson::Flags::Optional);
+        h->add_property("ktls", &this->ktls, staticjson::Flags::Optional);
+        h->add_property("qlog-file-base", &this->qlog_file_base, staticjson::Flags::Optional);
     }
 };
 

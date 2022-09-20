@@ -48,11 +48,10 @@ namespace h2load
 
 Http2Session::Http2Session(base_client* client)
     : client_(client),
-      session_(nullptr),
-      curr_stream_id(0),
-      config(client->get_config()),
-      stats(client->get_stats()),
-      request_map(client->requests_waiting_for_response())
+    session_(nullptr),
+    curr_stream_id(0),
+    config(client->get_config()),
+    stats(client->get_stats())
 {
 
 }
@@ -327,7 +326,12 @@ void Http2Session::on_connect()
         iv[niv].value = config->header_table_size;
         ++niv;
     }
-
+    if (config->max_frame_size != 16_k)
+    {
+        iv[niv].settings_id = NGHTTP2_SETTINGS_MAX_FRAME_SIZE;
+        iv[niv].value = config->max_frame_size;
+        ++niv;
+    }
     rv = nghttp2_submit_settings(session_, NGHTTP2_FLAG_NONE, iv.data(), niv);
 
     assert(rv == 0);
@@ -413,6 +417,7 @@ int Http2Session::on_write()
 void Http2Session::terminate()
 {
     nghttp2_session_terminate_session(session_, NGHTTP2_NO_ERROR);
+    client_->signal_write();
 }
 
 size_t Http2Session::max_concurrent_streams()
@@ -420,7 +425,7 @@ size_t Http2Session::max_concurrent_streams()
     return (size_t)config->max_concurrent_streams;
 }
 
-void Http2Session::submit_rst_stream(int32_t stream_id)
+void Http2Session::reset_stream(int64_t stream_id)
 {
     nghttp2_submit_rst_stream(session_, NGHTTP2_FLAG_END_STREAM, stream_id, NGHTTP2_STREAM_CLOSED);
 }
@@ -502,7 +507,7 @@ int Http2Session::_submit_request()
     }
 
     curr_stream_id = stream_id;
-    request_map.emplace(std::make_pair(stream_id, std::move(data)));
+    client_->requests_waiting_for_response().emplace(std::make_pair(stream_id, std::move(data)));
     client_->on_request_start(stream_id);
     return 0;
 }
