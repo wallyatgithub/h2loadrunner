@@ -244,7 +244,7 @@ private:
 #endif
     boost::asio::ip::tcp::socket tcp_client_probe_socket;
     boost::asio::ssl::context& ssl_ctx;
-    boost::asio::ssl::stream<boost::asio::ip::tcp::socket> ssl_socket;
+    std::unique_ptr<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>> ssl_socket;
     bool is_write_in_progress = false;
     bool is_client_stopped = false;
     bool write_signaled = false;

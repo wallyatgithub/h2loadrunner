@@ -70,7 +70,7 @@ asio_client_connection::asio_client_connection
       connect_back_to_preferred_host_timer(io_ctx),
       delayed_reconnect_timer(io_ctx),
       ssl_ctx(ssl_context),
-      ssl_socket(io_ctx, ssl_context),
+      ssl_socket(std::make_unique<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>(io_ctx, ssl_context)),
       ssl_handshake_timer(io_ctx),
       do_read_fn(&asio_client_connection::do_tcp_read),
       do_write_fn(&asio_client_connection::do_tcp_write)
@@ -351,7 +351,7 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
         {
             do_read_fn = &asio_client_connection::do_ssl_read;
             do_write_fn = &asio_client_connection::do_ssl_write;
-            ssl = ssl_socket.native_handle();
+            ssl = ssl_socket->native_handle();
         }
         else
         {
@@ -640,7 +640,7 @@ void asio_client_connection::on_probe_connected_event(const boost::system::error
 
 void asio_client_connection::start_async_handshake()
 {
-    ssl_socket.async_handshake(
+    ssl_socket->async_handshake(
         boost::asio::ssl::stream_base::client,
         [this](const boost::system::error_code & e)
     {
@@ -866,7 +866,7 @@ void asio_client_connection::do_tcp_read()
 
 void asio_client_connection::do_ssl_read()
 {
-    common_read(ssl_socket);
+    common_read(*ssl_socket);
 }
 
 void asio_client_connection::do_read()
@@ -965,7 +965,7 @@ void asio_client_connection::do_tcp_write()
 
 void asio_client_connection::do_ssl_write()
 {
-    common_write(ssl_socket);
+    common_write(*ssl_socket);
 }
 
 void asio_client_connection::do_write()
@@ -982,7 +982,8 @@ void asio_client_connection::stop()
     is_client_stopped = true;
     boost::system::error_code ignored_ec;
     tcp_client_socket.lowest_layer().close(ignored_ec);
-    ssl_socket.lowest_layer().close(ignored_ec);
+    ssl_socket.reset(nullptr);
+    ssl_socket = std::make_unique<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>(io_context, ssl_ctx);
     connect_timer.cancel();
     rps_timer.cancel();
     delay_request_execution_timer.cancel();
@@ -1033,7 +1034,7 @@ void asio_client_connection::on_resolve_result_event(const boost::system::error_
         }
         else
         {
-            start_async_connect(endpoint_iterator, ssl_socket);
+            start_async_connect(endpoint_iterator, *ssl_socket);
         }
     }
     else
