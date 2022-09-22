@@ -1596,6 +1596,24 @@ void post_process_json_config_schema(h2load::Config& config)
     load_file_content(config.json_config_schema.ca_cert);
     load_file_content(config.json_config_schema.client_cert);
     load_file_content(config.json_config_schema.private_key);
+
+    auto tokens = tokenize_string(config.json_config_schema.npn_list, ",");
+    config.json_config_schema.npn_list.clear();
+    std::map<std::string, std::string> m = {{"h3", "\x2h3"}, {"h3-29", "\x5h3-29"}};
+    for (size_t i = 0; i < (tokens.size() - 1); i++)
+    {
+        auto it = m.find(tokens[i]);
+        if (it != m.end())
+        {
+            config.json_config_schema.npn_list.append(it->second);
+        }
+        else
+        {
+            config.json_config_schema.npn_list.append(tokens[i]);
+        }
+        config.json_config_schema.npn_list.append(",");
+    }
+    config.json_config_schema.npn_list.append(tokens.back());
 }
 
 std::vector<std::vector<std::string>> read_csv_file(const std::string& csv_file_name)

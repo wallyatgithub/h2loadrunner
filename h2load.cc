@@ -1251,15 +1251,6 @@ int main(int argc, char** argv)
         config.nva.push_back(std::move(nva));
     }
 
-
-    // Don't DOS our server!
-    if (config.host == "nghttp2.org")
-    {
-        std::cerr << "Using h2load against public server " << config.host
-                  << " should be prohibited." << std::endl;
-        exit(EXIT_FAILURE);
-    }
-
     insert_customized_headers_to_Json_scenarios(config);
 
     if (config.verbose)
