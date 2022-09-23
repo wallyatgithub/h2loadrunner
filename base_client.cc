@@ -1221,7 +1221,7 @@ void base_client::slice_var_ids()
                     range_start.push_back(variable_range_start +
                                           (this_client_id.my_id * tokens_per_client) +
                                           std::min(this_client_id.my_id, tokens_left));
-                    range_end.push_back(variable_range_start +
+                    range_end.push_back(range_start.back() +
                                         tokens_per_client +
                                         (this_client_id.my_id >= tokens_left ? 0 : 1));
 
@@ -1229,11 +1229,13 @@ void base_client::slice_var_ids()
 
                     if (config->verbose)
                     {
+                        static std::mutex mu;
+                        std::lock_guard<std::mutex> guard(mu);
                         std::cerr << ", client Id:" << this_client_id.my_id
                                   << ", scenario index: " << index
                                   << ", variable name: " << scenario.variable_manager.get_var_name(var_id)
-                                  << ", variable id start:" << variable_range_start
-                                  << ", variable id end:" << variable_range_end
+                                  << ", variable id start:" << range_start.back()
+                                  << ", variable id end:" << range_end.back()
                                   << std::endl;
                     }
                 }
