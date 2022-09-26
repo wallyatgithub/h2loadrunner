@@ -53,6 +53,8 @@ public:
 
     boost::asio::io_service& get_io_context();
 
+    virtual SSL_CTX* get_ssl_ctx();
+
     void enqueue_user_timer(uint64_t ms_to_expire, std::function<void(void)>);
 
     void handle_tick_timer_timeout(const boost::system::error_code & ec);

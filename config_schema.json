@@ -101,7 +101,7 @@
     "max-concurrent-streams":
     {
       "description":"each http2 connection can have multiple concurrent streams running in parallel, this field specifies the max concurrent streams for each connection; this field is ignored for http 1.x test",
-      "default": 32,
+      "default": 2048,
       "type":"integer"
     },
     "request-per-second":
@@ -137,6 +137,12 @@
       "description":"Set allowed cipher list. The format of the string is described in OpenSSL ciphers(1)",
       "type":"string",
       "default":"ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256"
+    },
+    "tls13-ciphers":
+    {
+      "description":"Set allowed cipher list for TLSv1.3. The format of the string is described in OpenSSL ciphers(1)",
+      "type":"string",
+      "default":"TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256"
     },
     "caCert":
     {
@@ -192,7 +198,7 @@
     {
       "description":"Comma delimited list of ALPN protocol identifier sorted in the order of preference. That means most desirable protocol comes first. This is used in both ALPN and NPN. The parameter must be delimited by a single comma only and any white spaces are treated as a part of protocol string.",
       "type":"string",
-      "default":"h2,h2-16,h2-14,http/1.1"
+      "default":"h2,h2-16,h2-14,http/1.1,h3,h3-29"
     },
     "header-table-size":
     {
@@ -209,6 +215,11 @@
     "log-file":
     {
       "description":"Write per-request brief information to a file with name specified here. columns: start time as microseconds since epoch; HTTP status code; microseconds until end of response. Note: this is not the file to print statistics, and this per-request log may slow down the performance of h2loadrunner",
+      "type":"string"
+    },
+    "qlog-file-base":
+    {
+      "description":"Enable qlog output and specify base file name for qlogs. Qlog is emitted  for each connection. For a given base name 'base', each output file name becomes 'base.M.N.sqlog' where M is worker ID and N is client ID (e.g. 'base.0.3.sqlog'). Only effective in QUIC runs",
       "type":"string"
     },
     "failed-request-log-file":
@@ -253,6 +264,33 @@
     "socket-send-buffer-size":{
       "description":"socket send buffer size in bytes; default: 4M",
       "default": 4194304,
+      "type":"integer"
+    },
+    "max-frame-size":{
+      "description":"Maximum frame size that the local endpoint is willing to receive; Default: 16384",
+      "default": 16384,
+      "type":"integer"
+    },
+    "groups":{
+      "description":"Specify the supported groups. Default: X25519:P-256:P-384:P-521",
+      "default": "X25519:P-256:P-384:P-521",
+      "type":"string"
+    },
+    "no-udp-gso":
+    {
+      "description": "true: Disable UDP GSO; false: enable UDP GSO",
+      "default": false,
+      "type":"boolean"
+    },
+    "ktls":
+    {
+      "description": "true: Enable ktls",
+      "default": false,
+      "type":"boolean"
+    },
+    "max-udp-payload-size":{
+      "description":"Specify the maximum outgoing UDP datagram payload size.",
+      "default": 0,
       "type":"integer"
     },
     "Scenarios":

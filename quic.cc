@@ -1,7 +1,7 @@
 /*
  * nghttp2 - HTTP/2 C Library
  *
- * Copyright (c) 2014 Tatsuhiro Tsujikawa
+ * Copyright (c) 2019 nghttp2 contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -22,43 +22,39 @@
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#ifndef H2LOAD_SESSION_H
-#define H2LOAD_SESSION_H
+#include "quic.h"
 
-#include "nghttp2_config.h"
+#include <cassert>
 
-#include <sys/types.h>
+#include <ngtcp2/ngtcp2.h>
+#include <nghttp3/nghttp3.h>
 
-#include <cinttypes>
+#include "template.h"
 
-#include "h2load.h"
+using namespace nghttp2;
 
-namespace h2load
-{
+namespace quic {
 
-class Session
-{
-public:
-    virtual ~Session() {}
-    // Called when the connection was made.
-    virtual void on_connect() = 0;
-    // Called when one request must be issued.
-    virtual int submit_request() = 0;
-    // Called when incoming bytes are available. The subclass has to
-    // return the number of bytes read.
-    virtual int on_read(const uint8_t* data, size_t len) = 0;
-    // Called when write is available. Returns 0 on success, otherwise
-    // return -1.
-    virtual int on_write() = 0;
-    // Called when the underlying session must be terminated.
-    virtual void terminate() = 0;
-    // Return the maximum concurrency per connection
-    virtual size_t max_concurrent_streams() = 0;
-    virtual void reset_stream(int64_t stream_id) {};
+Error err_transport(int liberr) {
+  if (liberr == NGTCP2_ERR_RECV_VERSION_NEGOTIATION) {
+    return {ErrorType::TransportVersionNegotiation, 0};
+  }
+  return {ErrorType::Transport,
+          ngtcp2_err_infer_quic_transport_error_code(liberr)};
+}
 
-    virtual void submit_ping() {};
-};
+Error err_transport_idle_timeout() {
+  return {ErrorType::TransportIdleTimeout, 0};
+}
 
-} // namespace h2load
+Error err_transport_tls(int alert) {
+  return {ErrorType::Transport, ngtcp2_err_infer_quic_transport_error_code(
+                                    NGTCP2_CRYPTO_ERROR | alert)};
+}
 
-#endif // H2LOAD_SESSION_H
+Error err_application(int liberr) {
+  return {ErrorType::Application,
+          nghttp3_err_infer_quic_app_error_code(liberr)};
+}
+
+} // namespace quic
