@@ -214,4 +214,6 @@ void load_generic_variables_from_csv_file(Scenario& scenario);
 
 void load_file_content(std::string& source);
 
+uint64_t current_timestamp_nanoseconds();
+
 #endif

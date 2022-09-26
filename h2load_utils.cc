@@ -38,6 +38,14 @@ extern "C" {
 #include "h2load_utils.h"
 #include "base_client.h"
 #include "asio_worker.h"
+#ifdef ENABLE_HTTP3
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#    include <ngtcp2/ngtcp2_crypto_openssl.h>
+#  endif // HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+#    include <ngtcp2/ngtcp2_crypto_boringssl.h>
+#  endif // HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+#endif   // ENABLE_HTTP3
 
 
 using namespace h2load;
@@ -413,7 +421,6 @@ void quic_pkt_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
     {
         c->fail();
         c->worker->free_client(c);
-        delete c;
         return;
     }
 }
@@ -1596,24 +1603,6 @@ void post_process_json_config_schema(h2load::Config& config)
     load_file_content(config.json_config_schema.ca_cert);
     load_file_content(config.json_config_schema.client_cert);
     load_file_content(config.json_config_schema.private_key);
-
-    auto tokens = tokenize_string(config.json_config_schema.npn_list, ",");
-    config.json_config_schema.npn_list.clear();
-    std::map<std::string, std::string> m = {{"h3", "\x2h3"}, {"h3-29", "\x5h3-29"}};
-    for (size_t i = 0; i < (tokens.size() - 1); i++)
-    {
-        auto it = m.find(tokens[i]);
-        if (it != m.end())
-        {
-            config.json_config_schema.npn_list.append(it->second);
-        }
-        else
-        {
-            config.json_config_schema.npn_list.append(tokens[i]);
-        }
-        config.json_config_schema.npn_list.append(",");
-    }
-    config.json_config_schema.npn_list.append(tokens.back());
 }
 
 std::vector<std::vector<std::string>> read_csv_file(const std::string& csv_file_name)
@@ -2112,4 +2101,10 @@ void split_string(const std::string& source, String_With_Variables_In_Between& r
     result.string_segments.push_back(source.substr(offset, std::string::npos));
 
 }
+
+uint64_t current_timestamp_nanoseconds() {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>
+                                  (std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
 

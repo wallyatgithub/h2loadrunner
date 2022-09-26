@@ -106,7 +106,7 @@ set(C_ARES_INCLUDE
 
 if(DEFINED ENABLE_HTTP3)
     add_definitions(-DENABLE_HTTP3=1)
-
+    add_definitions(-DHAVE_LIBNGTCP2_CRYPTO_OPENSSL=1)
     set(HTTP3_SOURCES
       quic.cc
       h2load_http3_session.cc

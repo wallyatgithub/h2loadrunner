@@ -3225,8 +3225,7 @@ int base_client::quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
         settings.log_printf = debug_log_printf;
     }
     //settings.cc_algo = config.cc_algo; // TODO: 
-    settings.initial_ts = std::chrono::duration_cast<std::chrono::nanoseconds>
-                          (std::chrono::steady_clock::now().time_since_epoch()).count();
+    settings.initial_ts = current_timestamp_nanoseconds();
     settings.rand_ctx.native_handle = &worker->randgen;
     if (!config->qlog_file_base.empty())
     {
@@ -3301,7 +3300,11 @@ int base_client::quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
 
 void base_client::quic_free()
 {
-    ngtcp2_conn_del(quic.conn);
+    if (quic.conn)
+    {
+        ngtcp2_conn_del(quic.conn);
+        quic.conn = nullptr;
+    }
     if (quic.qlog_file != nullptr)
     {
         fclose(quic.qlog_file);

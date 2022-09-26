@@ -273,29 +273,30 @@ public:
     std::vector<std::function<void(bool, h2load::base_client*)>> connected_callbacks;
     std::map<int32_t, Stream_Callback_Data> stream_user_callback_queue;
 #ifdef ENABLE_HTTP3
-    struct
+    struct Quic
     {
         ngtcp2_crypto_conn_ref conn_ref;
-        ngtcp2_conn* conn;
+        ngtcp2_conn* conn = nullptr;
         ngtcp2_connection_close_error last_error;
-        bool close_requested;
-        FILE* qlog_file;
+        bool close_requested = false;
+        FILE* qlog_file = nullptr;
 
         struct
         {
-            bool send_blocked;
-            size_t num_blocked;
-            size_t num_blocked_sent;
+            bool send_blocked = false;
+            size_t num_blocked = 0;
+            size_t num_blocked_sent = 0;
             struct
             {
                 Address remote_addr;
-                const uint8_t* data;
-                size_t datalen;
-                size_t gso_size;
+                const uint8_t* data = nullptr;
+                size_t datalen = 0;
+                size_t gso_size = 0;
             } blocked[2];
             std::unique_ptr<uint8_t[]> data;
         } tx;
-    } quic;
+    } ;
+    Quic quic; // TODO: make this unique_ptr and reallocate during reconnect
 #endif // ENABLE_HTTP3
 };
 

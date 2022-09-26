@@ -22,6 +22,7 @@ public:
     asio_worker(uint32_t id, size_t nreq_todo, size_t nclients,
                 size_t rate, size_t max_samples, Config* config);
 
+    virtual ~asio_worker();
     virtual void run_event_loop();
 
     virtual std::shared_ptr<base_client> create_new_client(size_t req_todo);

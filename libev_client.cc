@@ -378,7 +378,9 @@ void libev_client::disconnect()
             ev_io_stop(static_cast<libev_worker*>(worker)->loop, &watcher);
         }
     };
-
+#ifdef ENABLE_HTTP3
+    stop_timer_watcher(pkt_timer);
+#endif // ENABLE_HTTP3
     stop_timer_watcher(conn_inactivity_watcher);
     stop_timer_watcher(conn_active_watcher);
     stop_timer_watcher(rps_watcher);
@@ -922,7 +924,7 @@ void libev_client::setup_quic_pkt_timer()
 int libev_client::quic_pkt_timeout()
 {
     int rv;
-    auto now = timestamp(static_cast<libev_worker*>(worker)->loop);
+    auto now = current_timestamp_nanoseconds();
 
     rv = ngtcp2_conn_handle_expiry(quic.conn, now);
     if (rv != 0)
@@ -938,7 +940,7 @@ int libev_client::quic_pkt_timeout()
 void libev_client::quic_restart_pkt_timer()
 {
     auto expiry = ngtcp2_conn_get_expiry(quic.conn);
-    auto now = timestamp(static_cast<libev_worker*>(worker)->loop);
+    auto now = current_timestamp_nanoseconds();
     auto t = expiry > now ? static_cast<ev_tstamp>(expiry - now) / NGTCP2_SECONDS
              : 1e-9;
     pkt_timer.repeat = t;
@@ -980,7 +982,7 @@ int libev_client::read_quic()
         };
 
         rv = ngtcp2_conn_read_pkt(quic.conn, &path, &pi, buf.data(), nread,
-                                  timestamp(static_cast<libev_worker*>(worker)->loop));
+                                  current_timestamp_nanoseconds());
         if (rv != 0)
         {
             std::cerr << "ngtcp2_conn_read_pkt: " << ngtcp2_strerror(rv) << std::endl;
@@ -1083,7 +1085,7 @@ int libev_client::write_quic()
         auto nwrite = ngtcp2_conn_writev_stream(
                           quic.conn, &ps.path, nullptr, bufpos, max_udp_payload_size, &ndatalen,
                           flags, stream_id, reinterpret_cast<const ngtcp2_vec*>(v), vcnt,
-                          timestamp(static_cast<libev_worker*>(worker)->loop));
+                          current_timestamp_nanoseconds());
         if (nwrite < 0)
         {
             switch (nwrite)
@@ -1324,7 +1326,7 @@ void libev_client::quic_close_connection()
 
     auto nwrite = ngtcp2_conn_write_connection_close(
                       quic.conn, &ps.path, nullptr, buf.data(), buf.size(), &quic.last_error,
-                      timestamp(static_cast<libev_worker*>(worker)->loop));
+                      current_timestamp_nanoseconds());
 
     if (nwrite <= 0)
     {

@@ -50,6 +50,11 @@ asio_worker::asio_worker(uint32_t id, size_t nreq_todo, size_t nclients,
     setup_SSL_CTX(ssl_ctx.native_handle(), *config);
 }
 
+asio_worker::~asio_worker()
+{
+    managed_clients.clear();
+}
+
 SSL_CTX* asio_worker::get_ssl_ctx()
 {
     return ssl_ctx.native_handle();

@@ -1414,6 +1414,8 @@ int main(int argc, char** argv)
         stats.bytes_head += s.bytes_head;
         stats.bytes_head_decomp += s.bytes_head_decomp;
         stats.bytes_body += s.bytes_body;
+        stats.udp_dgram_recv += s.udp_dgram_recv;
+        stats.udp_dgram_sent += s.udp_dgram_sent;
 
         for (size_t i = 0; i < stats.status.size(); ++i)
         {

@@ -233,7 +233,7 @@ private:
     boost::asio::ip::tcp::socket tcp_client_socket;
 #ifdef ENABLE_HTTP3
     boost::asio::ip::udp::resolver udp_dns_resolver;
-    boost::asio::ip::udp::socket udp_client_socket;
+    std::unique_ptr<boost::asio::ip::udp::socket> udp_client_socket;
     std::vector<std::vector<std::vector<uint8_t>>> quic_output_buffers;
     std::vector<std::vector<nghttp2::Address>> quic_remote_addresses;
     std::vector<std::vector<uint8_t>> quic_buffer_to_send;
