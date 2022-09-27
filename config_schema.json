@@ -546,7 +546,7 @@
                       "where-to-pickup-from": {
                         "description": "where to pick up the value from: from request header, request payload, response header, response payload",
                         "type":"string",
-			            "enum": ["Request-Header", "Response-Header", "Json-Pointer-In-Request-Payload", "Json-Pointer-In-Response-Payload"]
+                        "enum": ["Request-Header", "Response-Header", "Json-Pointer-In-Request-Payload", "Json-Pointer-In-Response-Payload"]
                       },
                       "source": {
                         "type":"string",

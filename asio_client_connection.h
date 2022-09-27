@@ -41,6 +41,7 @@ namespace h2load
 
 const auto single_buffer_size = 64 * 1024;
 const auto max_quic_pkt_to_send = 10;
+const auto number_of_output_buffer_groups = 2;
 
 class asio_client_connection
     : public h2load::base_client, private boost::noncopyable
@@ -226,6 +227,8 @@ private:
     void handle_quic_pkt_timer_timeout(const boost::system::error_code& ec);
     void quic_close_connection();
 
+    void handle_quic_read_complete(std::size_t bytes_transferred);
+
 #endif
 
     boost::asio::io_service& io_context;
@@ -237,6 +240,7 @@ private:
     std::vector<std::vector<std::vector<uint8_t>>> quic_output_buffers;
     std::vector<std::vector<nghttp2::Address>> quic_remote_addresses;
     std::vector<std::vector<uint8_t>> quic_buffer_to_send;
+    std::vector<boost::asio::const_buffer> udp_buffers_to_send;
     size_t quic_output_pkt_count = 0;
     boost::asio::ip::udp::endpoint remote_addr;
     boost::asio::deadline_timer quic_pkt_timer;

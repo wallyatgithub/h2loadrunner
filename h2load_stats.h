@@ -85,35 +85,35 @@ struct Stats
 {
     Stats(size_t req_todo, size_t nclients);
     // The total number of requests
-    size_t req_todo;
+    size_t req_todo = 0;
     // The number of requests issued so far
-    size_t req_started;
+    size_t req_started = 0;
     // The number of requests finished
-    size_t req_done;
+    size_t req_done = 0;
     // The number of requests completed successful, but not necessarily
     // means successful HTTP status code.
-    size_t req_success;
+    size_t req_success = 0;
     // The number of requests marked as success.  HTTP status code is
     // also considered as success. This is subset of req_done.
-    size_t req_status_success;
+    size_t req_status_success = 0;
     // The number of requests failed. This is subset of req_done.
-    size_t req_failed;
+    size_t req_failed = 0;
     // The number of requests failed due to network errors. This is
     // subset of req_failed.
-    size_t req_error;
+    size_t req_error = 0;
     // The number of requests that failed due to timeout.
-    size_t req_timedout;
+    size_t req_timedout = 0;
     // The number of bytes received on the "wire". If SSL/TLS is used,
     // this is the number of decrypted bytes the application received.
-    int64_t bytes_total;
+    int64_t bytes_total = 0;
     // The number of bytes received for header fields.  This is
     // compressed version.
-    int64_t bytes_head;
+    int64_t bytes_head = 0;
     // The number of bytes received for header fields after they are
     // decompressed.
-    int64_t bytes_head_decomp;
+    int64_t bytes_head_decomp = 0;
     // The number of bytes received in DATA frame.
-    int64_t bytes_body;
+    int64_t bytes_body = 0;
     // The number of each HTTP status category, status[i] is status code
     // in the range [i*100, (i+1)*100).
     std::array<size_t, 6> status;
@@ -121,13 +121,10 @@ struct Stats
     std::vector<RequestStat> req_stats;
     // The statistics per client
     std::vector<ClientStat> client_stats;
-    //    std::atomic<uint64_t> max_resp_time_ms;
-    //    std::atomic<uint64_t> min_resp_time_ms;
-    //    std::atomic<uint64_t> total_resp_time_ms;
     // The number of UDP datagrams received.
-    size_t udp_dgram_recv;
+    size_t udp_dgram_recv = 0;
     // The number of UDP datagrams sent.
-    size_t udp_dgram_sent;
+    size_t udp_dgram_sent = 0;
 };
 
 
