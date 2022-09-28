@@ -30,6 +30,7 @@ extern "C" {
 #include <netinet/udp.h>
 #include <nghttp3/nghttp3.h>
 #include "h2load_http3_session.h"
+
 #endif
 
 namespace h2load
@@ -964,6 +965,10 @@ int libev_client::read_quic()
         {
             return 0;
         }
+        if (config->verbose)
+        {
+            std::cerr <<__FUNCTION__<< ": bytes read: " << nread << std::endl;
+        }
 
         assert(quic.conn);
 
@@ -1306,6 +1311,10 @@ int libev_client::write_udp(const sockaddr* addr, socklen_t addrlen,
     else
     {
         ++worker->stats.udp_dgram_sent;
+        if (config->verbose)
+        {
+            std::cerr <<__FUNCTION__<< ": bytes sent: " << nwrite << std::endl;
+        }
     }
 
     ev_io_stop(static_cast<libev_worker*>(worker)->loop, &wev);

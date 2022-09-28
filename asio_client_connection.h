@@ -40,7 +40,7 @@ namespace h2load
 {
 
 const auto single_buffer_size = 64 * 1024;
-const auto max_quic_pkt_to_send = 10;
+const auto initial_number_of_quic_buffers = 10;
 const auto number_of_output_buffer_groups = 2;
 
 class asio_client_connection
@@ -229,6 +229,11 @@ private:
 
     void handle_quic_read_complete(std::size_t bytes_transferred);
 
+    size_t number_of_avaiable_quic_output_buffers();
+    size_t number_of_occupied_quic_output_buffers();
+    size_t get_next_quic_output_buffer_index();
+    size_t get_next_udp_write_buffer_index();
+
 #endif
 
     boost::asio::io_service& io_context;
@@ -237,11 +242,11 @@ private:
 #ifdef ENABLE_HTTP3
     boost::asio::ip::udp::resolver udp_dns_resolver;
     std::unique_ptr<boost::asio::ip::udp::socket> udp_client_socket;
-    std::vector<std::vector<std::vector<uint8_t>>> quic_output_buffers;
-    std::vector<std::vector<nghttp2::Address>> quic_remote_addresses;
-    std::vector<std::vector<uint8_t>> quic_buffer_to_send;
-    std::vector<boost::asio::const_buffer> udp_buffers_to_send;
-    size_t quic_output_pkt_count = 0;
+    std::vector<std::vector<uint8_t>> quic_output_buffers;
+    std::vector<nghttp2::Address> quic_remote_addresses;
+    std::vector<size_t> quic_output_buffer_sizes;
+    size_t quic_output_packet_count = 0;
+    size_t udp_output_packet_count = 0;
     boost::asio::ip::udp::endpoint remote_addr;
     boost::asio::deadline_timer quic_pkt_timer;
     bool quic_close_sent = false;
