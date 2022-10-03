@@ -58,7 +58,7 @@ asio_client_connection::asio_client_connection
 #endif
       tcp_client_probe_socket(io_ctx),
       input_buffer(single_buffer_size),
-      output_buffers(number_of_output_buffer_groups, std::vector<uint8_t>(single_buffer_size)),
+      output_buffers(number_of_stream_output_buffer_groups, std::vector<uint8_t>(single_buffer_size)),
       connect_timer(io_ctx),
       delay_request_execution_timer(io_ctx),
       rps_timer(io_ctx),
@@ -1344,9 +1344,10 @@ int asio_client_connection::handle_http3_write_signal()
         {
             flags |= NGTCP2_WRITE_STREAM_FLAG_FIN;
         }
+        auto index = get_next_quic_output_buffer_index();
 
         auto nwrite = ngtcp2_conn_writev_stream(
-                          quic.conn, &ps.path, nullptr, quic_output_buffers[quic_output_packet_count].data(),
+                          quic.conn, &ps.path, nullptr, quic_output_buffers[index].data(),
                           max_udp_payload_size, &ndatalen,
                           flags, stream_id, reinterpret_cast<const ngtcp2_vec*>(v), vcnt,
                           current_timestamp_nanoseconds());
@@ -1382,7 +1383,6 @@ int asio_client_connection::handle_http3_write_signal()
         // only nwrite >= 0 can reach here
         if (nwrite > 0)
         {
-            auto index = get_next_quic_output_buffer_index();
             quic_output_buffers[index].resize(nwrite);
             
             memcpy(&quic_remote_addresses[index].su, ps.path.remote.addr,

@@ -41,7 +41,7 @@ namespace h2load
 
 const auto single_buffer_size = 64 * 1024;
 const auto initial_number_of_quic_buffers = 10;
-const auto number_of_output_buffer_groups = 2;
+const auto number_of_stream_output_buffer_groups = 2;
 
 class asio_client_connection
     : public h2load::base_client, private boost::noncopyable
