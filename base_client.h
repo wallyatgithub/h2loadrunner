@@ -218,6 +218,8 @@ public:
     void quic_write_qlog(const void* data, size_t datalen);
     int quic_make_http3_session();
 
+    void request_connection_close();
+
 #endif // ENABLE_HTTP3
 
     base_worker* worker;

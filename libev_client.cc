@@ -135,6 +135,7 @@ libev_client::~libev_client()
     if (ssl)
     {
         SSL_free(ssl);
+        ssl = nullptr;
     }
 
     final_cleanup();
@@ -345,7 +346,7 @@ void libev_client::restart_timeout_timer()
 
 void libev_client::setup_graceful_shutdown()
 {
-    auto write_clear_callback = [this]()
+    write_clear_callback = [this]()
     {
         disconnect();
         return false;
@@ -1027,7 +1028,15 @@ int libev_client::write_quic()
 
     if (quic.close_requested)
     {
-        return -1;
+        if (quic.conn)
+        {
+            quic_close_connection();
+            return 0;
+        }
+        else
+        {
+            return -1;
+        }
     }
 
     if (quic.tx.send_blocked)
@@ -1341,9 +1350,15 @@ void libev_client::quic_close_connection()
     {
         return;
     }
+    if (config->verbose)
+    {
+        std::cerr <<__FUNCTION__<< std::endl;
+    }
 
     write_udp(reinterpret_cast<sockaddr*>(ps.path.remote.addr),
               ps.path.remote.addrlen, buf.data(), nwrite, 0);
+
+    quic_free();
 }
 
 #endif

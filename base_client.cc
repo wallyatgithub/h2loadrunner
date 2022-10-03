@@ -1547,22 +1547,9 @@ bool base_client::update_request_with_lua(lua_State* L, const Request_Data& fini
     return retCode;
 }
 
-
 void base_client::terminate_session()
 {
     session->terminate();
-
-#ifdef ENABLE_HTTP3
-    if (config->is_quic())
-    {
-        quic.close_requested = true;
-        if (!is_write_signaled() && write_clear_callback)
-        {
-            auto func = std::move(write_clear_callback);
-            func();
-        }
-    }
-#endif // ENABLE_HTTP3
 }
 
 void base_client::reset_timeout_requests()
@@ -3304,6 +3291,10 @@ void base_client::quic_free()
     {
         ngtcp2_conn_del(quic.conn);
         quic.conn = nullptr;
+        if (config->verbose)
+        {
+            std::cerr << __FUNCTION__ << ", timestamp:"<<current_timestamp_nanoseconds() << std::endl;
+        }
     }
     if (quic.qlog_file != nullptr)
     {
@@ -3311,6 +3302,16 @@ void base_client::quic_free()
         quic.qlog_file = nullptr;
     }
 }
+
+void base_client::request_connection_close()
+{
+    if (config->is_quic())
+    {
+        quic.close_requested = true;
+        signal_write();
+    }
+}
+
 
 #endif // ENABLE_HTTP3
 

@@ -1877,6 +1877,11 @@ void set_cert_verification_mode(SSL_CTX* ctx, uint32_t certificate_verification_
     SSL_CTX_set_verify(ctx, mode, NULL);
 }
 
+void SSL_CTX_keylog_cb_func_cb(const SSL *ssl, const char *line){
+    static std::ofstream log_file("/mnt/c/tmp/ssl.log");
+    log_file << line <<std::endl;
+}
+
 void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
 {
     auto ssl_opts = (SSL_OP_ALL & ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS) |
@@ -1886,6 +1891,7 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
     SSL_CTX_set_options(ssl_ctx, ssl_opts);
     SSL_CTX_set_mode(ssl_ctx, SSL_MODE_AUTO_RETRY);
     SSL_CTX_set_mode(ssl_ctx, SSL_MODE_RELEASE_BUFFERS);
+    SSL_CTX_set_keylog_callback(ssl_ctx, SSL_CTX_keylog_cb_func_cb);
 
     if (config.json_config_schema.client_cert.size() && config.json_config_schema.private_key.size())
     {

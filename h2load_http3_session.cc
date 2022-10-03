@@ -178,7 +178,10 @@ int Http3Session::on_write()
     return -1;
 }
 
-void Http3Session::terminate() {}
+void Http3Session::terminate()
+{
+    client_->request_connection_close();
+}
 
 size_t Http3Session::max_concurrent_streams()
 {
