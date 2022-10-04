@@ -828,12 +828,12 @@ void populate_config_from_json(h2load::Config& config)
     config.connection_window_bits = config.json_config_schema.connection_window_bits;
     config.warm_up_time = config.json_config_schema.warm_up_time;
     config.max_frame_size = config.json_config_schema.max_frame_size;
-    config.tls13_ciphers= config.json_config_schema.tls13_ciphers;
-    config.groups= config.json_config_schema.groups;
-    config.no_udp_gso= config.json_config_schema.no_udp_gso;
-    config.max_udp_payload_size= config.json_config_schema.max_udp_payload_size;
-    config.ktls= config.json_config_schema.ktls;
-    config.qlog_file_base= config.json_config_schema.qlog_file_base;
+    config.tls13_ciphers = config.json_config_schema.tls13_ciphers;
+    config.groups = config.json_config_schema.groups;
+    config.no_udp_gso = config.json_config_schema.no_udp_gso;
+    config.max_udp_payload_size = config.json_config_schema.max_udp_payload_size;
+    config.ktls = config.json_config_schema.ktls;
+    config.qlog_file_base = config.json_config_schema.qlog_file_base;
 }
 
 void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
@@ -1877,9 +1877,11 @@ void set_cert_verification_mode(SSL_CTX* ctx, uint32_t certificate_verification_
     SSL_CTX_set_verify(ctx, mode, NULL);
 }
 
-void SSL_CTX_keylog_cb_func_cb(const SSL *ssl, const char *line){
-    static std::ofstream log_file("/mnt/c/tmp/ssl.log");
-    log_file << line <<std::endl;
+static std::string tls_keylog_file;
+void SSL_CTX_keylog_cb_func_cb(const SSL* ssl, const char* line)
+{
+    static std::ofstream log_file(tls_keylog_file);
+    log_file << line << std::endl;
 }
 
 void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
@@ -1891,7 +1893,11 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
     SSL_CTX_set_options(ssl_ctx, ssl_opts);
     SSL_CTX_set_mode(ssl_ctx, SSL_MODE_AUTO_RETRY);
     SSL_CTX_set_mode(ssl_ctx, SSL_MODE_RELEASE_BUFFERS);
-    SSL_CTX_set_keylog_callback(ssl_ctx, SSL_CTX_keylog_cb_func_cb);
+    if (config.json_config_schema.tls_keylog_file.size())
+    {
+        tls_keylog_file = config.json_config_schema.tls_keylog_file;
+        SSL_CTX_set_keylog_callback(ssl_ctx, SSL_CTX_keylog_cb_func_cb);
+    }
 
     if (config.json_config_schema.client_cert.size() && config.json_config_schema.private_key.size())
     {
@@ -2108,9 +2114,10 @@ void split_string(const std::string& source, String_With_Variables_In_Between& r
 
 }
 
-uint64_t current_timestamp_nanoseconds() {
-  return std::chrono::duration_cast<std::chrono::nanoseconds>
-                                  (std::chrono::steady_clock::now().time_since_epoch()).count();
+uint64_t current_timestamp_nanoseconds()
+{
+    return std::chrono::duration_cast<std::chrono::nanoseconds>
+           (std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
 

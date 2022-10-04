@@ -526,6 +526,7 @@ public:
     uint64_t max_udp_payload_size;
     bool ktls;
     std::string qlog_file_base;
+    std::string tls_keylog_file;
 
     explicit Config_Schema():
         schema("http"),
@@ -622,6 +623,7 @@ public:
         h->add_property("max-udp-payload-size", &this->max_udp_payload_size, staticjson::Flags::Optional);
         h->add_property("ktls", &this->ktls, staticjson::Flags::Optional);
         h->add_property("qlog-file-base", &this->qlog_file_base, staticjson::Flags::Optional);
+        h->add_property("tls-keylog-file", &this->tls_keylog_file, staticjson::Flags::Optional);
     }
 };
 

@@ -172,6 +172,11 @@
       "default": "TLSv1.3",
       "enum": ["TLSv1.2", "TLSv1.3"]
     },
+    "tls-keylog-file":
+    {
+      "description":"Path to a file; if this is given, h2loadrunner will dump tls keylog to this file; note: this should only be used for debug purpose and it is working only if there is only one connection",
+      "type":"string"
+    },
     "no-tls-proto":
     {
       "description":"Specify ALPN identifier of the protocol to be used when accessing http URI without SSL/TLS. Available protocols: h2c and http/1.1",

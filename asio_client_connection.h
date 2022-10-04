@@ -35,13 +35,10 @@
 #include "h2load_Config.h"
 #include "h2load_stats.h"
 #include "config_schema.h"
+#include <deque>
 
 namespace h2load
 {
-
-const auto single_buffer_size = 64 * 1024;
-const auto initial_number_of_quic_buffers = 10;
-const auto number_of_stream_output_buffer_groups = 2;
 
 class asio_client_connection
     : public h2load::base_client, private boost::noncopyable
@@ -178,7 +175,7 @@ private:
 
     void handle_connection_error();
 
-    void handle_read_complete(const boost::system::error_code& e, const std::size_t bytes_transferred);
+    void handle_read_complete(bool is_quic, const boost::system::error_code& e, const std::size_t bytes_transferred);
 
     template<typename SOCKET>
     void common_read(SOCKET& socket);
@@ -189,7 +186,7 @@ private:
 
     void do_read();
 
-    void handle_write_complete(const boost::system::error_code& e, std::size_t bytes_transferred);
+    bool handle_write_complete(const boost::system::error_code& e, std::size_t bytes_transferred);
 
     void handle_write_signal();
 
@@ -229,10 +226,15 @@ private:
 
     void handle_quic_read_complete(std::size_t bytes_transferred);
 
-    size_t number_of_avaiable_quic_output_buffers();
-    size_t number_of_occupied_quic_output_buffers();
-    size_t get_next_quic_output_buffer_index();
-    size_t get_next_udp_write_buffer_index();
+    size_t get_one_available_buffer_for_quic_output();
+
+    void send_buffer_to_udp_output(size_t index);
+
+    void return_buffer_to_quic_output(size_t index);
+
+    bool get_buffer_index_to_write_to_udp(size_t& index);
+
+    void send_buffer_to_quic_output(size_t index);
 
 #endif
 
@@ -245,11 +247,28 @@ private:
     std::vector<std::vector<uint8_t>> quic_output_buffers;
     std::vector<nghttp2::Address> quic_remote_addresses;
     std::vector<size_t> quic_output_buffer_sizes;
-    size_t quic_output_packet_count = 0;
-    size_t udp_output_packet_count = 0;
+    std::deque<size_t> quic_output_buffer_indexes;
+    std::deque<size_t> udp_output_buffer_indexes;
     boost::asio::ip::udp::endpoint remote_addr;
     boost::asio::deadline_timer quic_pkt_timer;
     bool quic_close_sent = false;
+    struct  Defer_Or_DoNothing
+    {
+    public:
+        std::function<void(void)> m_func;
+        Defer_Or_DoNothing(std::function<void(void)> f): m_func(f) {};
+        ~Defer_Or_DoNothing()
+        {
+            if (m_func)
+            {
+                m_func();
+            }
+        };
+        void release()
+        {
+            auto t = std::move(m_func);
+        };
+    };
 #endif
     boost::asio::ip::tcp::socket tcp_client_probe_socket;
     boost::asio::ssl::context& ssl_ctx;
