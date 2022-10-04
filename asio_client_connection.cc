@@ -1513,6 +1513,9 @@ void asio_client_connection::quic_close_connection()
             auto function_name = __FUNCTION__;
             old_udp_client_socket->cancel();
             quic_free();
+
+            stop();
+
             // TODO: move this to somewhere else
             if (ssl)
             {
