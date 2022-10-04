@@ -186,7 +186,7 @@ private:
 
     void do_read();
 
-    bool handle_write_complete(const boost::system::error_code& e, std::size_t bytes_transferred);
+    bool handle_write_complete(bool is_quic, const boost::system::error_code& e, std::size_t bytes_transferred);
 
     void handle_write_signal();
 

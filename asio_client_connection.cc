@@ -778,8 +778,6 @@ void asio_client_connection::handle_connection_error()
 
 void asio_client_connection::handle_quic_read_complete(std::size_t bytes_transferred)
 {
-    ++worker->stats.udp_dgram_recv;
-
     // TODO: connection switch handling needs to be considered
     assert(quic.conn);
     int rv;
@@ -910,7 +908,7 @@ void asio_client_connection::do_read()
     do_read_fn(this);
 }
 
-bool asio_client_connection::handle_write_complete(const boost::system::error_code& e, std::size_t bytes_transferred)
+bool asio_client_connection::handle_write_complete(bool is_quic, const boost::system::error_code& e, std::size_t bytes_transferred)
 {
     if (config->verbose)
     {
@@ -932,9 +930,8 @@ bool asio_client_connection::handle_write_complete(const boost::system::error_co
     is_write_in_progress = false;
 
 #ifdef ENABLE_HTTP3
-    if (udp_client_socket)
+    if (is_quic)
     {
-        worker->stats.udp_dgram_sent += bytes_transferred;
         ++worker->stats.udp_dgram_sent;
     }
 #endif
@@ -1003,7 +1000,7 @@ void asio_client_connection::common_write(SOCKET& socket)
         socket, boost::asio::buffer(buffer.data(), length),
         [this](const boost::system::error_code & e, std::size_t bytes_transferred)
     {
-        handle_write_complete(e, bytes_transferred);
+        handle_write_complete(false, e, bytes_transferred);
     });
 }
 
@@ -1176,9 +1173,7 @@ void asio_client_connection::do_udp_read()
         boost::asio::buffer(input_buffer), remote_addr,
         [this](const boost::system::error_code & e, std::size_t bytes_transferred)
     {
-        auto read_complete = std::bind(&asio_client_connection::handle_read_complete, this, true, std::placeholders::_1,
-                                       std::placeholders::_2);
-        read_complete(e, bytes_transferred);
+        handle_read_complete(true, e, bytes_transferred);
     });
 }
 
@@ -1478,7 +1473,7 @@ void asio_client_connection::do_udp_write()
                                      remote_addr,
                                      [this, udp_output_buffer_index](const boost::system::error_code & e, std::size_t bytes_transferred)
     {
-        if (handle_write_complete(e, bytes_transferred))
+        if (handle_write_complete(true, e, bytes_transferred))
         {
             send_buffer_to_quic_output(udp_output_buffer_index);
         }
@@ -1533,7 +1528,7 @@ void asio_client_connection::quic_close_connection()
                     std::cerr << "bytes sent:" << bytes_transferred << ", timestamp:" << current_timestamp_nanoseconds() << std::endl;
                 }
                 old_udp_client_socket->close();
-                handle_write_complete(e, bytes_transferred);
+                handle_write_complete(true, e, bytes_transferred);
             });
             if (config->verbose)
             {
