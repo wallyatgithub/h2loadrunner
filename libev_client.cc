@@ -638,6 +638,25 @@ int libev_client::connected()
 
     if (ssl)
     {
+        if (config->json_config_schema.tls_keylog_file.size())
+        {
+            struct sockaddr local_addr;
+            socklen_t len = sizeof(sin);
+            if (getsockname(fd, &local_addr, &len) != -1)
+            {
+                if (local_addr->sa_family == AF_INET)
+                {
+                    tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((struct sockaddr_in*)local_addr)->sin_port)) + ".log";
+                }
+                else
+                {
+                    tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((struct sockaddr_in6*)local_addr)->sin6_port)) + ".log";
+                }
+
+            }
+            std::remove(tls_keylog_file_name.c_str());
+            SSL_set_ex_data(ssl, SSL_EXT_DATA_INDEX_KEYLOG_FILE, (void*)tls_keylog_file_name.c_str());
+        }
         readfn = &libev_client::tls_handshake;
         writefn = &libev_client::tls_handshake;
 

@@ -273,6 +273,7 @@ private:
     boost::asio::ip::tcp::socket tcp_client_probe_socket;
     boost::asio::ssl::context& ssl_ctx;
     std::unique_ptr<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>> ssl_socket;
+    std::deque<std::unique_ptr<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>> old_ssl_sockets;
     bool is_write_in_progress = false;
     bool is_client_stopped = false;
     bool write_signaled = false;

@@ -174,7 +174,7 @@
     },
     "tls-keylog-file":
     {
-      "description":"Path to a file; if this is given, h2loadrunner will dump tls keylog to this file; note: this should only be used for debug purpose and it is working only if there is only one connection",
+      "description":"Enable tls key log and specify base file name for tls key log; key log is emitted for each tls connection. For a given base name 'base', each output file name becomes 'base_localPort.log' where "localPort" is the local port of the connection",
       "type":"string"
     },
     "no-tls-proto":

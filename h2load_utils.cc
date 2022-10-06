@@ -1877,11 +1877,14 @@ void set_cert_verification_mode(SSL_CTX* ctx, uint32_t certificate_verification_
     SSL_CTX_set_verify(ctx, mode, NULL);
 }
 
-static std::string tls_keylog_file;
 void SSL_CTX_keylog_cb_func_cb(const SSL* ssl, const char* line)
 {
-    static std::ofstream log_file(tls_keylog_file);
-    log_file << line << std::endl;
+    void* p = SSL_get_ex_data(ssl, SSL_EXT_DATA_INDEX_KEYLOG_FILE);
+    if (p)
+    {
+        std::ofstream log_file((char*)p, std::ios_base::app);
+        log_file << line << std::endl;
+    }
 }
 
 void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
@@ -1895,7 +1898,6 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
     SSL_CTX_set_mode(ssl_ctx, SSL_MODE_RELEASE_BUFFERS);
     if (config.json_config_schema.tls_keylog_file.size())
     {
-        tls_keylog_file = config.json_config_schema.tls_keylog_file;
         SSL_CTX_set_keylog_callback(ssl_ctx, SSL_CTX_keylog_cb_func_cb);
     }
 

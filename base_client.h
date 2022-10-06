@@ -297,8 +297,24 @@ public:
             } blocked[2];
             std::unique_ptr<uint8_t[]> data;
         } tx;
+        void init()
+        {
+            conn = nullptr;
+            close_requested = false;
+            qlog_file = nullptr;
+            tx.send_blocked = false;
+            tx.num_blocked = 0;
+            tx.num_blocked_sent = 0;
+            for (int i = 0; i < 2; i++)
+            {
+                tx.blocked[i].data = nullptr;
+                tx.blocked[i].datalen = 0;
+                tx.blocked[i].gso_size = 0;
+            }
+        };
     } ;
     Quic quic; // TODO: make this unique_ptr and reallocate during reconnect
+    std::string tls_keylog_file_name;
 #endif // ENABLE_HTTP3
 };
 

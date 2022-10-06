@@ -33,7 +33,7 @@ namespace h2load
 
 
 const auto single_buffer_size = 64 * 1024;
-const auto initial_number_of_quic_buffers = 2;
+const auto initial_number_of_quic_buffers = 5;
 const auto number_of_stream_output_buffer_groups = 2;
 
 
@@ -74,7 +74,6 @@ asio_client_connection::asio_client_connection
       connect_back_to_preferred_host_timer(io_ctx),
       delayed_reconnect_timer(io_ctx),
       ssl_ctx(ssl_context),
-      ssl_socket(std::make_unique<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>(io_ctx, ssl_context)),
       ssl_handshake_timer(io_ctx),
       do_read_fn(&asio_client_connection::do_tcp_read),
       do_write_fn(&asio_client_connection::do_tcp_write)
@@ -370,6 +369,12 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
         {
             do_read_fn = &asio_client_connection::do_ssl_read;
             do_write_fn = &asio_client_connection::do_ssl_write;
+            while (!old_ssl_sockets.empty())
+            {
+                old_ssl_sockets.pop_front();
+            }
+            old_ssl_sockets.push_back(std::move(ssl_socket));
+            ssl_socket = std::make_unique<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>(io_context, ssl_ctx);
             ssl = ssl_socket->native_handle();
         }
         else
@@ -704,6 +709,13 @@ void asio_client_connection::on_connected_event(const boost::system::error_code&
         }
         else
         {
+            if (config->json_config_schema.tls_keylog_file.size())
+            {
+                auto local_port = socket.lowest_layer().local_endpoint().port();
+                tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(local_port) + ".log";
+                std::remove(tls_keylog_file_name.c_str());
+                SSL_set_ex_data(ssl, SSL_EXT_DATA_INDEX_KEYLOG_FILE, (void*)tls_keylog_file_name.c_str());
+            }
             start_async_handshake();
             start_ssl_handshake_watcher();
         }
@@ -900,7 +912,10 @@ void asio_client_connection::do_tcp_read()
 
 void asio_client_connection::do_ssl_read()
 {
-    common_read(*ssl_socket);
+    if (ssl_socket)
+    {
+        common_read(*ssl_socket);
+    }
 }
 
 void asio_client_connection::do_read()
@@ -1011,7 +1026,10 @@ void asio_client_connection::do_tcp_write()
 
 void asio_client_connection::do_ssl_write()
 {
-    common_write(*ssl_socket);
+    if (ssl_socket)
+    {
+        common_write(*ssl_socket);
+    }
 }
 
 void asio_client_connection::do_write()
@@ -1027,12 +1045,12 @@ void asio_client_connection::stop()
     }
     is_client_stopped = true;
     boost::system::error_code ignored_ec;
-    tcp_client_socket.lowest_layer().close(ignored_ec);
+    tcp_client_socket.close(ignored_ec);
     if (ssl_socket && ssl == ssl_socket->native_handle())
     {
         ssl = nullptr;
     }
-    ssl_socket = std::make_unique<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>(io_context, ssl_ctx);
+    ssl_socket->lowest_layer().close(ignored_ec);
     connect_timer.cancel();
     rps_timer.cancel();
     delay_request_execution_timer.cancel();
@@ -1284,23 +1302,11 @@ size_t asio_client_connection::get_one_available_buffer_for_quic_output()
 void asio_client_connection::send_buffer_to_udp_output(size_t index)
 {
     udp_output_buffer_indexes.push_back(index);
-    if (config->verbose)
-    {
-        std::cerr << __FUNCTION__
-                  << ": buffer index to write to udp: " << index << std::endl;
-
-    }
 }
 
 void asio_client_connection::send_buffer_to_quic_output(size_t index)
 {
     quic_output_buffer_indexes.push_back(index);
-    if (config->verbose)
-    {
-        std::cerr << __FUNCTION__
-                  << ": buffer index returned to quic: " << index << std::endl;
-
-    }
 }
 
 void asio_client_connection::return_buffer_to_quic_output(size_t index)

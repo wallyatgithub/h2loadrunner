@@ -3138,6 +3138,8 @@ int base_client::quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
 {
     int rv;
 
+    quic.init();
+
     if (!ssl)
     {
         ssl = SSL_new(worker->get_ssl_ctx());
@@ -3148,6 +3150,19 @@ int base_client::quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
         SSL_set_app_data(ssl, &quic.conn_ref);
         SSL_set_connect_state(ssl);
         SSL_set_quic_use_legacy_codepoint(ssl, 0);
+    }
+    if (config->json_config_schema.tls_keylog_file.size())
+    {
+        if (local_addr->sa_family == AF_INET)
+        {
+            tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((struct sockaddr_in*)local_addr)->sin_port)) + ".log";
+        }
+        else
+        {
+            tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((struct sockaddr_in6*)local_addr)->sin6_port)) + ".log";
+        }
+        std::remove(tls_keylog_file_name.c_str());
+        SSL_set_ex_data(ssl, SSL_EXT_DATA_INDEX_KEYLOG_FILE, (void*)tls_keylog_file_name.c_str());
     }
 
     auto callbacks = ngtcp2_callbacks
