@@ -120,9 +120,9 @@ if(DEFINED ENABLE_HTTP3)
     set(http3_libraries
     ngtcp2
     nghttp3
-    crypto
-    ssl
     ngtcp2_crypto_openssl
+    ssl
+    crypto
     )
 endif()
 
