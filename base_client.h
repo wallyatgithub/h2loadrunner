@@ -314,8 +314,8 @@ public:
         };
     } ;
     Quic quic; // TODO: make this unique_ptr and reallocate during reconnect
-    std::string tls_keylog_file_name;
 #endif // ENABLE_HTTP3
+    std::string tls_keylog_file_name;
 };
 
 }

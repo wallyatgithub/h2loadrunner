@@ -788,58 +788,6 @@ void asio_client_connection::handle_connection_error()
     return;
 }
 
-void asio_client_connection::handle_quic_read_complete(std::size_t bytes_transferred)
-{
-    // TODO: connection switch handling needs to be considered
-    assert(quic.conn);
-    int rv;
-    ngtcp2_pkt_info pi{};
-    ++worker->stats.udp_dgram_recv;
-    auto local_sockaddr = udp_client_socket->local_endpoint().data();
-    ngtcp2_socklen local_addr_len = udp_client_socket->local_endpoint().size();
-
-    auto remote_sockaddr = remote_addr.data();
-    ngtcp2_socklen remote_addr_len = remote_addr.size();
-
-    auto path = ngtcp2_path
-    {
-        {
-            local_sockaddr,
-            local_addr_len,
-        },
-        {
-            remote_sockaddr,
-            remote_addr_len,
-        },
-    };
-    rv = ngtcp2_conn_read_pkt(quic.conn, &path, &pi, input_buffer.data(), bytes_transferred,
-                              current_timestamp_nanoseconds());
-    if (rv != 0)
-    {
-        std::cerr << "ngtcp2_conn_read_pkt: " << ngtcp2_strerror(rv) << std::endl;
-
-        if (!quic.last_error.error_code)
-        {
-            if (rv == NGTCP2_ERR_CRYPTO)
-            {
-                ngtcp2_connection_close_error_set_transport_error_tls_alert(
-                    &quic.last_error, ngtcp2_conn_get_tls_alert(quic.conn), nullptr,
-                    0);
-            }
-            else
-            {
-                ngtcp2_connection_close_error_set_transport_error_liberr(
-                    &quic.last_error, rv, nullptr, 0);
-            }
-        }
-        return handle_connection_error();
-    }
-    if (udp_client_socket && !udp_client_socket->available())
-    {
-        signal_write();
-    }
-}
-
 void asio_client_connection::handle_read_complete(bool is_quic, const boost::system::error_code& e,
                                                   const std::size_t bytes_transferred)
 {
@@ -1050,7 +998,10 @@ void asio_client_connection::stop()
     {
         ssl = nullptr;
     }
-    ssl_socket->lowest_layer().close(ignored_ec);
+    if (ssl_socket)
+    {
+        ssl_socket->lowest_layer().close(ignored_ec);
+    }
     connect_timer.cancel();
     rps_timer.cancel();
     delay_request_execution_timer.cancel();
@@ -1136,6 +1087,59 @@ void asio_client_connection::on_probe_resolve_result_event(const boost::system::
 
 
 #ifdef ENABLE_HTTP3
+
+void asio_client_connection::handle_quic_read_complete(std::size_t bytes_transferred)
+{
+    // TODO: connection switch handling needs to be considered
+    assert(quic.conn);
+    assert(udp_client_socket);
+    int rv;
+    ngtcp2_pkt_info pi{};
+    ++worker->stats.udp_dgram_recv;
+    auto local_sockaddr = udp_client_socket->local_endpoint().data();
+    ngtcp2_socklen local_addr_len = udp_client_socket->local_endpoint().size();
+
+    auto remote_sockaddr = remote_addr.data();
+    ngtcp2_socklen remote_addr_len = remote_addr.size();
+
+    auto path = ngtcp2_path
+    {
+        {
+            local_sockaddr,
+            local_addr_len,
+        },
+        {
+            remote_sockaddr,
+            remote_addr_len,
+        },
+    };
+    rv = ngtcp2_conn_read_pkt(quic.conn, &path, &pi, input_buffer.data(), bytes_transferred,
+                              current_timestamp_nanoseconds());
+    if (rv != 0)
+    {
+        std::cerr << "ngtcp2_conn_read_pkt: " << ngtcp2_strerror(rv) << std::endl;
+
+        if (!quic.last_error.error_code)
+        {
+            if (rv == NGTCP2_ERR_CRYPTO)
+            {
+                ngtcp2_connection_close_error_set_transport_error_tls_alert(
+                    &quic.last_error, ngtcp2_conn_get_tls_alert(quic.conn), nullptr,
+                    0);
+            }
+            else
+            {
+                ngtcp2_connection_close_error_set_transport_error_liberr(
+                    &quic.last_error, rv, nullptr, 0);
+            }
+        }
+        return handle_connection_error();
+    }
+    if (udp_client_socket && !udp_client_socket->available())
+    {
+        signal_write();
+    }
+}
 
 void asio_client_connection::quic_restart_pkt_timer()
 {
@@ -1237,7 +1241,9 @@ void asio_client_connection::start_udp_async_connect(boost::asio::ip::udp::resol
     do_read_fn = &asio_client_connection::do_udp_read;
     do_write_fn = &asio_client_connection::do_udp_write;
 
-    udp_client_socket->lowest_layer().async_connect(remote_endpoint,
+    assert(udp_client_socket);
+
+    udp_client_socket->async_connect(remote_endpoint,
                                                     [this, endpoint_iterator](const boost::system::error_code & err)
     {
         if (!err)
@@ -1357,13 +1363,16 @@ int asio_client_connection::handle_http3_write_signal()
 
     ngtcp2_path_storage_zero(&ps);
 
+    int64_t quic_output_buffer_index = -1;
     for (;;)
     {
         int64_t stream_id = -1;
         int fin = 0;
         ssize_t sveccnt = 0;
-
-        auto quic_output_buffer_index = get_one_available_buffer_for_quic_output();
+        if (quic_output_buffer_index == -1)
+        {
+            quic_output_buffer_index = get_one_available_buffer_for_quic_output();
+        }
         auto f = [this, quic_output_buffer_index]()
         {
             return_buffer_to_quic_output(quic_output_buffer_index);
@@ -1412,6 +1421,7 @@ int asio_client_connection::handle_http3_write_signal()
                     {
                         return -1;
                     }
+                    autoReturn.release();
                     continue;
             }
 
@@ -1433,8 +1443,8 @@ int asio_client_connection::handle_http3_write_signal()
             quic_output_buffer_sizes[quic_output_buffer_index] = nwrite;
 
             autoReturn.release();
-
             send_buffer_to_udp_output(quic_output_buffer_index);
+            quic_output_buffer_index = -1;
 
             if (config->verbose)
             {
@@ -1452,7 +1462,8 @@ void asio_client_connection::do_udp_write()
 {
     size_t udp_output_buffer_index;
     if (is_write_in_progress || is_client_stopped ||
-        !get_buffer_index_to_write_to_udp(udp_output_buffer_index))
+        !get_buffer_index_to_write_to_udp(udp_output_buffer_index) ||
+        !udp_client_socket)
     {
         return;
     }
