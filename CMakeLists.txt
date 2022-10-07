@@ -114,8 +114,7 @@ if(DEFINED ENABLE_HTTP3)
     set(http3_link_directories
     "${CMAKE_CURRENT_SOURCE_DIR}/openssl/build/lib"
     "${CMAKE_CURRENT_SOURCE_DIR}/nghttp3/build/lib"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/lib/.libs/"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/crypto/openssl/.libs"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/build/lib"
     )
     
     set(http3_libraries

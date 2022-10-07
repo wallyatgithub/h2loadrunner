@@ -1,5 +1,5 @@
 FROM alpine
-RUN apk add nghttp2-static nghttp2-dev openssl-libs-static openssl-dev libcrypto1.1 cmake boost-static boost-dev luajit-dev gcc g++ unzip wget libexecinfo-dev libexecinfo-static make && \
+RUN apk add nghttp2-static nghttp2-dev openssl-libs-static openssl-dev libcrypto1.1 cmake boost-static boost-dev luajit-dev gcc g++ unzip wget libexecinfo-dev libexecinfo-static make autoconf automake libtool && \
     wget https://github.com/Tencent/rapidjson/archive/refs/heads/master.zip && \
     unzip master.zip && \
     cd rapidjson-master && cmake . && cmake --build ./ && cmake --install ./ && \
@@ -19,4 +19,4 @@ RUN apk add nghttp2-static nghttp2-dev openssl-libs-static openssl-dev libcrypto
     mkdir -p /usr/share/h2loadrunner/ && \
     cp h2loadrunner-main/config_schema.json /usr/share/h2loadrunner/ && \
     rm -rf h2loadrunner-main main.zip && \
-    apk del nghttp2-static nghttp2-dev openssl-libs-static openssl-dev libcrypto1.1 cmake boost-static boost-dev luajit-dev gcc g++ unzip wget libexecinfo-dev libexecinfo-static make
+    apk del nghttp2-static nghttp2-dev openssl-libs-static openssl-dev libcrypto1.1 cmake boost-static boost-dev luajit-dev gcc g++ unzip wget libexecinfo-dev libexecinfo-static make autoconf automake libtool

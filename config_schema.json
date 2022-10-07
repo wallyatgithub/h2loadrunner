@@ -65,7 +65,7 @@
     },
     "switch-back-after-connection-retry":
     {
-      "description": "when connection-retry occurs due to host disconnect, load balance may be broken as mentioned above; this field provide an option to recover; true: h2loadrunner will monitor the host disconnected, and when it is up again (tcp connect is successful), h2loadrunner will re-establish connection to it to reach load balance; false: h2loadrunner will not monitor the host disconnected, and leave the load unbalanced; note: it is not always positive to have this set to true, as it may cause connection to flip-flop when the host itself is unstable",
+      "description": "when connection-retry occurs due to host disconnect, load balance may be broken as mentioned above; this field provide an option to recover; true: h2loadrunner will monitor the host disconnected, and when it is up again (tcp connect is successful), h2loadrunner will re-establish connection to it to reach load balance; false: h2loadrunner will not monitor the host disconnected, and leave the load unbalanced; note: it is not always positive to have this set to true, as it may cause connection to flip-flop when the host itself is unstable; note: this is not yet supported with http3",
       "default": false,
       "type":"boolean"
     },
