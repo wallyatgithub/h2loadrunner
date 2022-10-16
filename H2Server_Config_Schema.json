@@ -86,6 +86,11 @@
         "default": false,
         "type":"boolean"
     },
+    "statistics-file":
+    {
+      "description":"Path to a file to write statistics to. If no file is given here, statistics would be written to stdout",
+      "type":"string"
+    },
     "Service":{
       "description":"service is a list of Request and the affiliated Response candidates. The Request specifies the pattern the incoming request message should have, and if the incoming request message matches the specified pattern, the response is generated from the associated Response candidates; if the incoming request can match more than one patterns, the pattern with more matching rules is chosen",
       "type":"array",
@@ -103,12 +108,12 @@
                 "type":"string"
               },
               "headers":{
-                "description": "Array of match rules to be executed against the received headers",
+                "description": "Array of match rules to be executed with the received headers",
                 "type":"array",
                 "minItems":1,
                 "items": {
                   "type": "object",
-                  "description": "Match rule to be executed against the value of one received header",
+                  "description": "Match rule to be executed with the value of one received header",
                   "properties":{
                     "header-name":{
                       "description": "This field specifies the name of a received header; the value of this header is to be picked up to run the match",
@@ -122,7 +127,7 @@
                       "enum": ["EqualsTo", "StartsWith", "EndsWith", "Contains", "RegexMatch"]
                     },
                     "input":{
-                      "description": "Input used to run the matchType above against the received header value; i.e., received header value should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression in POSIX grep grammar, and it should match the entire target character sequence, i.e., the header value",
+                      "description": "Input used to run the matchType above with the received header value; i.e., received header value should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression in POSIX grep grammar, and it should match the entire target character sequence, i.e., the header value",
                       "default": "/",
                       "type":"string"
                     }
@@ -130,12 +135,12 @@
                 }
               },
               "payload": {
-                "description": "Array of matches rules to be executed against the received Json payload",
+                "description": "Array of matches rules to be executed with the received message payload (body)",
                 "type":"array",
                 "minItems":0,
                 "items": {
                   "type": "object",
-                  "description": "Match rule to be executed against a value in the received Json payload as specified by the Json pointer",
+                  "description": "Match rule to be executed with the received message payload (body); if the message payload is in Json format, specify the Json pointer to locate a value within the Json payload; otherwise, leave JsonPointer field empty, the full message payload (body) will be interpreted as plain text, with which the match will be executed",
                   "properties":{
                     "JsonPointer": {
                       "description": "A Json pointer to locate a value within the received Json payload",
@@ -147,7 +152,7 @@
                       "enum": ["EqualsTo", "StartsWith", "EndsWith", "Contains", "RegexMatch"]
                     },
                     "input": {
-                      "description": "Input used to execute the matchType above against the value specified by the Json pointer above; the value specified by the Json pointer above should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression in POSIX grep grammar, and it should match the entire target character sequence, i.e., the value specified by the Json pointer",
+                      "description": "Input used to execute the matchType above with the value specified by JsonPointer field above; the value specified by JsonPointer above should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression in POSIX grep grammar, and it should match the entire target character sequence, i.e., the value specified by JsonPointer",
                       "type":"string"
                     }
                   }
@@ -195,7 +200,7 @@
                   "type":"object",
                   "properties":{
                     "msg-payload": {
-                      "description": "The actual message payload. The payload can optionally contain a placeholder (name specified below) that has multiple occurrences. For example: {'name': '$VAR', 'location': '$VAR', 'ID', '$VAR'}, here, $VAR is the placeholder. Each occurrence of $VAR would be replaced by an actual string as instructed by arguments field, in order of occurrance; no need to manually add Content-Length header in additonalHeaders field, as it would be generated based on the actual final length; however, Content-Type header should be provided by user manually in additonalHeaders field.",
+                      "description": "The actual message payload (or the path of a file, whose content is the actual payload). The payload can optionally contain a placeholder (name specified below) that has multiple occurrences. For example: {'name': '$VAR', 'location': '$VAR', 'ID', '$VAR'}, here, $VAR is the placeholder. Each occurrence of $VAR would be replaced by an actual string as instructed by arguments field, in order of occurrance; no need to manually add Content-Length header in additonalHeaders field, as it would be generated based on the actual final length; however, Content-Type header should be provided by user manually in additonalHeaders field.",
                       "type":"string"
                     },
                     "placeholder": {
@@ -211,9 +216,9 @@
                         "description": "Each argument produces a string value; the source can be the value identified by a Json pointer to the payload of the corresponding request, or the value of a header in the corresponding request; refer to type-of-value field for more sources to generate the string value. An optional regex can be applied to extract a sub string out of the string value, and an optional sub string action specified by sub-string-start and sub-string-length can be applied as the last step, to get the desired portion, this is usually meaningful when the value is from Json pointer or header, it is obviously not making sense to cut the value which is already a single hex",
                         "properties":{
                           "type-of-value": {
-                            "description": "how to produce the value: JsonPointer means to find the value from the received Json payload with the Json pointer specified by value-identifier field; Header means the value of the request header, with header name specified by value-identifier field; RandomHex means to generate a random hex number, like A, B, C, 9, etc.; TimeStamp is to generate a timestamp in IMF-fixdate format, e.g.: Sun, 06 Nov 1994 08:49:37 GMT",
+                            "description": "how to produce the value: JsonPointer means to find the value from the received Json payload with the Json pointer specified by value-identifier field; Header means the value of the request header, with header name specified by value-identifier field; RandomHex means to generate a random hex number, like A, B, C, 9, etc.; TimeStamp is to generate a timestamp in IMF-fixdate format, e.g.: Sun, 06 Nov 1994 08:49:37 GMT; Pseudo-UUID is to generate a UUID like string, note that this may not be unique enough as it is of 32 bits of randomness only; RawPayload means the whole message payload (body) interpreted as plain text",
                             "type":"string",
-                            "enum": ["JsonPointer", "Header", "RandomHex", "TimeStamp"]
+                            "enum": ["JsonPointer", "Header", "RandomHex", "TimeStamp", "Pseudo-UUID", "RawPayload"]
                           },
                           "value-identifier":{
                             "description": "Either a Json pointer, e.g., /name representing 'bill' in {'name': 'bill', 'location': office', 'ID', '123'}; or a header name which points to a header of the received request; this field is not used if type-of-value is neither JsonPointer nor Header",
@@ -262,9 +267,9 @@
                           "description": "Each argument produces a string value; the source can be the value identified by a Json pointer to the payload of the corresponding request, or the value of a header in the corresponding request; refer to type-of-value field for more sources to generate the string value. An optional regex can be applied to extract a sub string out of the string value, and an optional substring action specified by sub-string-start and sub-string-length can be applied as the last step, to get the desired portion, this is usually meaningful when the value is from Json pointer or header, it is obviously not making sense to cut the value which is already a single hex",
                           "properties":{
                             "type-of-value": {
-                              "description": "how to produce the value: JsonPointer means to find the value from the received Json payload with the Json pointer specified by value-identifier field; Header means the value of the request header, with header name specified by value-identifier field; RandomHex means to generate a random hex number, like A, B, C, 9, etc.; TimeStamp is to generate a timestamp in IMF-fixdate format, e.g.: Sun, 06 Nov 1994 08:49:37 GMT",
+                              "description": "how to produce the value: JsonPointer means to find the value from the received Json payload with the Json pointer specified by value-identifier field; Header means the value of the request header, with header name specified by value-identifier field; RandomHex means to generate a random hex number, like A, B, C, 9, etc.; TimeStamp is to generate a timestamp in IMF-fixdate format, e.g.: Sun, 06 Nov 1994 08:49:37 GMT; Pseudo-UUID is to generate a UUID like string, note that this may not be unique enough as it is of 32 bits of randomness only; RawPayload means the whole message payload (body) interpreted as plain text",
                               "type":"string",
-                              "enum": ["JsonPointer", "Header", "RandomHex", "TimeStamp"]
+                              "enum": ["JsonPointer", "Header", "RandomHex", "TimeStamp", "Pseudo-UUID", "RawPayload"]
                             },
                             "value-identifier":{
                               "description": "Either a Json pointer, e.g., /name representing 'bill' in {'name': 'bill', 'location': office', 'ID', '123'}; or a header name which points to a header of the received request; this field is not used if type-of-value is neither JsonPointer nor Header",

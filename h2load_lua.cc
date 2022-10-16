@@ -1028,7 +1028,7 @@ int start_server(lua_State* L)
         {
             ready_promise.set_value();
         };
-        start_server(config_file_name, false, init_cbk);
+        start_server(config_file_name, true, init_cbk);
     };
     std::thread serverThread(thread_func);
     auto bootstrap_thread_id = serverThread.get_id();

@@ -3,6 +3,10 @@
 
 bool debug_mode = false;
 
+static std::list<std::vector<uint64_t>> g_total_request_received;
+static std::list<std::vector<uint64_t>> g_total_unmatched_responses;
+static std::list<std::vector<std::vector<std::vector<ResponseStatistics>>>> g_response_stats;
+static std::list<H2Server_Config_Schema> g_config_schemas;
 
 void close_stream(uint64_t& handler_id, int32_t stream_id)
 {
@@ -563,7 +567,6 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
                     << "," << std::setw(req_name_width) << ((total_resp_throttled_till_now - total_resp_throttled_till_last)
                                                             *std::milli::den) / period_duration
                     << std::endl;
-            std::cout << SStream.str();
 
             SStream <<     std::setw(req_name_width) << "UNMATCHED"
                     << "," << std::setw(resp_name_width) << "---"
@@ -572,7 +575,16 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
                     << "," << std::setw(req_name_width) << ((total_unmatched_responses_till_now - total_unmatched_responses_till_last)*std::milli::den) / period_duration
                     << "," << std::setw(req_name_width) << "---"
                     << std::endl;
-            std::cout << SStream.str();
+            if (config_schema.statistics_file.empty())
+            {
+                std::cout << SStream.str();
+            }
+            else
+            {
+                static thread_local std::ofstream log_file(config_schema.statistics_file);
+                log_file << SStream.str();
+                log_file.flush();
+            }
 
             auto new_request_width = std::to_string(total_resp_sent_till_now).size();
             request_width = request_width > new_request_width ? request_width : new_request_width;
@@ -586,7 +598,8 @@ void start_server(const std::string& config_file_name, bool start_stats_thread, 
 {
     std::ifstream buffer(config_file_name);
     std::string jsonStr((std::istreambuf_iterator<char>(buffer)), std::istreambuf_iterator<char>());
-
+    g_config_schemas.emplace_back();
+    auto& config_schema = g_config_schemas.back();
     staticjson::ParseStatus result;
     if (!staticjson::from_json_string(jsonStr.c_str(), &config_schema, &result))
     {
@@ -615,9 +628,14 @@ void start_server(const std::string& config_file_name, bool start_stats_thread, 
     }
     config_schema.threads = num_threads;
 
-    static std::vector<uint64_t> totalReqsReceived(num_threads, 0);
-    static std::vector<uint64_t> totalUnMatchedResponses(num_threads, 0);
-    static std::vector<std::vector<std::vector<ResponseStatistics>>> respStats;
+    g_total_request_received.emplace_back(num_threads, 0);
+    auto& totalReqsReceived = g_total_request_received.back();
+
+    g_total_unmatched_responses.emplace_back(num_threads, 0);
+    auto& totalUnMatchedResponses = g_total_unmatched_responses.back();
+
+    g_response_stats.emplace_back();
+    auto& respStats = g_response_stats.back();
     for (size_t req_idx = 0; req_idx < config_schema.service.size(); req_idx++)
     {
         std::vector<std::vector<ResponseStatistics>> perServiceStats(config_schema.service[req_idx].responses.size(),
