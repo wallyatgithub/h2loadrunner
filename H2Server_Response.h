@@ -11,6 +11,7 @@
 #include <sstream>
 #include <fstream>
 #include <streambuf>
+#include <sstream>
 #include <map>
 #include <memory>
 #include "H2Server_Config_Schema.h"
@@ -21,6 +22,7 @@ extern "C" {
 #include "lualib.h"
 #include "lauxlib.h"
 }
+#include "common_lua.h"
 
 const std::string extended_json_pointer_indicator = "/~#";
 
@@ -271,6 +273,15 @@ std::string getValueFromJsonPtr(const RapidJsonType& d, const std::string& json_
     return convertRapidVJsonValueToStr(value);
 }
 
+enum VALUE_TYPE
+{
+    VAL_INVALID = 0,
+    VAL_RANDOM_HEX,
+    VAL_TIMESTAMP,
+    VAL_UUID,
+    VAL_RAW_PAYLOAD
+};
+
 class Argument
 {
 public:
@@ -281,31 +292,65 @@ public:
     std::regex reg_exp;
     std::string regex;
     bool regex_present = false;
-    bool random_hex = false;
-    bool timestamp = false;
+    VALUE_TYPE val_type = VAL_INVALID;
+
+    std::string generate_uuid_v4() const
+    {
+        static thread_local std::random_device              rd;
+        static thread_local std::mt19937                    gen(rd());
+        static thread_local std::uniform_int_distribution<> dis(0, 15);
+        static thread_local std::uniform_int_distribution<> dis2(8, 11);
+        std::stringstream ss;
+        int i;
+        ss << std::hex;
+        for (i = 0; i < 8; i++) {
+            ss << dis(gen);
+        }
+        ss << "-";
+        for (i = 0; i < 4; i++) {
+            ss << dis(gen);
+        }
+        ss << "-4";
+        for (i = 0; i < 3; i++) {
+            ss << dis(gen);
+        }
+        ss << "-";
+        ss << dis2(gen);
+        for (i = 0; i < 3; i++) {
+            ss << dis(gen);
+        }
+        ss << "-";
+        for (i = 0; i < 12; i++) {
+            ss << dis(gen);
+        };
+        return ss.str();
+    }
+
     Argument(const Schema_Argument& payload_argument)
     {
         if (payload_argument.type_of_value == "JsonPointer")
         {
             json_pointer = payload_argument.value_identifier;
-            header_name = "";
         }
         else if (payload_argument.type_of_value == "Header")
         {
-            json_pointer = "";
             header_name = payload_argument.value_identifier;
+        }
+        else if (payload_argument.type_of_value == "Pseudo-UUID")
+        {
+            val_type = VAL_UUID;
         }
         else if (payload_argument.type_of_value == "RandomHex")
         {
-            header_name = "";
-            json_pointer = "";
-            random_hex = true;
+            val_type = VAL_RANDOM_HEX;
         }
         else if (payload_argument.type_of_value == "TimeStamp")
         {
-            json_pointer = "";
-            header_name = "";
-            timestamp = true;
+            val_type = VAL_TIMESTAMP;
+        }
+        else if (payload_argument.type_of_value == "RawPayload")
+        {
+            val_type = VAL_RAW_PAYLOAD;
         }
         substring_start = payload_argument.substring_start;
         substring_length = payload_argument.substring_length;
@@ -335,30 +380,51 @@ public:
         {
             str = msg.headers.find(header_name)->second;
         }
-        else if (random_hex)
+        else
         {
-            static std::random_device              rd;
-            static std::mt19937                    gen(rd());
-            static std::uniform_int_distribution<> dis(0, 15);
-            std::stringstream stream;
-            stream << std::hex << dis(gen);
-            str = stream.str();
-        }
-        else if (timestamp)
-        {
-            std::time_t t = std::time(nullptr);
-            std::tm tm = *std::gmtime(&t);
-            std::stringstream buffer;
-            buffer << std::put_time(&tm, "%a, %d %b %Y %H:%M:%S %Z");
-            str = buffer.str();
+            switch (val_type)
+            {
+                case VAL_TIMESTAMP:
+                {
+                    std::time_t t = std::time(nullptr);
+                    std::tm tm = *std::gmtime(&t);
+                    std::stringstream buffer;
+                    buffer << std::put_time(&tm, "%a, %d %b %Y %H:%M:%S %Z");
+                    str = buffer.str();
+                    break;
+                }
+                case VAL_RANDOM_HEX:
+                {
+                    static thread_local std::random_device              rd;
+                    static thread_local std::mt19937                    gen(rd());
+                    static thread_local std::uniform_int_distribution<> dis(0, 15);
+                    std::stringstream stream;
+                    stream << std::hex << dis(gen);
+                    str = stream.str();
+                    break;
+                }
+                case VAL_UUID:
+                {
+                    str = generate_uuid_v4();
+                    break;
+                }
+                case VAL_RAW_PAYLOAD:
+                {
+                    str = *msg.raw_payload;
+                    break;
+                }
+                default:
+                {
+                }
+            }
         }
 
         if (debug_mode)
         {
             std::cout<<"json_pointer: "<<json_pointer<<std::endl;
             std::cout<<"header_name: "<<header_name<<std::endl;
-            std::cout<<"random_hex: "<<random_hex<<std::endl;
             std::cout<<"target string: "<<str<<std::endl;
+            std::cout<<"val_type: "<<val_type<<std::endl;
             std::cout<<"regex: "<<regex<<std::endl;
             std::cout<<"substring_start: "<<substring_start<<std::endl;
             std::cout<<"substring_length: "<<substring_length<<std::endl;
@@ -469,6 +535,7 @@ public:
         {
             luaState = std::shared_ptr<lua_State>(luaL_newstate(), &lua_close);
             luaL_openlibs(luaState.get());
+            init_new_lua_state_with_common_apis(luaState.get());
             luaL_dostring(luaState.get(), resp.luaScript.c_str());
             lua_getglobal(luaState.get(), customize_response.c_str());
             if (!lua_isfunction(luaState.get(), -1))

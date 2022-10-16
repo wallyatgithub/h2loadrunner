@@ -7,6 +7,7 @@
   "_caCert-file": "mtls/ca.crt",
   "mTLS": false,
   "verbose": false,
+  "statistics-file":"subs_update_notify_delete.stats.log",
   "max-concurrent-streams": 256,
   "Service": [
     {

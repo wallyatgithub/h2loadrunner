@@ -1161,6 +1161,7 @@ void output_realtime_stats(h2load::Config& config,
         {
             static std::ofstream log_file(config.json_config_schema.statistics_file);
             log_file << outputStream.str();
+            log_file.flush();
         }
         else
         {
