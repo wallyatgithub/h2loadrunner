@@ -991,6 +991,7 @@ H2Server_Config_Schema config_schema;
 int start_server(lua_State* L)
 {
     std::string config_file_name;
+    bool b_start_stats = false;
     int top = lua_gettop(L);
     for (int i = 0; i < top; i++)
     {
@@ -1001,6 +1002,11 @@ int start_server(lua_State* L)
                 size_t len;
                 const char* str = lua_tolstring(L, -1, &len);
                 config_file_name.assign(str, len);
+                break;
+            }
+            case LUA_TBOOLEAN:
+            {
+                b_start_stats = lua_toboolean(L, -1);
                 break;
             }
             default:
@@ -1022,13 +1028,13 @@ int start_server(lua_State* L)
 
     std::promise<void> ready_promise;
 
-    auto thread_func = [config_file_name, &ready_promise]()
+    auto thread_func = [config_file_name, &ready_promise, b_start_stats]()
     {
         auto init_cbk = [&ready_promise]()
         {
             ready_promise.set_value();
         };
-        start_server(config_file_name, true, init_cbk);
+        start_server(config_file_name, b_start_stats, init_cbk);
     };
     std::thread serverThread(thread_func);
     auto bootstrap_thread_id = serverThread.get_id();
