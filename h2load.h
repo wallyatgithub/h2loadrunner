@@ -37,6 +37,15 @@
 #include "H2Server_Request.h"
 #include "config_schema.h"
 
+#ifdef ENABLE_HTTP3
+#  include <ngtcp2/ngtcp2.h>
+#  include <ngtcp2/ngtcp2_crypto.h>
+#endif // ENABLE_HTTP3
+
+#ifdef ENABLE_HTTP3
+#  include "quic.h"
+#endif // ENABLE_HTTP3
+
 
 using namespace nghttp2;
 
@@ -51,6 +60,8 @@ const std::string method_header = ":method";
 const std::string x_envoy_original_dst_host_header = "x-envoy-original-dst-host";
 
 const std::string x_proto_to_use = "x-protocol-to-use";
+
+const int SSL_EXT_DATA_INDEX_KEYLOG_FILE = 128;
 
 static std::string emptyString;
 

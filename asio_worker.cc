@@ -55,6 +55,11 @@ asio_worker::~asio_worker()
     managed_clients.clear();
 }
 
+SSL_CTX* asio_worker::get_ssl_ctx()
+{
+    return ssl_ctx.native_handle();
+}
+
 bool asio_worker::timer_common_check(boost::asio::deadline_timer& timer, const boost::system::error_code& ec,
                                      void (asio_worker::*handler)(const boost::system::error_code&))
 {

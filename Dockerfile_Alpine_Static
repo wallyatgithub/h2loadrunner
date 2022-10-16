@@ -1,5 +1,5 @@
 FROM alpine
-RUN apk add nghttp2-static nghttp2-dev openssl-libs-static openssl-dev libcrypto1.1 cmake boost-static boost-dev luajit-dev gcc g++ unzip wget libexecinfo-dev libexecinfo-static make && \
+RUN apk add nghttp2-static nghttp2-dev openssl-libs-static openssl-dev libcrypto1.1 cmake boost-static boost-dev luajit-dev gcc g++ unzip wget libexecinfo-dev libexecinfo-static make autoconf automake libtool && \
     wget https://github.com/Tencent/rapidjson/archive/refs/heads/master.zip && \
     unzip master.zip && \
     cd rapidjson-master && cmake . && cmake --build ./ && cmake --install ./ && \
@@ -13,10 +13,31 @@ RUN apk add nghttp2-static nghttp2-dev openssl-libs-static openssl-dev libcrypto
     rm -rf mimalloc-master master.zip && \
     wget https://github.com/wallyatgithub/h2loadrunner/archive/refs/heads/main.zip && \
     unzip main.zip && \
-    cmake -S h2loadrunner-main -B h2loadrunner-main/build -DCMAKE_BUILD_TYPE=Release .. -DALPINE_STATIC=ON && \
+    cd h2loadrunner-main && \
+    git clone --depth 1 -b OpenSSL_1_1_1q+quic https://github.com/quictls/openssl && \
+    cd openssl && \
+    ./config --prefix=$PWD/build --openssldir=/etc/ssl && \
+    make -j$(nproc) && \
+    make install_sw && \
+    cd .. && \
+    git clone --depth 1 -b v0.7.1 https://github.com/ngtcp2/nghttp3 && \
+    cd nghttp3 && \
+    autoreconf -i && \
+    ./configure --prefix=$PWD/build --enable-lib-only && \
+    make -j$(nproc) && \
+    make install && \
+    cd .. && \
+    git clone --depth 1 -b v0.9.0 https://github.com/ngtcp2/ngtcp2 && \
+    cd ngtcp2 && \
+    autoreconf -i && \
+    ./configure --prefix=$PWD/build --enable-lib-only PKG_CONFIG_PATH="$PWD/../openssl/build/lib/pkgconfig" && \
+    make -j$(nproc) && \
+    make install && \
+    cd ../../ && \
+    cmake -S h2loadrunner-main -B h2loadrunner-main/build -DCMAKE_BUILD_TYPE=Release .. -DENABLE_HTTP3=ON -DALPINE_STATIC=ON && \
     cmake --build h2loadrunner-main/build && \
     cp h2loadrunner-main/build/h2loadrunner /usr/bin/ && \
     mkdir -p /usr/share/h2loadrunner/ && \
     cp h2loadrunner-main/config_schema.json /usr/share/h2loadrunner/ && \
     rm -rf h2loadrunner-main main.zip && \
-    apk del nghttp2-static nghttp2-dev openssl-libs-static openssl-dev libcrypto1.1 cmake boost-static boost-dev luajit-dev gcc g++ unzip wget libexecinfo-dev libexecinfo-static make
+    apk del nghttp2-static nghttp2-dev openssl-libs-static openssl-dev libcrypto1.1 cmake boost-static boost-dev luajit-dev gcc g++ unzip wget libexecinfo-dev libexecinfo-static make autoconf automake libtool

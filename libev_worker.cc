@@ -8,11 +8,11 @@
 namespace h2load
 {
 
-libev_worker::libev_worker(uint32_t id, SSL_CTX* ssl_ctx, size_t nreq_todo, size_t nclients,
+libev_worker::libev_worker(uint32_t id, SSL_CTX* ssl, size_t nreq_todo, size_t nclients,
            size_t rate, size_t max_samples, Config* config):
            base_worker(id, nreq_todo, nclients, rate, max_samples, config),
            loop(ev_loop_new(get_ev_loop_flags())),
-           ssl_ctx(ssl_ctx)
+           ssl_ctx(ssl)
 {
   init_timers();
 }
@@ -42,6 +42,11 @@ void libev_worker::init_timers()
 
     ev_timer_init(&warmup_watcher, warmup_timeout_cb, config->warm_up_time, 0.);
     warmup_watcher.data = this;
+}
+
+SSL_CTX* libev_worker::get_ssl_ctx()
+{
+    return ssl_ctx;
 }
 
 void libev_worker::start_rate_mode_period_timer()

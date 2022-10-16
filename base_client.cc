@@ -15,6 +15,22 @@
 #include <numeric>
 #include <cassert>
 
+#include <iostream>
+
+#ifdef HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#  include <ngtcp2/ngtcp2_crypto_openssl.h>
+#endif // HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#ifdef HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+#  include <ngtcp2/ngtcp2_crypto_boringssl.h>
+#endif // HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+
+#include <openssl/err.h>
+#include <openssl/rand.h>
+
+#ifdef ENABLE_HTTP3
+#include "h2load_http3_session.h"
+#endif
+
 #include "tls.h"
 #include "base_client.h"
 #include "base_worker.h"
@@ -56,6 +72,9 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
     rps(conf->rps),
     this_client_id(),
     rps_duration_started(),
+#ifdef ENABLE_HTTP3
+    quic {},
+#endif
     ssl(nullptr)
 {
     init_req_left();
@@ -65,6 +84,21 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
     init_lua_states();
 
     update_this_in_dest_client_map();
+
+#ifdef ENABLE_HTTP3
+    ngtcp2_connection_close_error_default(&quic.last_error);
+#endif // ENABLE_HTTP3
+
+}
+
+base_client::~base_client()
+{
+#ifdef ENABLE_HTTP3
+    if (config->is_quic())
+    {
+        quic_free();
+    }
+#endif // ENABLE_HTTP3
 
 }
 
@@ -141,7 +175,7 @@ void base_client::record_ttfb()
 }
 
 void base_client::log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req,
-                                     int32_t stream_id)
+                                     int64_t stream_id)
 {
     if (config.json_config_schema.failed_request_log_file.empty())
     {
@@ -244,7 +278,7 @@ bool base_client::validate_response_with_lua(lua_State* L, const Request_Data& f
     return retCode;
 }
 
-void base_client::record_stream_close_time(int32_t stream_id)
+void base_client::record_stream_close_time(int64_t stream_id)
 {
     auto req_stat = get_req_stat(stream_id);
     if (!req_stat)
@@ -360,7 +394,7 @@ void base_client::timing_script_timeout_handler()
     start_timing_script_request_timeout_timer(duration);
 }
 
-void base_client::brief_log_to_file(int32_t stream_id, bool success)
+void base_client::brief_log_to_file(int64_t stream_id, bool success)
 {
     if (!config->json_config_schema.log_file.size())
     {
@@ -506,7 +540,7 @@ void base_client::set_prefered_authority(const std::string& authority)
     preferred_authority = authority;
 }
 
-void base_client::on_status_code(int32_t stream_id, uint16_t status)
+void base_client::on_status_code(int64_t stream_id, uint16_t status)
 {
     auto request_data = requests_awaiting_response.find(stream_id);
     if (request_data != requests_awaiting_response.end())
@@ -568,7 +602,7 @@ bool base_client::should_reconnect_on_disconnect()
     return false;
 }
 
-void base_client::inc_status_counter_and_validate_response(int32_t stream_id)
+void base_client::inc_status_counter_and_validate_response(int64_t stream_id)
 {
     uint16_t status = 0;
     auto itr = streams.find(stream_id);
@@ -969,7 +1003,7 @@ void base_client::run_post_response_action(Request_Data& finished_request)
             std::cout << "var id:" << value_picker.unique_id << std::endl;
             std::cout << "target value located: " << source << std::endl;
             std::cout << "target value match result: " <<
-                      finished_request.scenario_data_per_user->variable_index_to_value[value_picker.unique_id] << std::endl;
+            finished_request.scenario_data_per_user->variable_index_to_value[value_picker.unique_id] << std::endl;
         }
     }
     if (config->verbose)
@@ -1052,6 +1086,7 @@ void base_client::populate_request_from_config_template(Request_Data& new_reques
     new_request.authority = &request_template.authority;
     new_request.string_collection.emplace_back(assemble_string(request_template.tokenized_payload_with_vars, scenario_index,
                                                                request_index, *new_request.scenario_data_per_user));
+
     new_request.req_payload = &(new_request.string_collection.back());
 
     new_request.req_headers_from_config = &request_template.headers_in_map;
@@ -1512,12 +1547,9 @@ bool base_client::update_request_with_lua(lua_State* L, const Request_Data& fini
     return retCode;
 }
 
-
 void base_client::terminate_session()
 {
     session->terminate();
-    // http1 session needs writecb to tear down session.
-    signal_write();
 }
 
 void base_client::reset_timeout_requests()
@@ -1535,7 +1567,7 @@ void base_client::reset_timeout_requests()
         auto stream_it = streams.find(it->second);
         if (stream_it != streams.end())
         {
-            session->submit_rst_stream(it->second);
+            session->reset_stream(it->second);
             if (stream_it->second.statistics_eligible)
             {
                 worker->stats.req_timedout++;
@@ -1624,7 +1656,7 @@ void base_client::process_timedout_streams()
     process_abandoned_streams();
 }
 
-void base_client::on_stream_close(int32_t stream_id, bool success, bool final)
+void base_client::on_stream_close(int64_t stream_id, bool success, bool final)
 {
     record_stream_close_time(stream_id);
 
@@ -1734,7 +1766,7 @@ void base_client::on_stream_close(int32_t stream_id, bool success, bool final)
     }
 }
 
-void base_client::on_header_frame_begin(int32_t stream_id, uint8_t flags)
+void base_client::on_header_frame_begin(int64_t stream_id, uint8_t flags)
 {
     auto it = requests_awaiting_response.find(stream_id);
     if (it != requests_awaiting_response.end())
@@ -1875,12 +1907,12 @@ int base_client::connection_made()
     return 0;
 }
 
-void base_client::on_data_chunk(int32_t stream_id, const uint8_t* data, size_t len)
+void base_client::on_data_chunk(int64_t stream_id, const uint8_t* data, size_t len)
 {
     auto request = requests_awaiting_response.find(stream_id);
     if (request != requests_awaiting_response.end())
     {
-        request->second.resp_payload.append((const char*)data, len);
+        request->second.resp_payload.append((const char*)data, len); // TODO: handle grpc payload
     }
     if (config->verbose)
     {
@@ -1901,7 +1933,7 @@ void base_client::resume_delayed_request_execution()
     }
 }
 
-RequestStat* base_client::get_req_stat(int32_t stream_id)
+RequestStat* base_client::get_req_stat(int64_t stream_id)
 {
     auto it = streams.find(stream_id);
     if (it == std::end(streams))
@@ -1912,7 +1944,7 @@ RequestStat* base_client::get_req_stat(int32_t stream_id)
     return &(*it).second.req_stat;
 }
 
-void base_client::on_request_start(int32_t stream_id)
+void base_client::on_request_start(int64_t stream_id)
 {
     size_t scenario_index = 0;
     size_t request_index = 0;
@@ -1970,7 +2002,7 @@ Request_Data base_client::get_request_to_submit()
     }
 }
 
-void base_client::on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
+void base_client::on_header(int64_t stream_id, const uint8_t* name, size_t namelen,
                             const uint8_t* value, size_t valuelen)
 {
     auto itr = streams.find(stream_id);
@@ -2047,7 +2079,7 @@ size_t& base_client::get_current_req_index()
     return reqidx;
 }
 
-std::map<int32_t, Request_Data>& base_client::requests_waiting_for_response()
+std::map<int64_t, Request_Data>& base_client::requests_waiting_for_response()
 {
     return requests_awaiting_response;
 }
@@ -2194,6 +2226,7 @@ bool base_client::prepare_next_request(Request_Data& finished_request)
         {
             new_request->string_collection.emplace_back(assemble_string(request_template.tokenized_path_with_vars, scenario_index,
                                                                         new_request->curr_request_idx, *new_request->scenario_data_per_user));
+
             new_request->path = &(new_request->string_collection.back());
 
             break;
@@ -2450,7 +2483,18 @@ int base_client::select_protocol_and_allocate_session()
         if (next_proto)
         {
             auto proto = StringRef {next_proto, next_proto_len};
-            if (util::check_h2_is_selected(proto))
+            if (config->is_quic())
+            {
+#ifdef ENABLE_HTTP3
+                assert(session);
+                if (!util::streq(StringRef{&NGHTTP3_ALPN_H3[1]}, proto) &&
+                    !util::streq_l("h3-29", proto))
+                {
+                    return -1;
+                }
+#endif // ENABLE_HTTP3
+            }
+            else if (util::check_h2_is_selected(proto))
             {
                 session = std::make_unique<Http2Session>(this);
             }
@@ -2599,7 +2643,7 @@ void base_client::install_connected_callback(std::function<void(bool, h2load::ba
     connected_callbacks.push_back(callback);
 }
 
-void base_client::queue_stream_for_user_callback(int32_t stream_id)
+void base_client::queue_stream_for_user_callback(int64_t stream_id)
 {
     const size_t MAX_STREAM_SAVED_FOR_CALLBACK = 500;
 
@@ -2610,7 +2654,7 @@ void base_client::queue_stream_for_user_callback(int32_t stream_id)
     stream_user_callback_queue[stream_id].stream_id = stream_id;
 }
 
-void base_client::process_stream_user_callback(int32_t stream_id)
+void base_client::process_stream_user_callback(int64_t stream_id)
 {
     auto it = requests_awaiting_response.find(stream_id);
     if (it !=  requests_awaiting_response.end() && stream_user_callback_queue.count(stream_id))
@@ -2627,7 +2671,7 @@ void base_client::process_stream_user_callback(int32_t stream_id)
     }
 }
 
-void base_client::pass_response_to_lua(int32_t stream_id, lua_State* L)
+void base_client::pass_response_to_lua(int64_t stream_id, lua_State* L)
 {
     if (stream_user_callback_queue.count(stream_id))
     {
@@ -2719,6 +2763,7 @@ std::string base_client::assemble_string(const String_With_Variables_In_Between&
     {
         return count + s.size();
     });
+
     for (auto& var_id : source.variable_ids_in_between)
     {
         if (var_id < scenario_template.number_of_variables_from_value_pickers)
@@ -2777,5 +2822,512 @@ std::string base_client::assemble_string(const String_With_Variables_In_Between&
     return result;
 }
 
+#ifdef ENABLE_HTTP3
+
+namespace
+{
+int handshake_completed(ngtcp2_conn* conn, void* user_data)
+{
+    auto c = static_cast<base_client*>(user_data);
+
+    if (c->quic_handshake_completed() != 0)
+    {
+        return NGTCP2_ERR_CALLBACK_FAILURE;
+    }
+
+    return 0;
+}
+} // namespace
+
+int base_client::quic_handshake_completed()
+{
+    return connection_made();
+}
+
+namespace
+{
+int recv_stream_data(ngtcp2_conn* conn, uint32_t flags, int64_t stream_id,
+                     uint64_t offset, const uint8_t* data, size_t datalen,
+                     void* user_data, void* stream_user_data)
+{
+    auto c = static_cast<base_client*>(user_data);
+    if (c->quic_recv_stream_data(flags, stream_id, data, datalen) != 0)
+    {
+        // TODO Better to do this gracefully rather than
+        // NGTCP2_ERR_CALLBACK_FAILURE.  Perhaps, call
+        // ngtcp2_conn_write_application_close() ?
+        return NGTCP2_ERR_CALLBACK_FAILURE;
+    }
+    return 0;
+}
+} // namespace
+
+int base_client::quic_recv_stream_data(uint32_t flags, int64_t stream_id,
+                                       const uint8_t* data, size_t datalen)
+{
+    if (worker->current_phase == Phase::MAIN_DURATION)
+    {
+        worker->stats.bytes_total += datalen;
+    }
+
+    auto s = static_cast<Http3Session*>(session.get());
+    auto nconsumed = s->read_stream(flags, stream_id, data, datalen);
+    if (nconsumed == -1)
+    {
+        return -1;
+    }
+
+    ngtcp2_conn_extend_max_stream_offset(quic.conn, stream_id, nconsumed);
+    ngtcp2_conn_extend_max_offset(quic.conn, nconsumed);
+
+    return 0;
+}
+
+namespace
+{
+int acked_stream_data_offset(ngtcp2_conn* conn, int64_t stream_id,
+                             uint64_t offset, uint64_t datalen, void* user_data,
+                             void* stream_user_data)
+{
+    auto c = static_cast<base_client*>(user_data);
+    if (c->quic_acked_stream_data_offset(stream_id, datalen) != 0)
+    {
+        return NGTCP2_ERR_CALLBACK_FAILURE;
+    }
+    return 0;
+}
+} // namespace
+
+int base_client::quic_acked_stream_data_offset(int64_t stream_id, size_t datalen)
+{
+    auto s = static_cast<Http3Session*>(session.get());
+    if (s->add_ack_offset(stream_id, datalen) != 0)
+    {
+        return -1;
+    }
+    return 0;
+}
+
+namespace
+{
+int stream_close(ngtcp2_conn* conn, uint32_t flags, int64_t stream_id,
+                 uint64_t app_error_code, void* user_data,
+                 void* stream_user_data)
+{
+    auto c = static_cast<base_client*>(user_data);
+
+    if (!(flags & NGTCP2_STREAM_CLOSE_FLAG_APP_ERROR_CODE_SET))
+    {
+        app_error_code = NGHTTP3_H3_NO_ERROR;
+    }
+
+    if (c->quic_stream_close(stream_id, app_error_code) != 0)
+    {
+        return NGTCP2_ERR_CALLBACK_FAILURE;
+    }
+    return 0;
+}
+} // namespace
+
+int base_client::quic_stream_close(int64_t stream_id, uint64_t app_error_code)
+{
+    auto s = static_cast<Http3Session*>(session.get());
+    if (s->close_stream(stream_id, app_error_code) != 0)
+    {
+        return -1;
+    }
+    return 0;
+}
+
+namespace
+{
+int stream_reset(ngtcp2_conn* conn, int64_t stream_id, uint64_t final_size,
+                 uint64_t app_error_code, void* user_data,
+                 void* stream_user_data)
+{
+    auto c = static_cast<base_client*>(user_data);
+    if (c->quic_stream_reset(stream_id, app_error_code) != 0)
+    {
+        return NGTCP2_ERR_CALLBACK_FAILURE;
+    }
+    return 0;
+}
+} // namespace
+
+int base_client::quic_stream_reset(int64_t stream_id, uint64_t app_error_code)
+{
+    auto s = static_cast<Http3Session*>(session.get());
+    if (s->shutdown_stream_read(stream_id) != 0)
+    {
+        return -1;
+    }
+    return 0;
+}
+
+namespace
+{
+int stream_stop_sending(ngtcp2_conn* conn, int64_t stream_id,
+                        uint64_t app_error_code, void* user_data,
+                        void* stream_user_data)
+{
+    auto c = static_cast<base_client*>(user_data);
+    if (c->quic_stream_stop_sending(stream_id, app_error_code) != 0)
+    {
+        return NGTCP2_ERR_CALLBACK_FAILURE;
+    }
+    return 0;
+}
+} // namespace
+
+int base_client::quic_stream_stop_sending(int64_t stream_id,
+                                          uint64_t app_error_code)
+{
+    auto s = static_cast<Http3Session*>(session.get());
+    if (s->shutdown_stream_read(stream_id) != 0)
+    {
+        return -1;
+    }
+    return 0;
+}
+
+namespace
+{
+int extend_max_local_streams_bidi(ngtcp2_conn* conn, uint64_t max_streams,
+                                  void* user_data)
+{
+    auto c = static_cast<base_client*>(user_data);
+
+    if (c->quic_extend_max_local_streams() != 0)
+    {
+        return NGTCP2_ERR_CALLBACK_FAILURE;
+    }
+
+    return 0;
+}
+} // namespace
+
+int base_client::quic_extend_max_local_streams()
+{
+    auto s = static_cast<Http3Session*>(session.get());
+    if (s->extend_max_local_streams() != 0)
+    {
+        return NGTCP2_ERR_CALLBACK_FAILURE;
+    }
+    return 0;
+}
+
+namespace
+{
+int get_new_connection_id(ngtcp2_conn* conn, ngtcp2_cid* cid, uint8_t* token,
+                          size_t cidlen, void* user_data)
+{
+    if (RAND_bytes(cid->data, cidlen) != 1)
+    {
+        return NGTCP2_ERR_CALLBACK_FAILURE;
+    }
+
+    cid->datalen = cidlen;
+
+    if (RAND_bytes(token, NGTCP2_STATELESS_RESET_TOKENLEN) != 1)
+    {
+        return NGTCP2_ERR_CALLBACK_FAILURE;
+    }
+
+    return 0;
+}
+} // namespace
+
+namespace
+{
+void debug_log_printf(void* user_data, const char* fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+
+    fprintf(stderr, "\n");
+}
+} // namespace
+
+namespace
+{
+int generate_cid(ngtcp2_cid& dest)
+{
+    dest.datalen = 8;
+
+    if (RAND_bytes(dest.data, dest.datalen) != 1)
+    {
+        return -1;
+    }
+
+    return 0;
+}
+} // namespace
+
+// qlog write callback -- excerpted from ngtcp2/examples/client_base.cc
+namespace
+{
+void qlog_write_cb(void* user_data, uint32_t flags, const void* data,
+                   size_t datalen)
+{
+    auto c = static_cast<base_client*>(user_data);
+    c->quic_write_qlog(data, datalen);
+}
+} // namespace
+
+void base_client::quic_write_qlog(const void* data, size_t datalen)
+{
+    assert(quic.qlog_file != nullptr);
+    fwrite(data, 1, datalen, quic.qlog_file);
+}
+
+namespace
+{
+void rand(uint8_t* dest, size_t destlen, const ngtcp2_rand_ctx* rand_ctx)
+{
+    util::random_bytes(dest, dest + destlen,
+                       *static_cast<std::mt19937*>(rand_ctx->native_handle));
+}
+} // namespace
+
+namespace
+{
+int recv_rx_key(ngtcp2_conn* conn, ngtcp2_crypto_level level, void* user_data)
+{
+    if (level != NGTCP2_CRYPTO_LEVEL_APPLICATION)
+    {
+        return 0;
+    }
+
+    auto c = static_cast<base_client*>(user_data);
+
+    if (c->quic_make_http3_session() != 0)
+    {
+        return NGTCP2_ERR_CALLBACK_FAILURE;
+    }
+
+    return 0;
+}
+} // namespace
+
+int base_client::quic_make_http3_session()
+{
+    auto s = std::make_unique<Http3Session>(this);
+    if (s->init_conn() == -1)
+    {
+        return -1;
+    }
+    session = std::move(s);
+
+    return 0;
+}
+
+namespace
+{
+ngtcp2_conn* get_conn(ngtcp2_crypto_conn_ref* conn_ref)
+{
+    auto c = static_cast<base_client*>(conn_ref->user_data);
+    return c->quic.conn;
+}
+} // namespace
+
+int base_client::quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
+                           const sockaddr* remote_addr, socklen_t remote_addrlen)
+{
+    int rv;
+
+    quic.init();
+
+    if (!ssl)
+    {
+        ssl = SSL_new(worker->get_ssl_ctx());
+
+        quic.conn_ref.get_conn = get_conn;
+        quic.conn_ref.user_data = this;
+
+        SSL_set_app_data(ssl, &quic.conn_ref);
+        SSL_set_connect_state(ssl);
+        SSL_set_quic_use_legacy_codepoint(ssl, 0);
+    }
+    if (config->json_config_schema.tls_keylog_file.size())
+    {
+        if (local_addr->sa_family == AF_INET)
+        {
+            tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((struct sockaddr_in*)local_addr)->sin_port)) + ".log";
+        }
+        else
+        {
+            tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((struct sockaddr_in6*)local_addr)->sin6_port)) + ".log";
+        }
+        std::remove(tls_keylog_file_name.c_str());
+        SSL_set_ex_data(ssl, SSL_EXT_DATA_INDEX_KEYLOG_FILE, (void*)tls_keylog_file_name.c_str());
+    }
+
+    auto callbacks = ngtcp2_callbacks
+    {
+        ngtcp2_crypto_client_initial_cb,
+        nullptr, // recv_client_initial
+        ngtcp2_crypto_recv_crypto_data_cb,
+        h2load::handshake_completed,
+        nullptr, // recv_version_negotiation
+        ngtcp2_crypto_encrypt_cb,
+        ngtcp2_crypto_decrypt_cb,
+        ngtcp2_crypto_hp_mask_cb,
+        h2load::recv_stream_data,
+        h2load::acked_stream_data_offset,
+        nullptr, // stream_open
+        h2load::stream_close,
+        nullptr, // recv_stateless_reset
+        ngtcp2_crypto_recv_retry_cb,
+        h2load::extend_max_local_streams_bidi,
+        nullptr, // extend_max_local_streams_uni
+        h2load::rand,
+        get_new_connection_id,
+        nullptr, // remove_connection_id
+        ngtcp2_crypto_update_key_cb,
+        nullptr, // path_validation
+        nullptr, // select_preferred_addr
+        h2load::stream_reset,
+        nullptr, // extend_max_remote_streams_bidi
+        nullptr, // extend_max_remote_streams_uni
+        nullptr, // extend_max_stream_data
+        nullptr, // dcid_status
+        nullptr, // handshake_confirmed
+        nullptr, // recv_new_token
+        ngtcp2_crypto_delete_crypto_aead_ctx_cb,
+        ngtcp2_crypto_delete_crypto_cipher_ctx_cb,
+        nullptr, // recv_datagram
+        nullptr, // ack_datagram
+        nullptr, // lost_datagram
+        ngtcp2_crypto_get_path_challenge_data_cb,
+        h2load::stream_stop_sending,
+        nullptr, // version_negotiation
+        h2load::recv_rx_key,
+        nullptr, // recv_tx_key
+    };
+
+    ngtcp2_cid scid, dcid;
+    if (generate_cid(scid) != 0)
+    {
+        return -1;
+    }
+    if (generate_cid(dcid) != 0)
+    {
+        return -1;
+    }
+
+    auto config = worker->config;
+
+    ngtcp2_settings settings;
+    ngtcp2_settings_default(&settings);
+    if (config->verbose)
+    {
+        settings.log_printf = debug_log_printf;
+    }
+    //settings.cc_algo = config.cc_algo; // TODO: 
+    settings.initial_ts = current_timestamp_nanoseconds();
+    settings.rand_ctx.native_handle = &worker->randgen;
+    if (!config->qlog_file_base.empty())
+    {
+        assert(quic.qlog_file == nullptr);
+        auto path = config->qlog_file_base;
+        path += '.';
+        path += util::utos(worker->id);
+        path += '.';
+        path += util::utos(id);
+        path += ".sqlog";
+        quic.qlog_file = fopen(path.c_str(), "w");
+        if (quic.qlog_file == nullptr)
+        {
+            std::cerr << "Failed to open a qlog file: " << path << std::endl;
+            return -1;
+        }
+        settings.qlog.write = qlog_write_cb;
+    }
+    if (config->max_udp_payload_size)
+    {
+        settings.max_udp_payload_size = config->max_udp_payload_size;
+        settings.no_udp_payload_size_shaping = 1;
+    }
+
+    ngtcp2_transport_params params;
+    ngtcp2_transport_params_default(&params);
+    auto max_stream_data =
+        std::min((1 << 26) - 1, (1 << config->window_bits) - 1);
+    params.initial_max_stream_data_bidi_local = max_stream_data;
+    params.initial_max_stream_data_uni = max_stream_data;
+    params.initial_max_data = (1 << config->connection_window_bits) - 1;
+    params.initial_max_streams_bidi = 0;
+    params.initial_max_streams_uni = 100;
+    params.max_idle_timeout = 30 * NGTCP2_SECONDS;
+
+    auto path = ngtcp2_path
+    {
+        {
+            const_cast<sockaddr*>(local_addr),
+            local_addrlen,
+        },
+        {
+            const_cast<sockaddr*>(remote_addr),
+            remote_addrlen,
+        },
+    };
+
+    assert(config->npn_list.size());
+
+    uint32_t quic_version;
+
+    if (config->npn_list[0] == NGHTTP3_ALPN_H3)
+    {
+        quic_version = NGTCP2_PROTO_VER_V1;
+    }
+    else
+    {
+        quic_version = NGTCP2_PROTO_VER_MIN;
+    }
+
+    rv = ngtcp2_conn_client_new(&quic.conn, &dcid, &scid, &path, quic_version,
+                                &callbacks, &settings, &params, nullptr, this);
+    if (rv != 0)
+    {
+        return -1;
+    }
+
+    ngtcp2_conn_set_tls_native_handle(quic.conn, ssl);
+
+    return 0;
+}
+
+void base_client::quic_free()
+{
+    if (quic.conn)
+    {
+        ngtcp2_conn_del(quic.conn);
+        quic.conn = nullptr;
+        if (config->verbose)
+        {
+            std::cerr << __FUNCTION__ << ", timestamp:"<<current_timestamp_nanoseconds() << std::endl;
+        }
+    }
+    if (quic.qlog_file != nullptr)
+    {
+        fclose(quic.qlog_file);
+        quic.qlog_file = nullptr;
+    }
+}
+
+void base_client::request_connection_close()
+{
+    if (config->is_quic())
+    {
+        quic.close_requested = true;
+        signal_write();
+    }
+}
+
+
+#endif // ENABLE_HTTP3
 
 }
