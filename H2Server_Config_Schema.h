@@ -2,6 +2,7 @@
 #define H2SERVER_CONFIG_SCHEMA_H
 
 #include <iostream>
+#include <fstream>
 
 #include "staticjson/document.hpp"
 #include "staticjson/staticjson.hpp"
@@ -171,6 +172,7 @@ public:
     std::string no_tls_proto;
     NO_TLS_PROTO no_tls_proto_enum;
     std::vector<Schema_Service> service;
+    std::string statistics_file;
     explicit H2Server_Config_Schema():
         enable_mTLS(false),
         verbose(false),
@@ -203,6 +205,7 @@ public:
         h->add_property("window-bits", &this->window_bits, staticjson::Flags::Optional);
         h->add_property("connection-window-bits", &this->connection_window_bits, staticjson::Flags::Optional);
         h->add_property("no-tls-proto", &this->no_tls_proto, staticjson::Flags::Optional);
+        h->add_property("statistics-file", &this->statistics_file, staticjson::Flags::Optional);
         h->add_property("Service", &this->service);
     }
     void config_post_process()
@@ -214,6 +217,30 @@ public:
         else
         {
             no_tls_proto_enum = HTTP1_1;
+        }
+        for (auto& s: service)
+        {
+            for (auto& r: s.responses)
+            {
+                if (r.payload.msg_payload.size())
+                {
+                    std::ifstream f(r.payload.msg_payload);
+                    if (f.good())
+                    {
+                        std::string dest((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+                        r.payload.msg_payload = dest;
+                    }
+                }
+                if (r.luaScript.size())
+                {
+                    std::ifstream f(r.luaScript);
+                    if (f.good())
+                    {
+                        std::string dest((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+                        r.luaScript = dest;
+                    }
+                }
+            }
         }
     }
 };

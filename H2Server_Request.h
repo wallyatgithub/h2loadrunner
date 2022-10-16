@@ -65,7 +65,7 @@ public:
                 reg_exp.assign(object, std::regex_constants::ECMAScript|std::regex_constants::optimize);
             }
         }
-        catch (std::regex_error& e)
+        catch (std::regex_error e)
         {
             std::cerr<<"invalid reg exp: "<<object<<" reason: "<<e.what()<<std::endl;
         }
@@ -83,7 +83,7 @@ public:
                 reg_exp.assign(object, std::regex_constants::ECMAScript|std::regex_constants::optimize);
             }
         }
-        catch (std::regex_error& e)
+        catch (std::regex_error e)
         {
             std::cerr<<"invalid reg exp: "<<object<<" "<<e.what()<<std::endl;
         }
@@ -157,8 +157,15 @@ public:
             }
             else
             {
-                request.decode_json_if_not_yet();
-                matched = match(request.json_payload);
+                if (json_pointer.size())
+                {
+                    request.decode_json_if_not_yet();
+                    matched = match(request.json_payload);
+                }
+                else
+                {
+                    matched = match(*request.raw_payload);
+                }
             }
             request.match_result[unique_id] = matched;
             return matched;
