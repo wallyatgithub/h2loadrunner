@@ -507,7 +507,7 @@
                             "enum": ["EqualsTo", "StartsWith", "EndsWith", "Contains", "RegexMatch"]
                           },
                           "input":{
-                            "description": "Content used to run the matchType above against the received header value; i.e., received header value should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression in ECMAScript grammar, and it should match the entire target character sequence, i.e., the header value",
+                            "description": "Content used to run the matchType above against the received header value; i.e., received header value should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression of ECMAScript flavor, and it should match the entire target character sequence, i.e., the header value",
                             "default": "200",
                             "type":"string"
                           }
@@ -532,7 +532,7 @@
                             "enum": ["EqualsTo", "StartsWith", "EndsWith", "Contains", "RegexMatch"]
                           },
                           "input": {
-                            "description": "Content used to execute the matchType above against the value specified by the Json pointer above; the value specified by the Json pointer above should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression in ECMAScript grammar, and it should match the entire target character sequence, i.e., the value specified by the Json pointer",
+                            "description": "Content used to execute the matchType above against the value specified by the Json pointer above; the value specified by the Json pointer above should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression of ECMAScript flavor, and it should match the entire target character sequence, i.e., the value specified by the Json pointer",
                             "type":"string"
                           }
                         }
@@ -542,7 +542,7 @@
                 },
                 "value-pickers":
                 {
-                  "description": "This is the actions to run when the response is received; it is using a regular expression to pick up a value, from a specific header, or from a value in the payload specified by a Json pointer, and then save the value to a variable whose name is given in save-to-variable; the stored value can be accessed later by wrapping the name of the variable with ${}, for example, pick up a value from the response header here, and store it to a variable named user_id, and then refer to this variable in a later request of the same scenario in this way: some_api_path/${user_id}, and ${user_id} would be replaced by the actual value stored here",
+                  "description": "This is the actions to run when the response is received; it is using a regular expression of ECMAScript flavor to pick up a value, from a specific header, or from a value in the payload specified by a Json pointer, and then save the value to a variable whose name is given in save-to-variable; the stored value can be accessed later by wrapping the name of the variable with ${}, for example, pick up a value from the response header here, and store it to a variable named user_id, and then refer to this variable in a later request of the same scenario in this way: some_api_path/${user_id}, and ${user_id} would be replaced by the actual value stored here",
                   "type": "array",
                   "items": {
                     "type": "object",
@@ -558,7 +558,8 @@
                         "description": "A header name, or a Json pointer, depending on what is given in where-to-pickup-from"
                       },
                       "regexp": {
-                        "description": "A regular expression to extract value from the source above",
+                        "description": "A regular expression of ECMAScript flavor to extract value from the source above",
+                        "default": ".*",
                         "type":"string"
                       },
                       "save-to-variable": {
