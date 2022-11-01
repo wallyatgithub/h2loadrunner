@@ -1536,8 +1536,9 @@ void post_process_json_config_schema(h2load::Config& config)
 
     for (auto& scenario : config.json_config_schema.scenarios)
     {
-        for (auto& request : scenario.requests)
+        for (auto i = 0; i < scenario.requests.size(); i++)
         {
+            auto& request = scenario.requests[i];
 
             for (auto& schema_header_match : request.response_match.header_match)
             {
@@ -1561,11 +1562,19 @@ void post_process_json_config_schema(h2load::Config& config)
                 {
                     request.make_request_function_present = true;
                 }
+                else
+                {
+                    std::cerr << scenario.name<<"_"<<i<<": lua script provided, but function " << make_request <<" is either malformed, or not present"<<std::endl;
+                }
                 lua_settop(L, 0);
                 lua_getglobal(L, validate_response);
                 if (lua_isfunction(L, -1))
                 {
                     request.validate_response_function_present = true;
+                }
+                else
+                {
+                    std::cerr << scenario.name<<"_"<<i<<": lua script provided, but function " << validate_response <<" is either malformed, or not present"<<std::endl;
                 }
                 lua_settop(L, 0);
                 lua_close(L);
