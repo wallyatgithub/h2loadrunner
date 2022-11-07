@@ -89,6 +89,8 @@ public:
 
     uint64_t get_handler_id();
 
+    void reset_writefun();
+
 protected:
     std::map<int32_t, std::shared_ptr<asio_server_stream>> streams_;
     connection_write writefun_;
