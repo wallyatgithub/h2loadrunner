@@ -50,6 +50,11 @@ base_handler::~base_handler()
     handler_io_service.erase(this_handler_id);
 }
 
+void base_handler::reset_writefun()
+{
+    auto tmp = std::move(writefun_);
+}
+
 base_handler* base_handler::find_handler(uint64_t handler_id)
 {
     auto it = alive_handlers.find(handler_id);

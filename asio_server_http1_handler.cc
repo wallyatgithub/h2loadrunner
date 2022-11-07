@@ -424,7 +424,10 @@ int http1_handler::on_write(std::vector<uint8_t>& buffer, std::size_t& len)
 void http1_handler::initiate_write()
 {
     write_signaled_ = false;
-    writefun_();
+    if (writefun_)
+    {
+        writefun_();
+    }
 }
 
 void http1_handler::stream_error(int32_t stream_id, uint32_t error_code)

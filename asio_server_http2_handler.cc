@@ -416,7 +416,10 @@ void http2_handler::signal_write() {
 
 void http2_handler::initiate_write() {
   write_signaled_ = false;
-  writefun_();
+  if (writefun_)
+  {
+      writefun_();
+  }
 }
 
 void http2_handler::stream_error(int32_t stream_id, uint32_t error_code) {
