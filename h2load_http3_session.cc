@@ -137,10 +137,16 @@ void Http3Session::read_data(nghttp3_vec* vec, size_t veccnt,
 
 int64_t Http3Session::submit_request_internal()
 {
+    auto config = client_->worker->config;
+
+    if (config->json_config_schema.scenarios.size())
+    {
+        return _submit_request();
+    }
+
     int rv;
     int64_t stream_id;
 
-    auto config = client_->worker->config;
     auto& nva = config->nva[reqidx_];
 
     rv = ngtcp2_conn_open_bidi_stream(client_->quic.conn, &stream_id, nullptr);
@@ -229,6 +235,7 @@ void Http3Session::recv_data(int64_t stream_id, const uint8_t* data,
 {
     client_->record_ttfb();
     client_->worker->stats.bytes_body += datalen;
+    client_->on_data_chunk(stream_id, data, datalen);
     consume(stream_id, datalen);
 }
 
@@ -267,6 +274,7 @@ void Http3Session::begin_headers(int64_t stream_id)
     assert(payloadlen > 0);
 
     client_->worker->stats.bytes_head += payloadlen;
+    client_->on_header_frame_begin(stream_id, 0);
 }
 
 namespace
@@ -566,12 +574,6 @@ int Http3Session::add_ack_offset(int64_t stream_id, size_t datalen)
 
 int Http3Session::_submit_request()
 {
-    if (npending_request_)
-    {
-        ++npending_request_;
-        return 0;
-    }
-
     int64_t stream_id;
 
     auto config = client_->worker->config;
@@ -646,6 +648,9 @@ int Http3Session::_submit_request()
     curr_stream_id = stream_id;
     client_->requests_waiting_for_response().insert(std::make_pair(stream_id, std::move(data)));
     client_->on_request_start(stream_id);
+    auto req_stat = client_->get_req_stat(stream_id);
+    assert(req_stat);
+    client_->record_request_time(req_stat);
     return 0;
 }
 
@@ -656,7 +661,6 @@ void Http3Session::submit_ping() // TODO:
 
 void Http3Session::reset_stream(int64_t stream_id)
 {
-    // TODO:
     ngtcp2_conn_shutdown_stream(client_->quic.conn, stream_id, NGHTTP3_H3_REQUEST_CANCELLED);
 
     client_->on_stream_close(stream_id, false);

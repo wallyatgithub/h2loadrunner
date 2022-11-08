@@ -174,7 +174,7 @@
     },
     "tls-keylog-file":
     {
-      "description":"Enable tls key log and specify base file name for tls key log; key log is emitted for each tls connection. For a given base name 'base', each output file name becomes 'base_localPort.log' where "localPort" is the local port of the connection",
+      "description":"Enable tls key log and specify base file name for tls key log; key log is emitted for each tls connection. For a given base name 'base', each output file name becomes 'base_localPort.log' where 'localPort' is the local port of the connection",
       "type":"string"
     },
     "no-tls-proto":
@@ -235,7 +235,7 @@
     "statistics-interval":
     {
       "description":"This field specifies a repeated timer in seconds; h2loadrunner will print the statistics to stdout or to statistics-file, in Comma-separated values (CSV) format upon each timer expiry",
-      "default": 5,
+      "default": 1,
       "type":"integer"
     },
     "statistics-file":
@@ -297,6 +297,12 @@
       "description":"Specify the maximum outgoing UDP datagram payload size.",
       "default": 0,
       "type":"integer"
+    },
+    "quic-congestion-control-algorithm":{
+      "description": "Choose congestion control algorithm for QUIC",
+      "type": "string",
+      "default": "RENO",
+      "enum": ["RENO", "CUBIC", "BBR", "BBR2"]
     },
     "Scenarios":
     {

@@ -55,6 +55,13 @@ enum VALUE_SOURCE_TYPE
     SOURCE_TYPE_RES_POINTER
 };
 
+enum PROTO_TYPE
+{
+    PROTO_HTTP1 = 0,
+    PROTO_HTTP2,
+    PROTO_HTTP3
+};
+
 const std::map<std::string, VALUE_SOURCE_TYPE> value_pickup_action_map =
 {
     {request_header, SOURCE_TYPE_REQ_HEADER},
@@ -527,6 +534,7 @@ public:
     bool ktls;
     std::string qlog_file_base;
     std::string tls_keylog_file;
+    std::string quic_congestion_control_algorithm;
 
     explicit Config_Schema():
         schema("http"),
@@ -624,6 +632,7 @@ public:
         h->add_property("ktls", &this->ktls, staticjson::Flags::Optional);
         h->add_property("qlog-file-base", &this->qlog_file_base, staticjson::Flags::Optional);
         h->add_property("tls-keylog-file", &this->tls_keylog_file, staticjson::Flags::Optional);
+        h->add_property("quic-congestion-control-algorithm", &this->quic_congestion_control_algorithm, staticjson::Flags::Optional);
     }
 };
 

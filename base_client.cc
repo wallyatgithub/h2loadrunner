@@ -1682,7 +1682,8 @@ void base_client::on_stream_close(int64_t stream_id, bool success, bool final)
         {
             return;
         }
-        if (streams.count(stream_id) && streams.at(stream_id).statistics_eligible)
+        auto itr = streams.find(stream_id);
+        if (itr != streams.end() && itr->second.statistics_eligible)
         {
             if (success)
             {
@@ -1690,7 +1691,7 @@ void base_client::on_stream_close(int64_t stream_id, bool success, bool final)
                 ++worker->stats.req_success;
                 ++cstat.req_success;
 
-                if (streams.count(stream_id) && streams.at(stream_id).status_success == 1)
+                if (itr->second.status_success == 1)
                 {
                     ++worker->stats.req_status_success;
                 }
@@ -1912,7 +1913,8 @@ void base_client::on_data_chunk(int64_t stream_id, const uint8_t* data, size_t l
     auto request = requests_awaiting_response.find(stream_id);
     if (request != requests_awaiting_response.end())
     {
-        request->second.resp_payload.append((const char*)data, len); // TODO: handle grpc payload
+        // TODO: handle grpc payload with multiple data chunks, each with size prefixed
+        request->second.resp_payload.append((const char*)data, len);
     }
     if (config->verbose)
     {
@@ -3226,7 +3228,7 @@ int base_client::quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
     {
         settings.log_printf = debug_log_printf;
     }
-    //settings.cc_algo = config.cc_algo; // TODO: 
+    settings.cc_algo = static_cast<ngtcp2_cc_algo>(config->cc_algo);
     settings.initial_ts = current_timestamp_nanoseconds();
     settings.rand_ctx.native_handle = &worker->randgen;
     if (!config->qlog_file_base.empty())

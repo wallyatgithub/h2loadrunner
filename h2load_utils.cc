@@ -1613,6 +1613,8 @@ void post_process_json_config_schema(h2load::Config& config)
     load_file_content(config.json_config_schema.ca_cert);
     load_file_content(config.json_config_schema.client_cert);
     load_file_content(config.json_config_schema.private_key);
+    static std::map<std::string, uint32_t> cc_algo = {{"RENO", 0}, {"CUBIC", 1}, {"BBR", 2}, {"BBR2", 3}};
+    config.cc_algo = cc_algo[config.json_config_schema.quic_congestion_control_algorithm];
 }
 
 std::vector<std::vector<std::string>> read_csv_file(const std::string& csv_file_name)

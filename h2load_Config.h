@@ -85,6 +85,7 @@ struct Config
     size_t max_udp_payload_size = 0;
     // Enable ktls.
     bool ktls = false;
+    uint32_t cc_algo;
 
     Config();
     ~Config();
