@@ -1343,6 +1343,21 @@ int main(int argc, char** argv)
         ready = true;
         cv.notify_all();
     }
+    auto check_clients_up = [&workers]()
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        size_t number_of_active_clients = 0;
+        for (auto& worker: workers)
+        {
+            number_of_active_clients += worker->get_number_of_active_clients();
+        }
+        if (number_of_active_clients == 0)
+        {
+            std::cerr << "no connections are established, quit" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    };
+    std::async(std::launch::async, check_clients_up);
 
     auto start = std::chrono::steady_clock::now();
     std::atomic<bool> workers_stopped(false);
@@ -1490,12 +1505,12 @@ traffic: )" << util::utos_funit(stats.bytes_total)
 #ifdef ENABLE_HTTP3
     if (config.is_quic())
     {
-        std::cout << "UDP datagram: " << stats.udp_dgram_sent << " sent, "
+        std::cerr << "UDP datagram: " << stats.udp_dgram_sent << " sent, "
                   << stats.udp_dgram_recv << " received" << std::endl;
     }
 #endif // ENABLE_HTTP3
 
-    std::cout
+    std::cerr
             << R"() data << min         max         mean         sd        +/- sd
 time for request: )"
             << std::setw(10) << util::format_duration(ts.request.min) << "  "

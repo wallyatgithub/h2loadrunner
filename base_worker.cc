@@ -324,5 +324,11 @@ std::map<size_t, base_client*>& base_worker::get_client_ids()
     return client_ids;
 }
 
+size_t base_worker::get_number_of_active_clients()
+{
+    return managed_clients.size();
+}
+
+
 }
 

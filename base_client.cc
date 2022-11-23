@@ -88,7 +88,15 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
 #ifdef ENABLE_HTTP3
     ngtcp2_connection_close_error_default(&quic.last_error);
 #endif // ENABLE_HTTP3
-
+    auto iter = http_schema_map.find(dest_schema);
+    if (iter != http_schema_map.end())
+    {
+        http_schema = iter->second;
+    }
+    else
+    {
+        http_schema = URI_SCHEMA::SCHEMA_INVALID;
+    }
 }
 
 base_client::~base_client()
@@ -99,7 +107,6 @@ base_client::~base_client()
         quic_free();
     }
 #endif // ENABLE_HTTP3
-
 }
 
 int base_client::connect()
@@ -836,7 +843,11 @@ void base_client::cleanup_due_to_disconnect()
 {
     if (CLIENT_CONNECTED == state)
     {
-        std::cerr << "===============disconnected from " << authority << "===============" << std::endl;
+        std::cerr << "=============== disconnected from " << authority << "===============" << std::endl;
+    }
+    else if (CLIENT_CONNECTING == state)
+    {
+        std::cerr << "=============== failed to connect to " << authority << "===============" << std::endl;
     }
 
     worker->get_client_ids().erase(this->get_client_unique_id());

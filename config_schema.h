@@ -35,6 +35,8 @@ const std::string path_header_name = ":path";
 const std::string scheme_header_name = ":scheme";
 const std::string authority_header_name = ":authority";
 const std::string method_header_name = ":method";
+const std::string schema_http = "http";
+const std::string schema_https = "https";
 
 enum URI_ACTION
 {
@@ -60,6 +62,19 @@ enum PROTO_TYPE
     PROTO_HTTP1 = 0,
     PROTO_HTTP2,
     PROTO_HTTP3
+};
+
+enum class URI_SCHEMA
+{
+    SCHEMA_INVALID = 0,
+    SCHEMA_HTTP,
+    SCHEMA_HTTPS
+};
+
+const std::map<std::string, URI_SCHEMA, ci_less> http_schema_map =
+{
+  {schema_http, URI_SCHEMA::SCHEMA_HTTP},
+  {schema_https, URI_SCHEMA::SCHEMA_HTTPS},
 };
 
 const std::map<std::string, VALUE_SOURCE_TYPE> value_pickup_action_map =

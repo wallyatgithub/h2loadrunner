@@ -93,6 +93,7 @@ public:
 
     std::map<size_t, base_client*>& get_client_ids();
 
+    size_t get_number_of_active_clients();
 
 };
 
