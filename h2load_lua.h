@@ -201,5 +201,12 @@ void format_length_prefixed_message(std::string& payload);
  */
 uint64_t leave_c_function(lua_State* L);
 
+void update_proto(std::map<std::string, std::string, ci_less>& headers, std::string& payload,
+                  std::string& orig_dst,
+                  std::string& proto);
+
+void update_orig_dst_and_proto(std::map<std::string, std::string, ci_less>& headers, std::string& payload,
+                               std::string& orig_dst,
+                               std::string& proto);
 
 #endif

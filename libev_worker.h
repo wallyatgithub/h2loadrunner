@@ -26,12 +26,14 @@ class libev_worker: public base_worker
 public:
     struct ev_loop* loop;
     MemchunkPool mcpool;
-    SSL_CTX* ssl_ctx;
+    SSL_CTX* ssl_ctx_http1;
+    SSL_CTX* ssl_ctx_http2;
+    SSL_CTX* ssl_ctx_http3;
     ev_timer rate_mode_period_watcher;
     ev_timer duration_watcher;
     ev_timer warmup_watcher;
 
-    libev_worker(uint32_t id, SSL_CTX* ssl, size_t nreq_todo, size_t nclients,
+    libev_worker(uint32_t id, size_t nreq_todo, size_t nclients,
            size_t rate, size_t max_samples, Config* config);
     virtual ~libev_worker();
     libev_worker(libev_worker&& o) = default;
@@ -44,8 +46,7 @@ public:
     virtual void stop_duration_timer();
     virtual void run_event_loop();
     virtual void start_graceful_stop_timer();
-    virtual std::shared_ptr<base_client> create_new_client(size_t req_todo);
-    virtual SSL_CTX* get_ssl_ctx();
+    virtual std::shared_ptr<base_client> create_new_client(size_t req_todo, PROTO_TYPE proto_type = PROTO_UNSPECIFIED, const std::string& schema = "", const std::string& authority = "");
 
     void init_timers();
 

@@ -55,7 +55,7 @@ public:
     // This is only active when there is not a bounded number of requests
     // specified
 
-    std::map<std::string, std::set<base_client*>> client_pool;
+    std::map<PROTO_TYPE, std::map<std::string, std::set<base_client*>>> client_pool;
     std::map<size_t, base_client*> client_ids;
     std::mt19937 randgen;
 
@@ -70,10 +70,8 @@ public:
     virtual void stop_warmup_timer() = 0;
     virtual void stop_duration_timer() = 0;
     virtual void run_event_loop() = 0;
-    virtual std::shared_ptr<base_client> create_new_client(size_t req_todo) = 0;
+    virtual std::shared_ptr<base_client> create_new_client(size_t req_todo, PROTO_TYPE proto_type = PROTO_UNSPECIFIED, const std::string& schema = "", const std::string& authority = "") = 0;
     virtual void start_graceful_stop_timer() = 0;
-    virtual SSL_CTX* get_ssl_ctx() = 0;
-
     void rate_period_timeout_handler();
     void warmup_timeout_handler();
     void duration_timeout_handler();
@@ -89,7 +87,7 @@ public:
     void check_in_client(std::shared_ptr<base_client>);
     void check_out_client(base_client*);
 
-    std::map<std::string, std::set<base_client*>>& get_client_pool();
+    std::map<PROTO_TYPE, std::map<std::string, std::set<base_client*>>>& get_client_pool();
 
     std::map<size_t, base_client*>& get_client_ids();
 

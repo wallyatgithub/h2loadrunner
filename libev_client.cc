@@ -38,9 +38,9 @@ namespace h2load
 
 
 libev_client::libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Config* conf,
-                           libev_client* parent, const std::string& dest_schema,
-                           const std::string& dest_authority)
-    : base_client(id, wrker, req_todo, conf, parent, dest_schema, dest_authority),
+                           SSL_CTX* ssl_ctx, libev_client* parent, const std::string& dest_schema,
+                           const std::string& dest_authority, PROTO_TYPE proto)
+    : base_client(id, wrker, req_todo, conf, ssl_ctx, parent, dest_schema, dest_authority, proto),
       wb(&static_cast<libev_worker*>(worker)->mcpool),
       next_addr(conf->addrs),
       current_addr(nullptr),
@@ -70,7 +70,7 @@ libev_client::libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Co
     ev_timer_init(&pkt_timer, quic_pkt_timeout_cb, 0., 0.);
     pkt_timer.data = this;
 
-    if (config->is_quic())
+    if (is_quic())
     {
         quic.tx.data = std::make_unique<uint8_t[]>(64_k);
     }
@@ -155,7 +155,7 @@ int libev_client::do_write()
 template<class T>
 int libev_client::make_socket(T* addr)
 {
-    if (config->is_quic())
+    if (is_quic())
     {
 #ifdef ENABLE_HTTP3
         int rv;
@@ -205,7 +205,7 @@ int libev_client::make_socket(T* addr)
         {
             if (!ssl)
             {
-                ssl = SSL_new(static_cast<libev_worker*>(worker)->ssl_ctx);
+                ssl = SSL_new(ssl_context);
             }
 
             std::string host = tokenize_string(authority, ":")[0];
@@ -310,7 +310,7 @@ int libev_client::make_async_connection()
     ev_io_set(&wev, fd, EV_WRITE);
 
     ev_io_start(static_cast<libev_worker*>(worker)->loop, &wev);
-    if (config->is_quic())
+    if (is_quic())
     {
 #ifdef ENABLE_HTTP3
         ev_io_start(static_cast<libev_worker*>(worker)->loop, &rev);
@@ -357,7 +357,7 @@ void libev_client::setup_graceful_shutdown()
 void libev_client::disconnect()
 {
 #ifdef ENABLE_HTTP3
-    if (config->is_quic())
+    if (is_quic())
     {
         quic_close_connection();
     }
@@ -800,11 +800,12 @@ void libev_client::signal_write()
 }
 
 std::shared_ptr<base_client> libev_client::create_dest_client(const std::string& dst_sch,
-                                                              const std::string& dest_authority)
+                                                              const std::string& dest_authority,
+                                                              PROTO_TYPE proto)
 {
     auto new_client = std::make_shared<libev_client>(this->id, static_cast<libev_worker*>(worker), this->req_todo,
                                                      this->config,
-                                                     this, dst_sch, dest_authority);
+                                                     this, dst_sch, dest_authority, proto);
     return new_client;
 }
 

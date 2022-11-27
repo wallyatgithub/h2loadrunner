@@ -93,12 +93,20 @@ void base_worker::stop_all_clients()
     }
 */
     // client_pool has all the connected clients, including sub client
-    for (auto& clients_set: client_pool)
+    std::set<base_client*> terminated_clients;
+    for (auto& client_map: client_pool)
     {
-        for (auto& client: clients_set.second)
+        for (auto& clients_set: client_map.second)
         {
-            client->setup_graceful_shutdown();
-            client->terminate_session();
+            for (auto& client: clients_set.second)
+            {
+                if (terminated_clients.count(client) == 0)
+                {
+                    client->setup_graceful_shutdown();
+                    client->terminate_session();
+                    terminated_clients.insert(client);
+                }
+            }
         }
     }
 }
@@ -314,7 +322,7 @@ void base_worker::check_out_client(base_client* client)
     managed_clients.erase(client);
 }
 
-std::map<std::string, std::set<base_client*>>& base_worker::get_client_pool()
+std::map<PROTO_TYPE, std::map<std::string, std::set<base_client*>>>& base_worker::get_client_pool()
 {
     return client_pool;
 }

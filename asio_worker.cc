@@ -31,9 +31,29 @@ boost::asio::io_service& asio_worker::get_io_context()
     return io_context;
 }
 
-std::shared_ptr<base_client> asio_worker::create_new_client(size_t req_todo)
+std::shared_ptr<base_client> asio_worker::create_new_client(size_t req_todo, PROTO_TYPE proto_type, const std::string& schema, const std::string& authority)
 {
-    return std::make_shared<asio_client_connection>(io_context, next_client_id++, this, req_todo, (config), ssl_ctx);
+    auto ctx = &ssl_ctx;
+    switch (proto_type)
+    {
+        case PROTO_HTTP1:
+            ctx = &ssl_ctx_http1;
+            break;
+        case PROTO_HTTP2:
+            ctx = &ssl_ctx_http2;
+            break;
+        case PROTO_HTTP3:
+            ctx = &ssl_ctx_http3;
+            break;
+        case PROTO_UNSPECIFIED:
+            ctx = &ssl_ctx;
+            break;
+
+        default:
+            std::cerr<<"invalid protol"<<std::endl;
+            abort();
+    }
+    return std::make_shared<asio_client_connection>(io_context, next_client_id++, this, req_todo, (config), *ctx, nullptr, schema, authority);
 }
 
 
@@ -45,19 +65,20 @@ asio_worker::asio_worker(uint32_t id, size_t nreq_todo, size_t nclients,
     duration_timer(io_context),
     tick_timer(io_context),
     ssl_ctx(boost::asio::ssl::context::sslv23),
+    ssl_ctx_http1(boost::asio::ssl::context::sslv23),
+    ssl_ctx_http2(boost::asio::ssl::context::sslv23),
+    ssl_ctx_http3(boost::asio::ssl::context::sslv23),
     async_resolver(io_context)
 {
     setup_SSL_CTX(ssl_ctx.native_handle(), *config);
+    setup_SSL_CTX(ssl_ctx_http1.native_handle(), *config, HTTP1_ALPN);
+    setup_SSL_CTX(ssl_ctx_http2.native_handle(), *config, HTTP2_ALPN);
+    setup_SSL_CTX(ssl_ctx_http3.native_handle(), *config, HTTP3_ALPN);
 }
 
 asio_worker::~asio_worker()
 {
     managed_clients.clear();
-}
-
-SSL_CTX* asio_worker::get_ssl_ctx()
-{
-    return ssl_ctx.native_handle();
 }
 
 bool asio_worker::timer_common_check(boost::asio::deadline_timer& timer, const boost::system::error_code& ec,

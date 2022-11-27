@@ -464,6 +464,12 @@
                   "default": "GET",
                   "type":"string"
                 },
+                "http-version":{
+                  "type":"string",
+                  "description": "http version, allowed value: default, http/1.1, http2, http3; default means use the default http version specified by 'no-tls-proto' and 'non-list'",
+                  "default": "default",
+                  "enum": ["default", "http/1.1", "http2", "http3"]
+                },
                 "payload":
                 {
                   "description": "http message content, or a filename containing the actual content",

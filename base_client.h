@@ -55,14 +55,15 @@ class base_client
 {
 public:
     base_client(uint32_t id, base_worker* wrker, size_t req_todo, Config* conf,
-                base_client* parent = nullptr, const std::string& dest_schema = "",
-                const std::string& dest_authority = "");
+                SSL_CTX* ssl_ctx, base_client* parent = nullptr, const std::string& dest_schema = "",
+                const std::string& dest_authority = "", PROTO_TYPE proto = PROTO_UNSPECIFIED);
     virtual ~base_client();
     virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length) = 0;
     virtual void signal_write() = 0;
     virtual bool any_pending_data_to_write() = 0;
     virtual std::shared_ptr<base_client> create_dest_client(const std::string& dst_sch,
-                                                            const std::string& dest_authority) = 0;
+                                                            const std::string& dest_authority,
+                                                            PROTO_TYPE proto = PROTO_UNSPECIFIED) = 0;
 
 
     virtual void start_conn_active_watcher() = 0;
@@ -220,6 +221,10 @@ public:
 
     void request_connection_close();
 
+    bool is_quic();
+
+    void clean_up_this_in_dest_client_map();
+
 #endif // ENABLE_HTTP3
 
     base_worker* worker;
@@ -259,7 +264,7 @@ public:
     std::multimap<std::chrono::steady_clock::time_point, Request_Data> delayed_requests_to_submit;
     std::map<int64_t, Request_Data> requests_awaiting_response;
     std::vector<std::vector<lua_State*>> lua_states;
-    std::map<std::string, base_client*> dest_clients;
+    std::map<PROTO_TYPE, std::map<std::string, base_client*>> dest_clients;
     base_client* parent_client;
     std::string schema;
     std::string authority;
@@ -272,6 +277,7 @@ public:
     std::vector<Scenario_Data_Per_Client> scenario_data_per_connection;
     time_point_in_seconds_double rps_duration_started;
     SSL* ssl;
+    SSL_CTX* ssl_context;
     std::vector<std::function<void(bool, h2load::base_client*)>> connected_callbacks;
     std::map<int32_t, Stream_Callback_Data> stream_user_callback_queue;
 #ifdef ENABLE_HTTP3

@@ -26,7 +26,7 @@ public:
 
     virtual void run_event_loop();
 
-    virtual std::shared_ptr<base_client> create_new_client(size_t req_todo);
+    virtual std::shared_ptr<base_client> create_new_client(size_t req_todo, PROTO_TYPE proto_type = PROTO_UNSPECIFIED, const std::string& schema = "", const std::string& authority = "");
 
     bool timer_common_check(boost::asio::deadline_timer & timer, const boost::system::error_code & ec,
                             void (asio_worker:: * handler)(const boost::system::error_code&));
@@ -53,8 +53,6 @@ public:
 
     boost::asio::io_service& get_io_context();
 
-    virtual SSL_CTX* get_ssl_ctx();
-
     void enqueue_user_timer(uint64_t ms_to_expire, std::function<void(void)>);
 
     void handle_tick_timer_timeout(const boost::system::error_code & ec);
@@ -79,6 +77,9 @@ private:
     boost::asio::deadline_timer duration_timer;
     boost::asio::deadline_timer tick_timer;
     boost::asio::ssl::context ssl_ctx;
+    boost::asio::ssl::context ssl_ctx_http1;
+    boost::asio::ssl::context ssl_ctx_http2;
+    boost::asio::ssl::context ssl_ctx_http3;
     std::multimap<std::chrono::steady_clock::time_point, std::function<void(void)>> user_timers;
     std::thread::id my_thread_id;
     boost::asio::ip::tcp::resolver async_resolver;

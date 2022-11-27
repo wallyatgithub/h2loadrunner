@@ -54,7 +54,8 @@ public:
         boost::asio::ssl::context& ssl_context,
         base_client* parent = nullptr,
         const std::string& dest_schema = "",
-        const std::string& dest_authority = ""
+        const std::string& dest_authority = "",
+        PROTO_TYPE proto = PROTO_UNSPECIFIED
     );
 
     virtual ~asio_client_connection();
@@ -108,7 +109,8 @@ public:
     virtual bool any_pending_data_to_write();
 
     virtual std::shared_ptr<base_client> create_dest_client(const std::string& dst_sch,
-                                                            const std::string& dest_authority);
+                                                            const std::string& dest_authority,
+                                                            PROTO_TYPE proto = PROTO_UNSPECIFIED);
 
     virtual void setup_connect_with_async_fqdn_lookup();
 

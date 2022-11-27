@@ -502,12 +502,16 @@ int32_t _make_connection(lua_State* L, const std::string& uri,
         std::string base_uri = schema;
         base_uri.append("://").append(authority);
         auto& clients = worker->get_client_pool();
-        if (clients[base_uri].size() < clients_needed)
+        PROTO_TYPE proto_type = PROTO_UNSPECIFIED;
+        auto iter = http_proto_map.find(proto);
+        if (iter != http_proto_map.end())
         {
-            auto client = worker->create_new_client(0xFFFFFFFF);
+            proto_type = iter->second;
+        }
+        if (clients[proto_type][base_uri].size() < clients_needed)
+        {
+            auto client = worker->create_new_client(0xFFFFFFFF, proto_type, schema, authority);
             worker->check_in_client(client);
-            // pre-mature insert to block excessive client creation during test start
-            clients[base_uri].insert(client.get());
             client->install_connected_callback(connected_callback);
             client->set_prefered_authority(authority);
             client->preferred_non_tls_proto = proto;
@@ -519,7 +523,7 @@ int32_t _make_connection(lua_State* L, const std::string& uri,
             thread_local static std::mt19937 generator(rand_dev());
             thread_local static std::uniform_int_distribution<uint64_t>  distr(0, clients_needed - 1);
             auto client_index = distr(generator);
-            auto iter = clients[base_uri].begin();
+            auto iter = clients[proto_type][base_uri].begin();
             std::advance(iter, client_index);
             auto client = *iter;
 
@@ -575,16 +579,13 @@ void update_orig_dst_and_proto(std::map<std::string, std::string, ci_less>& head
                                std::string& orig_dst,
                                std::string& proto)
 {
-    if (headers.count(h2load::x_envoy_original_dst_host_header))
+    auto iter = headers.find(h2load::x_envoy_original_dst_host_header);
+    if (iter != headers.end())
     {
-        orig_dst = headers[h2load::x_envoy_original_dst_host_header];
-        headers.erase(h2load::x_envoy_original_dst_host_header);
+        orig_dst = iter->second;
+        headers.erase(iter);
     }
-    if (headers.count(h2load::x_proto_to_use))
-    {
-        proto = headers[h2load::x_proto_to_use];
-        headers.erase(h2load::x_proto_to_use);
-    }
+    update_proto(headers, payload, orig_dst, proto);
 }
 
 // TODO: this is called every request, should be optimized
@@ -592,10 +593,11 @@ void update_proto(std::map<std::string, std::string, ci_less>& headers, std::str
                   std::string& orig_dst,
                   std::string& proto)
 {
-    if (headers.count(h2load::x_proto_to_use))
+    auto iter = headers.find(h2load::x_proto_to_use);
+    if (iter != headers.end())
     {
-        proto = headers[h2load::x_proto_to_use];
-        headers.erase(h2load::x_proto_to_use);
+        proto = iter->second;
+        headers.erase(iter);
     }
 }
 

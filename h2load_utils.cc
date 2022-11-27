@@ -92,14 +92,14 @@ std::shared_ptr<h2load::base_worker> create_worker(uint32_t id, SSL_CTX* ssl_ctx
 #else
     if (config.is_rate_mode())
     {
-        return std::make_shared<libev_worker>(id, ssl_ctx, nreqs, nclients, rate,
+        return std::make_shared<libev_worker>(id, nreqs, nclients, rate,
                                               max_samples, &config);
     }
     else
     {
         // Here rate is same as client because the rate_timeout callback
         // will be called only once
-        return std::make_shared<libev_worker>(id, ssl_ctx, nreqs, nclients, nclients,
+        return std::make_shared<libev_worker>(id, nreqs, nclients, nclients,
                                               max_samples, &config);
     }
 #endif
@@ -1568,6 +1568,18 @@ void post_process_json_config_schema(h2load::Config& config)
         for (auto i = 0; i < scenario.requests.size(); i++)
         {
             auto& request = scenario.requests[i];
+            const static std::map<std::string, PROTO_TYPE> http_version_to_proto_map =
+            {
+                {"http/1.1", PROTO_HTTP1},
+                {"http2", PROTO_HTTP2},
+                {"http3", PROTO_HTTP3},
+                {"default", PROTO_UNSPECIFIED}
+            };
+            auto iter = http_version_to_proto_map.find(request.http_version);
+            if (iter != http_version_to_proto_map.end())
+            {
+                request.proto_type = iter->second;
+            }
 
             for (auto& schema_header_match : request.response_match.header_match)
             {
@@ -1899,7 +1911,7 @@ void SSL_CTX_keylog_cb_func_cb(const SSL* ssl, const char* line)
     }
 }
 
-void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
+void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config, const std::string& apln_proto)
 {
     auto ssl_opts = (SSL_OP_ALL & ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS) |
                     SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION |
@@ -1932,7 +1944,7 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
         max_tls_version = TLS1_2_VERSION;
     }
 
-    if (config.is_quic())
+    if (config.is_quic() || apln_proto == HTTP3_ALPN)
     {
 #ifdef ENABLE_HTTP3
 #  ifdef HAVE_LIBNGTCP2_CRYPTO_OPENSSL
@@ -2000,9 +2012,17 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
 
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L
     std::vector<unsigned char> proto_list;
-    for (const auto& proto : config.npn_list)
+
+    if (apln_proto.empty())
     {
-        std::copy_n(proto.c_str(), proto.size(), std::back_inserter(proto_list));
+        for (const auto& proto : config.npn_list)
+        {
+            std::copy_n(proto.c_str(), proto.size(), std::back_inserter(proto_list));
+        }
+    }
+    else
+    {
+        std::copy_n(apln_proto.c_str(), apln_proto.size(), std::back_inserter(proto_list));
     }
 
     SSL_CTX_set_alpn_protos(ssl_ctx, proto_list.data(), proto_list.size());

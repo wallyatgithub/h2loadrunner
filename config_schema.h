@@ -11,7 +11,6 @@
 #include "rapidjson/schema.h"
 #include "rapidjson/prettywriter.h"
 
-#include "h2load.h"
 #include "H2Server_Request.h"
 
 static const char* validate_response = "validate_response";
@@ -37,6 +36,14 @@ const std::string authority_header_name = ":authority";
 const std::string method_header_name = ":method";
 const std::string schema_http = "http";
 const std::string schema_https = "https";
+const std::string http1_proto = "http/1.1";
+const std::string http2_proto = "h2";
+const std::string http2_cleartext_proto = "h2c";
+const std::string http3_proto = "h3";
+const std::string HTTP1_ALPN = "\x8http/1.1";
+const std::string HTTP2_ALPN = "\x2h2";
+const std::string HTTP3_ALPN = "\x2h3";
+
 
 enum URI_ACTION
 {
@@ -59,9 +66,19 @@ enum VALUE_SOURCE_TYPE
 
 enum PROTO_TYPE
 {
-    PROTO_HTTP1 = 0,
+    PROTO_INVALID = 0,
+    PROTO_HTTP1,
     PROTO_HTTP2,
-    PROTO_HTTP3
+    PROTO_HTTP3,
+    PROTO_UNSPECIFIED
+};
+
+const std::map<std::string, PROTO_TYPE, ci_less> http_proto_map =
+{
+    {http1_proto,           PROTO_HTTP1},
+    {http2_proto,           PROTO_HTTP2},
+    {http2_cleartext_proto, PROTO_HTTP2},
+    {http3_proto,           PROTO_HTTP3},
 };
 
 enum class URI_SCHEMA
@@ -198,6 +215,8 @@ public:
     bool validate_response_function_present;
     std::string schema;
     std::string authority;
+    std::string http_version;
+    PROTO_TYPE proto_type; // filled by post_process_json_config_schema
     //    std::string path; // filled by post_process_json_config_schema
     Uri uri;
     std::string method;
@@ -221,6 +240,7 @@ public:
         h->add_property("luaScript", &this->luaScript, staticjson::Flags::Optional);
         h->add_property("uri", &this->uri);
         h->add_property("method", &this->method);
+        h->add_property("http-version", &this->http_version);
         h->add_property("payload", &this->payload, staticjson::Flags::Optional);
         h->add_property("additonalHeaders", &this->additonalHeaders, staticjson::Flags::Optional);
         h->add_property("clear-old-cookies", &this->clear_old_cookies, staticjson::Flags::Optional);

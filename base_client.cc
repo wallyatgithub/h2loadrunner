@@ -49,8 +49,8 @@ Unique_Id::Unique_Id()
 }
 
 base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Config* conf,
-                         base_client* parent, const std::string& dest_schema,
-                         const std::string& dest_authority):
+                         SSL_CTX* ssl_ctx, base_client* parent, const std::string& dest_schema,
+                         const std::string& dest_authority, PROTO_TYPE proto):
     worker(wrker),
     cstat(),
     config(conf),
@@ -67,8 +67,10 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
     rps_req_pending(0),
     rps_req_inflight(0),
     parent_client(parent),
+    ssl_context(ssl_ctx),
     schema(dest_schema),
     authority(dest_authority),
+    proto_type(proto),
     rps(conf->rps),
     this_client_id(),
     rps_duration_started(),
@@ -102,7 +104,7 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
 base_client::~base_client()
 {
 #ifdef ENABLE_HTTP3
-    if (config->is_quic())
+    if (is_quic())
     {
         quic_free();
     }
@@ -158,9 +160,17 @@ uint64_t base_client::get_total_pending_streams()
     else
     {
         auto pendingStreams = streams.size();
-        for (auto& client : dest_clients)
+        std::set<base_client*> clients_handled;
+        for (auto& clients_with_same_proto_version: dest_clients)
         {
-            pendingStreams += client.second->streams.size();
+            for (auto& client : clients_with_same_proto_version.second)
+            {
+                if (clients_handled.count(client.second) == 0)
+                {
+                    pendingStreams += client.second->streams.size();
+                    clients_handled.insert(client.second);
+                }
+            }
         }
         return pendingStreams;
     }
@@ -818,6 +828,36 @@ void base_client::record_client_start_time()
     cstat.client_start_time = std::chrono::steady_clock::now();
 }
 
+
+void base_client::clean_up_this_in_dest_client_map()
+{
+    if (parent_client)
+    {
+        for (auto& clients_with_same_proto: parent_client->dest_clients)
+        {
+            for (auto iter = clients_with_same_proto.second.begin(); iter != clients_with_same_proto.second.end();)
+            {
+                if (iter->second == this)
+                {
+                    iter = clients_with_same_proto.second.erase(iter);
+                }
+                else
+                {
+                    iter++;
+                }
+            }
+        }
+    }
+
+    for (auto& client_map: worker->get_client_pool())
+    {
+        for (auto& client_set : client_map.second)
+        {
+            client_set.second.erase(this);
+        }
+    }
+}
+
 void base_client::final_cleanup()
 {
     worker->sample_client_stat(&cstat);
@@ -831,12 +871,7 @@ void base_client::final_cleanup()
     }
     lua_states.clear();
 
-    std::string dest = schema;
-    dest.append("://").append(authority);
-    if (parent_client && parent_client->dest_clients.count(dest) && parent_client->dest_clients[dest] == this)
-    {
-        parent_client->dest_clients.erase(dest);
-    }
+    clean_up_this_in_dest_client_map();
 }
 
 void base_client::cleanup_due_to_disconnect()
@@ -851,10 +886,6 @@ void base_client::cleanup_due_to_disconnect()
     }
 
     worker->get_client_ids().erase(this->get_client_unique_id());
-    for (auto& client_set : worker->get_client_pool())
-    {
-        client_set.second.erase(this);
-    }
 
     record_client_end_time();
     streams.clear();
@@ -1113,11 +1144,19 @@ void base_client::populate_request_from_config_template(Request_Data& new_reques
 
 void base_client::terminate_sub_clients()
 {
-    for (auto& sub_client : dest_clients)
+    std::set<base_client*> terminated_client;
+    for (auto& sub_clients_with_same_proto: dest_clients)
     {
-        if (sub_client.second != this && sub_client.second->session)
+        for (auto& sub_client : sub_clients_with_same_proto.second)
         {
-            sub_client.second->terminate_session();
+            if (sub_client.second != this && sub_client.second->session)
+            {
+                if (terminated_client.count(this) == 0)
+                {
+                    sub_client.second->terminate_session();
+                    terminated_client.insert(this);
+                }
+            }
         }
     }
 }
@@ -1137,22 +1176,19 @@ bool base_client::is_test_finished()
 
 void base_client::update_this_in_dest_client_map()
 {
-    auto& clients = parent_client ? parent_client->dest_clients : dest_clients;
-    for (auto it = clients.begin(); it != clients.end();)
-    {
-        if (it->second == this)
-        {
-            clients.erase(it);
-            break;
-        }
-        else
-        {
-            ++it;
-        }
-    }
-    std::string dest = schema;
-    dest.append("://").append(authority);
-    clients[dest] = this;
+    clean_up_this_in_dest_client_map();
+
+    std::string base_uri = schema;
+    base_uri.append("://").append(authority);
+
+    worker->get_client_pool()[proto_type][base_uri].insert(this);
+    worker->get_client_pool()[PROTO_UNSPECIFIED][base_uri].insert(this);
+
+    auto& clients_with_proto_type = parent_client ? parent_client->dest_clients[proto_type] : dest_clients[proto_type];
+    clients_with_proto_type[base_uri] = this;
+
+    auto& clients_with_unspecified_proto = parent_client ? parent_client->dest_clients[PROTO_UNSPECIFIED] : dest_clients[PROTO_UNSPECIFIED];
+    clients_with_unspecified_proto[base_uri] = this;
 }
 
 void base_client::init_lua_states()
@@ -1816,9 +1852,6 @@ int base_client::connection_made()
         return ret;
     }
 
-    std::string base_uri = schema;
-    base_uri.append("://").append(authority);
-    worker->get_client_pool()[base_uri].insert(this);
     worker->get_client_ids()[this->get_client_unique_id()] = this;
 
     state = CLIENT_CONNECTED;
@@ -2120,15 +2153,21 @@ base_client* base_client::find_or_create_dest_client(Request_Data& request_to_se
     {
         std::string dest = *(request_to_send.schema);
         dest.append("://").append(*request_to_send.authority);
-        auto it = dest_clients.find(dest);
-        if (it == dest_clients.end())
+        auto proto = request_to_send.proto_type;
+        auto& clients = dest_clients[proto];
+        auto it = clients.find(dest);
+        if (it == clients.end())
         {
-            auto new_client = create_dest_client(*request_to_send.schema, *request_to_send.authority);
+            auto new_client = create_dest_client(*request_to_send.schema, *request_to_send.authority, proto);
             worker->check_in_client(new_client);
-            dest_clients[dest] = new_client.get();
+            clients[dest] = new_client.get();
             new_client->connect_to_host(new_client->schema, new_client->authority);
+            return new_client.get();
         }
-        return dest_clients[dest];
+        else
+        {
+            return it->second;
+        }
     }
     else
     {
@@ -2423,9 +2462,12 @@ int base_client::submit_request()
         // on this connection, start the active timeout.
         if (worker->config->conn_active_timeout > 0. && req_left == 0 && is_controller_client())
         {
-            for (auto& client : dest_clients) // "this" is also in dest_clients
+            for (auto& dest_client_with_same_proto_version: dest_clients)  // "this" is also in dest_clients
             {
-                client.second->start_conn_active_watcher();
+                for (auto& client : dest_client_with_same_proto_version.second)
+                {
+                    client.second->start_conn_active_watcher();
+                }
             }
         }
     }
@@ -2467,6 +2509,26 @@ void base_client::process_request_failure(int errCode)
 
 void base_client::print_app_info()
 {
+    if (selected_proto.compare(http1_proto) == 0)
+    {
+        proto_type = PROTO_HTTP1;
+    }
+    else if (selected_proto.find(http2_proto, 0) == 0)
+    {
+        proto_type = PROTO_HTTP2;
+    }
+    else if (selected_proto.find(http2_cleartext_proto, 0) == 0)
+    {
+        proto_type = PROTO_HTTP2;
+    }
+    else if (selected_proto.find(http3_proto, 0) == 0)
+    {
+        proto_type = PROTO_HTTP3;
+    }
+    else
+    {
+        proto_type = PROTO_INVALID;
+    }
     if (worker->id == 0 && !worker->app_info_report_done)
     {
         worker->app_info_report_done = true;
@@ -2496,7 +2558,7 @@ int base_client::select_protocol_and_allocate_session()
         if (next_proto)
         {
             auto proto = StringRef {next_proto, next_proto_len};
-            if (config->is_quic())
+            if (is_quic())
             {
 #ifdef ENABLE_HTTP3
                 assert(session);
@@ -3155,7 +3217,7 @@ int base_client::quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
 
     if (!ssl)
     {
-        ssl = SSL_new(worker->get_ssl_ctx());
+        ssl = SSL_new(ssl_context);
 
         quic.conn_ref.get_conn = get_conn;
         quic.conn_ref.user_data = this;
@@ -3333,13 +3395,24 @@ void base_client::quic_free()
 
 void base_client::request_connection_close()
 {
-    if (config->is_quic())
+    if (is_quic())
     {
         quic.close_requested = true;
         signal_write();
     }
 }
 
+bool base_client::is_quic()
+{
+    if (PROTO_TYPE::PROTO_UNSPECIFIED == proto_type)
+    {
+        return config->is_quic();
+    }
+    else
+    {
+        return (PROTO_TYPE::PROTO_HTTP3 == proto_type);
+    }
+}
 
 #endif // ENABLE_HTTP3
 

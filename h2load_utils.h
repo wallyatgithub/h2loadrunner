@@ -190,7 +190,7 @@ bool check_key_cert_consistency(SSL_CTX* ctx);
 
 void set_cert_verification_mode(SSL_CTX* ctx, uint32_t certificate_verification_mode);
 
-void setup_SSL_CTX(SSL_CTX* ssl_ctx, h2load::Config& config);
+void setup_SSL_CTX(SSL_CTX* ssl_ctx, h2load::Config& config, const std::string& apln_proto = "");
 
 bool is_it_an_ipv6_address(const std::string& address);
 

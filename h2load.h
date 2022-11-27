@@ -59,7 +59,7 @@ const std::string method_header = ":method";
 
 const std::string x_envoy_original_dst_host_header = "x-envoy-original-dst-host";
 
-const std::string x_proto_to_use = "x-protocol-to-use";
+const std::string x_proto_to_use = "x-proto";
 
 const int SSL_EXT_DATA_INDEX_KEYLOG_FILE = 128;
 
@@ -103,6 +103,7 @@ struct Request_Data
     std::string* req_payload;
     std::string* path;
     std::string* method;
+    PROTO_TYPE proto_type = PROTO_UNSPECIFIED;
     size_t req_payload_cursor;
     std::map<std::string, std::string, ci_less>* req_headers_from_config;
     std::map<std::string, std::string, ci_less> req_headers_of_individual;

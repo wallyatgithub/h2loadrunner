@@ -34,16 +34,17 @@ class libev_client: public base_client
 public:
     enum { ERR_CONNECT_FAIL = -100 };
 
-    libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Config* conf,
+    libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Config* conf, SSL_CTX* ssl_ctx,
                  libev_client* parent = nullptr, const std::string& dest_schema = "",
-                 const std::string& dest_authority = "");
+                 const std::string& dest_authority = "", PROTO_TYPE proto = PROTO_UNSPECIFIED);
     virtual ~libev_client();
     virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length);
     virtual void signal_write() ;
     virtual bool any_pending_data_to_write();
     virtual void start_conn_active_watcher();
     virtual std::shared_ptr<base_client> create_dest_client(const std::string& dst_sch,
-                                                            const std::string& dest_authority);
+                                                            const std::string& dest_authority,
+                                                            PROTO_TYPE proto = PROTO_UNSPECIFIED);
     virtual int connect_to_host(const std::string& schema, const std::string& authority);
     virtual void disconnect();
     virtual void clear_default_addr_info();

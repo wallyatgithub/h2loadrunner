@@ -47,9 +47,10 @@ asio_client_connection::asio_client_connection
     boost::asio::ssl::context& ssl_context,
     base_client* parent,
     const std::string& dest_schema,
-    const std::string& dest_authority
+    const std::string& dest_authority,
+    PROTO_TYPE proto
 )
-    : base_client(id, wrker, req_todo, conf, parent, dest_schema, dest_authority),
+    : base_client(id, wrker, req_todo, conf, ssl_context.native_handle(), parent, dest_schema, dest_authority, proto),
       io_context(io_ctx),
       tcp_dns_resolver(io_ctx),
       tcp_client_socket(io_ctx),
@@ -322,11 +323,12 @@ bool asio_client_connection::any_pending_data_to_write()
 }
 
 std::shared_ptr<base_client> asio_client_connection::create_dest_client(const std::string& dst_sch,
-                                                                        const std::string& dest_authority)
+                                                                        const std::string& dest_authority,
+                                                                        PROTO_TYPE proto)
 {
     auto new_client =
         std::make_shared<asio_client_connection>(io_context, this->id, worker,
-                                                 req_todo, config, ssl_ctx, this, dst_sch, dest_authority);
+                                                 req_todo, config, ssl_ctx, this, dst_sch, dest_authority, proto);
     return new_client;
 }
 
@@ -349,7 +351,7 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
         exit(1);
     }
 #ifdef ENABLE_HTTP3
-    if (config->is_quic())
+    if (is_quic())
     {
         if (config->verbose)
         {

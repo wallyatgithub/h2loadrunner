@@ -1106,6 +1106,7 @@ int main(int argc, char** argv)
 
     if (!qlog_base.empty())
     {
+        /*
         if (!config.is_quic())
         {
             std::cerr
@@ -1113,6 +1114,7 @@ int main(int argc, char** argv)
                     << std::endl;
         }
         else
+        */
         {
 #ifdef ENABLE_HTTP3
             config.qlog_file_base = qlog_base;
@@ -1357,7 +1359,7 @@ int main(int argc, char** argv)
             exit(EXIT_FAILURE);
         }
     };
-    std::async(std::launch::async, check_clients_up);
+    auto dummy = std::async(std::launch::async, check_clients_up);
 
     auto start = std::chrono::steady_clock::now();
     std::atomic<bool> workers_stopped(false);
@@ -1503,7 +1505,7 @@ traffic: )" << util::utos_funit(stats.bytes_total)
               << stats.bytes_body << R"() data)" << std::endl;
 
 #ifdef ENABLE_HTTP3
-    if (config.is_quic())
+    //if (config.is_quic())
     {
         std::cerr << "UDP datagram: " << stats.udp_dgram_sent << " sent, "
                   << stats.udp_dgram_recv << " received" << std::endl;
