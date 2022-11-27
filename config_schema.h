@@ -240,7 +240,7 @@ public:
         h->add_property("luaScript", &this->luaScript, staticjson::Flags::Optional);
         h->add_property("uri", &this->uri);
         h->add_property("method", &this->method);
-        h->add_property("http-version", &this->http_version);
+        h->add_property("http-version", &this->http_version, staticjson::Flags::Optional);
         h->add_property("payload", &this->payload, staticjson::Flags::Optional);
         h->add_property("additonalHeaders", &this->additonalHeaders, staticjson::Flags::Optional);
         h->add_property("clear-old-cookies", &this->clear_old_cookies, staticjson::Flags::Optional);
