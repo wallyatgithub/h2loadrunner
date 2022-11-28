@@ -144,6 +144,7 @@ public:
 
     uint64_t get_total_pending_streams();
     base_client* get_controller_client();
+    void set_controller_client(base_client* controller);
     base_client* find_or_create_dest_client(Request_Data& request_to_send);
     bool is_controller_client();
     int submit_request();
@@ -265,7 +266,7 @@ public:
     std::map<int64_t, Request_Data> requests_awaiting_response;
     std::vector<std::vector<lua_State*>> lua_states;
     std::map<PROTO_TYPE, std::map<std::string, base_client*>> dest_clients;
-    base_client* parent_client;
+    std::shared_ptr<base_client> parent_client;
     std::string schema;
     std::string authority;
     std::string preferred_authority;

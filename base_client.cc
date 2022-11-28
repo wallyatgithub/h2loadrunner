@@ -66,7 +66,6 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
     final(false),
     rps_req_pending(0),
     rps_req_inflight(0),
-    parent_client(parent),
     ssl_context(ssl_ctx),
     schema(dest_schema),
     authority(dest_authority),
@@ -99,6 +98,7 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
     {
         http_schema = URI_SCHEMA::SCHEMA_INVALID;
     }
+    parent_client = worker->get_shared_ptr_of_client(parent);
 }
 
 base_client::~base_client()
@@ -589,7 +589,7 @@ void base_client::sanitize_request(Request_Data& new_request)
 
 void base_client::enqueue_request(Request_Data& finished_request, Request_Data&& new_request)
 {
-    auto client = this->parent_client ? this->parent_client : this;
+    auto client = this->parent_client ? this->parent_client.get() : this;
     if (!finished_request.delay_before_executing_next)
     {
         client->requests_to_submit.push_back(std::move(new_request));
@@ -833,18 +833,26 @@ void base_client::clean_up_this_in_dest_client_map()
 {
     if (parent_client)
     {
-        for (auto& clients_with_same_proto: parent_client->dest_clients)
+        for (auto clients_with_same_proto = parent_client->dest_clients.begin(); clients_with_same_proto != parent_client->dest_clients.end();)
         {
-            for (auto iter = clients_with_same_proto.second.begin(); iter != clients_with_same_proto.second.end();)
+            for (auto iter = clients_with_same_proto->second.begin(); iter != clients_with_same_proto->second.end();)
             {
                 if (iter->second == this)
                 {
-                    iter = clients_with_same_proto.second.erase(iter);
+                    iter = clients_with_same_proto->second.erase(iter);
                 }
                 else
                 {
                     iter++;
                 }
+            }
+            if (clients_with_same_proto->second.empty())
+            {
+                parent_client->dest_clients.erase(clients_with_same_proto);
+            }
+            else
+            {
+                clients_with_same_proto++;
             }
         }
     }
@@ -1153,8 +1161,9 @@ void base_client::terminate_sub_clients()
             {
                 if (terminated_client.count(this) == 0)
                 {
+                    sub_client.second->setup_graceful_shutdown();
                     sub_client.second->terminate_session();
-                    terminated_client.insert(this);
+                    terminated_client.insert(sub_client.second);
                 }
             }
         }
@@ -1789,6 +1798,7 @@ void base_client::on_stream_close(int64_t stream_id, bool success, bool final)
 
     if (req_left == 0 && req_inflight == 0)
     {
+        terminate_sub_clients();
         setup_graceful_shutdown();
         terminate_session();
         return;
@@ -1862,7 +1872,7 @@ int base_client::connection_made()
 
     update_this_in_dest_client_map();
 
-    if (parent_client != nullptr)
+    if (parent_client)
     {
         while (requests_to_submit.size())
         {
@@ -2117,7 +2127,16 @@ Stats& base_client::get_stats()
 
 base_client* base_client::get_controller_client()
 {
-    return parent_client;
+    return parent_client.get();
+}
+
+void base_client::set_controller_client(base_client* controller)
+{
+    auto iter = worker->managed_clients.find(controller);
+    if (iter != worker->managed_clients.end())
+    {
+        parent_client = iter->second;
+    }
 }
 
 size_t& base_client::get_current_req_index()
@@ -2147,7 +2166,7 @@ base_client* base_client::find_or_create_dest_client(Request_Data& request_to_se
 {
     if (!config->json_config_schema.open_new_connection_based_on_authority_header)
     {
-        return this->parent_client ? this->parent_client : this;
+        return this->parent_client ? this->parent_client.get() : this;
     }
     if (is_controller_client()) // this is the first connection
     {
@@ -2160,6 +2179,7 @@ base_client* base_client::find_or_create_dest_client(Request_Data& request_to_se
         {
             auto new_client = create_dest_client(*request_to_send.schema, *request_to_send.authority, proto);
             worker->check_in_client(new_client);
+            worker->clients_to_collect_stats.push_back(new_client.get());
             clients[dest] = new_client.get();
             new_client->connect_to_host(new_client->schema, new_client->authority);
             return new_client.get();
@@ -2178,12 +2198,12 @@ base_client* base_client::find_or_create_dest_client(Request_Data& request_to_se
 
 bool base_client::is_controller_client()
 {
-    return (parent_client == nullptr);
+    return (parent_client.get() == nullptr);
 }
 
 Request_Data base_client::prepare_first_request()
 {
-    auto controller = parent_client ? parent_client : this;
+    auto controller = parent_client ? parent_client.get() : this;
 
     size_t scenario_index = get_index_of_next_scenario_to_run();
 

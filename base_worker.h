@@ -49,8 +49,7 @@ public:
     // Keeps track of the current phase (for timing-based experiment) for the
     // worker
     Phase current_phase;
-    // We need to keep track of the clients in order to stop them when needed
-    std::vector<base_client*> clients;
+    std::vector<base_client*> clients_to_collect_stats;
     std::map<base_client*, std::shared_ptr<base_client>> managed_clients;
     // This is only active when there is not a bounded number of requests
     // specified
@@ -92,6 +91,8 @@ public:
     std::map<size_t, base_client*>& get_client_ids();
 
     size_t get_number_of_active_clients();
+
+    std::shared_ptr<base_client> get_shared_ptr_of_client(base_client* client);
 
 };
 
