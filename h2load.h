@@ -103,7 +103,7 @@ struct Request_Data
     std::string* req_payload;
     std::string* path;
     std::string* method;
-    PROTO_TYPE proto_type = PROTO_UNSPECIFIED;
+    PROTO_TYPE proto_type;
     size_t req_payload_cursor;
     std::map<std::string, std::string, ci_less>* req_headers_from_config;
     std::map<std::string, std::string, ci_less> req_headers_of_individual;
@@ -134,6 +134,7 @@ struct Request_Data
         curr_request_idx = 0;
         scenario_index = 0;
         req_payload_cursor = 0;
+        proto_type = PROTO_UNSPECIFIED;
         string_collection.reserve(12); // (path, authority, method, schema, payload, xx) * 2
     }
     explicit Request_Data(const std::vector<uint64_t>& u_ids)

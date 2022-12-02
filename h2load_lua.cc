@@ -514,7 +514,6 @@ int32_t _make_connection(lua_State* L, const std::string& uri,
             worker->check_in_client(client);
             client->install_connected_callback(connected_callback);
             client->set_prefered_authority(authority);
-            client->preferred_non_tls_proto = proto;
             client->connect_to_host(schema, authority);
         }
         else

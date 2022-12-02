@@ -256,6 +256,7 @@ public:
         delay_before_executing_next = 0;
         make_request_function_present = false;
         validate_response_function_present = false;
+        proto_type = PROTO_UNSPECIFIED;
     }
 };
 

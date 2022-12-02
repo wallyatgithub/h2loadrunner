@@ -100,6 +100,7 @@ void base_worker::stop_all_clients()
         {
             for (auto& client: clients_set.second)
             {
+                std::cout<<"authority:"<<client->authority<<std::endl;
                 if (terminated_clients.count(client) == 0)
                 {
                     client->setup_graceful_shutdown();

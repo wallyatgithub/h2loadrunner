@@ -942,7 +942,14 @@ void asio_client_connection::handle_write_signal()
             }
         }
     }
-
+    if (output_data_length <= 0)
+    {
+        if (write_clear_callback)
+        {
+            auto func = std::move(write_clear_callback);
+            func();
+        }
+    }
     do_write();
 }
 
@@ -953,6 +960,12 @@ void asio_client_connection::common_write(SOCKET& socket)
     {
         return;
     }
+
+//    if (output_data_length <= 0 && write_clear_callback)
+//    {
+//        handle_write_complete(false, boost::system::errc::make_error_code(boost::system::errc::success), 0);
+//        return;
+//    }
 
     auto& buffer = output_buffers[output_buffer_index];
     auto length = output_data_length;
@@ -1501,13 +1514,13 @@ void asio_client_connection::do_udp_write()
 
 void asio_client_connection::quic_close_connection()
 {
-    if (config->verbose)
-    {
-        std::cerr << __FUNCTION__ << ":" << authority << ", timestamp:" << current_timestamp_nanoseconds() << std::endl;
-    }
-
     if (udp_client_socket && udp_client_socket->is_open() && quic.conn && (!quic_close_sent))
     {
+        if (config->verbose)
+        {
+            std::cerr << __FUNCTION__ << ":" << authority << ", timestamp:" << current_timestamp_nanoseconds() << std::endl;
+        }
+
         quic_close_sent = true;
         auto buffer_to_send = std::make_shared<std::vector<uint8_t>>(single_buffer_size, 0);
         ngtcp2_path_storage ps;

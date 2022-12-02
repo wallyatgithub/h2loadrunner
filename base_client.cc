@@ -117,7 +117,7 @@ int base_client::connect()
     {
         return -1;
     }
-    if (!worker->config->is_timing_based_mode() ||
+    if (!config->is_timing_based_mode() ||
         worker->current_phase == Phase::MAIN_DURATION)
     {
         record_client_start_time();
@@ -132,7 +132,7 @@ int base_client::connect()
         start_warmup_timer();
     }
 
-    if (worker->config->conn_inactivity_timeout > 0.)
+    if (config->conn_inactivity_timeout > 0.)
     {
         start_conn_inactivity_watcher();
     }
@@ -848,7 +848,7 @@ void base_client::clean_up_this_in_dest_client_map()
             }
             if (clients_with_same_proto->second.empty())
             {
-                parent_client->dest_clients.erase(clients_with_same_proto);
+                clients_with_same_proto = parent_client->dest_clients.erase(clients_with_same_proto);
             }
             else
             {
@@ -1142,6 +1142,7 @@ void base_client::populate_request_from_config_template(Request_Data& new_reques
     new_request.req_headers_from_config = &request_template.headers_in_map;
     new_request.expected_status_code = request_template.expected_status_code;
     new_request.delay_before_executing_next = request_template.delay_before_executing_next;
+    new_request.proto_type = request_template.proto_type;
     for (auto& h : request_template.headers_with_variable)
     {
         auto name = assemble_string(h.first, scenario_index, request_index, *new_request.scenario_data_per_user);
@@ -2480,7 +2481,7 @@ int base_client::submit_request()
         }
         // if an active timeout is set and this is the last request to be submitted
         // on this connection, start the active timeout.
-        if (worker->config->conn_active_timeout > 0. && req_left == 0 && is_controller_client())
+        if (config->conn_active_timeout > 0. && req_left == 0 && is_controller_client())
         {
             for (auto& dest_client_with_same_proto_version: dest_clients)  // "this" is also in dest_clients
             {
@@ -2642,14 +2643,19 @@ int base_client::select_protocol_and_allocate_session()
     else
     {
         auto proto = config->no_tls_proto;
-        if (preferred_non_tls_proto.size())
+        if (PROTO_TYPE::PROTO_UNSPECIFIED != proto_type)
         {
-            if (preferred_non_tls_proto == "h2c")
+            if (proto_type == PROTO_TYPE::PROTO_HTTP2)
             {
                 proto = h2load::Config::PROTO_HTTP2;
             }
+            else if (proto_type == PROTO_TYPE::PROTO_HTTP1)
+            {
+                proto = h2load::Config::PROTO_HTTP1_1;
+            }
             else
             {
+                std::cerr<<"http3 requested, "<<authority<<" does not support TLS, fallback to http/1.1"<<std::endl;
                 proto = h2load::Config::PROTO_HTTP1_1;
             }
         }
@@ -3312,8 +3318,6 @@ int base_client::quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
     {
         return -1;
     }
-
-    auto config = worker->config;
 
     ngtcp2_settings settings;
     ngtcp2_settings_default(&settings);
