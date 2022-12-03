@@ -88,6 +88,11 @@ void resolve_host(h2load::Config& config);
 int client_select_next_proto_cb(SSL* ssl, unsigned char** out,
                                 unsigned char* outlen, const unsigned char* in,
                                 unsigned int inlen, void* arg);
+
+int client_select_next_proto_cb_http3(SSL* ssl, unsigned char** out,
+                                unsigned char* outlen, const unsigned char* in,
+                                unsigned int inlen, void* arg);
+
 #endif // !OPENSSL_NO_NEXTPROTONEG
 
 

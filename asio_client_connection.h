@@ -180,7 +180,7 @@ private:
     void handle_read_complete(bool is_quic, const boost::system::error_code& e, const std::size_t bytes_transferred);
 
     template<typename SOCKET>
-    void common_read(SOCKET& socket);
+    void common_tcp_read(SOCKET& socket);
 
     void do_tcp_read();
 
@@ -193,7 +193,7 @@ private:
     void handle_write_signal();
 
     template<typename SOCKET>
-    void common_write(SOCKET& socket);
+    void common_tcp_write(SOCKET& socket);
 
     void do_tcp_write();
 

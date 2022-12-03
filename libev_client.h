@@ -35,7 +35,7 @@ public:
     enum { ERR_CONNECT_FAIL = -100 };
 
     libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Config* conf, SSL_CTX* ssl_ctx,
-                 libev_client* parent = nullptr, const std::string& dest_schema = "",
+                 base_client* parent = nullptr, const std::string& dest_schema = "",
                  const std::string& dest_authority = "", PROTO_TYPE proto = PROTO_UNSPECIFIED);
     virtual ~libev_client();
     virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length);

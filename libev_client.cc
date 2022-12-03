@@ -38,7 +38,7 @@ namespace h2load
 
 
 libev_client::libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Config* conf,
-                           SSL_CTX* ssl_ctx, libev_client* parent, const std::string& dest_schema,
+                           SSL_CTX* ssl_ctx, base_client* parent, const std::string& dest_schema,
                            const std::string& dest_authority, PROTO_TYPE proto)
     : base_client(id, wrker, req_todo, conf, ssl_ctx, parent, dest_schema, dest_authority, proto),
       wb(&static_cast<libev_worker*>(worker)->mcpool),
@@ -641,16 +641,16 @@ int libev_client::connected()
         if (config->json_config_schema.tls_keylog_file.size())
         {
             struct sockaddr local_addr;
-            socklen_t len = sizeof(sin);
+            socklen_t len = sizeof(local_addr);
             if (getsockname(fd, &local_addr, &len) != -1)
             {
-                if (local_addr->sa_family == AF_INET)
+                if (local_addr.sa_family == AF_INET)
                 {
-                    tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((struct sockaddr_in*)local_addr)->sin_port)) + ".log";
+                    tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((struct sockaddr_in*)&local_addr)->sin_port)) + ".log";
                 }
                 else
                 {
-                    tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((struct sockaddr_in6*)local_addr)->sin6_port)) + ".log";
+                    tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((struct sockaddr_in6*)&local_addr)->sin6_port)) + ".log";
                 }
 
             }
@@ -803,9 +803,7 @@ std::shared_ptr<base_client> libev_client::create_dest_client(const std::string&
                                                               const std::string& dest_authority,
                                                               PROTO_TYPE proto)
 {
-    auto new_client = std::make_shared<libev_client>(this->id, static_cast<libev_worker*>(worker), this->req_todo,
-                                                     this->config,
-                                                     this, dst_sch, dest_authority, proto);
+    auto new_client = worker->create_new_sub_client(this, req_todo, dst_sch, dest_authority, proto);
     return new_client;
 }
 

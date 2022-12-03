@@ -3378,7 +3378,7 @@ int base_client::quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
 
     uint32_t quic_version;
 
-    if (config->npn_list[0] == NGHTTP3_ALPN_H3)
+    if (config->npn_list[0] == NGHTTP3_ALPN_H3 || PROTO_HTTP3 == proto_type)
     {
         quic_version = NGTCP2_PROTO_VER_V1;
     }

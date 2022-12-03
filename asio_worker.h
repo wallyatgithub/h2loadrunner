@@ -27,6 +27,7 @@ public:
     virtual void run_event_loop();
 
     virtual std::shared_ptr<base_client> create_new_client(size_t req_todo, PROTO_TYPE proto_type = PROTO_UNSPECIFIED, const std::string& schema = "", const std::string& authority = "");
+    virtual std::shared_ptr<base_client> create_new_sub_client(base_client* parent_client, size_t req_todo, const std::string& schema, const std::string& authority, PROTO_TYPE proto_type = PROTO_UNSPECIFIED);
 
     bool timer_common_check(boost::asio::deadline_timer & timer, const boost::system::error_code & ec,
                             void (asio_worker:: * handler)(const boost::system::error_code&));

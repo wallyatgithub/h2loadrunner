@@ -47,6 +47,7 @@
 #endif // HAVE_NETDB_H
 #ifndef _WINDOWS
 #include <sys/un.h>
+#include <sys/resource.h>
 #endif
 #include <cstdio>
 #include <cassert>
@@ -1126,6 +1127,13 @@ int main(int argc, char** argv)
     struct sigaction act {};
     act.sa_handler = SIG_IGN;
     sigaction(SIGPIPE, &act, nullptr);
+    struct rlimit old_lim, new_lim;
+    if(getrlimit(RLIMIT_NOFILE, &old_lim) == 0)
+    {
+        new_lim.rlim_max = old_lim.rlim_max;
+        new_lim.rlim_cur = old_lim.rlim_max;
+        setrlimit(RLIMIT_NOFILE, &new_lim);
+    }
 #endif
 
     auto ssl_ctx = SSL_CTX_new(SSLv23_client_method());

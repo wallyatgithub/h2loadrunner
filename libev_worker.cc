@@ -17,9 +17,11 @@ libev_worker::libev_worker(uint32_t id, size_t nreq_todo, size_t nclients,
   ssl_ctx_http1 = SSL_CTX_new(SSLv23_client_method());
   ssl_ctx_http2 = SSL_CTX_new(SSLv23_client_method());
   ssl_ctx_http3 = SSL_CTX_new(SSLv23_client_method());
+  ssl_ctx = SSL_CTX_new(SSLv23_client_method());
   setup_SSL_CTX(ssl_ctx_http1, *config, HTTP1_ALPN);
   setup_SSL_CTX(ssl_ctx_http2, *config, HTTP2_ALPN);
   setup_SSL_CTX(ssl_ctx_http3, *config, HTTP3_ALPN);
+  setup_SSL_CTX(ssl_ctx, *config);
 }
 
 
@@ -32,6 +34,7 @@ libev_worker::~libev_worker()
     SSL_CTX_free(ssl_ctx_http1);
     SSL_CTX_free(ssl_ctx_http2);
     SSL_CTX_free(ssl_ctx_http3);
+    SSL_CTX_free(ssl_ctx);
 }
 
 std::shared_ptr<base_client> libev_worker::create_new_client(size_t req_todo, PROTO_TYPE proto_type, const std::string& schema, const std::string& authority)
@@ -57,6 +60,31 @@ std::shared_ptr<base_client> libev_worker::create_new_client(size_t req_todo, PR
             abort();
     }
     return std::make_shared<libev_client>(next_client_id++, this, req_todo, (config), ctx, nullptr, schema, authority);
+}
+
+std::shared_ptr<base_client> libev_worker::create_new_sub_client(base_client* parent_client, size_t req_todo, const std::string& schema, const std::string& authority, PROTO_TYPE proto_type)
+{
+    auto ctx = ssl_ctx;
+    switch (proto_type)
+    {
+        case PROTO_HTTP1:
+            ctx = ssl_ctx_http1;
+            break;
+        case PROTO_HTTP2:
+            ctx = ssl_ctx_http2;
+            break;
+        case PROTO_HTTP3:
+            ctx = ssl_ctx_http3;
+            break;
+        case PROTO_UNSPECIFIED:
+            ctx = ssl_ctx;
+            break;
+
+        default:
+            std::cerr<<"invalid protol"<<std::endl;
+            abort();
+    }
+    return std::make_shared<libev_client>(parent_client->id, this, req_todo, (config), ctx, parent_client, schema, authority, proto_type);
 }
 
 void libev_worker::init_timers()

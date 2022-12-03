@@ -792,6 +792,23 @@ int client_select_next_proto_cb(SSL* ssl, unsigned char** out,
     // NOACK.  So there is no way to fallback.
     return SSL_TLSEXT_ERR_NOACK;
 }
+
+int client_select_next_proto_cb_http3(SSL* ssl, unsigned char** out,
+                                unsigned char* outlen, const unsigned char* in,
+                                unsigned int inlen, void* arg)
+{
+    std::vector<std::string> http3_npn_list = {HTTP3_ALPN};
+    if (util::select_protocol(const_cast<const unsigned char**>(out), outlen, in,
+                              inlen, http3_npn_list))
+    {
+        return SSL_TLSEXT_ERR_OK;
+    }
+
+    // OpenSSL will terminate handshake with fatal alert if we return
+    // NOACK.  So there is no way to fallback.
+    return SSL_TLSEXT_ERR_NOACK;
+}
+
 #endif // !OPENSSL_NO_NEXTPROTONEG
 
 void populate_config_from_json(h2load::Config& config)
@@ -2006,8 +2023,16 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config, const std::string& apln_pro
 #endif // !(OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL))
 
 #ifndef OPENSSL_NO_NEXTPROTONEG
-    SSL_CTX_set_next_proto_select_cb(ssl_ctx, client_select_next_proto_cb,
-                                     &config);
+    if (apln_proto == HTTP3_ALPN)
+    {
+        SSL_CTX_set_next_proto_select_cb(ssl_ctx, client_select_next_proto_cb_http3,
+                                         nullptr);
+    }
+    else
+    {
+        SSL_CTX_set_next_proto_select_cb(ssl_ctx, client_select_next_proto_cb,
+                                         &config);
+    }
 #endif // !OPENSSL_NO_NEXTPROTONEG
 
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L

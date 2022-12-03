@@ -29,6 +29,7 @@ public:
     SSL_CTX* ssl_ctx_http1;
     SSL_CTX* ssl_ctx_http2;
     SSL_CTX* ssl_ctx_http3;
+    SSL_CTX* ssl_ctx;
     ev_timer rate_mode_period_watcher;
     ev_timer duration_watcher;
     ev_timer warmup_watcher;
@@ -47,7 +48,7 @@ public:
     virtual void run_event_loop();
     virtual void start_graceful_stop_timer();
     virtual std::shared_ptr<base_client> create_new_client(size_t req_todo, PROTO_TYPE proto_type = PROTO_UNSPECIFIED, const std::string& schema = "", const std::string& authority = "");
-
+    virtual std::shared_ptr<base_client> create_new_sub_client(base_client* parent_client, size_t req_todo, const std::string& schema, const std::string& authority, PROTO_TYPE proto_type = PROTO_UNSPECIFIED);
     void init_timers();
 
 };

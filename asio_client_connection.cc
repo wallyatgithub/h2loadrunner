@@ -326,9 +326,7 @@ std::shared_ptr<base_client> asio_client_connection::create_dest_client(const st
                                                                         const std::string& dest_authority,
                                                                         PROTO_TYPE proto)
 {
-    auto new_client =
-        std::make_shared<asio_client_connection>(io_context, this->id, worker,
-                                                 req_todo, config, ssl_ctx, this, dst_sch, dest_authority, proto);
+    auto new_client = worker->create_new_sub_client(this, req_todo, dst_sch, dest_authority, proto);
     return new_client;
 }
 
@@ -841,7 +839,7 @@ void asio_client_connection::handle_read_complete(bool is_quic, const boost::sys
 }
 
 template<typename SOCKET>
-void asio_client_connection::common_read(SOCKET& socket)
+void asio_client_connection::common_tcp_read(SOCKET& socket)
 {
     if (is_client_stopped)
     {
@@ -857,14 +855,14 @@ void asio_client_connection::common_read(SOCKET& socket)
 
 void asio_client_connection::do_tcp_read()
 {
-    common_read(tcp_client_socket);
+    common_tcp_read(tcp_client_socket);
 }
 
 void asio_client_connection::do_ssl_read()
 {
     if (ssl_socket)
     {
-        common_read(*ssl_socket);
+        common_tcp_read(*ssl_socket);
     }
 }
 
@@ -926,12 +924,7 @@ void asio_client_connection::handle_write_signal()
     else
 #endif
     {
-        if (!session)
-        {
-            // a write signal is scheduled while connection switch is ongoing
-            return;
-        }
-        for (;;)
+        for (session;;)
         {
             auto output_data_length_before = output_data_length;
             session->on_write();
@@ -942,30 +935,21 @@ void asio_client_connection::handle_write_signal()
             }
         }
     }
-    if (output_data_length <= 0)
-    {
-        if (write_clear_callback)
-        {
-            auto func = std::move(write_clear_callback);
-            func();
-        }
-    }
+
     do_write();
 }
 
 template<typename SOCKET>
-void asio_client_connection::common_write(SOCKET& socket)
+void asio_client_connection::common_tcp_write(SOCKET& socket)
 {
     if (is_write_in_progress || is_client_stopped || output_data_length <= 0)
     {
+        if (!is_write_in_progress && write_clear_callback)
+        {
+            handle_write_complete(false, boost::system::errc::make_error_code(boost::system::errc::success), 0);
+        }
         return;
     }
-
-//    if (output_data_length <= 0 && write_clear_callback)
-//    {
-//        handle_write_complete(false, boost::system::errc::make_error_code(boost::system::errc::success), 0);
-//        return;
-//    }
 
     auto& buffer = output_buffers[output_buffer_index];
     auto length = output_data_length;
@@ -984,14 +968,14 @@ void asio_client_connection::common_write(SOCKET& socket)
 
 void asio_client_connection::do_tcp_write()
 {
-    common_write(tcp_client_socket);
+    common_tcp_write(tcp_client_socket);
 }
 
 void asio_client_connection::do_ssl_write()
 {
     if (ssl_socket)
     {
-        common_write(*ssl_socket);
+        common_tcp_write(*ssl_socket);
     }
 }
 

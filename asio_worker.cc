@@ -53,9 +53,33 @@ std::shared_ptr<base_client> asio_worker::create_new_client(size_t req_todo, PRO
             std::cerr<<"invalid protol"<<std::endl;
             abort();
     }
-    return std::make_shared<asio_client_connection>(io_context, next_client_id++, this, req_todo, (config), *ctx, nullptr, schema, authority);
+    return std::make_shared<asio_client_connection>(io_context, next_client_id++, this, req_todo, config, *ctx, nullptr, schema, authority);
 }
 
+std::shared_ptr<base_client> asio_worker::create_new_sub_client(base_client* parent_client, size_t req_todo, const std::string& schema, const std::string& authority, PROTO_TYPE proto_type)
+{
+    auto ctx = &ssl_ctx;
+    switch (proto_type)
+    {
+        case PROTO_HTTP1:
+            ctx = &ssl_ctx_http1;
+            break;
+        case PROTO_HTTP2:
+            ctx = &ssl_ctx_http2;
+            break;
+        case PROTO_HTTP3:
+            ctx = &ssl_ctx_http3;
+            break;
+        case PROTO_UNSPECIFIED:
+            ctx = &ssl_ctx;
+            break;
+
+        default:
+            std::cerr<<"invalid proto"<<std::endl;
+            abort();
+    }
+    return std::make_shared<asio_client_connection>(io_context, parent_client->id, this, req_todo, config, *ctx, parent_client, schema, authority, proto_type);
+}
 
 asio_worker::asio_worker(uint32_t id, size_t nreq_todo, size_t nclients,
                          size_t rate, size_t max_samples, Config* config):
