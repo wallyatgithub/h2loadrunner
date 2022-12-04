@@ -43,7 +43,9 @@ const std::string http3_proto = "h3";
 const std::string HTTP1_ALPN = "\x8http/1.1";
 const std::string HTTP2_ALPN = "\x2h2";
 const std::string HTTP3_ALPN = "\x2h3";
-
+const std::string http1_1_version = "http/1.1";
+const std::string http2_0_version = "http/2.0";
+const std::string http3_0_version = "http/3.0";
 
 enum URI_ACTION
 {
@@ -79,6 +81,14 @@ const std::map<std::string, PROTO_TYPE, ci_less> http_proto_map =
     {http2_proto,           PROTO_HTTP2},
     {http2_cleartext_proto, PROTO_HTTP2},
     {http3_proto,           PROTO_HTTP3},
+};
+
+const static std::map<std::string, PROTO_TYPE, ci_less> http_version_to_proto_map =
+{
+    {http1_1_version, PROTO_HTTP1},
+    {http2_0_version, PROTO_HTTP2},
+    {http3_0_version, PROTO_HTTP3},
+    {"default", PROTO_UNSPECIFIED}
 };
 
 enum class URI_SCHEMA

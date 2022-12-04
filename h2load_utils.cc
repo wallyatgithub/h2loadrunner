@@ -12,6 +12,10 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <boost/algorithm/string.hpp>
+#include <locale>
+#include <iomanip>
+#include <cstdio>
+#include <ctime>
 
 #ifdef USE_LIBEV
 extern "C" {
@@ -32,6 +36,7 @@ extern "C" {
 #include "util.h"
 #include "config_schema.h"
 #include "tls.h"
+#include "har_schema.h"
 
 #include <nghttp2/asio_httpx_server.h>
 
@@ -794,8 +799,8 @@ int client_select_next_proto_cb(SSL* ssl, unsigned char** out,
 }
 
 int client_select_next_proto_cb_http3(SSL* ssl, unsigned char** out,
-                                unsigned char* outlen, const unsigned char* in,
-                                unsigned int inlen, void* arg)
+                                      unsigned char* outlen, const unsigned char* in,
+                                      unsigned int inlen, void* arg)
 {
     std::vector<std::string> http3_npn_list = {HTTP3_ALPN};
     if (util::select_protocol(const_cast<const unsigned char**>(out), outlen, in,
@@ -1585,13 +1590,6 @@ void post_process_json_config_schema(h2load::Config& config)
         for (auto i = 0; i < scenario.requests.size(); i++)
         {
             auto& request = scenario.requests[i];
-            const static std::map<std::string, PROTO_TYPE> http_version_to_proto_map =
-            {
-                {"http/1.1", PROTO_HTTP1},
-                {"http2", PROTO_HTTP2},
-                {"http3", PROTO_HTTP3},
-                {"default", PROTO_UNSPECIFIED}
-            };
             auto iter = http_version_to_proto_map.find(request.http_version);
             if (iter != http_version_to_proto_map.end())
             {
@@ -1622,7 +1620,8 @@ void post_process_json_config_schema(h2load::Config& config)
                 }
                 else
                 {
-                    std::cerr << scenario.name<<"_"<<i<<": lua script provided, but function " << make_request <<" is either malformed, or not present"<<std::endl;
+                    std::cerr << scenario.name << "_" << i << ": lua script provided, but function " << make_request <<
+                              " is either malformed, or not present" << std::endl;
                 }
                 lua_settop(L, 0);
                 lua_getglobal(L, validate_response);
@@ -1632,7 +1631,8 @@ void post_process_json_config_schema(h2load::Config& config)
                 }
                 else
                 {
-                    std::cerr << scenario.name<<"_"<<i<<": lua script provided, but function " << validate_response <<" is either malformed, or not present"<<std::endl;
+                    std::cerr << scenario.name << "_" << i << ": lua script provided, but function " << validate_response <<
+                              " is either malformed, or not present" << std::endl;
                 }
                 lua_settop(L, 0);
                 lua_close(L);
@@ -2179,4 +2179,212 @@ uint64_t current_timestamp_nanoseconds()
            (std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
+uint64_t convert_iso8601_to_epoch(const std::string iso8601)
+{
+    uint32_t y, M, d, h, m;
+    float s;
+    sscanf(iso8601.c_str(), "%d-%d-%dT%d:%d:%f", &y, &M, &d, &h, &m, &s);
+    std::tm time = { 0 };
+    time.tm_year = y - 1900;
+    time.tm_mon = M - 1;
+    time.tm_mday = d;
+    time.tm_hour = h;
+    time.tm_min = m;
+    time.tm_sec = (int)s;
+    std::time_t t = std::mktime(&time);
+    int64_t ret = ((static_cast<int32_t>(t)) * 1000) + (s * 1000 - time.tm_sec * 1000);
+
+    return ret;
+}
+
+void parse_uri_and_populate_fields(const std::string& uri, std::string& schema, std::string& authority,
+                                   std::string& path, std::string& query)
+{
+    http_parser_url u {};
+    if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0)
+    {
+        path = get_reqline(uri.c_str(), u);
+        if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
+        {
+            schema = util::get_uri_field(uri.c_str(), u, UF_SCHEMA).str();
+            util::inp_strlower(schema);
+            authority = util::get_uri_field(uri.c_str(), u, UF_HOST).str();
+            util::inp_strlower(authority);
+            if (util::has_uri_field(u, UF_PORT))
+            {
+                authority.append(":").append(util::utos(u.port));
+            }
+        }
+        if (util::has_uri_field(u, UF_QUERY))
+        {
+            query = util::get_uri_field(uri.c_str(), u, UF_QUERY).str();
+        }
+
+    }
+}
+
+bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::Config& config_out)
+{
+    HAR_File har_file;
+    staticjson::ParseStatus result;
+    if (!staticjson::from_json_string(har_file_content.c_str(), &har_file, &result))
+    {
+        return false;
+    }
+
+    std::map<int64_t, size_t> order;
+    for (auto index = 0; index < har_file.log.entries.size(); index++)
+    {
+        order[convert_iso8601_to_epoch(har_file.log.entries[index].startedDateTime)] = index;
+    }
+
+    config_out.json_config_schema.scenarios.emplace_back();
+    for (auto iter = order.begin(); iter != order.end(); iter++)
+    {
+        config_out.json_config_schema.scenarios.back().requests.emplace_back();
+        Request& req_in_config = config_out.json_config_schema.scenarios.back().requests.back();
+        HAR_Request& req_in_har = har_file.log.entries[iter->second].request;
+
+        // method
+        req_in_config.method = req_in_har.method;
+
+        // schema, authority, path
+        req_in_config.uri.typeOfAction = "input";
+        std::string query;
+        parse_uri_and_populate_fields(req_in_har.url, req_in_config.schema, req_in_config.authority, req_in_config.uri.input,
+                                      query);
+        if (query.size())
+        {
+            req_in_config.uri.input.append("?");
+            req_in_config.uri.input.append(query);
+        }
+        else
+        {
+            if (req_in_har.queryString.size())
+            {
+                req_in_config.uri.input.append("?");
+                bool first_param = true;
+                for (auto& q : req_in_har.queryString)
+                {
+                    if (first_param)
+                    {
+                        first_param = false;
+                    }
+                    else
+                    {
+                        req_in_config.uri.input.append("&");
+                    }
+                    req_in_config.uri.input.append(nghttp2::util::percent_encode(q.name)).append("=").append(nghttp2::util::percent_encode(
+                                                                                                                 q.value));
+                }
+            }
+        }
+
+        // httpVersion
+        req_in_config.http_version = req_in_har.httpVersion;
+
+        // headers
+        for (auto& header : req_in_har.headers)
+        {
+            req_in_config.additonalHeaders.emplace_back(header.name);
+            req_in_config.additonalHeaders.back().append(":").append(header.value);
+        }
+
+        // payload
+        if (req_in_har.postData.text.size())
+        {
+            // directly from postData.text
+            req_in_config.payload = req_in_har.postData.text;
+        }
+        else
+        {
+            if (req_in_har.postData.params.size())
+            {
+                bool all_are_form_data = true;
+                std::for_each(req_in_har.postData.params.begin(), req_in_har.postData.params.end(),
+                              [&all_are_form_data](const HAR_PostData_Param & postData_param)
+                {
+                    if (postData_param.fileName.size())
+                    {
+                        all_are_form_data = false;
+                    }
+                });
+                // application/x-www-form-urlencoded
+                if (all_are_form_data)
+                {
+                    bool first_param = true;
+                    for (auto& param : req_in_har.postData.params)
+                    {
+                        if (first_param)
+                        {
+                            first_param = false;
+                        }
+                        else
+                        {
+                            req_in_config.payload.append("&");
+                        }
+                        req_in_config.payload.append(nghttp2::util::percent_encode(param.name)).append("=").append(
+                            nghttp2::util::percent_encode(param.value));
+                    }
+                }
+                else
+                {
+                    // TODO: multipart/form-data
+                }
+            }
+        }
+    }
+
+    if (config_out.json_config_schema.scenarios.back().requests.size())
+    {
+        config_out.json_config_schema.schema = config_out.json_config_schema.scenarios.back().requests[0].schema;
+        std::string& authority = config_out.json_config_schema.scenarios.back().requests[0].authority;
+        http_parser_url u {};
+        if (http_parser_parse_url(authority.c_str(), authority.size(), true, &u) == 0 && util::has_uri_field(u, UF_HOST))
+        {
+            config_out.json_config_schema.host = util::get_uri_field(authority.c_str(), u, UF_HOST).str();
+            if (util::has_uri_field(u, UF_PORT))
+            {
+                config_out.json_config_schema.port = u.port;
+            }
+            else
+            {
+                if (config_out.json_config_schema.schema == schema_https)
+                {
+                    config_out.json_config_schema.port = 443;
+                }
+                else
+                {
+                    config_out.json_config_schema.port = 80;
+                }
+            }
+        }
+
+        auto& http_version = config_out.json_config_schema.scenarios.back().requests[0].http_version;
+        auto proto_type = PROTO_UNSPECIFIED;
+        auto proto_iter = http_version_to_proto_map.find(http_version);
+        if (proto_iter != http_version_to_proto_map.end())
+        {
+            proto_type = proto_iter->second;
+        }
+        switch (proto_type)
+        {
+            case PROTO_HTTP1:
+                config_out.json_config_schema.npn_list = http1_proto;
+                config_out.json_config_schema.no_tls_proto = http1_proto;
+                break;
+            case PROTO_HTTP2:
+                config_out.json_config_schema.npn_list = http2_proto;
+                config_out.json_config_schema.no_tls_proto = http2_cleartext_proto;
+                break;
+            case PROTO_HTTP3:
+                config_out.json_config_schema.npn_list = http3_proto;
+                config_out.json_config_schema.no_tls_proto.clear();
+                break;
+            default:
+                break;
+        }
+    }
+    return true;
+}
 
