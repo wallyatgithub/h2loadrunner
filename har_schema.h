@@ -208,13 +208,13 @@ public:
 class HAR_timings
 {
 public:
-    int64_t blocked;
-    int64_t dns;
-    int64_t connect;
-    int64_t send;
-    int64_t wait;
-    int64_t receive;
-    int64_t ssl;
+    double blocked;
+    double dns;
+    double connect;
+    double send;
+    double wait;
+    double receive;
+    double ssl;
     std::string comment;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
@@ -234,7 +234,7 @@ class HAR_Entry
 public:
     std::string pageref;
     std::string startedDateTime;
-    int64_t time;
+    double time;
     HAR_Request request;
     HAR_Response response;
     HAR_Cache cache;
@@ -261,14 +261,14 @@ public:
 class HAR_pageTimings
 {
 public:
-    int64_t onContentLoad;
-    int64_t onLoad;
+    double onContentLoad;
+    double onLoad;
     std::string comment;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("onContentLoad", &this->onContentLoad, staticjson::Flags::Optional);
         h->add_property("onLoad", &this->onLoad, staticjson::Flags::Optional);
-        h->add_property("comment", &this->comment, staticjson::Flags::Optional);
+        h->add_property("comment", &this->comment, staticjson::Flags::Optional);
     }
 };
 
@@ -286,7 +286,7 @@ public:
         h->add_property("id", &this->id);
         h->add_property("title", &this->title);
         h->add_property("pageTimings", &this->pageTimings);
-        h->add_property("comment", &this->comment, staticjson::Flags::Optional);
+        h->add_property("comment", &this->comment, staticjson::Flags::Optional);
     }
 };
 

@@ -2198,10 +2198,10 @@ uint64_t convert_iso8601_to_epoch_ignore_tz(const std::string iso8601)
 }
 
 void parse_uri_and_populate_fields(const std::string& uri, std::string& schema, std::string& authority,
-                                   std::string& path, std::string& query)
+                                   std::string& path)
 {
     http_parser_url u {};
-    if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0)
+    if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) == 0)
     {
         path = get_reqline(uri.c_str(), u);
         if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
@@ -2215,11 +2215,6 @@ void parse_uri_and_populate_fields(const std::string& uri, std::string& schema, 
                 authority.append(":").append(util::utos(u.port));
             }
         }
-        if (util::has_uri_field(u, UF_QUERY))
-        {
-            query = util::get_uri_field(uri.c_str(), u, UF_QUERY).str();
-        }
-
     }
 }
 
@@ -2229,6 +2224,7 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
     staticjson::ParseStatus result;
     if (!staticjson::from_json_string(har_file_content.c_str(), &har_file, &result))
     {
+        std::cerr<<"error parsing har content:"<<result.description()<<std::endl;
         return false;
     }
 
@@ -2244,39 +2240,30 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
         config_out.json_config_schema.scenarios.back().requests.emplace_back();
         Request& req_in_config = config_out.json_config_schema.scenarios.back().requests.back();
         HAR_Request& req_in_har = har_file.log.entries[iter->second].request;
+        HAR_Response& resp_in_har = har_file.log.entries[iter->second].response;
 
         // method
         req_in_config.method = req_in_har.method;
 
         // schema, authority, path
         req_in_config.uri.typeOfAction = "input";
-        std::string query;
-        parse_uri_and_populate_fields(req_in_har.url, req_in_config.schema, req_in_config.authority, req_in_config.uri.input,
-                                      query);
-        if (query.size())
+        parse_uri_and_populate_fields(req_in_har.url, req_in_config.schema, req_in_config.authority, req_in_config.uri.input);
+        if (req_in_config.uri.input.find('?', 0) == std::string::npos && req_in_har.queryString.size())
         {
             req_in_config.uri.input.append("?");
-            req_in_config.uri.input.append(query);
-        }
-        else
-        {
-            if (req_in_har.queryString.size())
+            bool first_param = true;
+            for (auto& q : req_in_har.queryString)
             {
-                req_in_config.uri.input.append("?");
-                bool first_param = true;
-                for (auto& q : req_in_har.queryString)
+                if (first_param)
                 {
-                    if (first_param)
-                    {
-                        first_param = false;
-                    }
-                    else
-                    {
-                        req_in_config.uri.input.append("&");
-                    }
-                    req_in_config.uri.input.append(nghttp2::util::percent_encode(q.name)).append("=").append(nghttp2::util::percent_encode(
-                                                                                                                 q.value));
+                    first_param = false;
                 }
+                else
+                {
+                    req_in_config.uri.input.append("&");
+                }
+                req_in_config.uri.input.append(nghttp2::util::percent_encode(q.name)).append("=").append(nghttp2::util::percent_encode(
+                                                                                                             q.value));
             }
         }
 
@@ -2333,6 +2320,8 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
                 }
             }
         }
+        req_in_config.expected_status_code = resp_in_har.status;
+        // TODO: add more validation rules based on response content
     }
 
     if (config_out.json_config_schema.scenarios.back().requests.size())
@@ -2340,7 +2329,8 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
         config_out.json_config_schema.schema = config_out.json_config_schema.scenarios.back().requests[0].schema;
         std::string& authority = config_out.json_config_schema.scenarios.back().requests[0].authority;
         http_parser_url u {};
-        if (http_parser_parse_url(authority.c_str(), authority.size(), true, &u) == 0 && util::has_uri_field(u, UF_HOST))
+        auto ret = http_parser_parse_url(authority.c_str(), authority.size(), true, &u);
+        if (util::has_uri_field(u, UF_HOST))
         {
             config_out.json_config_schema.host = util::get_uri_field(authority.c_str(), u, UF_HOST).str();
             if (util::has_uri_field(u, UF_PORT))

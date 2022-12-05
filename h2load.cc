@@ -488,6 +488,7 @@ int main(int argc, char** argv)
             {"rps-input-file", required_argument, &flag, 24},
             {"config-file", required_argument, &flag, 25},
             {"script", required_argument, &flag, 26},
+            {"trans-har", required_argument, &flag, 27},
             {nullptr, 0, nullptr, 0}
         };
         int option_index = 0;
@@ -874,6 +875,20 @@ int main(int argc, char** argv)
                     {
                         std::string script_file = optarg;
                         script_files.push_back(script_file);
+                    }
+                    break;
+                    case 27:
+                    {
+                        std::string har_file_name = optarg;
+                        std::ifstream buffer(har_file_name);
+                        std::string har_conent((std::istreambuf_iterator<char>(buffer)),
+                                            std::istreambuf_iterator<char>());
+                        h2load::Config config_from_har;
+                        convert_har_to_h2loadrunner_config(har_conent, config_from_har);
+                        std::cerr << "HAR transformed to h2loadrunner config:" << std::endl << staticjson::to_pretty_json_string(config_from_har.json_config_schema)
+                                  << std::endl;
+                        exit(0);
+
                     }
                     break;
                 }

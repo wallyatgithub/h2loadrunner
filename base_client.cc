@@ -2695,7 +2695,8 @@ bool base_client::get_host_and_port_from_authority(const std::string& schema, co
                                                    std::string& host, std::string& port)
 {
     http_parser_url u {};
-    if (http_parser_parse_url(authority.c_str(), authority.size(), true, &u) == 0 && util::has_uri_field(u, UF_HOST))
+    http_parser_parse_url(authority.c_str(), authority.size(), true, &u);
+    if (util::has_uri_field(u, UF_HOST))
     {
         host = util::get_uri_field(authority.c_str(), u, UF_HOST).str();
         if (util::has_uri_field(u, UF_PORT))
