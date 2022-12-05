@@ -2179,7 +2179,7 @@ uint64_t current_timestamp_nanoseconds()
            (std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
-uint64_t convert_iso8601_to_epoch(const std::string iso8601)
+uint64_t convert_iso8601_to_epoch_ignore_tz(const std::string iso8601)
 {
     uint32_t y, M, d, h, m;
     float s;
@@ -2232,10 +2232,10 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
         return false;
     }
 
-    std::map<int64_t, size_t> order;
+    std::multimap<std::string, size_t> order;
     for (auto index = 0; index < har_file.log.entries.size(); index++)
     {
-        order[convert_iso8601_to_epoch(har_file.log.entries[index].startedDateTime)] = index;
+        order.emplace(har_file.log.entries[index].startedDateTime, index);
     }
 
     config_out.json_config_schema.scenarios.emplace_back();
@@ -2300,17 +2300,17 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
         {
             if (req_in_har.postData.params.size())
             {
-                bool all_are_form_data = true;
+                bool urlencoded_www_form = true;
                 std::for_each(req_in_har.postData.params.begin(), req_in_har.postData.params.end(),
-                              [&all_are_form_data](const HAR_PostData_Param & postData_param)
+                              [&urlencoded_www_form](const HAR_PostData_Param & postData_param)
                 {
                     if (postData_param.fileName.size())
                     {
-                        all_are_form_data = false;
+                        urlencoded_www_form = false;
                     }
                 });
                 // application/x-www-form-urlencoded
-                if (all_are_form_data)
+                if (urlencoded_www_form)
                 {
                     bool first_param = true;
                     for (auto& param : req_in_har.postData.params)
