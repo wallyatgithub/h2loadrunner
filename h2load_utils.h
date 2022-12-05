@@ -223,6 +223,8 @@ uint64_t current_timestamp_nanoseconds();
 
 uint64_t convert_iso8601_to_epoch_ignore_tz(const std::string iso8601);
 
+bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenario& scenario);
+
 bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::Config& config_out);
 
 void parse_uri_and_populate_fields(const std::string& uri, std::string& schema, std::string& authority, std::string& path);

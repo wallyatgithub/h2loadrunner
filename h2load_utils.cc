@@ -2217,8 +2217,7 @@ void parse_uri_and_populate_fields(const std::string& uri, std::string& schema, 
         }
     }
 }
-
-bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::Config& config_out)
+bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenario& scenario)
 {
     HAR_File har_file;
     staticjson::ParseStatus result;
@@ -2234,11 +2233,10 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
         order.emplace(har_file.log.entries[index].startedDateTime, index);
     }
 
-    config_out.json_config_schema.scenarios.emplace_back();
     for (auto iter = order.begin(); iter != order.end(); iter++)
     {
-        config_out.json_config_schema.scenarios.back().requests.emplace_back();
-        Request& req_in_config = config_out.json_config_schema.scenarios.back().requests.back();
+        scenario.requests.emplace_back();
+        Request& req_in_config = scenario.requests.back();
         HAR_Request& req_in_har = har_file.log.entries[iter->second].request;
         HAR_Response& resp_in_har = har_file.log.entries[iter->second].response;
 
@@ -2323,9 +2321,18 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
         req_in_config.expected_status_code = resp_in_har.status;
         // TODO: add more validation rules based on response content
     }
+    return true;
+}
+
+bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::Config& config_out)
+{
+    config_out.json_config_schema.scenarios.emplace_back();
+
+    convert_har_to_h2loadrunner_scenario(har_file_content, config_out.json_config_schema.scenarios.back());
 
     if (config_out.json_config_schema.scenarios.back().requests.size())
     {
+        config_out.json_config_schema.open_new_connection_based_on_authority_header = true;
         config_out.json_config_schema.schema = config_out.json_config_schema.scenarios.back().requests[0].schema;
         std::string& authority = config_out.json_config_schema.scenarios.back().requests[0].authority;
         http_parser_url u {};
