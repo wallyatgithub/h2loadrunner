@@ -2243,9 +2243,12 @@ bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenari
         // method
         req_in_config.method = req_in_har.method;
 
-        // schema, authority, path
+        // uri, post_process_json_config_schema is need to further process uri to get host, schema, etc
         req_in_config.uri.typeOfAction = "input";
-        parse_uri_and_populate_fields(req_in_har.url, req_in_config.schema, req_in_config.authority, req_in_config.uri.input);
+        req_in_config.uri.input = req_in_har.url;
+        // host, port, schema
+        std::string tmpPath;
+        parse_uri_and_populate_fields(req_in_har.url, req_in_config.schema, req_in_config.authority, tmpPath);
         if (req_in_config.uri.input.find('?', 0) == std::string::npos && req_in_har.queryString.size())
         {
             req_in_config.uri.input.append("?");
