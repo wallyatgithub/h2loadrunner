@@ -2328,9 +2328,8 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
 {
     config_out.json_config_schema.scenarios.emplace_back();
 
-    convert_har_to_h2loadrunner_scenario(har_file_content, config_out.json_config_schema.scenarios.back());
-
-    if (config_out.json_config_schema.scenarios.back().requests.size())
+    if (convert_har_to_h2loadrunner_scenario(har_file_content, config_out.json_config_schema.scenarios.back()) &&
+        config_out.json_config_schema.scenarios.back().requests.size())
     {
         config_out.json_config_schema.open_new_connection_based_on_authority_header = true;
         config_out.json_config_schema.schema = config_out.json_config_schema.scenarios.back().requests[0].schema;
@@ -2381,7 +2380,12 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
             default:
                 break;
         }
+        return true;
     }
-    return true;
+    else
+    {
+        config_out.json_config_schema.scenarios.pop_back();
+        return false;
+    }
 }
 
