@@ -234,7 +234,7 @@ Options:
               Maximum frame size that the local endpoint is willing to
               receive.
               Default: )"
-      << util::utos_unit(config.max_frame_size) << R"(
+        << util::utos_unit(config.max_frame_size) << R"(
    -w, --window-bits=<N>
               Sets the stream level initial window size to (2**<N>)-1.
               Default: )"
@@ -255,7 +255,7 @@ Options:
               Set allowed cipher list for  TLSv1.3.  The format of the
               string is described in OpenSSL ciphers(1).
               Default: )"
-      << config.tls13_ciphers << R"(
+        << config.tls13_ciphers << R"(
   -p, --no-tls-proto=<PROTOID>
               Specify ALPN identifier of the  protocol to be used when
               accessing http URI without SSL/TLS.
@@ -396,7 +396,7 @@ Options:
   --groups=<GROUPS>
               Specify the supported groups.
               Default: )"
-      << config.groups << R"(
+        << config.groups << R"(
   --no-udp-gso
               Disable UDP GSO.
   --max-udp-payload-size=<SIZE>
@@ -488,7 +488,8 @@ int main(int argc, char** argv)
             {"rps-input-file", required_argument, &flag, 24},
             {"config-file", required_argument, &flag, 25},
             {"script", required_argument, &flag, 26},
-            {"trans-har", required_argument, &flag, 27},
+            {"transform-har", required_argument, &flag, 27},
+            {"run-har", required_argument, &flag, 28},
             {nullptr, 0, nullptr, 0}
         };
         int option_index = 0;
@@ -548,23 +549,27 @@ int main(int argc, char** argv)
                 }
                 break;
             }
-            case 'f': {
-              auto n = util::parse_uint_with_unit(optarg);
-              if (n == -1) {
-                std::cerr << "--max-frame-size: bad option value: " << optarg
-                          << std::endl;
-                exit(EXIT_FAILURE);
-              }
-              if (static_cast<uint64_t>(n) < 16_k) {
-                std::cerr << "--max-frame-size: minimum 16384" << std::endl;
-                exit(EXIT_FAILURE);
-              }
-              if (static_cast<uint64_t>(n) > 16_m - 1) {
-                std::cerr << "--max-frame-size: maximum 16777215" << std::endl;
-                exit(EXIT_FAILURE);
-              }
-              config.max_frame_size = n;
-              break;
+            case 'f':
+            {
+                auto n = util::parse_uint_with_unit(optarg);
+                if (n == -1)
+                {
+                    std::cerr << "--max-frame-size: bad option value: " << optarg
+                              << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                if (static_cast<uint64_t>(n) < 16_k)
+                {
+                    std::cerr << "--max-frame-size: minimum 16384" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                if (static_cast<uint64_t>(n) > 16_m - 1)
+                {
+                    std::cerr << "--max-frame-size: maximum 16777215" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                config.max_frame_size = n;
+                break;
             }
             case 'H':
             {
@@ -882,12 +887,30 @@ int main(int argc, char** argv)
                         std::string har_file_name = optarg;
                         std::ifstream buffer(har_file_name);
                         std::string har_conent((std::istreambuf_iterator<char>(buffer)),
-                                            std::istreambuf_iterator<char>());
+                                               std::istreambuf_iterator<char>());
                         h2load::Config config_from_har;
                         convert_har_to_h2loadrunner_config(har_conent, config_from_har);
-                        std::cerr << "HAR transformed to h2loadrunner config:" << std::endl << staticjson::to_pretty_json_string(config_from_har.json_config_schema)
+                        std::cerr << "HAR transformed to h2loadrunner config:" << std::endl << staticjson::to_pretty_json_string(
+                                      config_from_har.json_config_schema)
                                   << std::endl;
                         exit(0);
+
+                    }
+                    case 28:
+                    {
+                        std::string har_file_name = optarg;
+                        std::ifstream buffer(har_file_name);
+                        std::string har_conent((std::istreambuf_iterator<char>(buffer)),
+                                               std::istreambuf_iterator<char>());
+                        h2load::Config config_from_har;
+                        convert_har_to_h2loadrunner_config(har_conent, config_from_har);
+                        std::cerr << "HAR transformed to h2loadrunner config:" << std::endl << staticjson::to_pretty_json_string(
+                                      config_from_har.json_config_schema)
+                                  << std::endl;
+
+                        config = config_from_har;
+                        post_process_json_config_schema(config);
+                        populate_config_from_json(config);
 
                     }
                     break;
@@ -1143,7 +1166,7 @@ int main(int argc, char** argv)
     act.sa_handler = SIG_IGN;
     sigaction(SIGPIPE, &act, nullptr);
     struct rlimit old_lim, new_lim;
-    if(getrlimit(RLIMIT_NOFILE, &old_lim) == 0)
+    if (getrlimit(RLIMIT_NOFILE, &old_lim) == 0)
     {
         new_lim.rlim_max = old_lim.rlim_max;
         new_lim.rlim_cur = old_lim.rlim_max;
@@ -1368,11 +1391,23 @@ int main(int argc, char** argv)
         ready = true;
         cv.notify_all();
     }
-    auto check_clients_up = [&workers]()
+
+    std::atomic<bool> workers_stopped(false);
+
+    auto check_clients_up = [&workers, &workers_stopped]()
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        auto total_time_to_wait = 5000;
+        auto time_to_wait_for_each_iteration = 100;
+        for (auto i = 0; i < total_time_to_wait / time_to_wait_for_each_iteration; i++)
+        {
+            if (workers_stopped)
+            {
+                return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(time_to_wait_for_each_iteration));
+        }
         size_t number_of_active_clients = 0;
-        for (auto& worker: workers)
+        for (auto& worker : workers)
         {
             number_of_active_clients += worker->get_number_of_active_clients();
         }
@@ -1385,7 +1420,6 @@ int main(int argc, char** argv)
     auto dummy = std::async(std::launch::async, check_clients_up);
 
     auto start = std::chrono::steady_clock::now();
-    std::atomic<bool> workers_stopped(false);
 
     std::stringstream dataStream;
 

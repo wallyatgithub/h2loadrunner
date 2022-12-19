@@ -222,16 +222,6 @@ void asio_client_connection::stop_conn_inactivity_timer()
     conn_inactivity_timer.cancel();
 }
 
-int asio_client_connection::make_async_connection()
-{
-    return connect_to_host(schema, authority);
-}
-
-int asio_client_connection::do_connect()
-{
-    return connect();
-}
-
 void asio_client_connection::disconnect()
 {
 #ifdef ENABLE_HTTP3
@@ -330,13 +320,12 @@ std::shared_ptr<base_client> asio_client_connection::create_dest_client(const st
     return new_client;
 }
 
-void asio_client_connection::setup_connect_with_async_fqdn_lookup()
-{
-    return;
-}
-
 int asio_client_connection::connect_to_host(const std::string& dest_schema, const std::string& dest_authority)
 {
+    if (CLIENT_IDLE != state)
+    {
+        return 0;
+    }
     if (config->verbose)
     {
         std::cerr << __FUNCTION__ << ":" << dest_authority << std::endl;
@@ -394,6 +383,8 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
     schema = dest_schema;
     authority = dest_authority;
     state = CLIENT_CONNECTING;
+
+    update_this_in_dest_client_map();
 
     return 0;
 
@@ -631,13 +622,16 @@ void asio_client_connection::graceful_restart_connection()
 
 void asio_client_connection::start_request_delay_execution_timer()
 {
-    delay_request_execution_timer.expires_from_now(boost::posix_time::millisec(10));
-    delay_request_execution_timer.async_wait
-    (
-        [this](const boost::system::error_code & ec)
+    if (is_controller_client())
     {
-        handle_request_execution_timer_timeout(ec);
-    });
+        delay_request_execution_timer.expires_from_now(boost::posix_time::millisec(10));
+        delay_request_execution_timer.async_wait
+        (
+            [this](const boost::system::error_code & ec)
+        {
+            handle_request_execution_timer_timeout(ec);
+        });
+    }
 }
 
 void asio_client_connection::handle_request_execution_timer_timeout(const boost::system::error_code& ec)
@@ -871,7 +865,8 @@ void asio_client_connection::do_read()
     do_read_fn(this);
 }
 
-bool asio_client_connection::handle_write_complete(bool is_quic, const boost::system::error_code& e, std::size_t bytes_transferred)
+bool asio_client_connection::handle_write_complete(bool is_quic, const boost::system::error_code& e,
+                                                   std::size_t bytes_transferred)
 {
     if (config->verbose)
     {
@@ -924,7 +919,7 @@ void asio_client_connection::handle_write_signal()
     else
 #endif
     {
-        for (session;;)
+        while (session)
         {
             auto output_data_length_before = output_data_length;
             session->on_write();
@@ -1002,13 +997,11 @@ void asio_client_connection::stop()
         ssl_socket->lowest_layer().close(ignored_ec);
     }
     connect_timer.cancel();
-    rps_timer.cancel();
-    delay_request_execution_timer.cancel();
+
     conn_activity_timer.cancel();
     ping_timer.cancel();
     conn_inactivity_timer.cancel();
     stream_timeout_timer.cancel();
-    timing_script_request_timeout_timer.cancel();
     connect_back_to_preferred_host_timer.cancel();
     delayed_reconnect_timer.cancel();
     ssl_handshake_timer.cancel();
@@ -1020,6 +1013,11 @@ void asio_client_connection::stop()
         ssl = nullptr;
     }
 #endif
+}
+
+void asio_client_connection::stop_delayed_execution_timer()
+{
+    delay_request_execution_timer.cancel();
 }
 
 template <typename SOCKET>
@@ -1243,7 +1241,7 @@ void asio_client_connection::start_udp_async_connect(boost::asio::ip::udp::resol
     assert(udp_client_socket);
 
     udp_client_socket->async_connect(remote_endpoint,
-                                                    [this, endpoint_iterator](const boost::system::error_code & err)
+                                     [this, endpoint_iterator](const boost::system::error_code & err)
     {
         if (!err)
         {

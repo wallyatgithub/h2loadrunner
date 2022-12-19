@@ -254,7 +254,7 @@ void libev_client::stop_conn_inactivity_timer()
     ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &conn_inactivity_watcher);
 }
 
-int libev_client::make_async_connection()
+int libev_client::connect_async()
 {
     int rv;
     if (current_addr)
@@ -323,6 +323,9 @@ int libev_client::make_async_connection()
     {
         writefn = &libev_client::connected;
     }
+
+    update_this_in_dest_client_map();
+
     return 0;
 }
 
@@ -385,11 +388,8 @@ void libev_client::disconnect()
 #endif // ENABLE_HTTP3
     stop_timer_watcher(conn_inactivity_watcher);
     stop_timer_watcher(conn_active_watcher);
-    stop_timer_watcher(rps_watcher);
-    stop_timer_watcher(request_timeout_watcher);
     stop_timer_watcher(stream_timeout_watcher);
     stop_timer_watcher(connection_timeout_watcher);
-    stop_timer_watcher(delayed_request_watcher);
     stop_timer_watcher(send_ping_watcher);
     stop_timer_watcher(delayed_reconnect_watcher);
     stop_timer_watcher(connect_to_preferred_host_watcher);
@@ -462,7 +462,18 @@ void libev_client::start_rps_timer()
 
 void libev_client::stop_rps_timer()
 {
-    ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &rps_watcher);
+    if (ev_is_active(&watcher))
+    {
+        ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &rps_watcher);
+    }
+}
+
+void libev_client::stop_delayed_execution_timer()
+{
+    if (ev_is_active(&delayed_request_watcher))
+    {
+        ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &delayed_request_watcher);
+    }
 }
 
 void libev_client::start_stream_timeout_timer()
@@ -493,7 +504,10 @@ void libev_client::start_connect_to_preferred_host_timer()
 
 void libev_client::stop_timing_script_request_timeout_timer()
 {
-    ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &request_timeout_watcher);
+    if (ev_is_active(&request_timeout_watcher))
+    {
+        ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &request_timeout_watcher);
+    }
 }
 
 void libev_client::conn_activity_timeout_handler()
@@ -622,7 +636,10 @@ int libev_client::write_clear()
 
 void libev_client::start_request_delay_execution_timer()
 {
-    ev_timer_start(static_cast<libev_worker*>(worker)->loop, &delayed_request_watcher);
+    if (is_controller_client() && !ev_is_active(delayed_request_watcher))
+    {
+        ev_timer_start(static_cast<libev_worker*>(worker)->loop, &delayed_request_watcher);
+    }
 }
 int libev_client::connected()
 {
@@ -646,11 +663,13 @@ int libev_client::connected()
             {
                 if (local_addr.sa_family == AF_INET)
                 {
-                    tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((struct sockaddr_in*)&local_addr)->sin_port)) + ".log";
+                    tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((
+                                                                                                                        struct sockaddr_in*)&local_addr)->sin_port)) + ".log";
                 }
                 else
                 {
-                    tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((struct sockaddr_in6*)&local_addr)->sin6_port)) + ".log";
+                    tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((
+                                                                                                                        struct sockaddr_in6*)&local_addr)->sin6_port)) + ".log";
                 }
 
             }
@@ -828,7 +847,11 @@ int libev_client::resolve_fqdn_and_connect(const std::string& schema, const std:
 
 int libev_client::connect_to_host(const std::string& schema, const std::string& authority)
 {
-    //if (config->verbose)
+    if (CLIENT_IDLE != state)
+    {
+        return 0;
+    }
+    if (config->verbose)
     {
         std::cerr << "===============connecting to " << schema << "://" << authority << "===============" << std::endl;
     }
@@ -874,22 +897,6 @@ bool libev_client::probe_address(ares_addrinfo* ares_address)
     return false;
 }
 
-int libev_client::do_connect()
-{
-    return connectfn(*this);
-}
-
-int libev_client::connect_with_async_fqdn_lookup()
-{
-    restore_connectfn(); // one time deal
-    return connect_to_host(schema, authority);
-}
-
-void libev_client::setup_connect_with_async_fqdn_lookup()
-{
-    connectfn = &libev_client::connect_with_async_fqdn_lookup;
-}
-
 void libev_client::feed_timing_script_request_timeout_timer()
 {
     if (!ev_is_active(&request_timeout_watcher))
@@ -908,11 +915,6 @@ void libev_client::stop_connect_timeout_timer()
     ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &connection_timeout_watcher);
 }
 
-void libev_client::restore_connectfn()
-{
-    connectfn = &libev_client::connect;
-}
-
 size_t libev_client::push_data_to_output_buffer(const uint8_t* data, size_t length)
 {
     if (wb.rleft() >= BACKOFF_WRITE_BUFFER_THRES)
@@ -929,9 +931,11 @@ bool libev_client::any_pending_data_to_write()
 
 #ifdef ENABLE_HTTP3
 
-namespace {
-ngtcp2_tstamp timestamp(struct ev_loop *loop) {
-  return ev_now(loop) * NGTCP2_SECONDS;
+namespace
+{
+ngtcp2_tstamp timestamp(struct ev_loop* loop)
+{
+    return ev_now(loop) * NGTCP2_SECONDS;
 }
 } // namespace
 
@@ -986,7 +990,7 @@ int libev_client::read_quic()
         }
         if (config->verbose)
         {
-            std::cerr <<__FUNCTION__<< ": bytes read: " << nread << std::endl;
+            std::cerr << __FUNCTION__ << ": bytes read: " << nread << std::endl;
         }
 
         assert(quic.conn);
@@ -1340,7 +1344,7 @@ int libev_client::write_udp(const sockaddr* addr, socklen_t addrlen,
         ++worker->stats.udp_dgram_sent;
         if (config->verbose)
         {
-            std::cerr <<__FUNCTION__<< ": bytes sent: " << nwrite << std::endl;
+            std::cerr << __FUNCTION__ << ": bytes sent: " << nwrite << std::endl;
         }
     }
 
@@ -1370,7 +1374,7 @@ void libev_client::quic_close_connection()
     }
     if (config->verbose)
     {
-        std::cerr <<__FUNCTION__<< std::endl;
+        std::cerr << __FUNCTION__ << std::endl;
     }
 
     write_udp(reinterpret_cast<sockaddr*>(ps.path.remote.addr),

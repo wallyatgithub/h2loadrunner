@@ -70,7 +70,6 @@ public:
     virtual int connect_to_host(const std::string& schema, const std::string& authority) = 0;
     virtual void disconnect() = 0;
     virtual void clear_default_addr_info() = 0;
-    virtual void setup_connect_with_async_fqdn_lookup() = 0;
     virtual void feed_timing_script_request_timeout_timer() = 0;
     virtual void graceful_restart_connection() = 0;
     virtual void restart_timeout_timer() = 0;
@@ -88,13 +87,13 @@ public:
     virtual void stop_warmup_timer() = 0;
     virtual void start_conn_inactivity_watcher() = 0;
     virtual void stop_conn_inactivity_timer() = 0;
-    virtual int make_async_connection() = 0;
-    virtual int do_connect() = 0;
     virtual void start_delayed_reconnect_timer() = 0;
     virtual void probe_and_connect_to(const std::string& schema, const std::string& authority) = 0;
     virtual void setup_graceful_shutdown() = 0;
     virtual bool is_write_signaled() = 0;
+    virtual void stop_delayed_execution_timer() = 0;
 
+    bool is_disconnected();
     int connect();
     void cleanup_due_to_disconnect();
     void final_cleanup();
@@ -117,10 +116,11 @@ public:
     // Otherwise, this function returns -1, and this object should be
     // deleted.
     int try_again_or_fail();
-    void process_request_failure(int errCode = -1);
+    void process_submit_request_failure(int errCode = -1);
 
     void process_timedout_streams();
     void process_abandoned_streams();
+    void mark_requests_to_send_fail();
     void timeout();
     void terminate_session();
     void on_header(int64_t stream_id, const uint8_t* name, size_t namelen,
@@ -137,14 +137,12 @@ public:
     void on_status_code(int64_t stream_id, uint16_t status);
     bool is_final();
     void set_final(bool val);
-    size_t get_req_left();
-
+    void cluster_on_connected();
     Config* get_config();
     Stats& get_stats();
 
     uint64_t get_total_pending_streams();
     base_client* get_controller_client();
-    void set_controller_client(base_client* controller);
     base_client* find_or_create_dest_client(Request_Data& request_to_send);
     bool is_controller_client();
     int submit_request();
@@ -203,6 +201,8 @@ public:
                                 Scenario_Data_Per_User& scenario_data_per_user);
     bool parse_uri_and_poupate_request(const std::string& uri, Request_Data& new_request);
     void sanitize_request(Request_Data& new_request);
+    size_t get_number_of_request_left();
+    void dec_number_of_request_left();
 
 #ifdef ENABLE_HTTP3
     // QUIC
@@ -225,6 +225,8 @@ public:
     bool is_quic();
 
     void clean_up_this_in_dest_client_map();
+
+    PROTO_TYPE get_proto_type();
 
 #endif // ENABLE_HTTP3
 
@@ -280,6 +282,7 @@ public:
     SSL_CTX* ssl_context;
     std::vector<std::function<void(bool, h2load::base_client*)>> connected_callbacks;
     std::map<int32_t, Stream_Callback_Data> stream_user_callback_queue;
+    size_t req_inflight_of_all_clients = 0;
 #ifdef ENABLE_HTTP3
     struct Quic
     {

@@ -333,7 +333,7 @@ void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ar
         client->next_addr = nullptr;
         client->current_addr = nullptr;
         client->ares_address = res;
-        client->connect();
+        client->connect_async();
         ares_freeaddrinfo(client->ares_address);
         client->ares_address = nullptr;
     }
@@ -732,9 +732,14 @@ process_time_stats(const std::vector<std::shared_ptr<h2load::base_worker>>& work
            };
 }
 
-bool is_null_destination(h2load::Config& config)
+bool request_template_unavailable(h2load::Config& config)
 {
     return (!config.base_uri_unix && config.connect_to_host.empty() && config.host.empty());
+    bool host_empty = (config.base_uri_unix && config.connect_to_host.empty() && config.host.empty());
+    bool empty_scenario = (config.json_config_schema.scenarios.size() == 1 &&
+                           config.json_config_schema.scenarios[0].requests.size() == 1 &&
+                           config.json_config_schema.scenarios[0].requests[0].uri.input.empty());
+    return (host_empty && empty_scenario);
 }
 
 void resolve_host(h2load::Config& config)
@@ -1932,7 +1937,8 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config, const std::string& apln_pro
 {
     auto ssl_opts = (SSL_OP_ALL & ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS) |
                     SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION |
-                    SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION;
+                    SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION | SSL_OP_NO_TICKET |
+                    SSL_OP_NO_RENEGOTIATION;
 
     SSL_CTX_set_options(ssl_ctx, ssl_opts);
     SSL_CTX_set_mode(ssl_ctx, SSL_MODE_AUTO_RETRY);
@@ -2223,7 +2229,7 @@ bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenari
     staticjson::ParseStatus result;
     if (!staticjson::from_json_string(har_file_content.c_str(), &har_file, &result))
     {
-        std::cerr<<"error parsing har content:"<<result.description()<<std::endl;
+        std::cerr << "error parsing har content:" << result.description() << std::endl;
         return false;
     }
 
@@ -2330,10 +2336,14 @@ bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenari
 bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::Config& config_out)
 {
     config_out.json_config_schema.scenarios.emplace_back();
+    config_out.json_config_schema.scenarios.back().name = "HAR";
+    config_out.json_config_schema.tls_keylog_file = "har";
 
     if (convert_har_to_h2loadrunner_scenario(har_file_content, config_out.json_config_schema.scenarios.back()) &&
         config_out.json_config_schema.scenarios.back().requests.size())
     {
+        config_out.json_config_schema.builtin_cookie_support = false;
+        config_out.json_config_schema.connection_retry_on_disconnect = false;
         config_out.json_config_schema.open_new_connection_based_on_authority_header = true;
         config_out.json_config_schema.schema = config_out.json_config_schema.scenarios.back().requests[0].schema;
         std::string& authority = config_out.json_config_schema.scenarios.back().requests[0].authority;
@@ -2383,6 +2393,10 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
             default:
                 break;
         }
+
+        config_out.json_config_schema.threads = 1;
+        config_out.json_config_schema.clients = 1;
+        config_out.json_config_schema.nreqs = config_out.json_config_schema.scenarios.back().requests.size();
         return true;
     }
     else

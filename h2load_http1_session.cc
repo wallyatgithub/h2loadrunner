@@ -110,7 +110,7 @@ int htp_msg_completecb(llhttp_t* htp)
 
         // Connection is going down.  If we have still request to do,
         // create new connection and keep on doing the job.
-        if (client->get_req_left())
+        if (client->get_number_of_request_left())
         {
             client->try_new_connection();
         }

@@ -86,10 +86,6 @@ public:
 
     virtual void stop_conn_inactivity_timer();
 
-    virtual int make_async_connection();
-
-    virtual int do_connect();
-
     virtual void disconnect();
 
     virtual void start_warmup_timer();
@@ -112,8 +108,6 @@ public:
                                                             const std::string& dest_authority,
                                                             PROTO_TYPE proto = PROTO_UNSPECIFIED);
 
-    virtual void setup_connect_with_async_fqdn_lookup();
-
     virtual int connect_to_host(const std::string& dest_schema, const std::string& dest_authority);
 
     virtual void probe_and_connect_to(const std::string& schema, const std::string& authority);
@@ -124,6 +118,8 @@ public:
     {
         return write_signaled;
     };
+
+    virtual void stop_delayed_execution_timer();
 
 private:
 

@@ -48,7 +48,6 @@ public:
     virtual int connect_to_host(const std::string& schema, const std::string& authority);
     virtual void disconnect();
     virtual void clear_default_addr_info();
-    virtual void setup_connect_with_async_fqdn_lookup();
     virtual void feed_timing_script_request_timeout_timer();
     virtual void graceful_restart_connection();
     virtual void restart_timeout_timer();
@@ -67,15 +66,16 @@ public:
     virtual void stop_warmup_timer();
     virtual void start_conn_inactivity_watcher();
     virtual void stop_conn_inactivity_timer();
-    virtual int make_async_connection();
-    virtual int do_connect();
     virtual void start_delayed_reconnect_timer();
     virtual void probe_and_connect_to(const std::string& schema, const std::string& authority);
     virtual void setup_graceful_shutdown();
     virtual bool is_write_signaled();
+    virtual void stop_delayed_execution_timer();
 
     int do_read();
     int do_write();
+
+    int connect_async();
 
     // low-level I/O callback functions called by do_read/do_write
     int connected();
@@ -96,7 +96,6 @@ public:
     bool probe_address(ares_addrinfo* ares_address);
 
     int write_clear_with_callback();
-    void restore_connectfn();
     int connect_with_async_fqdn_lookup();
     void init_ares();
 
@@ -117,7 +116,7 @@ public:
     int send_blocked_packet();
 
     ev_timer pkt_timer;
-    
+
     int quic_pkt_timeout();
 
 #endif
@@ -126,7 +125,6 @@ public:
     ev_io wev;
     ev_io rev;
     std::function<int(libev_client&)> readfn, writefn;
-    std::function<int(libev_client&)> connectfn;
     ev_timer request_timeout_watcher;
     addrinfo* next_addr;
     // Address for the current address.  When try_new_connection() is

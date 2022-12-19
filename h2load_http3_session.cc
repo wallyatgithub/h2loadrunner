@@ -53,11 +53,11 @@ int Http3Session::submit_request()
     }
 
     auto config = client_->worker->config;
-    reqidx_ = client_->reqidx;
+    reqidx_ = client_->get_controller_client()->reqidx;
 
-    if (++client_->reqidx == config->nva.size())
+    if (++client_->get_controller_client()->reqidx == config->nva.size())
     {
-        client_->reqidx = 0;
+        client_->get_controller_client()->reqidx = 0;
     }
 
     auto stream_id = submit_request_internal();

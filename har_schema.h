@@ -40,7 +40,7 @@ public:
         h->add_property("value", &this->value);
         h->add_property("path", &this->path, staticjson::Flags::Optional);
         h->add_property("domain", &this->domain, staticjson::Flags::Optional);
-        h->add_property("expires", &this->expires, staticjson::Flags::Optional);
+        //h->add_property("expires", &this->expires, staticjson::Flags::Optional); // TODO: handle null
         h->add_property("httpOnly", &this->httpOnly, staticjson::Flags::Optional);
         h->add_property("secure", &this->secure, staticjson::Flags::Optional);
         h->add_property("comment", &this->comment, staticjson::Flags::Optional);
@@ -267,7 +267,7 @@ public:
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("onContentLoad", &this->onContentLoad, staticjson::Flags::Optional);
-        h->add_property("onLoad", &this->onLoad, staticjson::Flags::Optional);
+        // h->add_property("onLoad", &this->onLoad, staticjson::Flags::Optional); // TODO: handle null
         h->add_property("comment", &this->comment, staticjson::Flags::Optional);
     }
 };

@@ -16,7 +16,7 @@ namespace h2load
 
 
 base_worker::base_worker(uint32_t id, size_t req_todo, size_t nclients,
-                                   size_t rate, size_t max_samples, Config* config)
+                         size_t rate, size_t max_samples, Config* config)
     : stats(req_todo, nclients),
       config(config),
       id(id),
@@ -81,26 +81,25 @@ base_worker::~base_worker()
 
 void base_worker::stop_all_clients()
 {
-/*
-    for (auto client : clients_to_collect_stats)
-    {
-        if (client && client->session)
+    /*
+        for (auto client : clients_to_collect_stats)
         {
-            client->setup_graceful_shutdown();
-            client->terminate_session();
-            client->terminate_sub_clients();
+            if (client && client->session)
+            {
+                client->setup_graceful_shutdown();
+                client->terminate_session();
+                client->terminate_sub_clients();
+            }
         }
-    }
-*/
+    */
     // client_pool has all the connected clients, including sub client
     std::set<base_client*> terminated_clients;
-    for (auto& client_map: client_pool)
+    for (auto& client_map : client_pool)
     {
-        for (auto& clients_set: client_map.second)
+        for (auto& clients_set : client_map.second)
         {
-            for (auto& client: clients_set.second)
+            for (auto& client : clients_set.second)
             {
-                std::cout<<"authority:"<<client->authority<<std::endl;
                 if (terminated_clients.count(client) == 0)
                 {
                     client->setup_graceful_shutdown();
@@ -136,7 +135,7 @@ std::shared_ptr<base_client> base_worker::get_shared_ptr_of_client(base_client* 
     auto iter = managed_clients.find(client);
     if (iter != managed_clients.end())
     {
-       return iter->second;
+        return iter->second;
     }
     return std::shared_ptr<base_client>(nullptr);
 }
@@ -155,7 +154,7 @@ void base_worker::run()
             }
 
             auto client = create_new_client(req_todo);
-            if (client->do_connect() != 0)
+            if (client->connect() != 0)
             {
                 std::cerr << "client could not connect to host" << std::endl;
                 client->fail();
@@ -194,7 +193,7 @@ void base_worker::rate_period_timeout_handler()
 
         ++nconns_made;
 
-        if (client->do_connect() != 0)
+        if (client->connect() != 0)
         {
             std::cerr << "client could not connect to host" << std::endl;
             client->fail();
@@ -254,7 +253,7 @@ void base_worker::warmup_timeout_handler()
         if (client)
         {
             assert(client->req_todo == 0);
-            assert(client->req_left == 1);
+            assert(client->get_number_of_request_left() == 1);
             assert(client->req_inflight == 0);
             assert(client->req_started == 0);
             assert(client->req_done == 0);

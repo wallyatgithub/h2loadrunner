@@ -137,11 +137,12 @@ int base_client::connect()
         start_conn_inactivity_watcher();
     }
 
-    auto rv = make_async_connection();
+    auto rv = connect_to_host(schema, authority);
     if (rv != 0)
     {
         return rv;
     }
+
     start_connect_timeout_timer();
     return 0;
 }
@@ -161,7 +162,8 @@ uint64_t base_client::get_total_pending_streams()
     {
         auto pendingStreams = streams.size();
         std::set<base_client*> clients_handled;
-        for (auto& clients_with_same_proto_version: dest_clients)
+        clients_handled.insert(this);
+        for (auto& clients_with_same_proto_version : dest_clients)
         {
             for (auto& client : clients_with_same_proto_version.second)
             {
@@ -381,14 +383,16 @@ void base_client::timing_script_timeout_handler()
     }
     signal_write();
 
-    if (req_left == 0)
+    if (get_number_of_request_left() == 0)
     {
         stop_timing_script_request_timeout_timer();
         return;
     }
 
+
+    auto start = get_controller_client()->reqidx ? config->timings[get_controller_client()->reqidx - 1] : 0;
     double duration =
-        config->timings[reqidx] - config->timings[reqidx - 1];
+        config->timings[get_controller_client()->reqidx] - start;
 
     while (duration < 1e-9)
     {
@@ -398,14 +402,14 @@ void base_client::timing_script_timeout_handler()
             return;
         }
         signal_write();
-        if (req_left == 0)
+        if (get_number_of_request_left() == 0)
         {
             stop_timing_script_request_timeout_timer();
             return;
         }
 
         duration =
-            config->timings[reqidx] - config->timings[reqidx - 1];
+            config->timings[get_controller_client()->reqidx] - config->timings[get_controller_client()->reqidx - 1];
     }
 
     start_timing_script_request_timeout_timer(duration);
@@ -504,7 +508,14 @@ void base_client::init_connection_targert()
                     authority = host;
                 }
         */
-        authority = host + ":" + util::utos(config->port);
+        if ((schema == schema_http && 80 == config->port) || (schema == schema_https && 443 == config->port))
+        {
+            authority = host;
+        }
+        else
+        {
+            authority = host + ":" + util::utos(config->port);
+        }
     }
 
     if (is_controller_client() &&
@@ -546,8 +557,6 @@ void base_client::init_connection_targert()
         std::random_device random_device;
         std::mt19937 generator(random_device());
         std::shuffle(candidate_addresses.begin(), candidate_addresses.end(), generator);
-
-        setup_connect_with_async_fqdn_lookup();
     }
     preferred_authority = authority;
 }
@@ -589,7 +598,7 @@ void base_client::sanitize_request(Request_Data& new_request)
 
 void base_client::enqueue_request(Request_Data& finished_request, Request_Data&& new_request)
 {
-    auto client = this->parent_client ? this->parent_client.get() : this;
+    auto client = get_controller_client();
     if (!finished_request.delay_before_executing_next)
     {
         client->requests_to_submit.push_back(std::move(new_request));
@@ -728,9 +737,8 @@ int base_client::try_again_or_fail()
     {
         new_connection_requested = false;
 
-        if (req_left)
+        if (get_number_of_request_left())
         {
-
             if (worker->current_phase == Phase::MAIN_DURATION)
             {
                 // At the moment, we don't have a facility to re-start request
@@ -742,7 +750,7 @@ int base_client::try_again_or_fail()
             }
 
             // Keep using current address
-            if (connect() == 0)
+            if (connect_to_host(schema, authority) == 0)
             {
                 return 0;
             }
@@ -786,16 +794,37 @@ void base_client::process_abandoned_streams()
 
     auto req_abandoned = req_inflight;
 
-    if (!should_reconnect_on_disconnect())
+    if (is_test_finished() && is_controller_client())
     {
-        req_abandoned += req_left;
-        req_left = 0;
+        req_abandoned += get_number_of_request_left();
+        get_controller_client()->req_left = 0;
     }
 
     worker->stats.req_failed += req_abandoned;
     worker->stats.req_error += req_abandoned;
 
     req_inflight = 0;
+}
+
+void base_client::mark_requests_to_send_fail()
+{
+    while (streams.size())
+    {
+        auto begin = streams.begin();
+        on_stream_close(begin->first, false);
+    }
+    auto req_to_submit = std::move(requests_to_submit);
+    while (req_to_submit.size())
+    {
+        size_t stream_id = 0;
+        auto req = std::move(req_to_submit.front());
+        req_to_submit.pop_front();
+        requests_waiting_for_response().emplace(std::make_pair(stream_id, std::move(req)));
+        on_request_start(stream_id);
+        auto req_stat = get_req_stat(stream_id);
+        record_request_time(req_stat);
+        on_stream_close(stream_id, false);
+    }
 }
 
 void base_client::record_connect_start_time()
@@ -833,7 +862,8 @@ void base_client::clean_up_this_in_dest_client_map()
 {
     if (parent_client)
     {
-        for (auto clients_with_same_proto = parent_client->dest_clients.begin(); clients_with_same_proto != parent_client->dest_clients.end();)
+        for (auto clients_with_same_proto = parent_client->dest_clients.begin();
+             clients_with_same_proto != parent_client->dest_clients.end();)
         {
             for (auto iter = clients_with_same_proto->second.begin(); iter != clients_with_same_proto->second.end();)
             {
@@ -857,7 +887,7 @@ void base_client::clean_up_this_in_dest_client_map()
         }
     }
 
-    for (auto& client_map: worker->get_client_pool())
+    for (auto& client_map : worker->get_client_pool())
     {
         for (auto& client_set : client_map.second)
         {
@@ -870,6 +900,12 @@ void base_client::final_cleanup()
 {
     worker->sample_client_stat(&cstat);
     ++worker->client_smp.n;
+
+    stop_rps_timer();
+    stop_delayed_execution_timer();
+    stop_timing_script_request_timeout_timer();
+    requests_to_submit.clear();
+
     for (auto& V : lua_states)
     {
         for (auto& L : V)
@@ -878,6 +914,8 @@ void base_client::final_cleanup()
         }
     }
     lua_states.clear();
+
+    mark_requests_to_send_fail();
 
     clean_up_this_in_dest_client_map();
 }
@@ -940,7 +978,9 @@ void base_client::cleanup_due_to_disconnect()
             req.request_sent_callback(-1, this);
         }
     }
-    requests_to_submit.clear();
+    //    requests_to_submit.clear();
+
+    clean_up_this_in_dest_client_map();
 }
 
 void base_client::record_client_end_time()
@@ -1053,7 +1093,7 @@ void base_client::run_post_response_action(Request_Data& finished_request)
             std::cout << "var id:" << value_picker.unique_id << std::endl;
             std::cout << "target value located: " << source << std::endl;
             std::cout << "target value match result: " <<
-            finished_request.scenario_data_per_user->variable_index_to_value[value_picker.unique_id] << std::endl;
+                      finished_request.scenario_data_per_user->variable_index_to_value[value_picker.unique_id] << std::endl;
         }
     }
     if (config->verbose)
@@ -1106,6 +1146,10 @@ bool base_client::parse_uri_and_poupate_request(const std::string& uri, Request_
 
 void base_client::parse_and_save_cookies(Request_Data& finished_request)
 {
+    if (!config->json_config_schema.builtin_cookie_support)
+    {
+        return;
+    }
     for (auto& header_map : finished_request.resp_headers)
     {
         auto iter = header_map.find("Set-Cookie");
@@ -1154,13 +1198,13 @@ void base_client::populate_request_from_config_template(Request_Data& new_reques
 void base_client::terminate_sub_clients()
 {
     std::set<base_client*> terminated_client;
-    for (auto& sub_clients_with_same_proto: dest_clients)
+    for (auto& sub_clients_with_same_proto : dest_clients)
     {
         for (auto& sub_client : sub_clients_with_same_proto.second)
         {
             if (sub_client.second != this && sub_client.second->session)
             {
-                if (terminated_client.count(this) == 0)
+                if (terminated_client.count(sub_client.second) == 0)
                 {
                     sub_client.second->setup_graceful_shutdown();
                     sub_client.second->terminate_session();
@@ -1173,7 +1217,7 @@ void base_client::terminate_sub_clients()
 
 bool base_client::is_test_finished()
 {
-    if (0 == req_left || worker->current_phase > Phase::MAIN_DURATION)
+    if (0 == get_number_of_request_left() || worker->current_phase > Phase::MAIN_DURATION)
     {
         return true;
     }
@@ -1197,7 +1241,8 @@ void base_client::update_this_in_dest_client_map()
     auto& clients_with_proto_type = parent_client ? parent_client->dest_clients[proto_type] : dest_clients[proto_type];
     clients_with_proto_type[base_uri] = this;
 
-    auto& clients_with_unspecified_proto = parent_client ? parent_client->dest_clients[PROTO_UNSPECIFIED] : dest_clients[PROTO_UNSPECIFIED];
+    auto& clients_with_unspecified_proto = parent_client ? parent_client->dest_clients[PROTO_UNSPECIFIED] :
+                                           dest_clients[PROTO_UNSPECIFIED];
     clients_with_unspecified_proto[base_uri] = this;
 }
 
@@ -1424,6 +1469,10 @@ void base_client::submit_ping()
 
 void base_client::produce_request_cookie_header(Request_Data& req_to_be_sent)
 {
+    if (!config->json_config_schema.builtin_cookie_support)
+    {
+        return;
+    }
     if (req_to_be_sent.scenario_data_per_user->saved_cookies.empty())
     {
         return;
@@ -1606,7 +1655,17 @@ bool base_client::update_request_with_lua(lua_State* L, const Request_Data& fini
 
 void base_client::terminate_session()
 {
-    session->terminate();
+    if (session)
+    {
+        session->terminate();
+    }
+    else
+    {
+        if (write_clear_callback)
+        {
+            write_clear_callback();
+        }
+    }
 }
 
 void base_client::reset_timeout_requests()
@@ -1648,7 +1707,7 @@ void base_client::on_rps_timer()
         return;
     }
 
-    if (req_left == 0)
+    if (get_number_of_request_left() == 0)
     {
         stop_rps_timer();
         return;
@@ -1662,10 +1721,10 @@ void base_client::on_rps_timer()
         return;
     }
     auto n = static_cast<size_t>(round(duration * config->rps));
-    rps_req_pending = n; // += n; do not accumulate to avoid burst of load
+    get_controller_client()->rps_req_pending = n; // += n; do not accumulate to avoid burst of load
     rps_duration_started = now - d + std::chrono::duration<double>(static_cast<double>(n) / config->rps);
 
-    if (rps_req_pending == 0)
+    if (get_controller_client()->rps_req_pending == 0)
     {
         return;
     }
@@ -1676,9 +1735,9 @@ void base_client::on_rps_timer()
         return;
     }
 
-    nreq = config->is_timing_based_mode() ? std::max(nreq, req_left)
-           : std::min(nreq, req_left);
-    nreq = std::min(nreq, rps_req_pending);
+    nreq = config->is_timing_based_mode() ? std::max(nreq, get_number_of_request_left())
+           : std::min(nreq, get_number_of_request_left());
+    nreq = std::min(nreq, get_controller_client()->rps_req_pending);
 
     for (; nreq > 0; --nreq)
     {
@@ -1687,8 +1746,8 @@ void base_client::on_rps_timer()
         {
             break;
         }
-        rps_req_inflight++;
-        rps_req_pending--;
+        get_controller_client()->rps_req_inflight++;
+        get_controller_client()->rps_req_pending--;
     }
     // client->signal_write(); // submit_request already calls signal_write()
 }
@@ -1730,9 +1789,13 @@ void base_client::on_stream_close(int64_t stream_id, bool success, bool final)
         {
             --req_inflight;
         }
-        if (rps_mode() && rps_req_inflight)
+        if (get_controller_client()->req_inflight_of_all_clients > 0)
         {
-            --rps_req_inflight;
+            --get_controller_client()->req_inflight_of_all_clients;
+        }
+        if (rps_mode() && get_controller_client()->rps_req_inflight)
+        {
+            --get_controller_client()->rps_req_inflight;
         }
         auto req_stat = get_req_stat(stream_id);
         if (!req_stat)
@@ -1797,15 +1860,15 @@ void base_client::on_stream_close(int64_t stream_id, bool success, bool final)
     }
     streams.erase(stream_id);
 
-    if (req_left == 0 && req_inflight == 0)
+    if (get_number_of_request_left() == 0 && get_controller_client()->req_inflight_of_all_clients == 0)
     {
-        terminate_sub_clients();
-        setup_graceful_shutdown();
-        terminate_session();
+        get_controller_client()->terminate_sub_clients();
+        get_controller_client()->setup_graceful_shutdown();
+        get_controller_client()->terminate_session();
         return;
     }
 
-    if (!final && req_left > 0)
+    if (!final && !is_test_finished())
     {
         if (config->timing_script)
         {
@@ -1813,13 +1876,13 @@ void base_client::on_stream_close(int64_t stream_id, bool success, bool final)
         }
         else if (!rps_mode())
         {
-            submit_request();
+            get_controller_client()->submit_request();
         }
-        else if (rps_req_pending)
+        else if (get_controller_client()->rps_req_inflight)
         {
-            if (submit_request() == 0)
+            if (get_controller_client()->submit_request() == 0)
             {
-                --rps_req_pending;
+                --get_controller_client()->rps_req_inflight;
             }
         }
     }
@@ -1853,6 +1916,82 @@ void base_client::on_prefered_host_up()
     }
 }
 
+void base_client::cluster_on_connected()
+{
+    get_controller_client()->start_request_delay_execution_timer();
+
+    if (get_controller_client()->rps_mode() &&
+        (0 == std::chrono::duration_cast<std::chrono::microseconds>
+         (get_controller_client()->rps_duration_started.time_since_epoch()).count()))
+    {
+        get_controller_client()->start_rps_timer();
+        get_controller_client()->rps_duration_started = std::chrono::steady_clock::now();
+    }
+
+    if (get_controller_client()->rps_mode())
+    {
+        if (get_controller_client()->rps_req_pending)
+        {
+            assert(get_number_of_request_left());
+
+            ++get_controller_client()->rps_req_inflight;
+            --get_controller_client()->rps_req_pending;
+
+            get_controller_client()->submit_request();
+        }
+    }
+    else if (!get_controller_client()->config->timing_script)
+    {
+
+        auto max_concurrent_streams =
+            get_controller_client()->dest_clients[PROTO_HTTP1].size() ?
+            1 : get_controller_client()->config->max_concurrent_streams;
+
+        auto nreq = get_controller_client()->config->is_timing_based_mode()
+                    ? std::max(get_number_of_request_left(), max_concurrent_streams)
+                    : std::min(get_number_of_request_left(), max_concurrent_streams);
+
+        for (; nreq > 0; --nreq)
+        {
+            if (get_controller_client()->submit_request() != 0)
+            {
+                break;
+            }
+        }
+    }
+    else
+    {
+        auto start = get_controller_client()->reqidx ? get_controller_client()->config->timings[get_controller_client()->reqidx
+                                                                                                - 1] : 0.0;
+        double duration =
+            get_controller_client()->config->timings[get_controller_client()->reqidx] - start;
+
+        while (duration < 1e-9)
+        {
+            if (get_controller_client()->submit_request() != 0)
+            {
+                break;
+            }
+            duration = get_controller_client()->config->timings[get_controller_client()->reqidx];
+            if (get_controller_client()->reqidx == 0)
+            {
+                // if reqidx wraps around back to 0, we uses up all lines and
+                // should break
+                break;
+            }
+        }
+
+        if (duration >= 1e-9)
+        {
+            // double check since we may have break due to reqidx wraps
+            // around back to 0
+            get_controller_client()->start_timing_script_request_timeout_timer(duration);
+        }
+    }
+    // not needed any more, as signal_write is called by submit_request
+    // get_controller_client()->signal_write();
+}
+
 int base_client::connection_made()
 {
     stop_connect_timeout_timer();
@@ -1873,84 +2012,20 @@ int base_client::connection_made()
 
     update_this_in_dest_client_map();
 
-    if (parent_client)
+    start_stream_timeout_timer();
+
+    if (!is_controller_client())
     {
         while (requests_to_submit.size())
         {
             // re-push to parent to be scheduled immediately
             parent_client->requests_to_submit.push_front(std::move(requests_to_submit.back()));
             requests_to_submit.pop_back();
-            if (!rps_mode())
-            {
-                if (parent_client->submit_request() != 0)
-                {
-                    break;
-                }
-            }
-        }
-        return 0;
-    }
-
-    start_request_delay_execution_timer();
-
-    if (rps_mode())
-    {
-        start_rps_timer();
-        rps_duration_started = std::chrono::steady_clock::now();
-    }
-
-    start_stream_timeout_timer();
-
-    if (rps_mode())
-    {
-        assert(req_left);
-
-        ++rps_req_inflight;
-
-        submit_request();
-    }
-    else if (!config->timing_script)
-    {
-        auto nreq = config->is_timing_based_mode()
-                    ? std::max(req_left, session->max_concurrent_streams())
-                    : std::min(req_left, session->max_concurrent_streams());
-
-        for (; nreq > 0; --nreq)
-        {
-            if (submit_request() != 0)
-            {
-                break;
-            }
         }
     }
-    else
-    {
 
-        double duration = config->timings[reqidx];
+    cluster_on_connected();
 
-        while (duration < 1e-9)
-        {
-            if (submit_request() != 0)
-            {
-                break;
-            }
-            duration = config->timings[reqidx];
-            if (reqidx == 0)
-            {
-                // if reqidx wraps around back to 0, we uses up all lines and
-                // should break
-                break;
-            }
-        }
-
-        if (duration >= 1e-9)
-        {
-            // double check since we may have break due to reqidx wraps
-            // around back to 0
-            start_timing_script_request_timeout_timer(duration);
-        }
-    }
-    signal_write();
     std::cerr << "===============connected to " << authority << "===============" << std::endl;
     if (authority != preferred_authority &&
         config->json_config_schema.connect_back_to_preferred_host &&
@@ -2128,21 +2203,19 @@ Stats& base_client::get_stats()
 
 base_client* base_client::get_controller_client()
 {
-    return parent_client.get();
-}
-
-void base_client::set_controller_client(base_client* controller)
-{
-    auto iter = worker->managed_clients.find(controller);
-    if (iter != worker->managed_clients.end())
+    if (parent_client)
     {
-        parent_client = iter->second;
+        return parent_client.get();
+    }
+    else
+    {
+        return this;
     }
 }
 
 size_t& base_client::get_current_req_index()
 {
-    return reqidx;
+    return get_controller_client()->reqidx;
 }
 
 std::map<int64_t, Request_Data>& base_client::requests_waiting_for_response()
@@ -2158,9 +2231,10 @@ void base_client::set_final(bool val)
 {
     final = val;
 }
-size_t base_client::get_req_left()
+
+bool base_client::is_disconnected()
 {
-    return req_left;
+    return (CLIENT_IDLE == state);
 }
 
 base_client* base_client::find_or_create_dest_client(Request_Data& request_to_send)
@@ -2187,6 +2261,11 @@ base_client* base_client::find_or_create_dest_client(Request_Data& request_to_se
         }
         else
         {
+            if (it->second->is_disconnected())
+            {
+                assert(it->second->get_proto_type() == proto);
+                it->second->connect_to_host(*request_to_send.schema, *request_to_send.authority);
+            }
             return it->second;
         }
     }
@@ -2196,6 +2275,10 @@ base_client* base_client::find_or_create_dest_client(Request_Data& request_to_se
     }
 }
 
+PROTO_TYPE base_client::get_proto_type()
+{
+    return proto_type;
+}
 
 bool base_client::is_controller_client()
 {
@@ -2405,7 +2488,7 @@ void base_client::update_content_length(Request_Data& data)
 
 int base_client::submit_request()
 {
-    if (is_null_destination(*config) && requests_to_submit.empty())
+    if (requests_to_submit.empty() && request_template_unavailable(*config))
     {
         return 0;
     }
@@ -2415,7 +2498,16 @@ int base_client::submit_request()
         return parent_client->submit_request();
     }
 
-    if (session->max_concurrent_streams() <= get_total_pending_streams())
+    auto max_concurrent_streams =
+        get_controller_client()->dest_clients[PROTO_HTTP1].size() ?
+        1 : get_controller_client()->config->max_concurrent_streams;
+
+    if (get_total_pending_streams() >= max_concurrent_streams)
+    {
+        return -1;
+    }
+
+    if (get_number_of_request_left() <= 0)
     {
         return -1;
     }
@@ -2454,7 +2546,7 @@ int base_client::submit_request()
 
         if (retCode != 0)
         {
-            destination_client->process_request_failure(retCode);
+            destination_client->process_submit_request_failure(retCode);
             return retCode;
         }
 
@@ -2464,26 +2556,27 @@ int base_client::submit_request()
         {
             return 0;
         }
-        if (is_controller_client())
+
+        ++worker->stats.req_started;
+        ++destination_client->req_started;
+        ++destination_client->req_inflight;
+        ++get_controller_client()->req_inflight_of_all_clients;
+        if (!worker->config->is_timing_based_mode())
         {
-            ++worker->stats.req_started;
-            ++req_started;
-            ++req_inflight;
-            if (!worker->config->is_timing_based_mode())
-            {
-                --req_left;
-            }
-            if (scenario_index < worker->scenario_stats.size() &&
-                request_index < worker->scenario_stats[scenario_index].size())
-            {
-                ++worker->scenario_stats[scenario_index][request_index]->req_started;
-            }
+            dec_number_of_request_left();
         }
+
+        if (scenario_index < worker->scenario_stats.size() &&
+            request_index < worker->scenario_stats[scenario_index].size())
+        {
+            ++worker->scenario_stats[scenario_index][request_index]->req_started;
+        }
+
         // if an active timeout is set and this is the last request to be submitted
         // on this connection, start the active timeout.
-        if (config->conn_active_timeout > 0. && req_left == 0 && is_controller_client())
+        if (config->conn_active_timeout > 0. && get_number_of_request_left() == 0 && is_controller_client())
         {
-            for (auto& dest_client_with_same_proto_version: dest_clients)  // "this" is also in dest_clients
+            for (auto& dest_client_with_same_proto_version : dest_clients) // "this" is also in dest_clients
             {
                 for (auto& client : dest_client_with_same_proto_version.second)
                 {
@@ -2496,15 +2589,12 @@ int base_client::submit_request()
     return 0;
 }
 
-void base_client::process_request_failure(int errCode)
+void base_client::process_submit_request_failure(int errCode)
 {
     if (worker->current_phase != Phase::MAIN_DURATION)
     {
         return;
     }
-
-    worker->stats.req_failed += req_left;
-    worker->stats.req_error += req_left;
 
     if (MAX_STREAM_TO_BE_EXHAUSTED == errCode)
     {
@@ -2515,7 +2605,12 @@ void base_client::process_request_failure(int errCode)
 
     if (!should_reconnect_on_disconnect())
     {
-        req_left = 0;
+        if (is_controller_client())
+        {
+            worker->stats.req_failed += req_left;
+            worker->stats.req_error += req_left;
+            req_left = 0;
+        }
     }
 
     if (streams.size() == 0)
@@ -2559,6 +2654,24 @@ void base_client::print_app_info()
 
 int base_client::select_protocol_and_allocate_session()
 {
+    auto allocate_session_and_set_selected_non_tls_proto = [this](uint8_t proto)
+    {
+        switch (proto)
+        {
+            case Config::PROTO_HTTP2:
+                session = std::make_unique<Http2Session>(this);
+                selected_proto = NGHTTP2_CLEARTEXT_PROTO_VERSION_ID;
+                break;
+            case Config::PROTO_HTTP1_1:
+                session = std::make_unique<Http1Session>(this);
+                selected_proto = NGHTTP2_H1_1.str();
+                break;
+            default:
+                // unreachable
+                assert(0);
+        }
+    };
+
     if (ssl)
     {
         report_tls_info();
@@ -2605,21 +2718,41 @@ int base_client::select_protocol_and_allocate_session()
         }
         else
         {
-            std::cerr << "No protocol negotiated. Fallback behaviour may be activated"
-                      << std::endl;
-
-            for (const auto& proto : config->npn_list)
+            auto proto = config->no_tls_proto;
+            if (PROTO_TYPE::PROTO_UNSPECIFIED != proto_type)
             {
-                if (util::streq(NGHTTP2_H1_1_ALPN, StringRef {proto}))
+                if (proto_type == PROTO_TYPE::PROTO_HTTP2)
                 {
-                    std::cerr
-                            << "Server does not support NPN/ALPN. Falling back to HTTP/1.1."
-                            << std::endl;
-                    session = std::make_unique<Http1Session>(this);
-                    selected_proto = NGHTTP2_H1_1.str();
-                    break;
+                    proto = h2load::Config::PROTO_HTTP2;
+                }
+                else if (proto_type == PROTO_TYPE::PROTO_HTTP1)
+                {
+                    proto = h2load::Config::PROTO_HTTP1_1;
+                }
+                else
+                {
+                    std::cerr << "http3 requested, " << authority << " does not support TLS, fallback to http/1.1" << std::endl;
+                    proto = h2load::Config::PROTO_HTTP1_1;
                 }
             }
+            else
+            {
+                std::cerr << "No protocol negotiated. Fallback behaviour may be activated"
+                          << std::endl;
+
+                for (const auto& protocol : config->npn_list)
+                {
+                    if (util::streq(NGHTTP2_H1_1_ALPN, StringRef {protocol}))
+                    {
+                        std::cerr
+                                << "Server does not support NPN/ALPN. Falling back to HTTP/1.1."
+                                << std::endl;
+                        proto = h2load::Config::PROTO_HTTP1_1;
+                        break;
+                    }
+                }
+            }
+            allocate_session_and_set_selected_non_tls_proto(proto);
         }
 
         if (!selected_proto.empty())
@@ -2655,24 +2788,11 @@ int base_client::select_protocol_and_allocate_session()
             }
             else
             {
-                std::cerr<<"http3 requested, "<<authority<<" does not support TLS, fallback to http/1.1"<<std::endl;
+                std::cerr << "http3 requested, " << authority << " does not support TLS, fallback to http/1.1" << std::endl;
                 proto = h2load::Config::PROTO_HTTP1_1;
             }
         }
-        switch (proto)
-        {
-            case Config::PROTO_HTTP2:
-                session = std::make_unique<Http2Session>(this);
-                selected_proto = NGHTTP2_CLEARTEXT_PROTO_VERSION_ID;
-                break;
-            case Config::PROTO_HTTP1_1:
-                session = std::make_unique<Http1Session>(this);
-                selected_proto = NGHTTP2_H1_1.str();
-                break;
-            default:
-                // unreachable
-                assert(0);
-        }
+        allocate_session_and_set_selected_non_tls_proto(proto);
         print_app_info();
     }
 
@@ -2922,6 +3042,15 @@ std::string base_client::assemble_string(const String_With_Variables_In_Between&
     }
     result.append(source.string_segments.back());
     return result;
+}
+
+size_t base_client::get_number_of_request_left()
+{
+    return get_controller_client()->req_left;
+}
+void base_client::dec_number_of_request_left()
+{
+    --get_controller_client()->req_left;
 }
 
 #ifdef ENABLE_HTTP3
@@ -3257,11 +3386,13 @@ int base_client::quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
     {
         if (local_addr->sa_family == AF_INET)
         {
-            tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((struct sockaddr_in*)local_addr)->sin_port)) + ".log";
+            tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((
+                                                                                                                struct sockaddr_in*)local_addr)->sin_port)) + ".log";
         }
         else
         {
-            tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((struct sockaddr_in6*)local_addr)->sin6_port)) + ".log";
+            tls_keylog_file_name = config->json_config_schema.tls_keylog_file + "_" + std::to_string(ntohs(((
+                                                                                                                struct sockaddr_in6*)local_addr)->sin6_port)) + ".log";
         }
         std::remove(tls_keylog_file_name.c_str());
         SSL_set_ex_data(ssl, SSL_EXT_DATA_INDEX_KEYLOG_FILE, (void*)tls_keylog_file_name.c_str());
@@ -3408,7 +3539,7 @@ void base_client::quic_free()
         quic.conn = nullptr;
         if (config->verbose)
         {
-            std::cerr << __FUNCTION__ << ", timestamp:"<<current_timestamp_nanoseconds() << std::endl;
+            std::cerr << __FUNCTION__ << ", timestamp:" << current_timestamp_nanoseconds() << std::endl;
         }
     }
     if (quic.qlog_file != nullptr)

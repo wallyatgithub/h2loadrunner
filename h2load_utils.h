@@ -90,8 +90,8 @@ int client_select_next_proto_cb(SSL* ssl, unsigned char** out,
                                 unsigned int inlen, void* arg);
 
 int client_select_next_proto_cb_http3(SSL* ssl, unsigned char** out,
-                                unsigned char* outlen, const unsigned char* in,
-                                unsigned int inlen, void* arg);
+                                      unsigned char* outlen, const unsigned char* in,
+                                      unsigned int inlen, void* arg);
 
 #endif // !OPENSSL_NO_NEXTPROTONEG
 
@@ -199,7 +199,7 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, h2load::Config& config, const std::string& 
 
 bool is_it_an_ipv6_address(const std::string& address);
 
-bool is_null_destination(h2load::Config& config);
+bool request_template_unavailable(h2load::Config& config);
 
 void process_delayed_scenario(h2load::Config& config);
 
@@ -227,6 +227,7 @@ bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenari
 
 bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::Config& config_out);
 
-void parse_uri_and_populate_fields(const std::string& uri, std::string& schema, std::string& authority, std::string& path);
+void parse_uri_and_populate_fields(const std::string& uri, std::string& schema, std::string& authority,
+                                   std::string& path);
 
 #endif
