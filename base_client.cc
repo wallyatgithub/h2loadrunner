@@ -824,6 +824,11 @@ void base_client::process_abandoned_streams()
 
 void base_client::cleanup_unsent_requests(bool fail_all)
 {
+    if (requests_to_submit.empty())
+    {
+        get_controller_client()->disconnected_event_on_controller(this);
+        return;
+    }
     while (requests_to_submit.size())
     {
         auto req = std::move(requests_to_submit.front());
@@ -977,10 +982,6 @@ void base_client::cleanup_due_to_disconnect()
         auto iter = streams.begin();
         on_stream_close(iter->first, false);
         fail_one_req_done = true;
-    }
-    if (!fail_one_req_done && requests_to_submit.empty())
-    {
-        get_controller_client()->disconnected_event_on_controller(this);
     }
 
     if (!conn_normal_close_restart_to_be_done)
