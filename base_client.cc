@@ -826,17 +826,9 @@ void base_client::cleanup_unsent_requests(bool fail_all)
 {
     while (requests_to_submit.size())
     {
-        size_t stream_id = 0;
         auto req = std::move(requests_to_submit.front());
         requests_to_submit.pop_front();
-        if (req->request_sent_callback)
-        {
-            req->request_sent_callback(-1, this);
-        }
-        on_request_start(stream_id, req);
-        auto req_stat = get_req_stat(stream_id);
-        record_request_time(req_stat);
-        on_stream_close(stream_id, false);
+        early_fail_of_request(req, this);
         if (!fail_all)
         {
             break;
@@ -979,10 +971,16 @@ void base_client::cleanup_due_to_disconnect()
 
     call_connected_callbacks(false);
 
+    bool fail_one_req_done = false;
     while (streams.size())
     {
         auto iter = streams.begin();
         on_stream_close(iter->first, false);
+        fail_one_req_done = true;
+    }
+    if (!fail_one_req_done && requests_to_submit.empty())
+    {
+        get_controller_client()->disconnected_event_on_controller(this);
     }
 
     if (!conn_normal_close_restart_to_be_done)
@@ -1936,6 +1934,58 @@ void base_client::on_prefered_host_up()
     }
 }
 
+void base_client::early_fail_of_request(std::unique_ptr<Request_Response_Data>& req, base_client* client)
+{
+    if (req->request_sent_callback)
+    {
+        req->request_sent_callback(-1, client);
+    }
+    size_t stream_id = 0;
+    on_request_start(stream_id, req);
+    auto req_stat = get_req_stat(stream_id);
+    record_request_time(req_stat);
+    on_stream_close(stream_id, false);
+}
+
+// TODO: optimize the design
+void base_client::disconnected_event_on_controller(base_client* disconnected_client)
+{
+    if (!disconnected_client)
+    {
+        return;
+    }
+    if (!is_controller_client())
+    {
+        return get_controller_client()->disconnected_event_on_controller(disconnected_client);
+    }
+    decltype(requests_to_submit) temp;
+    while (requests_to_submit.size())
+    {
+        auto req = std::move(requests_to_submit.front());
+        requests_to_submit.pop_front();
+        if (*req->schema == disconnected_client->schema &&
+            *req->authority == disconnected_client->authority &&
+            (req->proto_type == disconnected_client->proto_type || req->proto_type == PROTO_UNSPECIFIED))
+        {
+            early_fail_of_request(req, disconnected_client);
+            break;
+        }
+        else
+        {
+            temp.push_back(std::move(req));
+        }
+    }
+    while (temp.size())
+    {
+        auto req = std::move(temp.back());
+        temp.pop_back();
+        requests_to_submit.push_front(std::move(req));
+    }
+}
+
+
+
+// TODO: consider submit_request only on the client that is just connected
 void base_client::connected_event_on_controller()
 {
     get_controller_client()->start_request_delay_execution_timer();

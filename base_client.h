@@ -137,7 +137,6 @@ public:
     void on_status_code(int64_t stream_id, uint16_t status);
     bool is_final();
     void set_final(bool val);
-    void connected_event_on_controller();
     Config* get_config();
     Stats& get_stats();
 
@@ -232,6 +231,12 @@ public:
     void return_unsent_request_to_controller(bool immediate = true);
 
     size_t get_max_concurrent_stream();
+
+    void connected_event_on_controller();
+
+    void disconnected_event_on_controller(base_client* disconnected_client);
+
+    void early_fail_of_request(std::unique_ptr<Request_Response_Data>& req, base_client* client);
 
 #endif // ENABLE_HTTP3
 
