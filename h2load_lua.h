@@ -74,7 +74,7 @@ int _send_response(lua_State* L, bool updatePayload);
 
 
 int _send_http_request(lua_State* L, Request_Preprocessor request_preprocessor,
-                       std::function<void(int32_t, h2load::base_client*)> request_sent_callback);
+                       std::function<void(int64_t, h2load::base_client*)> request_sent_callback);
 
 void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load::Config& config);
 

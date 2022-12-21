@@ -366,6 +366,10 @@
               }
             }
           },
+          "HAR-file": {
+            "description": "path to an HAR file; the content of the HAR file will be loaded and transformed to a list of requests; if this field is given, the input of 'Requests' will be ignored",
+            "type": "string"
+          },
           "Requests": {
             "description": "Array of requests, each request has URI, method, optional payload, optional addtional headers, and optionally an lua script for advanced users to customize the request",
             "type": "array",

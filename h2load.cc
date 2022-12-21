@@ -148,10 +148,16 @@ Stats::Stats(size_t req_todo, size_t nclients)
       status()
 {}
 
-Stream::Stream(size_t scenario_id, size_t request_id, bool stats_eligible)
-    : req_stat(scenario_id, request_id),
+Stream::Stream(bool stats_eligible, std::unique_ptr<Request_Response_Data>& rr_data)
+    : req_stat(rr_data ? rr_data->scenario_index : 0, rr_data ? rr_data->curr_request_idx : 0),
       status_success(-1),
-      statistics_eligible(stats_eligible) {}
+      statistics_eligible(stats_eligible)
+      {
+        if (rr_data)
+        {
+            request_response = std::move(rr_data);
+        }
+      }
 
 namespace
 {
@@ -385,8 +391,13 @@ Options:
   --rps-input-file=<PATH>
               A file specifying rps number.  It is useful when dynamic
               change of rps is needed.
-  --config-file=<PATH>
+  --config-file=<PATH-To-Json-Config-File>
               A JSON file specifying the configurations needed.
+  --transform-har=<PATH-To-HAR-File>
+              Transform an HAR file to h2loadrunner Json  config file.
+  --run-har=<PATH-To-HAR-File>
+              Load an HAR file, transform to  h2loadrunner Json  based
+              config file, and then run with this config file.
   --script=<PATH>
               A Lua script file to load and run. Configuration related
               to host, Scenarioes in above config-file will be ignored
@@ -890,8 +901,7 @@ int main(int argc, char** argv)
                                                std::istreambuf_iterator<char>());
                         h2load::Config config_from_har;
                         convert_har_to_h2loadrunner_config(har_conent, config_from_har);
-                        std::cerr << "HAR transformed to h2loadrunner config:" << std::endl << staticjson::to_pretty_json_string(
-                                      config_from_har.json_config_schema)
+                        std::cerr << staticjson::to_pretty_json_string(config_from_har.json_config_schema)
                                   << std::endl;
                         exit(0);
 
@@ -1475,7 +1485,6 @@ int main(int argc, char** argv)
     for (const auto& w : workers)
     {
         const auto& s = w->stats;
-
         stats.req_todo += s.req_todo;
         stats.req_started += s.req_started;
         stats.req_done += s.req_done;

@@ -82,7 +82,7 @@ base_worker::~base_worker()
 void base_worker::stop_all_clients()
 {
     /*
-        for (auto client : clients_to_collect_stats)
+        for (auto client : clients_in_timing_mode)
         {
             if (client && client->session)
             {
@@ -117,13 +117,13 @@ void base_worker::free_client(base_client* deleted_client)
     {
         return;
     }
-    for (size_t index = 0; index < clients_to_collect_stats.size(); index++)
+    for (size_t index = 0; index < clients_in_timing_mode.size(); index++)
     {
-        if (clients_to_collect_stats[index] == deleted_client)
+        if (clients_in_timing_mode[index] == deleted_client)
         {
-            clients_to_collect_stats[index]->req_todo = clients_to_collect_stats[index]->req_done;
-            stats.req_todo += clients_to_collect_stats[index]->req_todo;
-            clients_to_collect_stats[index] = NULL;
+            clients_in_timing_mode[index]->req_todo = clients_in_timing_mode[index]->req_done;
+            stats.req_todo += clients_in_timing_mode[index]->req_todo;
+            clients_in_timing_mode[index] = NULL;
             break;
         }
     }
@@ -200,10 +200,6 @@ void base_worker::rate_period_timeout_handler()
         }
         else
         {
-            if (config->is_timing_based_mode())
-            {
-                clients_to_collect_stats.push_back(client.get());
-            }
             check_in_client(client);
         }
         report_rate_progress();
@@ -212,7 +208,7 @@ void base_worker::rate_period_timeout_handler()
     {
         stop_rate_mode_period_timer();
         // To check whether all created clients are pushed correctly
-        if (config->is_timing_based_mode() && nclients != clients_to_collect_stats.size())
+        if (config->is_timing_based_mode() && nclients != clients_in_timing_mode.size())
         {
             std::cerr << "client not started successfully, exit" << id << std::endl;
             exit(EXIT_FAILURE);
@@ -248,7 +244,7 @@ void base_worker::warmup_timeout_handler()
     assert(stats.req_started == 0);
     assert(stats.req_done == 0);
 
-    for (auto client : clients_to_collect_stats)
+    for (auto client : clients_in_timing_mode)
     {
         if (client)
         {
@@ -325,6 +321,10 @@ void base_worker::report_rate_progress()
 void base_worker::check_in_client(std::shared_ptr<base_client> client)
 {
     managed_clients[client.get()] = client;
+    if (config->is_timing_based_mode())
+    {
+        clients_in_timing_mode.push_back(client.get());
+    }
 }
 
 void base_worker::check_out_client(base_client* client)

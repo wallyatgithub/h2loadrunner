@@ -9,6 +9,9 @@
 namespace h2load
 {
 
+struct Request_Response_Data;
+
+
 struct RequestStat
 {
     // time point when request was sent
@@ -37,10 +40,10 @@ struct RequestStat
 struct ClientStat
 {
     // time client started (i.e., first connect starts)
-    std::chrono::steady_clock::time_point client_start_time;
+    std::chrono::steady_clock::time_point client_start_time = std::chrono::steady_clock::time_point();
     // time client end (i.e., client somehow processed all requests it
     // is responsible for, and disconnected)
-    std::chrono::steady_clock::time_point client_end_time;
+    std::chrono::steady_clock::time_point client_end_time = std::chrono::steady_clock::time_point();
     // The number of requests completed successful, but not necessarily
     // means successful HTTP status code.
     size_t req_success;
@@ -49,16 +52,32 @@ struct ClientStat
     // is made.
 
     // time connect starts
-    std::chrono::steady_clock::time_point connect_start_time;
+    std::chrono::steady_clock::time_point connect_start_time = std::chrono::steady_clock::time_point();
     // time to connect
-    std::chrono::steady_clock::time_point connect_time;
+    std::chrono::steady_clock::time_point connect_time = std::chrono::steady_clock::time_point();
     // time to first byte (TTFB)
-    std::chrono::steady_clock::time_point ttfb;
+    std::chrono::steady_clock::time_point ttfb = std::chrono::steady_clock::time_point();
 
     ClientStat()
     {
         req_success = 0;
     }
+
+    friend std::ostream& operator<<(std::ostream& o, const ClientStat& stat)
+    {
+        auto now = std::chrono::steady_clock::now();
+        o << "ClientStats: "<<std::endl
+          <<"{ " << std::endl
+          << "  client_start_time: " << std::chrono::duration_cast<std::chrono::milliseconds>(stat.client_start_time - now).count() << std::endl
+          << "  client_end_time: " << std::chrono::duration_cast<std::chrono::milliseconds>(stat.client_end_time - now).count() << std::endl
+          << "  connect_start_time: " << std::chrono::duration_cast<std::chrono::milliseconds>(stat.connect_start_time - now).count() << std::endl
+          << "  connect_time: " << std::chrono::duration_cast<std::chrono::milliseconds>(stat.connect_time - now).count() << std::endl
+          << "  time to first byte: " << std::chrono::duration_cast<std::chrono::milliseconds>(stat.ttfb - now).count() << std::endl
+          << "  req_success: " << stat.req_success << std::endl
+          << "}" << std::endl;
+        return o;
+    }
+
 };
 
 struct SDStat
@@ -125,6 +144,36 @@ struct Stats
     size_t udp_dgram_recv = 0;
     // The number of UDP datagrams sent.
     size_t udp_dgram_sent = 0;
+
+    friend std::ostream& operator<<(std::ostream& o, const Stats& stat)
+    {
+        o << "Stats: "<<std::endl
+          <<"{ " << std::endl
+          << "  req_todo: " << stat.req_todo << std::endl
+          << "  req_started: " << stat.req_started << std::endl
+          << "  req_done: " << stat.req_done << std::endl
+          << "  req_success: " << stat.req_success << std::endl
+          << "  req_status_success: " << stat.req_status_success << std::endl
+          << "  req_failed: " << stat.req_failed << std::endl
+          << "  req_error: " << stat.req_error << std::endl
+          << "  req_timedout: " << stat.req_timedout << std::endl
+          << "  bytes_total: " << stat.bytes_total << std::endl
+          << "  bytes_head: " << stat.bytes_head << std::endl
+          << "  bytes_head_decomp: " << stat.bytes_head_decomp << std::endl
+          << "  bytes_body: " << stat.bytes_body << std::endl
+          << "  udp_dgram_recv: " << stat.udp_dgram_recv << std::endl
+          << "  udp_dgram_sent: " << stat.udp_dgram_sent << std::endl;
+        for (size_t i = 1; i < stat.status.size(); i++)
+        {
+            o << "  " << i <<"xx status code: " << stat.status[i] <<std::endl;
+        }
+        for (size_t i = 0; i < stat.client_stats.size(); i++)
+        {
+            o << "  client: " << i <<", req_success: " << stat.client_stats[i].req_success <<std::endl;
+        }
+        o <<"}" << std::endl;
+        return o;
+    }
 };
 
 
@@ -133,7 +182,8 @@ struct Stream
     RequestStat req_stat;
     int status_success;
     bool statistics_eligible;
-    Stream(size_t scenario_id, size_t request_id, bool stat_eligible);
+    std::unique_ptr<Request_Response_Data> request_response;
+    Stream(bool stat_eligible, std::unique_ptr<Request_Response_Data>& rr_data);
 };
 
 

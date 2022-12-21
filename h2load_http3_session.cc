@@ -108,10 +108,9 @@ void Http3Session::_read_data(int64_t stream_id, nghttp3_vec* vec, size_t veccnt
     assert(veccnt > 0);
     auto config = client_->worker->config;
 
-    auto& request_map = client_->requests_waiting_for_response();
-    auto request = request_map.find(stream_id);
-    assert(request != request_map.end());
-    std::string& stream_buffer = *(request->second.req_payload);
+    auto& request = client_->get_request_response_data(stream_id);
+    static std::string empty_str;
+    std::string& stream_buffer = request ? *(request->req_payload) : empty_str;
 
     if (config->verbose)
     {
@@ -588,7 +587,8 @@ int Http3Session::_submit_request()
     dr.read_data = h2load::_read_data;
 
     std::vector<nghttp2_nv> http2_nvs;
-    auto data = std::move(client_->get_request_to_submit());
+    auto ptr = std::move(client_->get_request_to_submit());
+    auto& data = *ptr;
     if (data.is_empty())
     {
         return -1;
@@ -646,8 +646,7 @@ int Http3Session::_submit_request()
     }
 
     curr_stream_id = stream_id;
-    client_->requests_waiting_for_response().insert(std::make_pair(stream_id, std::move(data)));
-    client_->on_request_start(stream_id);
+    client_->on_request_start(stream_id, ptr);
     auto req_stat = client_->get_req_stat(stream_id);
     assert(req_stat);
     client_->record_request_time(req_stat);

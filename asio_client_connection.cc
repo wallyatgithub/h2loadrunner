@@ -328,7 +328,7 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
     }
     if (config->verbose)
     {
-        std::cerr << __FUNCTION__ << ":" << dest_authority << std::endl;
+        std::cerr << __FUNCTION__ << ":" << dest_authority <<", proto: "<< proto_type<<std::endl;
     }
 
     std::string host;
@@ -463,7 +463,7 @@ void asio_client_connection::start_ping_watcher()
 
 void asio_client_connection::restart_rps_timer()
 {
-    rps_timer.expires_from_now(boost::posix_time::millisec(std::max(10, 1000 / (int)rps)));
+    rps_timer.expires_from_now(boost::posix_time::millisec(std::max(uint64_t(10), uint64_t(1000.0 / rps))));
     rps_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -737,6 +737,8 @@ void asio_client_connection::on_connected_event(const boost::system::error_code&
         }
         else
         {
+            bool fail_all = true;
+            cleanup_unsent_requests(fail_all);
             handle_connection_error();
         }
     }

@@ -96,7 +96,7 @@ struct Scenario_Data_Per_User
 
 };
 
-struct Request_Data
+struct Request_Response_Data
 {
     std::string* schema;
     std::string* authority;
@@ -116,7 +116,7 @@ struct Request_Data
     size_t curr_request_idx;
     size_t scenario_index;
     std::vector<std::string> string_collection;
-    std::function<void(int32_t, h2load::base_client*)> request_sent_callback;
+    std::function<void(int64_t, h2load::base_client*)> request_sent_callback;
     uint32_t stream_timeout_in_ms;
     std::shared_ptr<Scenario_Data_Per_User> scenario_data_per_user;
 
@@ -137,61 +137,72 @@ struct Request_Data
         proto_type = PROTO_UNSPECIFIED;
         string_collection.reserve(12); // (path, authority, method, schema, payload, xx) * 2
     }
-    explicit Request_Data(const std::vector<uint64_t>& u_ids)
+    explicit Request_Response_Data(const std::vector<uint64_t>& u_ids)
     {
         init();
         scenario_data_per_user = std::make_shared<Scenario_Data_Per_User>(u_ids);
     }
 
-    explicit Request_Data(std::shared_ptr<Scenario_Data_Per_User>& scenario_data_from_sibling)
+    explicit Request_Response_Data(std::shared_ptr<Scenario_Data_Per_User>& scenario_data_from_sibling)
     {
         init();
         scenario_data_per_user = scenario_data_from_sibling;
     }
 
-    explicit Request_Data(std::shared_ptr<Scenario_Data_Per_User>&& scenario_data_from_sibling)
+    explicit Request_Response_Data(std::shared_ptr<Scenario_Data_Per_User>&& scenario_data_from_sibling)
     {
         init();
         scenario_data_per_user = std::move(scenario_data_from_sibling);
     }
 
-    friend std::ostream& operator<<(std::ostream& o, const Request_Data& request_data)
+    ~Request_Response_Data()
     {
-        o << "Request_Data: { " << std::endl
-          << "scenario index: " << request_data.scenario_index << std::endl
-          << "request index: " << request_data.curr_request_idx << std::endl
-          << "schema:" << *request_data.schema << std::endl
-          << "authority:" << *request_data.authority << std::endl
-          << "req_payload:" << *request_data.req_payload << std::endl
-          << "path:" << *request_data.path << std::endl
-          << "method:" << *request_data.method << std::endl
-          << "scenario data:" << std::endl
-          << *request_data.scenario_data_per_user
+        if (request_sent_callback)
+        {
+            request_sent_callback(-1, nullptr);
+            auto dummy = std::move(request_sent_callback);
+        }
+    }
+
+    friend std::ostream& operator<<(std::ostream& o, const Request_Response_Data& request_data)
+    {
+        o << "Request_Response_Data:"
+          <<"{ " << std::endl
+          << "  scenario index: " << request_data.scenario_index << std::endl
+          << "  request index: " << request_data.curr_request_idx << std::endl
+          << "  schema:" << *request_data.schema << std::endl
+          << "  authority:" << *request_data.authority << std::endl
+          << "  req_payload:" << *request_data.req_payload << std::endl
+          << "  path:" << *request_data.path << std::endl
+          << "  method:" << *request_data.method << std::endl
+          << "  proto_type: " << request_data.proto_type << std::endl
+          << "  scenario data:" << std::endl
+          << "  " << *request_data.scenario_data_per_user
           << std::endl
-          << "expected_status_code:" << request_data.expected_status_code << std::endl
-          << "delay_before_executing_next:" << request_data.delay_before_executing_next << std::endl;
+          << "  expected_status_code:" << request_data.expected_status_code << std::endl
+          << "  delay_before_executing_next:" << request_data.delay_before_executing_next << std::endl;
 
         for (auto& it : * (request_data.req_headers_from_config))
         {
-            o << "request header name from template: " << it.first << ", header value: " << it.second << std::endl;
+            o << "  request header name from template: " << it.first << ", header value: " << it.second << std::endl;
         }
         for (auto& it : request_data.req_headers_of_individual)
         {
-            o << "updated request header name: " << it.first << ", header value: " << it.second << std::endl;
+            o << "  updated request header name: " << it.first << ", header value: " << it.second << std::endl;
         }
 
-        o << "response status code:" << request_data.status_code << std::endl;
-        o << "resp_payload:" << request_data.resp_payload << std::endl;
+        o << "  response status code:" << request_data.status_code << std::endl;
+        o << "  resp_payload:" << request_data.resp_payload << std::endl;
         for (auto& vit : request_data.resp_headers)
         {
             for (auto& it : vit)
             {
-                o << "response header name: " << it.first << ", header value: " << it.second << std::endl;
+                o << "  response header name: " << it.first << ", header value: " << it.second << std::endl;
             }
         }
         for (auto& it : request_data.scenario_data_per_user->saved_cookies)
         {
-            o << "cookie name: " << it.first << ", cookie content: " << it.second << std::endl;
+            o << "  cookie name: " << it.first << ", cookie content: " << it.second << std::endl;
         }
         o << "}" << std::endl;
         return o;
@@ -208,7 +219,10 @@ struct Request_Data
 
 };
 
-struct Scenario_Data_Per_Client
+static std::unique_ptr<Request_Response_Data> dummy_rr_data(nullptr);
+
+
+struct Variable_Data_Per_Client
 {
     uint64_t req_variable_value_start = 0;
     uint64_t req_variable_value_end = 0;
@@ -217,7 +231,7 @@ struct Scenario_Data_Per_Client
     std::vector<uint64_t> req_variable_values_end;
     std::vector<uint64_t> curr_req_variable_values;
 
-    explicit Scenario_Data_Per_Client(const std::vector<uint64_t>& range_start, const std::vector<uint64_t>& range_end,
+    explicit Variable_Data_Per_Client(const std::vector<uint64_t>& range_start, const std::vector<uint64_t>& range_end,
                                       const std::vector<uint64_t>& current_var):
         req_variable_values_start(range_start),
         req_variable_values_end(range_end),

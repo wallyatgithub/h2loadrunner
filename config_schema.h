@@ -485,6 +485,7 @@ public:
     Variable_Manager variable_manager; // content populated by post_process_json_config_schema
     // TODO:  refactor the next line
     size_t number_of_variables_from_value_pickers;  // set by post_process_json_config_schema
+    std::string har_file_name;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("name", &this->name);
@@ -500,6 +501,7 @@ public:
         h->add_property("user-variables-input-file", &this->user_variables_input_file, staticjson::Flags::Optional);
         h->add_property("range-based-variables", &this->range_based_variables, staticjson::Flags::Optional);
         h->add_property("two-dimensional-variables", &this->two_dim_variables, staticjson::Flags::Optional);
+        h->add_property("HAR-file", &this->har_file_name, staticjson::Flags::Optional);
         h->add_property("Requests", &this->requests);
     }
     explicit Scenario():
@@ -604,7 +606,7 @@ public:
         header_table_size(4096),
         encoder_header_table_size(4096),
         log_file(""),
-        statistics_interval(5),
+        statistics_interval(1),
         request_per_second(0),
         nreqs(0),
         stream_timeout_in_ms(5000),

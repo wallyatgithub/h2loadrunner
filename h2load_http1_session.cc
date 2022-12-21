@@ -112,7 +112,7 @@ int htp_msg_completecb(llhttp_t* htp)
         // create new connection and keep on doing the job.
         if (client->get_number_of_request_left())
         {
-            client->try_new_connection();
+            client->set_open_new_conn_needed();
         }
 
         return HPE_PAUSED;
@@ -354,7 +354,8 @@ int Http1Session::on_write()
 
 int Http1Session::_submit_request()
 {
-    auto data = std::move(client_->get_request_to_submit());
+    auto ptr = std::move(client_->get_request_to_submit());
+    auto& data = *ptr;
     if (data.is_empty())
     {
         return -1;
@@ -400,9 +401,7 @@ int Http1Session::_submit_request()
         std::cout << "sending headers:" << req << std::endl;
     }
 
-    client_->requests_waiting_for_response().emplace(std::make_pair(stream_req_counter_, std::move(data)));
-
-    client_->on_request_start(stream_req_counter_);
+    client_->on_request_start(stream_req_counter_, ptr);
 
     auto req_stat = client_->get_req_stat(stream_req_counter_);
 
@@ -432,12 +431,9 @@ int Http1Session::_on_write()
     {
         return 0;
     }
-    auto& request_map = client_->requests_waiting_for_response();
-    auto request = request_map.find(stream_req_counter_);
-    assert(request != request_map.end());
+    auto& request = client_->get_request_response_data(stream_req_counter_);
     static std::string empty_str;
-    auto it = request_map.find(stream_req_counter_);
-    std::string& stream_buffer = (it == request_map.end()) ? empty_str : *(it->second.req_payload);
+    std::string& stream_buffer = request ? *(request->req_payload) : empty_str;
 
     if (!stream_buffer.empty())
     {

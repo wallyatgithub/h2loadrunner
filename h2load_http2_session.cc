@@ -217,31 +217,30 @@ ssize_t buffer_read_callback(nghttp2_session* session, int32_t stream_id,
 {
     auto client = static_cast<base_client*>(user_data);
     auto config = client->get_config();
-    auto& request_map = client->requests_waiting_for_response();
-    auto request = request_map.find(stream_id);
-    assert(request != request_map.end());
-    std::string& stream_buffer = *(request->second.req_payload);
+    auto& request = client->get_request_response_data(stream_id);
+    static std::string empty_str;
+    std::string& stream_buffer = request ? *(request->req_payload) : empty_str;
 
     if (config->verbose)
     {
         std::cout << "sending data:" << stream_buffer << std::endl;
     }
 
-    if (request->second.req_payload_cursor < stream_buffer.size())
+    if (request && request->req_payload_cursor < stream_buffer.size())
     {
-        if (length >= (stream_buffer.size() - request->second.req_payload_cursor))
+        if (length >= (stream_buffer.size() - request->req_payload_cursor))
         {
-            memcpy(buf, (stream_buffer.c_str() + request->second.req_payload_cursor),
-                   (stream_buffer.size() - request->second.req_payload_cursor));
+            memcpy(buf, (stream_buffer.c_str() + request->req_payload_cursor),
+                   (stream_buffer.size() - request->req_payload_cursor));
             *data_flags |= NGHTTP2_DATA_FLAG_EOF;
-            size_t buf_size = (stream_buffer.size() - request->second.req_payload_cursor);
-            request->second.req_payload_cursor = stream_buffer.size();
+            size_t buf_size = (stream_buffer.size() - request->req_payload_cursor);
+            request->req_payload_cursor = stream_buffer.size();
             return buf_size;
         }
         else
         {
             memcpy(buf, stream_buffer.c_str(), length);
-            request->second.req_payload_cursor += length;
+            request->req_payload_cursor += length;
             return length;
         }
     }
@@ -449,7 +448,8 @@ int Http2Session::_submit_request()
     nghttp2_data_provider prd {{0}, buffer_read_callback};
 
     std::vector<nghttp2_nv> http2_nvs;
-    auto data = std::move(client_->get_request_to_submit());
+    auto ptr = std::move(client_->get_request_to_submit());
+    auto& data = *ptr;
     if (data.is_empty())
     {
         return -1;
@@ -507,8 +507,7 @@ int Http2Session::_submit_request()
     }
 
     curr_stream_id = stream_id;
-    client_->requests_waiting_for_response().emplace(std::make_pair(stream_id, std::move(data)));
-    client_->on_request_start(stream_id);
+    client_->on_request_start(stream_id, ptr);
     return 0;
 }
 

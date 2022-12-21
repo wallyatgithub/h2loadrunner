@@ -608,7 +608,7 @@ int send_http_request(lua_State* L)
         update_proto(headers, payload, orig_dst, proto);
     };
     enter_c_function(L);
-    auto request_sent = [L](int32_t stream_id, h2load::base_client * client)
+    auto request_sent = [L](int64_t stream_id, h2load::base_client * client)
     {
         if (stream_id && client)
         {
@@ -629,7 +629,7 @@ int send_http_request(lua_State* L)
 
 Request_Sent_cb await_response_request_sent_cb_generator(lua_State* L)
 {
-    return [L](int32_t stream_id, h2load::base_client * client)
+    return [L](int64_t stream_id, h2load::base_client * client)
     {
         if (stream_id > 0 && client)
         {
@@ -775,7 +775,7 @@ int await_response(lua_State* L)
 
 
 int _send_http_request(lua_State* L, Request_Preprocessor request_preprocessor,
-                       std::function<void(int32_t, h2load::base_client*)> request_sent_callback)
+                       std::function<void(int64_t, h2load::base_client*)> request_sent_callback)
 {
     auto argument_error = false;
     std::string payload;
@@ -879,21 +879,22 @@ int _send_http_request(lua_State* L, Request_Preprocessor request_preprocessor,
                 request_sent_callback(-1, nullptr);
                 return;
             }
-            h2load::Request_Data request_to_send(0);
-            request_to_send.request_sent_callback = request_sent_callback;
-            request_to_send.string_collection.emplace_back(payload);
-            request_to_send.req_payload = &(request_to_send.string_collection.back());
-            request_to_send.string_collection.emplace_back(method);
-            request_to_send.method = &(request_to_send.string_collection.back());
-            request_to_send.string_collection.emplace_back(path);
-            request_to_send.path = &(request_to_send.string_collection.back());
-            request_to_send.string_collection.emplace_back(authority);
-            request_to_send.authority = &(request_to_send.string_collection.back());
-            request_to_send.string_collection.emplace_back(schema);
-            request_to_send.schema = &(request_to_send.string_collection.back());
-            request_to_send.req_headers_of_individual = std::move(headers);
-            request_to_send.req_headers_from_config = &dummyHeaders;
-            request_to_send.stream_timeout_in_ms = timeout_interval_in_ms;
+            const static std::vector<uint64_t> u_ids(0);
+            auto request_to_send = std::make_unique<h2load::Request_Response_Data>(u_ids);
+            request_to_send->request_sent_callback = request_sent_callback;
+            request_to_send->string_collection.emplace_back(payload);
+            request_to_send->req_payload = &(request_to_send->string_collection.back());
+            request_to_send->string_collection.emplace_back(method);
+            request_to_send->method = &(request_to_send->string_collection.back());
+            request_to_send->string_collection.emplace_back(path);
+            request_to_send->path = &(request_to_send->string_collection.back());
+            request_to_send->string_collection.emplace_back(authority);
+            request_to_send->authority = &(request_to_send->string_collection.back());
+            request_to_send->string_collection.emplace_back(schema);
+            request_to_send->schema = &(request_to_send->string_collection.back());
+            request_to_send->req_headers_of_individual = std::move(headers);
+            request_to_send->req_headers_from_config = &dummyHeaders;
+            request_to_send->stream_timeout_in_ms = timeout_interval_in_ms;
             client->requests_to_submit.emplace_back(std::move(request_to_send));
             client->submit_request();
         };

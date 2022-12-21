@@ -436,7 +436,7 @@ void quic_pkt_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
 
 bool recorded(const std::chrono::steady_clock::time_point& t)
 {
-    return std::chrono::steady_clock::duration::zero() != t.time_since_epoch();
+    return std::chrono::steady_clock::time_point() != t;
 }
 
 std::string get_reqline(const char* uri, const http_parser_url& u)
@@ -1592,6 +1592,24 @@ void post_process_json_config_schema(h2load::Config& config)
 
     for (auto& scenario : config.json_config_schema.scenarios)
     {
+        if (scenario.har_file_name.size())
+        {
+            std::ifstream har_stream(scenario.har_file_name);
+            if (!har_stream)
+            {
+                std::cerr << "cannot read HAR file: " << scenario.har_file_name << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            std::string har_content((std::istreambuf_iterator<char>(har_stream)),
+                                      std::istreambuf_iterator<char>());
+            if (!convert_har_to_h2loadrunner_scenario(har_content, scenario))
+            {
+                std::cerr << "cannot parsing HAR file: " << scenario.har_file_name << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            continue;
+        }
+
         for (auto i = 0; i < scenario.requests.size(); i++)
         {
             auto& request = scenario.requests[i];
