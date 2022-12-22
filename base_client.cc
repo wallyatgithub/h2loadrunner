@@ -824,6 +824,10 @@ void base_client::process_abandoned_streams()
 
 void base_client::process_requests_to_submit_upon_error(bool fail_all)
 {
+    if (is_controller_client())
+    {
+        return;
+    }
     if (requests_to_submit.empty())
     {
         get_controller_client()->fail_one_request_of_client(this);
@@ -1784,7 +1788,7 @@ void base_client::on_rps_timer()
     }
     auto n = static_cast<size_t>(round(duration * config->rps));
     rps_req_pending = n;
-    time_point_of_last_rps_timer_expiry = now - d + std::chrono::duration<double>(static_cast<double>(n) / config->rps);
+    time_point_of_last_rps_timer_expiry = time_point_of_last_rps_timer_expiry + std::chrono::duration<double>(static_cast<double>(n) / config->rps);
 
     if (rps_req_pending == 0)
     {
@@ -1947,11 +1951,11 @@ void base_client::on_stream_close(int64_t stream_id, bool success, bool final)
         {
             get_controller_client()->submit_request();
         }
-        else if (get_controller_client()->rps_req_inflight)
+        else if (get_controller_client()->rps_req_pending)
         {
             if (get_controller_client()->submit_request() == 0)
             {
-                --get_controller_client()->rps_req_inflight;
+                --get_controller_client()->rps_req_pending;
             }
         }
     }
@@ -1992,9 +1996,9 @@ void base_client::early_fail_of_request(std::unique_ptr<Request_Response_Data>& 
         req->request_sent_callback(-1, client);
     }
     size_t stream_id = 0;
-    on_request_start(stream_id, req);
-    auto req_stat = get_req_stat(stream_id);
-    record_request_time(req_stat);
+    on_request_start(stream_id, req, false);
+    // auto req_stat = get_req_stat(stream_id);
+    // record_request_time(req_stat);
     on_stream_close(stream_id, false);
 }
 
@@ -2285,7 +2289,7 @@ void base_client::execute_request_sent_callback(Request_Response_Data& request, 
 }
 
 
-void base_client::on_request_start(int64_t stream_id, std::unique_ptr<Request_Response_Data>& rr_data)
+void base_client::on_request_start(int64_t stream_id, std::unique_ptr<Request_Response_Data>& rr_data, bool do_not_stat)
 {
     auto timeout_interval = 0;
     if (rr_data)
@@ -2301,7 +2305,7 @@ void base_client::on_request_start(int64_t stream_id, std::unique_ptr<Request_Re
         streams.erase(stream_id);
     }
     bool stats_eligible = (worker->current_phase == Phase::MAIN_DURATION
-                           || worker->current_phase == Phase::MAIN_DURATION_GRACEFUL_SHUTDOWN);
+                           || worker->current_phase == Phase::MAIN_DURATION_GRACEFUL_SHUTDOWN) && (!do_not_stat);
     streams.insert(std::make_pair(stream_id, Stream(stats_eligible, rr_data)));
     auto curr_timepoint = std::chrono::steady_clock::now();
     auto timeout_timepoint = curr_timepoint + std::chrono::milliseconds(timeout_interval);

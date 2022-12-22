@@ -132,7 +132,7 @@ public:
     void record_request_time(RequestStat* req_stat);
     const std::unique_ptr<Request_Response_Data>& get_request_response_data(int64_t stream_id);
     size_t& get_current_req_index();
-    void on_request_start(int64_t stream_id, std::unique_ptr<Request_Response_Data>& rr_data = dummy_rr_data);
+    void on_request_start(int64_t stream_id, std::unique_ptr<Request_Response_Data>& rr_data = dummy_rr_data, bool do_not_stat = false);
     std::unique_ptr<Request_Response_Data> get_request_to_submit();
     void on_status_code(int64_t stream_id, uint16_t status);
     bool is_final();
