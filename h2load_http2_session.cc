@@ -464,25 +464,29 @@ int Http2Session::_submit_request()
 
     for (auto& header : *data.req_headers_from_config)
     {
+    /*
+        if (reserved_headers.count(header.first))
+        {
+            continue;
+        }
+    */
         if (data.req_headers_of_individual.count(header.first))
         {
             continue;
         }
-        if (header.first == path_header || header.first == scheme_header || header.first == authority_header
-            || header.first == method_header)
-        {
-            continue;
-        }
+
         http2_nvs.emplace_back(http2::make_nv(header.first, header.second, false));
     }
 
     for (auto& header : data.req_headers_of_individual)
     {
-        if (header.first == path_header || header.first == scheme_header || header.first == authority_header
-            || header.first == method_header)
-        {
-            continue;
-        }
+        /*
+            if (reserved_headers.count(header.first))
+            {
+                continue;
+            }
+        */
+
         http2_nvs.emplace_back(http2::make_nv(header.first, header.second, false));
     }
 

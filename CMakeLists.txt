@@ -9,6 +9,8 @@ set(Boost_USE_STATIC_LIBS ON)
 
 #set (USE_LIBEV ON)
 
+add_definitions(-DOPENSSL_NO_NEXTPROTONEG=1)
+
 add_subdirectory(third-party)
 
 if (NOT DEFINED ENABLE_HTTP3)

@@ -698,6 +698,14 @@ int libev_client::tls_handshake()
 {
     ERR_clear_error();
 
+    std::string port;
+    std::string host;
+    if (!get_host_and_port_from_authority(schema, authority, host, port))
+    {
+        return -1;
+    }
+    SSL_set_tlsext_host_name(ssl, host.c_str());
+
     auto rv = SSL_do_handshake(ssl);
 
     if (rv <= 0)
@@ -845,7 +853,7 @@ int libev_client::resolve_fqdn_and_connect(const std::string& schema, const std:
     return 0;
 }
 
-int libev_client::connect_to_host(const std::string& schema, const std::string& authority)
+int libev_client::connect_to_host(const std::string& dest_schema, const std::string& dest_authority)
 {
     if (CLIENT_IDLE != state)
     {
@@ -855,6 +863,8 @@ int libev_client::connect_to_host(const std::string& schema, const std::string& 
     {
         std::cerr << "===============connecting to " << schema << "://" << authority << "===============" << std::endl;
     }
+    schema = dest_schema;
+    authority = dest_authority;
     return resolve_fqdn_and_connect(schema, authority);
 }
 

@@ -45,7 +45,7 @@ public:
     virtual std::shared_ptr<base_client> create_dest_client(const std::string& dst_sch,
                                                             const std::string& dest_authority,
                                                             PROTO_TYPE proto = PROTO_UNSPECIFIED);
-    virtual int connect_to_host(const std::string& schema, const std::string& authority);
+    virtual int connect_to_host(const std::string& dest_schema, const std::string& dest_authority);
     virtual void disconnect();
     virtual void clear_default_addr_info();
     virtual void feed_timing_script_request_timeout_timer();

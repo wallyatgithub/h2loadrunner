@@ -230,4 +230,6 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
 void parse_uri_and_populate_fields(const std::string& uri, std::string& schema, std::string& authority,
                                    std::string& path);
 
+void remove_reserved_http_headers(std::map<std::string, std::string, ci_less>& header_map);
+
 #endif

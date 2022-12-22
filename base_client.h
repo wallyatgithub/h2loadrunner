@@ -120,7 +120,7 @@ public:
 
     void process_timedout_streams();
     void process_abandoned_streams();
-    void cleanup_unsent_requests(bool fail_all = false);
+    void process_requests_to_submit_upon_error(bool fail_all = false);
     void timeout();
     void terminate_session();
     void on_header(int64_t stream_id, const uint8_t* name, size_t namelen,
@@ -145,7 +145,7 @@ public:
     base_client* find_or_create_dest_client(Request_Response_Data& request_to_send);
     bool is_controller_client();
     int submit_request();
-    std::unique_ptr<Request_Response_Data> prepare_first_request();
+    void prepare_first_request();
 
     void reset_timeout_requests();
 
@@ -205,6 +205,21 @@ public:
 
     void execute_request_sent_callback(Request_Response_Data& request, int64_t stream_id);
 
+    void clean_up_this_in_dest_client_map();
+
+    PROTO_TYPE get_proto_type();
+    void return_unsent_request_to_controller(bool immediate_schedule = true);
+
+    size_t get_max_concurrent_stream();
+
+    void connected_event_on_controller();
+
+    void fail_one_request_of_client(base_client* disconnected_client);
+
+    void early_fail_of_request(std::unique_ptr<Request_Response_Data>& req, base_client* client);
+
+    void submit_request_upon_connected();
+
 #ifdef ENABLE_HTTP3
     // QUIC
     int quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
@@ -224,19 +239,6 @@ public:
     void request_connection_close();
 
     bool is_quic();
-
-    void clean_up_this_in_dest_client_map();
-
-    PROTO_TYPE get_proto_type();
-    void return_unsent_request_to_controller(bool immediate = true);
-
-    size_t get_max_concurrent_stream();
-
-    void connected_event_on_controller();
-
-    void disconnected_event_on_controller(base_client* disconnected_client);
-
-    void early_fail_of_request(std::unique_ptr<Request_Response_Data>& req, base_client* client);
 
 #endif // ENABLE_HTTP3
 

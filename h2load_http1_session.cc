@@ -232,6 +232,11 @@ void Http1Session::on_connect()
 
 int Http1Session::submit_request()
 {
+    if (client_->streams.size())
+    {
+        return -1;
+    }
+
     if (config->json_config_schema.scenarios.size())
     {
         return _submit_request();
@@ -371,11 +376,14 @@ int Http1Session::_submit_request()
         {
             continue;
         }
-        if (header.first == path_header || header.first == scheme_header || header.first == authority_header
-            || header.first == method_header)
-        {
-            continue;
-        }
+
+        /*
+            if (reserved_headers.count(header.first))
+            {
+                continue;
+            }
+        */
+
         req.append(header.first);
         req.append(": ");
         req.append(header.second);
@@ -383,11 +391,13 @@ int Http1Session::_submit_request()
     }
     for (auto& header : data.req_headers_of_individual)
     {
-        if (header.first == path_header || header.first == scheme_header || header.first == authority_header
-            || header.first == method_header)
-        {
-            continue;
-        }
+        /*
+            if (reserved_headers.count(header.first))
+            {
+                continue;
+            }
+        */
+
         req.append(header.first);
         req.append(": ");
         req.append(header.second);

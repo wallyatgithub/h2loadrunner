@@ -26,6 +26,7 @@
 #define H2LOAD_H
 #include <string>
 #include <map>
+#include <set>
 #include <iostream>
 #include <vector>
 #include "h2load_Cookie.h"
@@ -56,6 +57,16 @@ const std::string scheme_header = ":scheme";
 const std::string path_header = ":path";
 const std::string authority_header = ":authority";
 const std::string method_header = ":method";
+const std::string host_header = "host";
+
+static std::set<std::string> reserved_headers =
+{
+    scheme_header,
+    path_header,
+    authority_header,
+    method_header,
+    host_header
+};
 
 const std::string x_envoy_original_dst_host_header = "x-envoy-original-dst-host";
 

@@ -845,13 +845,15 @@ int _send_http_request(lua_State* L, Request_Preprocessor request_preprocessor,
         }
 
         std::string schema = headers[h2load::scheme_header];
-        headers.erase(h2load::scheme_header);
+        //headers.erase(h2load::scheme_header);
         std::string authority = headers[h2load::authority_header];
-        headers.erase(h2load::authority_header);
+        //headers.erase(h2load::authority_header);
+        //headers.erase(h2load::host_header);
         std::string method = headers[h2load::method_header];
-        headers.erase(h2load::method_header);
+        //headers.erase(h2load::method_header);
         std::string path = headers[h2load::path_header];
-        headers.erase(h2load::path_header);
+        //headers.erase(h2load::path_header);
+        remove_reserved_http_headers(headers);
         std::string base_uri;
         if (original_dst.size())
         {

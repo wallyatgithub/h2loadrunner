@@ -881,6 +881,14 @@ void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
             }
         }
     }
+
+    for (auto& scenario : config.json_config_schema.scenarios)
+    {
+        for (auto& request : scenario.requests)
+        {
+            remove_reserved_http_headers(request.headers_in_map);
+        }
+    }
 }
 
 std::string get_tls_error_string()
@@ -1561,8 +1569,16 @@ void process_variables(h2load::Config& config)
                     request.headers_with_variable.emplace_back(std::make_pair(name_result, value_result));
                     continue;
                 }
+                util::inp_strlower(header_name);
+                if (reserved_headers.count(header_name))
+                {
+                    std::cerr<<"WARNING: header "<<header_name<<" is not allowed in additonalHeaders, ignored"<<std::endl;
+                    continue;
+                }
                 request.headers_in_map[header_name] = header_value;
             }
+            // not necessary as check above is down, just consistent with lua interface like _send_http_request
+            remove_reserved_http_headers(request.headers_in_map);
         }
     }
 }
@@ -2298,6 +2314,11 @@ bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenari
         // headers
         for (auto& header : req_in_har.headers)
         {
+            if (reserved_headers.count(header.name))
+            {
+                std::cerr<<"WARNING: header "<<header.name<<" is redundant and thus ignored"<<std::endl;
+                continue;
+            }
             req_in_config.additonalHeaders.emplace_back(header.name);
             req_in_config.additonalHeaders.back().append(":").append(header.value);
         }
@@ -2421,6 +2442,14 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
     {
         config_out.json_config_schema.scenarios.pop_back();
         return false;
+    }
+}
+
+void remove_reserved_http_headers(std::map<std::string, std::string, ci_less>& header_map)
+{
+    for (auto& h: reserved_headers)
+    {
+        header_map.erase(h);
     }
 }
 

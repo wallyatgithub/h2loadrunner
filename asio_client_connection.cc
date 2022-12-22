@@ -365,6 +365,7 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
             old_ssl_sockets.push_back(std::move(ssl_socket));
             ssl_socket = std::make_unique<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>(io_context, ssl_ctx);
             ssl = ssl_socket->native_handle();
+            SSL_set_tlsext_host_name(ssl, host.c_str());
         }
         else
         {
@@ -738,7 +739,7 @@ void asio_client_connection::on_connected_event(const boost::system::error_code&
         else
         {
             bool fail_all = true;
-            cleanup_unsent_requests(fail_all);
+            process_requests_to_submit_upon_error(fail_all);
             handle_connection_error();
         }
     }
