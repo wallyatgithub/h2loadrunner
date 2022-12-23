@@ -244,11 +244,13 @@ public:
     uint32_t delay_before_executing_next;
     std::vector<Response_Value_Regex_Picker> response_value_regex_pickers;
     std::vector<Regex_Picker> actual_regex_value_pickers; // filled by post_process_json_config_schema
+    size_t page_id = 0;
 
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("luaScript", &this->luaScript, staticjson::Flags::Optional);
         h->add_property("uri", &this->uri);
+        h->add_property("page-id", &this->page_id, staticjson::Flags::Optional);
         h->add_property("method", &this->method);
         h->add_property("http-version", &this->http_version, staticjson::Flags::Optional);
         h->add_property("payload", &this->payload, staticjson::Flags::Optional);
@@ -591,7 +593,7 @@ public:
         port(80),
         threads(1),
         clients(1),
-        max_concurrent_streams(1),
+        max_concurrent_streams(1024),
         window_bits(30),
         connection_window_bits(30),
         ciphers("ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256"),

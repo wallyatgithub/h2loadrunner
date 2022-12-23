@@ -232,9 +232,9 @@ void Http1Session::on_connect()
 
 int Http1Session::submit_request()
 {
-    if (client_->streams.size())
+    if (client_->get_number_of_request_inflight())
     {
-        return -1;
+        return MAX_CONCURRENT_STREAM_REACHED;
     }
 
     if (config->json_config_schema.scenarios.size())

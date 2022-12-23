@@ -606,19 +606,20 @@ void base_client::return_unsent_request_to_controller(bool immediate_schedule)
     }
 }
 
-void base_client::enqueue_request(Request_Response_Data& finished_request, std::unique_ptr<Request_Response_Data>& new_request)
+const std::unique_ptr<Request_Response_Data>& base_client::enqueue_request(const Request_Response_Data& finished_request, std::unique_ptr<Request_Response_Data>& new_request)
 {
     auto client = get_controller_client();
     if (!finished_request.delay_before_executing_next)
     {
         client->requests_to_submit.push_back(std::move(new_request));
+        return client->requests_to_submit.back();
     }
     else
     {
         const std::chrono::milliseconds delay_duration(finished_request.delay_before_executing_next);
         std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
         std::chrono::steady_clock::time_point timeout_timepoint = curr_time_point + delay_duration;
-        client->delayed_requests_to_submit.insert(std::make_pair(timeout_timepoint, std::move(new_request)));
+        return client->delayed_requests_to_submit.insert(std::make_pair(timeout_timepoint, std::move(new_request)))->second;
     }
 }
 
@@ -1839,6 +1840,12 @@ void base_client::process_timedout_streams()
     process_abandoned_streams();
 }
 
+
+size_t base_client::get_number_of_request_inflight()
+{
+    return streams.size();
+}
+
 void base_client::on_stream_close(int64_t stream_id, bool success, bool final)
 {
     record_stream_close_time(stream_id);
@@ -1924,7 +1931,9 @@ void base_client::on_stream_close(int64_t stream_id, bool success, bool final)
     {
         size_t scenario_index = finished_request->scenario_index;
         Scenario& scenario = config->json_config_schema.scenarios[scenario_index];
-        if (!scenario.run_requests_in_parallel)
+        auto req_idx = finished_request->curr_request_idx;
+        if ((req_idx < (scenario.requests.size() - 1))&&
+            (scenario.requests[req_idx].page_id != scenario.requests[req_idx + 1].page_id))
         {
             prepare_next_request(*finished_request);
         }
@@ -2164,10 +2173,7 @@ void base_client::connected_event_on_controller()
 
         for (; nreq > 0; --nreq)
         {
-            if (get_controller_client()->submit_request() != 0)
-            {
-                break;
-            }
+            get_controller_client()->submit_request();
         }
     }
     else
@@ -2496,7 +2502,7 @@ bool base_client::is_controller_client()
 
 void base_client::prepare_first_request()
 {
-    static thread_local Request_Response_Data dummy_data(0);
+    static const Request_Response_Data dummy_data(0);
 
     auto controller = get_controller_client();
 
@@ -2546,42 +2552,54 @@ void base_client::prepare_first_request()
 
     sanitize_request(*new_request);
 
-    enqueue_request(dummy_data, new_request);
+    auto start_idx = new_request->curr_request_idx;
 
-    if (scenario.run_requests_in_parallel)
+    auto req_ptr = enqueue_request(dummy_data, new_request).get();
+
+    for (auto req_idx = start_idx; req_idx < scenario.requests.size() - 1; req_idx++)
     {
-        for (auto req_idx = new_request->curr_request_idx; req_idx < scenario.requests.size() - 1; req_idx++)
+        bool next_req_is_of_same_page = (scenario.requests[req_idx].page_id == scenario.requests[req_idx + 1].page_id);
+        if (!next_req_is_of_same_page)
         {
-            prepare_next_request(*new_request);
+            break;
+        }
+        req_ptr = prepare_next_request(*req_ptr).get();
+        if (!req_ptr || req_ptr->schema == &emptyString)
+        {
+            break;
         }
     }
+
 }
 
-bool base_client::prepare_next_request(Request_Response_Data& finished_request)
+const std::unique_ptr<Request_Response_Data>& base_client::prepare_next_request(Request_Response_Data& prev_request)
 {
-    run_post_response_action(finished_request);
+    static const auto dummy_data = std::make_unique<Request_Response_Data>(std::vector<uint64_t>(0));
 
-    size_t scenario_index = finished_request.scenario_index;
+    run_post_response_action(prev_request);
+
+    size_t scenario_index = prev_request.scenario_index;
     Scenario& scenario = config->json_config_schema.scenarios[scenario_index];
 
-    size_t curr_req_index = ((finished_request.curr_request_idx + 1) % scenario.requests.size());
+    size_t curr_req_index = ((prev_request.curr_request_idx + 1) % scenario.requests.size());
     if (curr_req_index == 0)
     {
-        return false;
+        return dummy_data;
     }
     auto& request_template = scenario.requests[curr_req_index];
     if (!request_template.clear_old_cookies)
     {
-        parse_and_save_cookies(finished_request);
+        parse_and_save_cookies(prev_request);
     }
     std::unique_ptr<Request_Response_Data> new_request;
-    if (scenario.run_requests_in_parallel)
+    bool parallel_requests_of_same_page = (scenario.requests[prev_request.curr_request_idx].page_id == scenario.requests[curr_req_index].page_id);
+    if (parallel_requests_of_same_page)
     {
-        new_request = std::make_unique<Request_Response_Data>(finished_request.scenario_data_per_user);
+        new_request = std::make_unique<Request_Response_Data>(prev_request.scenario_data_per_user);
     }
     else
     {
-        new_request = std::make_unique<Request_Response_Data>(std::move(finished_request.scenario_data_per_user));
+        new_request = std::make_unique<Request_Response_Data>(std::move(prev_request.scenario_data_per_user));
     }
 
     new_request->scenario_index = scenario_index;
@@ -2602,18 +2620,18 @@ bool base_client::prepare_next_request(Request_Response_Data& finished_request)
         }
         case SAME_WITH_LAST_ONE:
         {
-            new_request->string_collection.emplace_back(*finished_request.path);
+            new_request->string_collection.emplace_back(*prev_request.path);
             new_request->path = &(new_request->string_collection.back());
-            new_request->string_collection.emplace_back(*finished_request.schema);
+            new_request->string_collection.emplace_back(*prev_request.schema);
             new_request->schema = &(new_request->string_collection.back());
-            new_request->string_collection.emplace_back(*finished_request.authority);
+            new_request->string_collection.emplace_back(*prev_request.authority);
             new_request->authority = &(new_request->string_collection.back());
             break;
         }
         case FROM_RESPONSE_HEADER:
         {
             std::string* uri_header_value = nullptr;
-            for (auto& header_map : finished_request.resp_headers)
+            for (auto& header_map : prev_request.resp_headers)
             {
                 auto header = header_map.find(request_template.uri.input);
                 if (header != header_map.end())
@@ -2626,9 +2644,9 @@ bool base_client::prepare_next_request(Request_Response_Data& finished_request)
             {
                 if (!new_request->authority)
                 {
-                    new_request->string_collection.emplace_back(*finished_request.schema);
+                    new_request->string_collection.emplace_back(*prev_request.schema);
                     new_request->schema = &(new_request->string_collection.back());
-                    new_request->string_collection.emplace_back(*finished_request.authority);
+                    new_request->string_collection.emplace_back(*prev_request.authority);
                     new_request->authority = &(new_request->string_collection.back());
                 }
             }
@@ -2636,18 +2654,18 @@ bool base_client::prepare_next_request(Request_Response_Data& finished_request)
             {
                 if (config->verbose)
                 {
-                    std::cout << "response status code:" << finished_request.status_code << std::endl;
+                    std::cout << "response status code:" << prev_request.status_code << std::endl;
                     std::cerr << "abort whole scenario sequence, as header not found: " << request_template.uri.input << std::endl;
-                    for (auto& header_map : finished_request.resp_headers)
+                    for (auto& header_map : prev_request.resp_headers)
                     {
                         for (auto& header : header_map)
                         {
                             std::cout << header.first << ":" << header.second << std::endl;
                         }
                     }
-                    std::cout << "response payload:" << finished_request.resp_payload << std::endl;
+                    std::cout << "response payload:" << prev_request.resp_payload << std::endl;
                 }
-                return false;
+                return dummy_data;
             }
             break;
         }
@@ -2658,7 +2676,7 @@ bool base_client::prepare_next_request(Request_Response_Data& finished_request)
             if (!parse_uri_and_poupate_request(uri, *new_request))
             {
                 std::cerr << "abort whole scenario sequence, as uri is invalid:" << uri << std::endl;
-                return false;
+                return dummy_data;
             }
             break;
         }
@@ -2675,18 +2693,33 @@ bool base_client::prepare_next_request(Request_Response_Data& finished_request)
 
     if (request_template.luaScript.size())
     {
-        if (!update_request_with_lua(lua_states[scenario_index][curr_req_index], finished_request, *new_request))
+        if (!update_request_with_lua(lua_states[scenario_index][curr_req_index], prev_request, *new_request))
         {
-            return false; // lua script returns error or kills the request, abort this scenario
+            return dummy_data; // lua script returns error or kills the request, abort this scenario
         }
     }
 
     update_content_length(*new_request);
     sanitize_request(*new_request);
 
-    enqueue_request(finished_request, new_request);
+    auto& ret = enqueue_request(prev_request, new_request);
+    auto req_ptr = ret.get();
 
-    return true;
+    for (auto req_idx = curr_req_index; req_idx < scenario.requests.size() - 1; req_idx++)
+    {
+        if (scenario.requests[req_idx].page_id != scenario.requests[req_idx + 1].page_id)
+        {
+            break;
+        }
+        req_ptr = prepare_next_request(*req_ptr).get();
+        if (!req_ptr || req_ptr->schema == &emptyString)
+        {
+            break;
+        }
+    }
+
+    return ret;
+
 }
 
 void base_client::update_content_length(Request_Response_Data& data)
@@ -2700,9 +2733,7 @@ void base_client::update_content_length(Request_Response_Data& data)
 
 size_t base_client::get_max_concurrent_stream()
 {
-    return get_controller_client()->client_registry[PROTO_HTTP1].size() ?
-           1 : get_controller_client()->config->max_concurrent_streams;
-    // TODO: for parallel execution, limitation caused by http/1.1 should be bypassed
+    return config->max_concurrent_streams;
 }
 
 int base_client::submit_request()
@@ -2721,7 +2752,7 @@ int base_client::submit_request()
 
     if (get_total_pending_streams() >= max_concurrent_streams)
     {
-        return -1;
+        return MAX_CONCURRENT_STREAM_REACHED;
     }
 
     if (get_number_of_request_left() <= 0)
@@ -2810,6 +2841,11 @@ int base_client::submit_request()
 void base_client::process_submit_request_failure(int errCode)
 {
     if (worker->current_phase != Phase::MAIN_DURATION)
+    {
+        return;
+    }
+
+    if (MAX_CONCURRENT_STREAM_REACHED == errCode)
     {
         return;
     }

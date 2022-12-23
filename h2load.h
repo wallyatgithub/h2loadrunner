@@ -272,6 +272,8 @@ struct Variable_Data_Per_Client
 
 constexpr auto BACKOFF_WRITE_BUFFER_THRES = 16_k;
 constexpr int MAX_STREAM_TO_BE_EXHAUSTED = -2;
+constexpr int MAX_CONCURRENT_STREAM_REACHED = -3;
+
 
 
 

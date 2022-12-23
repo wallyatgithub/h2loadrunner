@@ -155,7 +155,7 @@ public:
     void record_client_start_time();
     void record_client_end_time();
 
-    bool prepare_next_request(Request_Response_Data& data);
+    const std::unique_ptr<Request_Response_Data>& prepare_next_request(Request_Response_Data& data);
     void update_content_length(Request_Response_Data& data);
     bool update_request_with_lua(lua_State* L, const Request_Response_Data& finished_request, Request_Response_Data& request_to_send);
     void produce_request_cookie_header(Request_Response_Data& req_to_be_sent);
@@ -179,7 +179,7 @@ public:
     bool validate_response_with_lua(lua_State* L, const Request_Response_Data& finished_request);
     void record_stream_close_time(int64_t stream_id);
     void brief_log_to_file(int64_t stream_id, bool success);
-    void enqueue_request(Request_Response_Data& finished_request, std::unique_ptr<Request_Response_Data>& new_request);
+    const std::unique_ptr<Request_Response_Data>& enqueue_request(const Request_Response_Data& finished_request, std::unique_ptr<Request_Response_Data>& new_request);
     void inc_status_counter_and_validate_response(int64_t stream_id);
     bool should_reconnect_on_disconnect();
     int select_protocol_and_allocate_session();
@@ -219,6 +219,8 @@ public:
     void early_fail_of_request(std::unique_ptr<Request_Response_Data>& req, base_client* client);
 
     void submit_request_upon_connected();
+
+    size_t get_number_of_request_inflight();
 
 #ifdef ENABLE_HTTP3
     // QUIC

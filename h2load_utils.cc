@@ -1572,7 +1572,7 @@ void process_variables(h2load::Config& config)
                 util::inp_strlower(header_name);
                 if (reserved_headers.count(header_name))
                 {
-                    std::cerr<<"WARNING: header "<<header_name<<" is not allowed in additonalHeaders, ignored"<<std::endl;
+                    std::cerr << "WARNING: header " << header_name << " is not allowed in additonalHeaders, ignored" << std::endl;
                     continue;
                 }
                 request.headers_in_map[header_name] = header_value;
@@ -1617,7 +1617,7 @@ void post_process_json_config_schema(h2load::Config& config)
                 exit(EXIT_FAILURE);
             }
             std::string har_content((std::istreambuf_iterator<char>(har_stream)),
-                                      std::istreambuf_iterator<char>());
+                                    std::istreambuf_iterator<char>());
             if (!convert_har_to_h2loadrunner_scenario(har_content, scenario))
             {
                 std::cerr << "cannot parsing HAR file: " << scenario.har_file_name << std::endl;
@@ -1629,6 +1629,10 @@ void post_process_json_config_schema(h2load::Config& config)
         for (auto i = 0; i < scenario.requests.size(); i++)
         {
             auto& request = scenario.requests[i];
+            if (!scenario.run_requests_in_parallel)
+            {
+                request.page_id = i;
+            }
             auto iter = http_version_to_proto_map.find(request.http_version);
             if (iter != http_version_to_proto_map.end())
             {
@@ -2267,108 +2271,138 @@ bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenari
         return false;
     }
 
-    std::multimap<std::string, size_t> order;
+    std::set<std::string> page_ids;
+    std::multimap<std::string, std::string> pages_ordered_with_timestamp;
+    for (auto index = 0; index < har_file.log.pages.size(); index++)
+    {
+        pages_ordered_with_timestamp.emplace(har_file.log.pages[index].startedDateTime, har_file.log.pages[index].id);
+        page_ids.insert(har_file.log.pages[index].id);
+    }
+
+    std::map<std::string, std::multimap<std::string, size_t>> entries_of_pages;
     for (auto index = 0; index < har_file.log.entries.size(); index++)
     {
-        order.emplace(har_file.log.entries[index].startedDateTime, index);
+        entries_of_pages[har_file.log.entries[index].pageref].emplace(har_file.log.entries[index].startedDateTime, index);
     }
 
-    for (auto iter = order.begin(); iter != order.end(); iter++)
+    for (auto entry_iter = entries_of_pages.begin(); entry_iter != entries_of_pages.end(); entry_iter++)
     {
-        scenario.requests.emplace_back();
-        Request& req_in_config = scenario.requests.back();
-        HAR_Request& req_in_har = har_file.log.entries[iter->second].request;
-        HAR_Response& resp_in_har = har_file.log.entries[iter->second].response;
-
-        // method
-        req_in_config.method = req_in_har.method;
-
-        // uri, post_process_json_config_schema is need to further process uri to get host, schema, etc
-        req_in_config.uri.typeOfAction = "input";
-        req_in_config.uri.input = req_in_har.url;
-        // host, port, schema
-        std::string tmpPath;
-        parse_uri_and_populate_fields(req_in_har.url, req_in_config.schema, req_in_config.authority, tmpPath);
-        if (req_in_config.uri.input.find('?', 0) == std::string::npos && req_in_har.queryString.size())
+        if (page_ids.count(entry_iter->first) == 0)
         {
-            req_in_config.uri.input.append("?");
-            bool first_param = true;
-            for (auto& q : req_in_har.queryString)
-            {
-                if (first_param)
-                {
-                    first_param = false;
-                }
-                else
-                {
-                    req_in_config.uri.input.append("&");
-                }
-                req_in_config.uri.input.append(nghttp2::util::percent_encode(q.name)).append("=").append(nghttp2::util::percent_encode(
-                                                                                                             q.value));
-            }
+            std::cerr << "pageref: " << entry_iter->first << " does not have a matching page with id = " << entry_iter->first <<
+                      std::endl;
+            return false;
         }
-
-        // httpVersion
-        req_in_config.http_version = req_in_har.httpVersion;
-
-        // headers
-        for (auto& header : req_in_har.headers)
-        {
-            if (reserved_headers.count(header.name))
-            {
-                std::cerr<<"WARNING: header "<<header.name<<" is redundant and thus ignored"<<std::endl;
-                continue;
-            }
-            req_in_config.additonalHeaders.emplace_back(header.name);
-            req_in_config.additonalHeaders.back().append(":").append(header.value);
-        }
-
-        // payload
-        if (req_in_har.postData.text.size())
-        {
-            // directly from postData.text
-            req_in_config.payload = req_in_har.postData.text;
-        }
-        else
-        {
-            if (req_in_har.postData.params.size())
-            {
-                bool urlencoded_www_form = true;
-                std::for_each(req_in_har.postData.params.begin(), req_in_har.postData.params.end(),
-                              [&urlencoded_www_form](const HAR_PostData_Param & postData_param)
-                {
-                    if (postData_param.fileName.size())
-                    {
-                        urlencoded_www_form = false;
-                    }
-                });
-                // application/x-www-form-urlencoded
-                if (urlencoded_www_form)
-                {
-                    bool first_param = true;
-                    for (auto& param : req_in_har.postData.params)
-                    {
-                        if (first_param)
-                        {
-                            first_param = false;
-                        }
-                        else
-                        {
-                            req_in_config.payload.append("&");
-                        }
-                        req_in_config.payload.append(nghttp2::util::percent_encode(param.name)).append("=").append(
-                            nghttp2::util::percent_encode(param.value));
-                    }
-                }
-                else
-                {
-                    // TODO: multipart/form-data
-                }
-            }
-        }
-        req_in_config.expected_status_code = resp_in_har.status;
-        // TODO: add more validation rules based on response content
     }
+
+    size_t page_id = 0;
+    for (auto page_order_iter = pages_ordered_with_timestamp.begin(); page_order_iter != pages_ordered_with_timestamp.end();
+         page_order_iter++)
+    {
+        auto entries_of_pages_iter = entries_of_pages.find(page_order_iter->second);
+        if (entries_of_pages_iter == entries_of_pages.end())
+        {
+            continue;
+        }
+        for (auto iter = entries_of_pages_iter->second.begin(); iter != entries_of_pages_iter->second.end(); iter++)
+        {
+            scenario.requests.emplace_back();
+            Request& req_in_config = scenario.requests.back();
+            req_in_config.page_id = page_id;
+            HAR_Request& req_in_har = har_file.log.entries[iter->second].request;
+            HAR_Response& resp_in_har = har_file.log.entries[iter->second].response;
+            // method
+            req_in_config.method = req_in_har.method;
+
+            // uri, post_process_json_config_schema is need to further process uri to get host, schema, etc
+            req_in_config.uri.typeOfAction = "input";
+            req_in_config.uri.input = req_in_har.url;
+            // host, port, schema
+            std::string tmpPath;
+            parse_uri_and_populate_fields(req_in_har.url, req_in_config.schema, req_in_config.authority, tmpPath);
+            if (req_in_config.uri.input.find('?', 0) == std::string::npos && req_in_har.queryString.size())
+            {
+                req_in_config.uri.input.append("?");
+                bool first_param = true;
+                for (auto& q : req_in_har.queryString)
+                {
+                    if (first_param)
+                    {
+                        first_param = false;
+                    }
+                    else
+                    {
+                        req_in_config.uri.input.append("&");
+                    }
+                    req_in_config.uri.input.append(nghttp2::util::percent_encode(q.name)).append("=").append(nghttp2::util::percent_encode(
+                                                                                                                 q.value));
+                }
+            }
+
+            // httpVersion
+            req_in_config.http_version = req_in_har.httpVersion;
+
+            // headers
+            for (auto& header : req_in_har.headers)
+            {
+                if (reserved_headers.count(header.name))
+                {
+                    std::cerr << "WARNING: header " << header.name << " is redundant and thus ignored" << std::endl;
+                    continue;
+                }
+                req_in_config.additonalHeaders.emplace_back(header.name);
+                req_in_config.additonalHeaders.back().append(":").append(header.value);
+            }
+
+            // payload
+            if (req_in_har.postData.text.size())
+            {
+                // directly from postData.text
+                req_in_config.payload = req_in_har.postData.text;
+            }
+            else
+            {
+                if (req_in_har.postData.params.size())
+                {
+                    bool urlencoded_www_form = true;
+                    std::for_each(req_in_har.postData.params.begin(), req_in_har.postData.params.end(),
+                                  [&urlencoded_www_form](const HAR_PostData_Param & postData_param)
+                    {
+                        if (postData_param.fileName.size())
+                        {
+                            urlencoded_www_form = false;
+                        }
+                    });
+                    // application/x-www-form-urlencoded
+                    if (urlencoded_www_form)
+                    {
+                        bool first_param = true;
+                        for (auto& param : req_in_har.postData.params)
+                        {
+                            if (first_param)
+                            {
+                                first_param = false;
+                            }
+                            else
+                            {
+                                req_in_config.payload.append("&");
+                            }
+                            req_in_config.payload.append(nghttp2::util::percent_encode(param.name)).append("=").append(
+                                nghttp2::util::percent_encode(param.value));
+                        }
+                    }
+                    else
+                    {
+                        // TODO: multipart/form-data
+                    }
+                }
+            }
+            req_in_config.expected_status_code = resp_in_har.status;
+        }
+        page_id++;
+    }
+
+
     return true;
 }
 
@@ -2447,7 +2481,7 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
 
 void remove_reserved_http_headers(std::map<std::string, std::string, ci_less>& header_map)
 {
-    for (auto& h: reserved_headers)
+    for (auto& h : reserved_headers)
     {
         header_map.erase(h);
     }

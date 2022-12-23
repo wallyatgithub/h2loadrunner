@@ -881,8 +881,7 @@ int _send_http_request(lua_State* L, Request_Preprocessor request_preprocessor,
                 request_sent_callback(-1, nullptr);
                 return;
             }
-            const static std::vector<uint64_t> u_ids(0);
-            auto request_to_send = std::make_unique<h2load::Request_Response_Data>(u_ids);
+            auto request_to_send = std::make_unique<h2load::Request_Response_Data>(std::vector<uint64_t>(0));
             request_to_send->request_sent_callback = request_sent_callback;
             request_to_send->string_collection.emplace_back(payload);
             request_to_send->req_payload = &(request_to_send->string_collection.back());

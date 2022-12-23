@@ -2,6 +2,8 @@
 #define HAR_SCHEMA_H
 
 #include <vector>
+#include <queue>
+
 #include "staticjson/document.hpp"
 #include "staticjson/staticjson.hpp"
 #include "rapidjson/schema.h"
@@ -229,6 +231,18 @@ public:
     }
 };
 
+class HAR_Initiator
+{
+public:
+    std::string type;
+    std::string url;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("type", &this->type);
+        h->add_property("url", &this->url, staticjson::Flags::Optional);
+    }
+};
+
 class HAR_Entry
 {
 public:
@@ -242,6 +256,7 @@ public:
     std::string serverIPAddress;
     std::string connection;
     std::string comment;
+    HAR_Initiator initiator;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("pageref", &this->pageref, staticjson::Flags::Optional);
@@ -254,6 +269,7 @@ public:
         h->add_property("serverIPAddress", &this->serverIPAddress, staticjson::Flags::Optional);
         h->add_property("connection", &this->connection, staticjson::Flags::Optional);
         h->add_property("comment", &this->comment, staticjson::Flags::Optional);
+        h->add_property("_initiator", &this->initiator, staticjson::Flags::Optional);
     }
 };
 
@@ -347,6 +363,31 @@ public:
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("log", &this->log);
+    }
+};
+
+class HAR_Entry_Tree
+{
+public:
+    HAR_Entry entry;
+    size_t level;
+    std::vector<HAR_Entry_Tree> children;
+    std::vector<std::pair<HAR_Entry, size_t>> breadth_traverse()
+    {
+        std::vector<std::pair<HAR_Entry, size_t>> result;
+        std::queue<HAR_Entry_Tree> subtree_to_traverse;
+        subtree_to_traverse.push(*this);
+        while (subtree_to_traverse.size())
+        {
+            auto node = subtree_to_traverse.front();
+            subtree_to_traverse.pop();
+            for (auto& child: node.children)
+            {
+                subtree_to_traverse.push(child);
+            }
+            result.push_back(std::make_pair(node.entry, node.level));
+        }
+        return result;
     }
 };
 
