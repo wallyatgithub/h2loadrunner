@@ -2007,7 +2007,7 @@ void base_client::early_fail_of_request(std::unique_ptr<Request_Response_Data>& 
         req->request_sent_callback(-1, client);
     }
     size_t stream_id = 0;
-    on_request_start(stream_id, req, false);
+    on_request_start(stream_id, req, true); // do not count into statistics as DONE
     // auto req_stat = get_req_stat(stream_id);
     // record_request_time(req_stat);
     on_stream_close(stream_id, false);
