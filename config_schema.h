@@ -46,6 +46,7 @@ const std::string HTTP3_ALPN = "\x2h3";
 const std::string http1_1_version = "http/1.1";
 const std::string http2_0_version = "http/2.0";
 const std::string http3_0_version = "http/3.0";
+const int64_t LEAST_VALID_PAGE_ID = 1;
 
 enum URI_ACTION
 {
@@ -244,7 +245,7 @@ public:
     uint32_t delay_before_executing_next;
     std::vector<Response_Value_Regex_Picker> response_value_regex_pickers;
     std::vector<Regex_Picker> actual_regex_value_pickers; // filled by post_process_json_config_schema
-    size_t page_id = 0;
+    int64_t page_id = 0;
 
     void staticjson_init(staticjson::ObjectHandler* h)
     {
@@ -482,7 +483,6 @@ public:
     uint64_t variable_range_end;
     bool variable_range_slicing;
     std::vector<Request> requests;
-    bool run_requests_in_parallel;
     std::string user_variables_input_file;
     Variable_Manager variable_manager; // content populated by post_process_json_config_schema
     // TODO:  refactor the next line
@@ -499,7 +499,6 @@ public:
         h->add_property("user-id-range-end", &this->variable_range_end, staticjson::Flags::Optional);
         h->add_property("user-id-range-slicing", &this->variable_range_slicing, staticjson::Flags::Optional);
         h->add_property("interval-to-wait-before-start", &this->interval_to_wait_before_start, staticjson::Flags::Optional);
-        h->add_property("run-requests-in-parallel", &this->run_requests_in_parallel, staticjson::Flags::Optional);
         h->add_property("user-variables-input-file", &this->user_variables_input_file, staticjson::Flags::Optional);
         h->add_property("range-based-variables", &this->range_based_variables, staticjson::Flags::Optional);
         h->add_property("two-dimensional-variables", &this->two_dim_variables, staticjson::Flags::Optional);
@@ -512,8 +511,7 @@ public:
         variable_range_end(0),
         variable_range_slicing(false),
         weight(100),
-        interval_to_wait_before_start(0),
-        run_requests_in_parallel(false)
+        interval_to_wait_before_start(0)
     {
     }
 };

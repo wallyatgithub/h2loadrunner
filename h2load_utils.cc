@@ -1626,13 +1626,40 @@ void post_process_json_config_schema(h2load::Config& config)
             continue;
         }
 
+        int64_t next_available_valid_page_id = 1;
         for (auto i = 0; i < scenario.requests.size(); i++)
         {
             auto& request = scenario.requests[i];
-            if (!scenario.run_requests_in_parallel)
+            if (request.page_id >= LEAST_VALID_PAGE_ID && request.page_id >= next_available_valid_page_id)
             {
-                request.page_id = i;
+                next_available_valid_page_id = request.page_id + 1;
             }
+        }
+        for (auto i = 0; i < scenario.requests.size(); i++)
+        {
+            auto& request = scenario.requests[i];
+            if (request.page_id < LEAST_VALID_PAGE_ID)
+            {
+                request.page_id = next_available_valid_page_id++;
+            }
+        }
+
+        std::multimap<int64_t, Request> requests_ordered_with_page_id;
+        for (auto i = 0; i < scenario.requests.size(); i++)
+        {
+            auto& request = scenario.requests[i];
+            requests_ordered_with_page_id.emplace(std::make_pair(request.page_id, request));
+        }
+        scenario.requests.clear();
+        for (auto iter = requests_ordered_with_page_id.begin(); iter != requests_ordered_with_page_id.end(); iter++)
+        {
+            scenario.requests.push_back(iter->second);
+        }
+
+        for (auto i = 0; i < scenario.requests.size(); i++)
+        {
+            auto& request = scenario.requests[i];
+
             auto iter = http_version_to_proto_map.find(request.http_version);
             if (iter != http_version_to_proto_map.end())
             {
@@ -2295,7 +2322,7 @@ bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenari
         }
     }
 
-    size_t page_id = 0;
+    size_t page_id = 1;
     for (auto page_order_iter = pages_ordered_with_timestamp.begin(); page_order_iter != pages_ordered_with_timestamp.end();
          page_order_iter++)
     {
@@ -2402,7 +2429,6 @@ bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenari
         page_id++;
     }
 
-
     return true;
 }
 
@@ -2470,6 +2496,14 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
         config_out.json_config_schema.threads = 1;
         config_out.json_config_schema.clients = 1;
         config_out.json_config_schema.nreqs = config_out.json_config_schema.scenarios.back().requests.size();
+        for (auto& req: config_out.json_config_schema.scenarios.back().requests)
+        {
+            if (req.http_version == http1_1_version)
+            {
+                config_out.json_config_schema.max_concurrent_streams = 1;
+                break;
+            }
+        }
         return true;
     }
     else

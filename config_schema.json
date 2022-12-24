@@ -317,11 +317,6 @@
             "default": true,
             "type": "boolean"
           },
-          "run-requests-in-parallel": {
-            "description": "true: all the requests of this scenario will be run in parallel, obvious, the request uri typeOfAction cannot be fromResponseHeader or fromJsonPointer in this case; false: the requests of this scenario will be run one after another in the listed order",
-            "default": false,
-            "type": "boolean"
-          },
           "user-variables-input-file": {
             "description": "path of a UTF-8 CSV file; the first row must be the list of column names, and each colume name is interpreted as a variable name; the value of this variable is given from the second row and after, with each row representing a specific user; suppose the CSV files has M columns and N rows, then it represents N-1 users: each row represents the M variable values of a single user; each variable value can be referred to in user message definition by wrapping the variable name with ${}, where variable name is given in the corresponding column at the first row",
             "type": "string"
@@ -437,6 +432,11 @@
                 },
                 "expected-status-code": {
                   "description": "the expected http status code for this request; if the returned status code matches the one specified here, this request is considered successful in statistics report; if nothing or 0 is specified here, 2xx status codes (i.e., 200, 201, 204, etc.) are all considered successful",
+                  "default": 0,
+                  "type": "integer"
+                },
+                "page-id": {
+                  "description": "specify the id of the page to which this request belongs to; a valid page id must be a non-zero positive integer; requests with same valid page id would be executed in parallel (if possible) like a browser loads different resources of same page in parallel; different pages are executed in ascending order of page id; each request with an invalid (negative or zero) page id, or with a valid page id but different from any other request, would be considered to be belonging to a different page each",
                   "default": 0,
                   "type": "integer"
                 },

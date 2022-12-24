@@ -76,6 +76,7 @@ asio_client_connection::asio_client_connection
       delayed_reconnect_timer(io_ctx),
       ssl_ctx(ssl_context),
       ssl_handshake_timer(io_ctx),
+      timebomb_timer(io_ctx),
       do_read_fn(&asio_client_connection::do_tcp_read),
       do_write_fn(&asio_client_connection::do_tcp_write)
 {
@@ -91,7 +92,6 @@ asio_client_connection::asio_client_connection
 asio_client_connection::~asio_client_connection()
 {
     std::cerr << "deallocate connection: " << schema << "://" << authority << std::endl;
-    //printBacktrace();
     disconnect();
     final_cleanup();
 }
@@ -110,6 +110,37 @@ void asio_client_connection::start_conn_active_watcher()
         handle_con_activity_timer_timeout(ec);
     });
 }
+
+void asio_client_connection::handle_timebomb_timer_timeout(const boost::system::error_code& ec)
+{
+    if (((!timebomb_timer_active)) || (!timer_common_check(timebomb_timer, ec, &asio_client_connection::handle_timebomb_timer_timeout, false)))
+    {
+        return;
+    }
+    io_context.post([this]()
+    {
+        worker->free_client(this);
+    });
+}
+
+void asio_client_connection::start_timebomb_timer()
+{
+    const auto timebomb_timer_value = 5000;
+    if (timebomb_timer_active)
+    {
+        return;
+    }
+    timebomb_timer_active = true;
+    timebomb_timer.expires_from_now(boost::posix_time::millisec(timebomb_timer_value));
+    timebomb_timer.async_wait
+    (
+        [this](const boost::system::error_code & ec)
+    {
+        handle_timebomb_timer_timeout(ec);
+
+    });
+}
+
 
 void asio_client_connection::start_ssl_handshake_watcher()
 {
@@ -413,10 +444,7 @@ void asio_client_connection::setup_graceful_shutdown()
     write_clear_callback = [this]()
     {
         disconnect();
-        io_context.post([this]()
-        {
-            worker->free_client(this);
-        });
+        start_timebomb_timer();
         return false;
     };
 }
@@ -474,14 +502,15 @@ void asio_client_connection::restart_rps_timer()
 }
 
 bool asio_client_connection::timer_common_check(boost::asio::deadline_timer& timer, const boost::system::error_code& ec,
-                                                void (asio_client_connection::*handler)(const boost::system::error_code&))
+                                                void (asio_client_connection::*handler)(const boost::system::error_code&),
+                                                bool check_stop_flag)
 {
     if (ec)
     {
         return false;
     }
 
-    if (is_client_stopped)
+    if (check_stop_flag && is_client_stopped)
     {
         return false;
     }
@@ -651,7 +680,7 @@ void asio_client_connection::on_probe_connected_event(const boost::system::error
 {
     boost::system::error_code ignored_ec;
     tcp_client_probe_socket.lowest_layer().close(ignored_ec);
-    if (!err)
+    if (!err && !is_client_stopped)
     {
         on_prefered_host_up();
     }
@@ -685,6 +714,10 @@ void asio_client_connection::on_connected_event(const boost::system::error_code&
     if (config->verbose)
     {
         std::cerr << __FUNCTION__ << ":" << authority << std::endl;
+    }
+    if (is_client_stopped)
+    {
+        std::cerr << __FUNCTION__ << ":" << authority <<", connection timeout while attempting to connect"<< std::endl;
     }
     static thread_local boost::asio::ip::tcp::resolver::iterator end_of_resolve_result;
     if (!err)
@@ -751,10 +784,6 @@ void asio_client_connection::handle_connect_timeout(const boost::system::error_c
     {
         return;
     }
-    if (is_client_stopped)
-    {
-        return;
-    }
     handle_connection_error();
 }
 
@@ -765,6 +794,7 @@ void asio_client_connection::handle_connection_error()
         std::cerr << __FUNCTION__ << ": " << schema << "://" << authority << std::endl;
         printBacktrace();
     }
+
     call_connected_callbacks(false);
     // for http1 reconnect
     if (try_again_or_fail() == 0)
@@ -778,10 +808,7 @@ void asio_client_connection::handle_connection_error()
         is_client_stopped = false;
         return;
     }
-    io_context.post([this]()
-    {
-        worker->free_client(this);
-    });
+    start_timebomb_timer();
     return;
 }
 
@@ -1008,8 +1035,10 @@ void asio_client_connection::stop()
     connect_back_to_preferred_host_timer.cancel();
     delayed_reconnect_timer.cancel();
     ssl_handshake_timer.cancel();
+    tcp_dns_resolver.cancel();
 #ifdef ENABLE_HTTP3
     quic_pkt_timer.cancel();
+    udp_dns_resolver.cancel();
     if (ssl && (!ssl_socket || ssl_socket->native_handle() != ssl))
     {
         SSL_free(ssl);
@@ -1049,7 +1078,7 @@ void asio_client_connection::on_resolve_result_event(const boost::system::error_
     {
         std::cerr << __FUNCTION__ << ":" << authority << std::endl;
     }
-    if (!err)
+    if (!err && !is_client_stopped)
     {
         if (schema != "https")
         {
@@ -1063,13 +1092,14 @@ void asio_client_connection::on_resolve_result_event(const boost::system::error_
     else
     {
         std::cerr << "Error: " << err.message() << "\n";
+        std::cerr << "is_client_stopped: " << is_client_stopped << "\n";
     }
 }
 
 void asio_client_connection::on_probe_resolve_result_event(const boost::system::error_code& err,
                                                            boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
 {
-    if (!err)
+    if (!err && !is_client_stopped)
     {
         boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
         auto next_endpoint_iterator = ++endpoint_iterator;
@@ -1206,7 +1236,7 @@ void asio_client_connection::on_udp_resolve_result_event(const boost::system::er
     {
         std::cerr << __FUNCTION__ << ":" << authority << std::endl;
     }
-    if (!err)
+    if (!err && !is_client_stopped)
     {
         start_udp_async_connect(endpoint_iterator);
     }

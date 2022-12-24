@@ -77,6 +77,7 @@ base_worker::base_worker(uint32_t id, size_t req_todo, size_t nclients,
 
 base_worker::~base_worker()
 {
+    //printBacktrace();
 }
 
 void base_worker::stop_all_clients()
@@ -93,21 +94,21 @@ void base_worker::stop_all_clients()
         }
     */
     // client_pool has all the connected clients, including sub client
-    std::set<base_client*> terminated_clients;
+    std::set<base_client*> clients_to_terminate;
     for (auto& client_map : client_pool)
     {
         for (auto& clients_set : client_map.second)
         {
             for (auto& client : clients_set.second)
             {
-                if (terminated_clients.count(client) == 0)
-                {
-                    client->setup_graceful_shutdown();
-                    client->terminate_session();
-                    terminated_clients.insert(client);
-                }
+                clients_to_terminate.insert(client);
             }
         }
+    }
+    for (auto& client: clients_to_terminate)
+    {
+        client->setup_graceful_shutdown();
+        client->terminate_session();
     }
 }
 
@@ -132,12 +133,20 @@ void base_worker::free_client(base_client* deleted_client)
 
 std::shared_ptr<base_client> base_worker::get_shared_ptr_of_client(base_client* client)
 {
+    if (!client)
+    {
+        return std::shared_ptr<base_client>(nullptr);
+    }
     auto iter = managed_clients.find(client);
     if (iter != managed_clients.end())
     {
         return iter->second;
     }
-    return std::shared_ptr<base_client>(nullptr);
+    else
+    {
+        std::cerr<<"cannot find client: "<<client<<std::endl;
+        return std::shared_ptr<base_client>(nullptr);
+    }
 }
 
 void base_worker::run()

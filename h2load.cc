@@ -901,6 +901,7 @@ int main(int argc, char** argv)
                                                std::istreambuf_iterator<char>());
                         h2load::Config config_from_har;
                         convert_har_to_h2loadrunner_config(har_conent, config_from_har);
+                        post_process_json_config_schema(config);
                         std::cerr << staticjson::to_pretty_json_string(config_from_har.json_config_schema)
                                   << std::endl;
                         exit(0);

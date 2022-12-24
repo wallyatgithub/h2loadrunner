@@ -84,12 +84,13 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
 
     init_lua_states();
 
+    parent_client = worker->get_shared_ptr_of_client(parent);
+
     update_this_in_dest_client_map();
 
 #ifdef ENABLE_HTTP3
     ngtcp2_connection_close_error_default(&quic.last_error);
 #endif // ENABLE_HTTP3
-    parent_client = worker->get_shared_ptr_of_client(parent);
 }
 
 base_client::~base_client()
@@ -880,30 +881,28 @@ void base_client::record_client_start_time()
 
 void base_client::clean_up_this_in_dest_client_map()
 {
-    if (parent_client)
+    auto& controller_client_registry = get_controller_client()->client_registry;
+    for (auto clients_with_same_proto = controller_client_registry.begin();
+         clients_with_same_proto != controller_client_registry.end();)
     {
-        for (auto clients_with_same_proto = parent_client->client_registry.begin();
-             clients_with_same_proto != parent_client->client_registry.end();)
+        for (auto iter = clients_with_same_proto->second.begin(); iter != clients_with_same_proto->second.end();)
         {
-            for (auto iter = clients_with_same_proto->second.begin(); iter != clients_with_same_proto->second.end();)
+            if (iter->second == this)
             {
-                if (iter->second == this)
-                {
-                    iter = clients_with_same_proto->second.erase(iter);
-                }
-                else
-                {
-                    iter++;
-                }
-            }
-            if (clients_with_same_proto->second.empty())
-            {
-                clients_with_same_proto = parent_client->client_registry.erase(clients_with_same_proto);
+                iter = clients_with_same_proto->second.erase(iter);
             }
             else
             {
-                clients_with_same_proto++;
+                iter++;
             }
+        }
+        if (clients_with_same_proto->second.empty())
+        {
+            clients_with_same_proto = controller_client_registry.erase(clients_with_same_proto);
+        }
+        else
+        {
+            clients_with_same_proto++;
         }
     }
 
@@ -1259,21 +1258,21 @@ void base_client::populate_request_from_config_template(Request_Response_Data& n
 
 void base_client::terminate_sub_clients()
 {
-    std::set<base_client*> terminated_client;
+    std::set<base_client*> client_to_terminate;
     for (auto& sub_clients_with_same_proto : client_registry)
     {
         for (auto& sub_client : sub_clients_with_same_proto.second)
         {
             if (sub_client.second != this && sub_client.second->session)
             {
-                if (terminated_client.count(sub_client.second) == 0)
-                {
-                    sub_client.second->setup_graceful_shutdown();
-                    sub_client.second->terminate_session();
-                    terminated_client.insert(sub_client.second);
-                }
+                client_to_terminate.insert(sub_client.second);
             }
         }
+    }
+    for (auto& client: client_to_terminate)
+    {
+        client->setup_graceful_shutdown();
+        client->terminate_session();
     }
 }
 
@@ -1293,7 +1292,10 @@ bool base_client::is_test_finished()
 void base_client::update_this_in_dest_client_map()
 {
     clean_up_this_in_dest_client_map();
-
+    if (schema.empty() || authority.empty())
+    {
+        return;
+    }
     std::string base_uri = schema;
     base_uri.append("://").append(authority);
 
@@ -2459,7 +2461,7 @@ base_client* base_client::find_or_create_dest_client(Request_Response_Data& requ
     {
         return get_controller_client();
     }
-    if (is_controller_client()) // this is the first connection
+    if (is_controller_client())
     {
         std::string dest = *(request_to_send.schema);
         dest.append("://").append(*request_to_send.authority);
@@ -2563,7 +2565,7 @@ void base_client::prepare_first_request()
         {
             break;
         }
-        req_ptr = prepare_next_request(*req_ptr).get();
+        req_ptr = prepare_next_request(*req_ptr, false).get();
         if (!req_ptr || req_ptr->schema == &emptyString)
         {
             break;
@@ -2572,7 +2574,7 @@ void base_client::prepare_first_request()
 
 }
 
-const std::unique_ptr<Request_Response_Data>& base_client::prepare_next_request(Request_Response_Data& prev_request)
+const std::unique_ptr<Request_Response_Data>& base_client::prepare_next_request(Request_Response_Data& prev_request, bool check_next_req)
 {
     static const auto dummy_data = std::make_unique<Request_Response_Data>(std::vector<uint64_t>(0));
 
@@ -2705,16 +2707,19 @@ const std::unique_ptr<Request_Response_Data>& base_client::prepare_next_request(
     auto& ret = enqueue_request(prev_request, new_request);
     auto req_ptr = ret.get();
 
-    for (auto req_idx = curr_req_index; req_idx < scenario.requests.size() - 1; req_idx++)
+    if (check_next_req)
     {
-        if (scenario.requests[req_idx].page_id != scenario.requests[req_idx + 1].page_id)
+        for (auto req_idx = curr_req_index; req_idx < scenario.requests.size() - 1; req_idx++)
         {
-            break;
-        }
-        req_ptr = prepare_next_request(*req_ptr).get();
-        if (!req_ptr || req_ptr->schema == &emptyString)
-        {
-            break;
+            if (scenario.requests[req_idx].page_id != scenario.requests[req_idx + 1].page_id)
+            {
+                break;
+            }
+            req_ptr = prepare_next_request(*req_ptr, false).get();
+            if (!req_ptr || req_ptr->schema == &emptyString)
+            {
+                break;
+            }
         }
     }
 
@@ -2869,7 +2874,9 @@ void base_client::process_submit_request_failure(int errCode)
 
     if (streams.size() == 0)
     {
+        setup_graceful_shutdown();
         terminate_session();
+        return;
     }
 
     std::cerr << "Process Request Failure:" << worker->stats.req_failed

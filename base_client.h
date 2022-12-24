@@ -155,7 +155,7 @@ public:
     void record_client_start_time();
     void record_client_end_time();
 
-    const std::unique_ptr<Request_Response_Data>& prepare_next_request(Request_Response_Data& data);
+    const std::unique_ptr<Request_Response_Data>& prepare_next_request(Request_Response_Data& data, bool check_next_req = true);
     void update_content_length(Request_Response_Data& data);
     bool update_request_with_lua(lua_State* L, const Request_Response_Data& finished_request, Request_Response_Data& request_to_send);
     void produce_request_cookie_header(Request_Response_Data& req_to_be_sent);
