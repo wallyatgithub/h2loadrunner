@@ -303,13 +303,13 @@ void base_client::connection_timeout_handler()
 {
     stop_connect_timeout_timer();
     fail();
-    reconnect_to_alt_addr();
+    reconnect_to_other_or_same_addr();
     //ev_break (EV_A_ EVBREAK_ALL);
 }
 
 void base_client::reconnect_to_used_host()
 {
-    if (CLIENT_CONNECTED == state)
+    if (CLIENT_IDLE != state)
     {
         return;
     }
@@ -327,7 +327,7 @@ void base_client::reconnect_to_used_host()
     }
 }
 
-bool base_client::reconnect_to_alt_addr()
+bool base_client::reconnect_to_other_or_same_addr()
 {
     if (CLIENT_CONNECTED == state)
     {
@@ -628,7 +628,7 @@ bool base_client::should_reconnect_on_disconnect()
 {
     if (!is_test_finished())
     {
-        if (is_controller_client() && (client_registry.size() > 1))
+        if (is_controller_client())
         {
             return true;
         }

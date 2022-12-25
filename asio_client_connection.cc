@@ -76,7 +76,7 @@ asio_client_connection::asio_client_connection
       delayed_reconnect_timer(io_ctx),
       ssl_ctx(ssl_context),
       ssl_handshake_timer(io_ctx),
-      timebomb_timer(io_ctx),
+      self_destruction_timer(io_ctx),
       do_read_fn(&asio_client_connection::do_tcp_read),
       do_write_fn(&asio_client_connection::do_tcp_write)
 {
@@ -111,9 +111,9 @@ void asio_client_connection::start_conn_active_watcher()
     });
 }
 
-void asio_client_connection::handle_timebomb_timer_timeout(const boost::system::error_code& ec)
+void asio_client_connection::handle_self_destruction_timer_timeout(const boost::system::error_code& ec)
 {
-    if (((!timebomb_timer_active)) || (!timer_common_check(timebomb_timer, ec, &asio_client_connection::handle_timebomb_timer_timeout, false)))
+    if (((!self_destruction_timer_active)) || (!timer_common_check(self_destruction_timer, ec, &asio_client_connection::handle_self_destruction_timer_timeout, false, false)))
     {
         return;
     }
@@ -123,20 +123,20 @@ void asio_client_connection::handle_timebomb_timer_timeout(const boost::system::
     });
 }
 
-void asio_client_connection::start_timebomb_timer()
+void asio_client_connection::start_self_destruction_timer()
 {
     const auto timebomb_timer_value = 5000;
-    if (timebomb_timer_active)
+    if (self_destruction_timer_active)
     {
         return;
     }
-    timebomb_timer_active = true;
-    timebomb_timer.expires_from_now(boost::posix_time::millisec(timebomb_timer_value));
-    timebomb_timer.async_wait
+    self_destruction_timer_active = true;
+    self_destruction_timer.expires_from_now(boost::posix_time::millisec(timebomb_timer_value));
+    self_destruction_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
     {
-        handle_timebomb_timer_timeout(ec);
+        handle_self_destruction_timer_timeout(ec);
 
     });
 }
@@ -357,6 +357,10 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
     {
         return 0;
     }
+    if (self_destruction_timer_active)
+    {
+        abort();
+    }
     if (config->verbose)
     {
         std::cerr << __FUNCTION__ << ":" << dest_authority <<", proto: "<< proto_type<<std::endl;
@@ -444,7 +448,7 @@ void asio_client_connection::setup_graceful_shutdown()
     write_clear_callback = [this]()
     {
         disconnect();
-        start_timebomb_timer();
+        start_self_destruction_timer();
         return false;
     };
 }
@@ -503,7 +507,7 @@ void asio_client_connection::restart_rps_timer()
 
 bool asio_client_connection::timer_common_check(boost::asio::deadline_timer& timer, const boost::system::error_code& ec,
                                                 void (asio_client_connection::*handler)(const boost::system::error_code&),
-                                                bool check_stop_flag)
+                                                bool check_stop_flag, bool check_self_destruction_timer_flag)
 {
     if (ec)
     {
@@ -511,6 +515,11 @@ bool asio_client_connection::timer_common_check(boost::asio::deadline_timer& tim
     }
 
     if (check_stop_flag && is_client_stopped)
+    {
+        return false;
+    }
+
+    if (check_self_destruction_timer_flag && self_destruction_timer_active)
     {
         return false;
     }
@@ -571,7 +580,7 @@ void asio_client_connection::connect_to_prefered_host_timer_handler(const boost:
 
 void asio_client_connection::handle_rps_timer_timeout(const boost::system::error_code& ec)
 {
-    if (!timer_common_check(rps_timer, ec, &asio_client_connection::handle_rps_timer_timeout))
+    if (!timer_common_check(rps_timer, ec, &asio_client_connection::handle_rps_timer_timeout, false, true))
     {
         return;
     }
@@ -582,7 +591,7 @@ void asio_client_connection::handle_rps_timer_timeout(const boost::system::error
 void asio_client_connection::handle_timing_script_request_timeout(const boost::system::error_code& ec)
 {
     if (!timer_common_check(timing_script_request_timeout_timer,
-                            ec, &asio_client_connection::handle_timing_script_request_timeout))
+                            ec, &asio_client_connection::handle_timing_script_request_timeout, false, true))
     {
         return;
     }
@@ -667,7 +676,7 @@ void asio_client_connection::start_request_delay_execution_timer()
 void asio_client_connection::handle_request_execution_timer_timeout(const boost::system::error_code& ec)
 {
     if (!timer_common_check(delay_request_execution_timer, ec,
-                            &asio_client_connection::handle_request_execution_timer_timeout))
+                            &asio_client_connection::handle_request_execution_timer_timeout, false, true))
     {
         return;
     }
@@ -803,12 +812,12 @@ void asio_client_connection::handle_connection_error()
     }
 
     fail();
-    if (reconnect_to_alt_addr())
+    if (reconnect_to_other_or_same_addr())
     {
         is_client_stopped = false;
         return;
     }
-    start_timebomb_timer();
+    start_self_destruction_timer();
     return;
 }
 

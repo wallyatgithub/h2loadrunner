@@ -194,7 +194,7 @@ void writecb(struct ev_loop* loop, ev_io* w, int revents)
     if (rv == libev_client::ERR_CONNECT_FAIL)
     {
         client->disconnect();
-        if (client->reconnect_to_alt_addr())
+        if (client->reconnect_to_other_or_same_addr())
         {
             return;
         }
@@ -212,7 +212,7 @@ void writecb(struct ev_loop* loop, ev_io* w, int revents)
     if (rv != 0)
     {
         client->fail();
-        if (client->reconnect_to_alt_addr())
+        if (client->reconnect_to_other_or_same_addr())
         {
             return;
         }
@@ -230,7 +230,7 @@ void readcb(struct ev_loop* loop, ev_io* w, int revents)
         {
             return;
         }
-        if (client->reconnect_to_alt_addr())
+        if (client->reconnect_to_other_or_same_addr())
         {
             return;
         }

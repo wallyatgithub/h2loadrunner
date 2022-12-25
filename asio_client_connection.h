@@ -130,13 +130,14 @@ private:
     void restart_rps_timer();
 
     bool timer_common_check(boost::asio::deadline_timer& timer, const boost::system::error_code& ec,
-                            void (asio_client_connection::*handler)(const boost::system::error_code&), bool check_stop_flag = true);
+                                   void (asio_client_connection::*handler)(const boost::system::error_code&), bool check_stop_flag = true,
+                                   bool check_self_destruction_timer_flag = true);
 
     virtual void start_rps_timer();
 
-    void start_timebomb_timer();
+    void start_self_destruction_timer();
 
-    void handle_timebomb_timer_timeout(const boost::system::error_code& ec);
+    void handle_self_destruction_timer_timeout(const boost::system::error_code& ec);
 
     virtual void conn_activity_timeout_handler();
 
@@ -296,8 +297,8 @@ private:
     boost::asio::deadline_timer connect_back_to_preferred_host_timer;
     boost::asio::deadline_timer delayed_reconnect_timer;
     boost::asio::deadline_timer ssl_handshake_timer;
-    boost::asio::deadline_timer timebomb_timer;
-    bool timebomb_timer_active = false;
+    boost::asio::deadline_timer self_destruction_timer;
+    bool self_destruction_timer_active = false;
     std::function<void(asio_client_connection*)> do_read_fn, do_write_fn;
 };
 

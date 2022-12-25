@@ -100,7 +100,7 @@ public:
     void init_req_left();
     void reconnect_to_used_host();
     void on_prefered_host_up();
-    bool reconnect_to_alt_addr();
+    bool reconnect_to_other_or_same_addr();
     void set_open_new_conn_needed();
     void connection_timeout_handler();
     void timing_script_timeout_handler();
