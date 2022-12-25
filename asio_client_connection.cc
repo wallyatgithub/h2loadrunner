@@ -819,6 +819,7 @@ void asio_client_connection::handle_read_complete(bool is_quic, const boost::sys
     {
         std::cerr << "read return code: " << e << ", bytes read: " << bytes_transferred << ", timestamp:" <<
                   current_timestamp_nanoseconds() << std::endl;
+        std::cerr << "read content: "<<std::string((char*)input_buffer.data(), bytes_transferred)<<std::endl;
     }
 
     if (e)

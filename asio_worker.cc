@@ -95,9 +95,9 @@ asio_worker::asio_worker(uint32_t id, size_t nreq_todo, size_t nclients,
     async_resolver(io_context)
 {
     setup_SSL_CTX(ssl_ctx.native_handle(), *config);
-    setup_SSL_CTX(ssl_ctx_http1.native_handle(), *config, HTTP1_ALPN);
-    setup_SSL_CTX(ssl_ctx_http2.native_handle(), *config, HTTP2_ALPN);
-    setup_SSL_CTX(ssl_ctx_http3.native_handle(), *config, HTTP3_ALPN);
+    setup_SSL_CTX(ssl_ctx_http1.native_handle(), *config, std::set<std::string>{HTTP1_ALPN});
+    setup_SSL_CTX(ssl_ctx_http2.native_handle(), *config, std::set<std::string>{HTTP2_ALPN, HTTP1_ALPN});
+    setup_SSL_CTX(ssl_ctx_http3.native_handle(), *config, std::set<std::string>{HTTP3_ALPN});
 }
 
 asio_worker::~asio_worker()

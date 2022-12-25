@@ -2446,7 +2446,7 @@ void base_client::set_final(bool val)
     final = val;
 }
 
-bool base_client::is_disconnected()
+bool base_client::not_connected()
 {
     return (CLIENT_IDLE == state);
 }
@@ -2466,25 +2466,34 @@ base_client* base_client::find_or_create_dest_client(Request_Response_Data& requ
         std::string dest = *(request_to_send.schema);
         dest.append("://").append(*request_to_send.authority);
         auto proto = request_to_send.proto_type;
-        auto& clients = client_registry[proto];
-        auto it = clients.find(dest);
-        if (it == clients.end())
+
+        decltype(this) destination_client = nullptr;
+
+        auto map_of_map_iter = client_registry.find(proto);
+        if (map_of_map_iter != client_registry.end())
+        {
+            auto iter = map_of_map_iter->second.find(dest);
+            if (iter != map_of_map_iter->second.end())
+            {
+                destination_client = iter->second;
+            }
+        }
+        if (!destination_client)
         {
             auto new_client = create_dest_client(*request_to_send.schema, *request_to_send.authority, proto);
             worker->check_in_client(new_client);
-            clients[dest] = new_client.get();
             new_client->connect_to_host(new_client->schema, new_client->authority);
-            return new_client.get();
+            destination_client = new_client.get();
         }
         else
         {
-            if (it->second->is_disconnected())
+            if (destination_client->not_connected())
             {
-                assert(it->second->get_proto_type() == proto);
-                it->second->connect_to_host(*request_to_send.schema, *request_to_send.authority);
+                assert(destination_client->get_proto_type() == proto);
+                destination_client->connect_to_host(*request_to_send.schema, *request_to_send.authority);
             }
-            return it->second;
         }
+        return destination_client;
     }
     else
     {

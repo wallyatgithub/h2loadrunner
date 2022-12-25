@@ -24,6 +24,9 @@
  */
 #include <fstream>
 #include <streambuf>
+#include <cstdlib>
+#include <iostream>
+#include <ctime>
 
 #include "h2load.h"
 
@@ -436,6 +439,7 @@ Options:
 int main(int argc, char** argv)
 {
     tls::libssl_init();
+    std::srand(std::time(0));
 
 #ifdef USE_LIBEV
     auto status = ares_library_init(ARES_LIB_INIT_ALL);

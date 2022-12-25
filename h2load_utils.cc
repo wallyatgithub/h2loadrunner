@@ -1998,7 +1998,7 @@ void SSL_CTX_keylog_cb_func_cb(const SSL* ssl, const char* line)
     }
 }
 
-void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config, const std::string& apln_proto)
+void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config, const std::set<std::string>& apln_proto)
 {
     auto ssl_opts = (SSL_OP_ALL & ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS) |
                     SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION |
@@ -2032,7 +2032,7 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config, const std::string& apln_pro
         max_tls_version = TLS1_2_VERSION;
     }
 
-    if (config.is_quic() || apln_proto == HTTP3_ALPN)
+    if (config.is_quic() || apln_proto.count(HTTP3_ALPN))
     {
 #ifdef ENABLE_HTTP3
 #  ifdef HAVE_LIBNGTCP2_CRYPTO_OPENSSL
@@ -2094,7 +2094,7 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config, const std::string& apln_pro
 #endif // !(OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL))
 
 #ifndef OPENSSL_NO_NEXTPROTONEG
-    if (apln_proto == HTTP3_ALPN)
+    if (apln_proto.count(HTTP3_ALPN))
     {
         SSL_CTX_set_next_proto_select_cb(ssl_ctx, client_select_next_proto_cb_http3,
                                          nullptr);
@@ -2118,7 +2118,10 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config, const std::string& apln_pro
     }
     else
     {
-        std::copy_n(apln_proto.c_str(), apln_proto.size(), std::back_inserter(proto_list));
+        for (const auto& proto : apln_proto)
+        {
+            std::copy_n(proto.c_str(), proto.size(), std::back_inserter(proto_list));
+        }
     }
 
     SSL_CTX_set_alpn_protos(ssl_ctx, proto_list.data(), proto_list.size());

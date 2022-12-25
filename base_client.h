@@ -93,7 +93,7 @@ public:
     virtual bool is_write_signaled() = 0;
     virtual void stop_delayed_execution_timer() = 0;
 
-    bool is_disconnected();
+    bool not_connected();
     int connect();
     void cleanup_due_to_disconnect();
     void final_cleanup();
