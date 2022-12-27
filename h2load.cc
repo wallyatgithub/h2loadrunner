@@ -401,6 +401,9 @@ Options:
   --run-har=<PATH-To-HAR-File>
               Load an HAR file, transform to  h2loadrunner Json  based
               config file, and then run with this config file.
+  --skip-host=hostname_or_ip[:port]
+              specify the hostname or ip address to skip when  running
+              load, usually from an HAR file.
   --script=<PATH>
               A Lua script file to load and run. Configuration related
               to host, Scenarioes in above config-file will be ignored
@@ -440,6 +443,7 @@ int main(int argc, char** argv)
 {
     tls::libssl_init();
     std::srand(std::time(0));
+    std::vector<std::string> skipped_hosts;
 
 #ifdef USE_LIBEV
     auto status = ares_library_init(ARES_LIB_INIT_ALL);
@@ -505,6 +509,7 @@ int main(int argc, char** argv)
             {"script", required_argument, &flag, 26},
             {"transform-har", required_argument, &flag, 27},
             {"run-har", required_argument, &flag, 28},
+            {"skip-host", required_argument, &flag, 29},
             {nullptr, 0, nullptr, 0}
         };
         int option_index = 0;
@@ -929,12 +934,20 @@ int main(int argc, char** argv)
 
                     }
                     break;
+                    case 29:
+                    {
+                        std::string skipped_host = optarg;
+                        skipped_hosts.push_back(skipped_host);
+                    }
+                    break;
                 }
                 break;
             default:
                 break;
         }
     }
+
+    remove_skipped_host_from_config(config, skipped_hosts);
 
     if (script_files.size())
     {

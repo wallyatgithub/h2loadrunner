@@ -72,6 +72,7 @@ public:
     virtual std::shared_ptr<base_client> create_new_client(size_t req_todo, PROTO_TYPE proto_type = PROTO_UNSPECIFIED, const std::string& schema = "", const std::string& authority = "") = 0;
     virtual std::shared_ptr<base_client> create_new_sub_client(base_client* parent_client, size_t req_todo, const std::string& schema, const std::string& authority, PROTO_TYPE proto_type = PROTO_UNSPECIFIED) = 0;
     virtual void start_graceful_stop_timer() = 0;
+    virtual void stop_event_loop() = 0;
     void rate_period_timeout_handler();
     void warmup_timeout_handler();
     void duration_timeout_handler();

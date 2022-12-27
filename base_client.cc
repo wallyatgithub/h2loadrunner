@@ -743,8 +743,6 @@ void base_client::inc_status_counter_and_validate_response(int64_t stream_id)
 
 int base_client::try_again_or_fail()
 {
-    disconnect();
-
     if (conn_normal_close_restart_to_be_done)
     {
         conn_normal_close_restart_to_be_done = false;
@@ -772,8 +770,6 @@ int base_client::try_again_or_fail()
             }
         }
     }
-
-    process_abandoned_streams();
 
     return -1;
 }

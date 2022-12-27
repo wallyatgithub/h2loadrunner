@@ -126,11 +126,14 @@ void asio_client_connection::handle_self_destruction_timer_timeout(const boost::
 void asio_client_connection::start_self_destruction_timer()
 {
     const auto timebomb_timer_value = 5000;
+
+    clean_up_this_in_dest_client_map();
+
     if (self_destruction_timer_active)
     {
         return;
     }
-    self_destruction_timer_active = true;
+
     self_destruction_timer.expires_from_now(boost::posix_time::millisec(timebomb_timer_value));
     self_destruction_timer.async_wait
     (
@@ -139,6 +142,8 @@ void asio_client_connection::start_self_destruction_timer()
         handle_self_destruction_timer_timeout(ec);
 
     });
+
+    self_destruction_timer_active = true;
 }
 
 
@@ -365,6 +370,8 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
     {
         std::cerr << __FUNCTION__ << ":" << dest_authority <<", proto: "<< proto_type<<std::endl;
     }
+
+    is_client_stopped = false;
 
     std::string host;
     std::string port;
@@ -732,6 +739,7 @@ void asio_client_connection::on_connected_event(const boost::system::error_code&
     if (!err)
     {
         socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
+        socket.lowest_layer().set_option(boost::asio::socket_base::keep_alive(true));
         boost::asio::socket_base::receive_buffer_size rcv_option(config->json_config_schema.skt_recv_buffer_size);
         socket.lowest_layer().set_option(rcv_option);
         boost::asio::socket_base::receive_buffer_size snd_option(config->json_config_schema.skt_send_buffer_size);
@@ -805,18 +813,21 @@ void asio_client_connection::handle_connection_error()
     }
 
     call_connected_callbacks(false);
+
+    disconnect();
     // for http1 reconnect
     if (try_again_or_fail() == 0)
     {
         return;
     }
-
-    fail();
     if (reconnect_to_other_or_same_addr())
     {
         is_client_stopped = false;
         return;
     }
+
+    process_abandoned_streams();
+
     start_self_destruction_timer();
     return;
 }
@@ -1101,8 +1112,7 @@ void asio_client_connection::on_resolve_result_event(const boost::system::error_
     }
     else
     {
-        std::cerr << "Error: " << err.message() << "\n";
-        std::cerr << "is_client_stopped: " << is_client_stopped << "\n";
+        std::cerr << "Error: " << err.message() << ", connection stopped: " << is_client_stopped<< "\n";
     }
 }
 

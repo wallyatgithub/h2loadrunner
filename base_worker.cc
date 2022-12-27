@@ -241,6 +241,7 @@ void base_worker::duration_timeout_handler()
         stop_all_clients();
         stop_rate_mode_period_timer();
         std::cerr << "Stopped all clients for thread #" << id << std::endl;
+        //stop_event_loop();
     }
 }
 

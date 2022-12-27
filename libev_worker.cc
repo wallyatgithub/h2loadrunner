@@ -141,4 +141,10 @@ void libev_worker::run_event_loop()
     ev_run(loop, 0);
 }
 
+void libev_worker::stop_event_loop()
+{
+    ev_break(loop, EVBREAK_ALL);
+}
+
+
 }

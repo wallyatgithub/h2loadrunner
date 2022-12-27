@@ -226,10 +226,12 @@ void readcb(struct ev_loop* loop, ev_io* w, int revents)
     client->restart_timeout_timer();
     if (client->do_read() != 0)
     {
+        client->disconnect();
         if (client->try_again_or_fail() == 0)
         {
             return;
         }
+        client->process_abandoned_streams();
         if (client->reconnect_to_other_or_same_addr())
         {
             return;
@@ -2522,5 +2524,39 @@ void remove_reserved_http_headers(std::map<std::string, std::string, ci_less>& h
     {
         header_map.erase(h);
     }
+}
+
+void remove_skipped_host_from_config(h2load::Config& config_out, const std::vector<std::string>& skipped_host)
+{
+    for (auto s_idx = 0; s_idx < config_out.json_config_schema.scenarios.size(); s_idx++)
+    {
+        std::vector<Request> new_requests;
+        for (auto r_idx = 0; r_idx < config_out.json_config_schema.scenarios[s_idx].requests.size(); r_idx++)
+        {
+            bool host_blocked = false;
+            for (auto& s: skipped_host)
+            {
+                if (config_out.json_config_schema.scenarios[s_idx].requests[r_idx].authority.find(s) == 0)
+                {
+                    host_blocked = true;
+                    break;
+                }
+            }
+            if (!host_blocked)
+            {
+                new_requests.push_back(config_out.json_config_schema.scenarios[s_idx].requests[r_idx]);
+            }
+        }
+        std::swap(new_requests, config_out.json_config_schema.scenarios[s_idx].requests);
+    }
+    std::vector<Scenario> new_scenarios;
+    for (auto& s: config_out.json_config_schema.scenarios)
+    {
+        if (s.requests.size())
+        {
+            new_scenarios.push_back(s);
+        }
+    }
+    std::swap(new_scenarios, config_out.json_config_schema.scenarios);
 }
 

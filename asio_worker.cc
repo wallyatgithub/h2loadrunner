@@ -98,6 +98,8 @@ asio_worker::asio_worker(uint32_t id, size_t nreq_todo, size_t nclients,
     setup_SSL_CTX(ssl_ctx_http1.native_handle(), *config, std::set<std::string>{HTTP1_ALPN});
     setup_SSL_CTX(ssl_ctx_http2.native_handle(), *config, std::set<std::string>{HTTP2_ALPN, HTTP1_ALPN});
     setup_SSL_CTX(ssl_ctx_http3.native_handle(), *config, std::set<std::string>{HTTP3_ALPN});
+    // DEBUG
+    start_tick_timer();
 }
 
 asio_worker::~asio_worker()
@@ -292,6 +294,11 @@ void asio_worker::resolve_hostname(const std::string& hostname, const std::funct
         cb_function(resolved_addresses);
     };
     async_resolver.async_resolve(hostname, "", resolve_handler);
+}
+
+void asio_worker::stop_event_loop()
+{
+    io_context.stop();
 }
 
 }

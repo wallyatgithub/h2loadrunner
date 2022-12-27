@@ -232,4 +232,7 @@ void parse_uri_and_populate_fields(const std::string& uri, std::string& schema, 
 
 void remove_reserved_http_headers(std::map<std::string, std::string, ci_less>& header_map);
 
+void remove_skipped_host_from_config(h2load::Config& config_out, const std::vector<std::string>& skipped_host);
+
+
 #endif

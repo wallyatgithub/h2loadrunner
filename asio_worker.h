@@ -52,6 +52,8 @@ public:
 
     virtual void start_graceful_stop_timer();
 
+    virtual void stop_event_loop();
+
     boost::asio::io_service& get_io_context();
 
     void enqueue_user_timer(uint64_t ms_to_expire, std::function<void(void)>);
