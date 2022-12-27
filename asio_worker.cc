@@ -175,7 +175,6 @@ void asio_worker::handle_tick_timer_timeout(const boost::system::error_code & ec
         return;
     }
     process_user_timers();
-    start_tick_timer();
 }
 
 void asio_worker::handle_rate_mode_period_timer_timeout(const boost::system::error_code& ec)
