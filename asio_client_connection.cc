@@ -113,7 +113,9 @@ void asio_client_connection::start_conn_active_watcher()
 
 void asio_client_connection::handle_self_destruction_timer_timeout(const boost::system::error_code& ec)
 {
-    if (((!self_destruction_timer_active)) || (!timer_common_check(self_destruction_timer, ec, &asio_client_connection::handle_self_destruction_timer_timeout, false, false)))
+    if (((!self_destruction_timer_active))
+        || (!timer_common_check(self_destruction_timer, ec, &asio_client_connection::handle_self_destruction_timer_timeout,
+                                false, false)))
     {
         return;
     }
@@ -368,7 +370,7 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
     }
     if (config->verbose)
     {
-        std::cerr << __FUNCTION__ << ":" << dest_authority <<", proto: "<< proto_type<<std::endl;
+        std::cerr << __FUNCTION__ << ":" << dest_authority << ", proto: " << proto_type << std::endl;
     }
 
     is_client_stopped = false;
@@ -733,7 +735,7 @@ void asio_client_connection::on_connected_event(const boost::system::error_code&
     }
     if (is_client_stopped)
     {
-        std::cerr << __FUNCTION__ << ":" << authority <<", connection timeout while attempting to connect"<< std::endl;
+        std::cerr << __FUNCTION__ << ":" << authority << ", connection timeout while attempting to connect" << std::endl;
     }
     static thread_local boost::asio::ip::tcp::resolver::iterator end_of_resolve_result;
     if (!err)
@@ -843,7 +845,7 @@ void asio_client_connection::handle_read_complete(bool is_quic, const boost::sys
     {
         std::cerr << "read return code: " << e << ", bytes read: " << bytes_transferred << ", timestamp:" <<
                   current_timestamp_nanoseconds() << std::endl;
-        std::cerr << "read content: "<<std::string((char*)input_buffer.data(), bytes_transferred)<<std::endl;
+        std::cerr << "read content: " << std::string((char*)input_buffer.data(), bytes_transferred) << std::endl;
     }
 
     if (e)
@@ -1078,6 +1080,17 @@ void asio_client_connection::stop_delayed_execution_timer()
 }
 
 template <typename SOCKET>
+void asio_client_connection::start_async_connect(boost::asio::ip::tcp::endpoint endpoint, SOCKET& socket)
+{
+    socket.lowest_layer().async_connect(endpoint,
+                                        [this, &socket](const boost::system::error_code & err)
+    {
+        boost::asio::ip::tcp::resolver::iterator end_of_resolve_result;
+        on_connected_event(err, end_of_resolve_result, socket);
+    });
+}
+
+template <typename SOCKET>
 void asio_client_connection::start_async_connect(boost::asio::ip::tcp::resolver::iterator endpoint_iterator,
                                                  SOCKET& socket)
 {
@@ -1116,7 +1129,7 @@ void asio_client_connection::on_resolve_result_event(const boost::system::error_
     }
     else
     {
-        std::cerr << "Error: " << err.message() << ", connection stopped: " << is_client_stopped<< "\n";
+        std::cerr << "Error: " << err.message() << ", connection stopped: " << is_client_stopped << "\n";
     }
 }
 
@@ -1270,17 +1283,8 @@ void asio_client_connection::on_udp_resolve_result_event(const boost::system::er
     }
 }
 
-void asio_client_connection::start_udp_async_connect(boost::asio::ip::udp::resolver::iterator endpoint_iterator)
+void asio_client_connection::pre_udp_async_connect(boost::asio::ip::udp::endpoint remote_endpoint)
 {
-    static thread_local boost::asio::ip::udp::resolver::iterator end_of_resolve_result;
-    if (endpoint_iterator == end_of_resolve_result)
-    {
-        std::cerr << __FUNCTION__ << ": start_udp_async_connect failed " << std::endl;
-        handle_connection_error();
-        return;
-    }
-
-    boost::asio::ip::udp::endpoint remote_endpoint = *endpoint_iterator;
     if (remote_endpoint.address().is_v4())
     {
         boost::asio::ip::udp::endpoint local_ep(boost::asio::ip::udp::v4(), 0);
@@ -1296,6 +1300,62 @@ void asio_client_connection::start_udp_async_connect(boost::asio::ip::udp::resol
     do_write_fn = &asio_client_connection::do_udp_write;
 
     assert(udp_client_socket);
+}
+
+void asio_client_connection::post_udp_async_connect(boost::asio::ip::udp::endpoint remote_endpoint)
+{
+    auto local_sockaddr = udp_client_socket->local_endpoint().data();
+    auto local_addr_len = udp_client_socket->local_endpoint().size();
+
+    auto remote_sockaddr = remote_endpoint.data();
+    auto remote_addr_len = remote_endpoint.size();
+
+    if (quic_init(local_sockaddr, local_addr_len, remote_sockaddr,
+                  remote_addr_len) != 0)
+    {
+        std::cerr << "quic_init failed" << std::endl;
+        exit(1);
+    }
+    signal_write();
+    do_read();
+}
+
+
+void asio_client_connection::start_udp_async_connect(boost::asio::ip::udp::endpoint remote_endpoint)
+{
+    pre_udp_async_connect(remote_endpoint);
+
+    udp_client_socket->async_connect(remote_endpoint,
+                                     [this, remote_endpoint](const boost::system::error_code & err)
+    {
+        if (!err)
+        {
+            post_udp_async_connect(remote_endpoint);
+        }
+        else
+        {
+            if (config->verbose)
+            {
+                std::cerr << __FUNCTION__ << " err: " << err << std::endl;
+            }
+            handle_connection_error();
+        }
+    });
+
+}
+
+void asio_client_connection::start_udp_async_connect(boost::asio::ip::udp::resolver::iterator endpoint_iterator)
+{
+    static thread_local boost::asio::ip::udp::resolver::iterator end_of_resolve_result;
+    if (endpoint_iterator == end_of_resolve_result)
+    {
+        std::cerr << __FUNCTION__ << ": start_udp_async_connect failed " << std::endl;
+        handle_connection_error();
+        return;
+    }
+
+    boost::asio::ip::udp::endpoint remote_endpoint = *endpoint_iterator;
+    pre_udp_async_connect(remote_endpoint);
 
     udp_client_socket->async_connect(remote_endpoint,
                                      [this, endpoint_iterator](const boost::system::error_code & err)
@@ -1303,20 +1363,7 @@ void asio_client_connection::start_udp_async_connect(boost::asio::ip::udp::resol
         if (!err)
         {
             boost::asio::ip::udp::endpoint remote_endpoint = *endpoint_iterator;
-            auto local_sockaddr = udp_client_socket->local_endpoint().data();
-            auto local_addr_len = udp_client_socket->local_endpoint().size();
-
-            auto remote_sockaddr = remote_endpoint.data();
-            auto remote_addr_len = remote_endpoint.size();
-
-            if (quic_init(local_sockaddr, local_addr_len, remote_sockaddr,
-                          remote_addr_len) != 0)
-            {
-                std::cerr << "quic_init failed" << std::endl;
-                exit(1);
-            }
-            signal_write();
-            do_read();
+            post_udp_async_connect(remote_endpoint);
         }
         else
         {

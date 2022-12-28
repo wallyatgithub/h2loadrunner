@@ -939,11 +939,14 @@ void base_client::cleanup_due_to_disconnect()
 {
     clean_up_this_in_dest_client_map();
 
-    if (CLIENT_CONNECTED == state)
+    if (!config->disable_connection_trace)
     {
-        std::cerr << "=============== disconnected from " << authority << "===============" << std::endl;
+        if (CLIENT_CONNECTED == state)
+        {
+            std::cerr << "=============== disconnected from " << authority << "===============" << std::endl;
+        }
     }
-    else if (CLIENT_CONNECTING == state)
+    if (CLIENT_CONNECTING == state)
     {
         std::cerr << "=============== failed to connect to " << authority << "===============" << std::endl;
     }
@@ -2232,8 +2235,10 @@ int base_client::connection_made()
     return_unsent_request_to_controller(true);
 
     submit_request_upon_connected();
-
-    std::cerr << "===============connected to " << authority << "===============" << std::endl;
+    if (!config->disable_connection_trace)
+    {
+        std::cerr << "===============connected to " << authority << "===============" << std::endl;
+    }
     if (authority != preferred_authority &&
         config->json_config_schema.connect_back_to_preferred_host &&
         (!is_test_finished()))

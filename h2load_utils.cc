@@ -2453,7 +2453,7 @@ bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenari
 bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::Config& config_out, const std::vector<std::string>& skipped_host)
 {
     config_out.json_config_schema.scenarios.emplace_back();
-    config_out.json_config_schema.scenarios.back().name = "HAR";
+    config_out.json_config_schema.scenarios.back().name = "HAR_"+std::to_string(config_out.json_config_schema.scenarios.size());
     config_out.json_config_schema.tls_keylog_file = "har";
 
     if (convert_har_to_h2loadrunner_scenario(har_file_content, config_out.json_config_schema.scenarios.back(), skipped_host) &&
@@ -2522,6 +2522,7 @@ bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::C
                 break;
             }
         }
+        config_out.disable_connection_trace = true;
         return true;
     }
     else

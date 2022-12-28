@@ -86,6 +86,7 @@ struct Config
     // Enable ktls.
     bool ktls = false;
     uint32_t cc_algo;
+    bool disable_connection_trace = false;
 
     Config();
     ~Config();

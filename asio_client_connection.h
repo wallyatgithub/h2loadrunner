@@ -207,6 +207,9 @@ private:
     template <typename SOCKET>
     void start_async_connect(boost::asio::ip::tcp::resolver::iterator endpoint_iterator, SOCKET& socket);
 
+    template <typename SOCKET>
+    void start_async_connect(boost::asio::ip::tcp::endpoint endpoint, SOCKET& socket);
+
     void on_resolve_result_event(const boost::system::error_code& err,
                                  boost::asio::ip::tcp::resolver::iterator endpoint_iterator);
 
@@ -217,6 +220,12 @@ private:
     void on_udp_resolve_result_event(const boost::system::error_code& err,
                                      boost::asio::ip::udp::resolver::iterator endpoint_iterator);
     void start_udp_async_connect(boost::asio::ip::udp::resolver::iterator endpoint_iterator);
+
+    void start_udp_async_connect(boost::asio::ip::udp::endpoint remote_endpoint);
+
+    void pre_udp_async_connect(boost::asio::ip::udp::endpoint remote_endpoint);
+
+    void post_udp_async_connect(boost::asio::ip::udp::endpoint remote_endpoint);
 
     void do_udp_write();
 
