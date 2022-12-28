@@ -811,6 +811,10 @@ void asio_client_connection::handle_connection_error()
         std::cerr << __FUNCTION__ << ": " << schema << "://" << authority << std::endl;
         printBacktrace();
     }
+    if (is_client_stopped || self_destruction_timer_active)
+    {
+        return;
+    }
 
     call_connected_callbacks(false);
 

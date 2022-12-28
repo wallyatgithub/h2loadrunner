@@ -1620,7 +1620,7 @@ void post_process_json_config_schema(h2load::Config& config)
             }
             std::string har_content((std::istreambuf_iterator<char>(har_stream)),
                                     std::istreambuf_iterator<char>());
-            if (!convert_har_to_h2loadrunner_scenario(har_content, scenario))
+            if (!convert_har_to_h2loadrunner_scenario(har_content, scenario, std::vector<std::string>{}))
             {
                 std::cerr << "cannot parsing HAR file: " << scenario.har_file_name << std::endl;
                 exit(EXIT_FAILURE);
@@ -2293,7 +2293,7 @@ void parse_uri_and_populate_fields(const std::string& uri, std::string& schema, 
         }
     }
 }
-bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenario& scenario)
+bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenario& scenario, const std::vector<std::string>& skipped_host)
 {
     HAR_File har_file;
     staticjson::ParseStatus result;
@@ -2338,20 +2338,33 @@ bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenari
         }
         for (auto iter = entries_of_pages_iter->second.begin(); iter != entries_of_pages_iter->second.end(); iter++)
         {
-            scenario.requests.emplace_back();
-            Request& req_in_config = scenario.requests.back();
-            req_in_config.page_id = page_id;
             HAR_Request& req_in_har = har_file.log.entries[iter->second].request;
             HAR_Response& resp_in_har = har_file.log.entries[iter->second].response;
-            // method
+            std::string schema;
+            std::string authority;
+            std::string path;
+            parse_uri_and_populate_fields(req_in_har.url, schema, authority, path);
+            bool host_blocked = false;
+            for (auto& s: skipped_host)
+            {
+                if (authority.find(s) == 0)
+                {
+                    host_blocked = true;
+                    break;
+                }
+            }
+            if (host_blocked)
+            {
+                continue;
+            }
+            scenario.requests.emplace_back();
+            Request& req_in_config = scenario.requests.back();
+            req_in_config.schema = schema;
+            req_in_config.authority = authority;
+            req_in_config.page_id = page_id;
             req_in_config.method = req_in_har.method;
-
-            // uri, post_process_json_config_schema is need to further process uri to get host, schema, etc
             req_in_config.uri.typeOfAction = "input";
             req_in_config.uri.input = req_in_har.url;
-            // host, port, schema
-            std::string tmpPath;
-            parse_uri_and_populate_fields(req_in_har.url, req_in_config.schema, req_in_config.authority, tmpPath);
             if (req_in_config.uri.input.find('?', 0) == std::string::npos && req_in_har.queryString.size())
             {
                 req_in_config.uri.input.append("?");
@@ -2437,13 +2450,13 @@ bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenari
     return true;
 }
 
-bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::Config& config_out)
+bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::Config& config_out, const std::vector<std::string>& skipped_host)
 {
     config_out.json_config_schema.scenarios.emplace_back();
     config_out.json_config_schema.scenarios.back().name = "HAR";
     config_out.json_config_schema.tls_keylog_file = "har";
 
-    if (convert_har_to_h2loadrunner_scenario(har_file_content, config_out.json_config_schema.scenarios.back()) &&
+    if (convert_har_to_h2loadrunner_scenario(har_file_content, config_out.json_config_schema.scenarios.back(), skipped_host) &&
         config_out.json_config_schema.scenarios.back().requests.size())
     {
         config_out.json_config_schema.builtin_cookie_support = false;
@@ -2524,39 +2537,5 @@ void remove_reserved_http_headers(std::map<std::string, std::string, ci_less>& h
     {
         header_map.erase(h);
     }
-}
-
-void remove_skipped_host_from_config(h2load::Config& config_out, const std::vector<std::string>& skipped_host)
-{
-    for (auto s_idx = 0; s_idx < config_out.json_config_schema.scenarios.size(); s_idx++)
-    {
-        std::vector<Request> new_requests;
-        for (auto r_idx = 0; r_idx < config_out.json_config_schema.scenarios[s_idx].requests.size(); r_idx++)
-        {
-            bool host_blocked = false;
-            for (auto& s: skipped_host)
-            {
-                if (config_out.json_config_schema.scenarios[s_idx].requests[r_idx].authority.find(s) == 0)
-                {
-                    host_blocked = true;
-                    break;
-                }
-            }
-            if (!host_blocked)
-            {
-                new_requests.push_back(config_out.json_config_schema.scenarios[s_idx].requests[r_idx]);
-            }
-        }
-        std::swap(new_requests, config_out.json_config_schema.scenarios[s_idx].requests);
-    }
-    std::vector<Scenario> new_scenarios;
-    for (auto& s: config_out.json_config_schema.scenarios)
-    {
-        if (s.requests.size())
-        {
-            new_scenarios.push_back(s);
-        }
-    }
-    std::swap(new_scenarios, config_out.json_config_schema.scenarios);
 }
 

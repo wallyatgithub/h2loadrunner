@@ -937,6 +937,8 @@ void base_client::final_cleanup()
 
 void base_client::cleanup_due_to_disconnect()
 {
+    clean_up_this_in_dest_client_map();
+
     if (CLIENT_CONNECTED == state)
     {
         std::cerr << "=============== disconnected from " << authority << "===============" << std::endl;
@@ -989,8 +991,6 @@ void base_client::cleanup_due_to_disconnect()
         // not a graceful disconnect, fail one unsent request
         process_requests_to_submit_upon_error(false);
     }
-
-    clean_up_this_in_dest_client_map();
 }
 
 void base_client::record_client_end_time()

@@ -909,7 +909,7 @@ int main(int argc, char** argv)
                         std::string har_conent((std::istreambuf_iterator<char>(buffer)),
                                                std::istreambuf_iterator<char>());
                         h2load::Config config_from_har;
-                        convert_har_to_h2loadrunner_config(har_conent, config_from_har);
+                        convert_har_to_h2loadrunner_config(har_conent, config_from_har, std::vector<std::string>{});
                         post_process_json_config_schema(config);
                         std::cerr << staticjson::to_pretty_json_string(config_from_har.json_config_schema)
                                   << std::endl;
@@ -922,13 +922,11 @@ int main(int argc, char** argv)
                         std::ifstream buffer(har_file_name);
                         std::string har_conent((std::istreambuf_iterator<char>(buffer)),
                                                std::istreambuf_iterator<char>());
-                        h2load::Config config_from_har;
-                        convert_har_to_h2loadrunner_config(har_conent, config_from_har);
+                        convert_har_to_h2loadrunner_config(har_conent, config, skipped_hosts);
                         std::cerr << "HAR transformed to h2loadrunner config:" << std::endl << staticjson::to_pretty_json_string(
-                                      config_from_har.json_config_schema)
+                                      config.json_config_schema)
                                   << std::endl;
 
-                        config = config_from_har;
                         post_process_json_config_schema(config);
                         populate_config_from_json(config);
 
@@ -946,8 +944,6 @@ int main(int argc, char** argv)
                 break;
         }
     }
-
-    remove_skipped_host_from_config(config, skipped_hosts);
 
     if (script_files.size())
     {

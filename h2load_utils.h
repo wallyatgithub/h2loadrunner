@@ -223,16 +223,14 @@ uint64_t current_timestamp_nanoseconds();
 
 uint64_t convert_iso8601_to_epoch_ignore_tz(const std::string iso8601);
 
-bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenario& scenario);
+bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenario& scenario, const std::vector<std::string>& skipped_host);
 
-bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::Config& config_out);
+bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::Config& config_out, const std::vector<std::string>& skipped_host);
 
 void parse_uri_and_populate_fields(const std::string& uri, std::string& schema, std::string& authority,
                                    std::string& path);
 
 void remove_reserved_http_headers(std::map<std::string, std::string, ci_less>& header_map);
-
-void remove_skipped_host_from_config(h2load::Config& config_out, const std::vector<std::string>& skipped_host);
 
 
 #endif
