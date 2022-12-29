@@ -11,6 +11,7 @@ extern "C" {
 #include "lauxlib.h"
 }
 #include <openssl/ssl.h>
+#include <boost/noncopyable.hpp>
 
 #include "http2.h"
 
@@ -51,7 +52,8 @@ public:
 using time_point_in_seconds_double =
     std::chrono::time_point<std::chrono::steady_clock, std::chrono::duration< double >>;
 
-class base_client
+class base_client: public std::enable_shared_from_this<base_client>,
+                        private boost::noncopyable
 {
 public:
     base_client(uint32_t id, base_worker* wrker, size_t req_todo, Config* conf,

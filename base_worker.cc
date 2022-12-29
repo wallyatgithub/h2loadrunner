@@ -133,20 +133,12 @@ void base_worker::free_client(base_client* deleted_client)
 
 std::shared_ptr<base_client> base_worker::get_shared_ptr_of_client(base_client* client)
 {
-    if (!client)
+    static thread_local std::shared_ptr<base_client> ptr(nullptr);
+    if (client)
     {
-        return std::shared_ptr<base_client>(nullptr);
+        return client->shared_from_this();
     }
-    auto iter = managed_clients.find(client);
-    if (iter != managed_clients.end())
-    {
-        return iter->second;
-    }
-    else
-    {
-        std::cerr<<"cannot find client: "<<client<<std::endl;
-        return std::shared_ptr<base_client>(nullptr);
-    }
+    return ptr;
 }
 
 void base_worker::run()

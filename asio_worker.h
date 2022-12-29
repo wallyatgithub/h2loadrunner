@@ -1,6 +1,8 @@
 #ifndef ASIO_WORKER_H
 #define ASIO_WORKER_H
 
+#include <map>
+
 #ifdef _WINDOWS
 #include <sdkddkver.h>
 #endif
@@ -23,6 +25,10 @@ public:
                 size_t rate, size_t max_samples, Config* config);
 
     virtual ~asio_worker();
+
+    using query_type = std::pair<std::string, std::string>;
+    using result_type = std::pair<std::vector<std::string>, std::vector<std::string>>;
+    using result_with_ttl_type = std::pair<result_type, std::chrono::steady_clock::time_point>;
 
     virtual void run_event_loop();
 
@@ -70,9 +76,16 @@ public:
 
     void resolve_hostname(const std::string& hostname, const std::function<void(std::vector<std::string>&)>& cb_function);
 
-private:
+    void update_tcp_resolver_cache(const std::pair<std::string, std::string>& query, const result_type& addresses);
+    const result_type& get_from_tcp_resolver_cache(const std::pair<std::string, std::string>& query);
 
+    void update_udp_resolver_cache(const std::pair<std::string, std::string>& query, const result_type& addresses);
+    const result_type& get_from_udp_resolver_cache(const std::pair<std::string, std::string>& query);
+
+private:
     void process_user_timers();
+    void update_resolver_cache(const std::pair<std::string, std::string>& query, const result_type& addresses, std::map<query_type, result_with_ttl_type>& cache);
+    const result_type& get_from_resolver_cache(const std::pair<std::string, std::string>& query, std::map<query_type, result_with_ttl_type>& cache);
 
     boost::asio::io_service io_context;
     boost::asio::deadline_timer rate_mode_period_timer;
@@ -86,7 +99,8 @@ private:
     std::multimap<std::chrono::steady_clock::time_point, std::function<void(void)>> user_timers;
     std::thread::id my_thread_id;
     boost::asio::ip::tcp::resolver async_resolver;
-
+    std::map<query_type, result_with_ttl_type> tcp_resolver_cache;
+    std::map<query_type, result_with_ttl_type> udp_resolver_cache;
 };
 
 }

@@ -41,7 +41,7 @@ namespace h2load
 {
 
 class asio_client_connection
-    : public h2load::base_client, private boost::noncopyable
+    : public h2load::base_client
 {
 public:
     asio_client_connection

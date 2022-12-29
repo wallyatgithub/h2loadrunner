@@ -300,6 +300,52 @@ void asio_worker::stop_event_loop()
     io_context.stop();
 }
 
+void asio_worker::update_resolver_cache(const std::pair<std::string, std::string>& query, const asio_worker::result_type& addresses, std::map<query_type, result_with_ttl_type>& cache)
+{
+    std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
+    auto ttl = std::chrono::seconds(60);
+    auto expiry_timepoint = curr_time_point + ttl;
+    cache[query] = std::make_pair(addresses, expiry_timepoint);
+}
+
+const asio_worker::result_type& asio_worker::get_from_resolver_cache(const std::pair<std::string, std::string>& query, std::map<query_type, result_with_ttl_type>& cache)
+{
+    static std::pair<std::vector<std::string>, std::vector<std::string>> empty_result{std::vector<std::string>(0), std::vector<std::string>(0)};
+    auto iter = cache.find(query);
+    if (iter != cache.end())
+    {
+        if (iter->second.second > std::chrono::steady_clock::now())
+        {
+            return iter->second.first;
+        }
+        else
+        {
+            cache.erase(iter);
+        }
+    }
+    return empty_result;
+}
+
+void asio_worker::update_tcp_resolver_cache(const std::pair<std::string, std::string>& query, const asio_worker::result_type& addresses)
+{
+    return update_resolver_cache(query, addresses, tcp_resolver_cache);
+}
+
+const asio_worker::result_type& asio_worker::get_from_tcp_resolver_cache(const std::pair<std::string, std::string>& query)
+{
+    return get_from_resolver_cache(query, tcp_resolver_cache);
+}
+
+void asio_worker::update_udp_resolver_cache(const std::pair<std::string, std::string>& query, const asio_worker::result_type& addresses)
+{
+    return update_resolver_cache(query, addresses, udp_resolver_cache);
+}
+
+const asio_worker::result_type& asio_worker::get_from_udp_resolver_cache(const std::pair<std::string, std::string>& query)
+{
+    return get_from_resolver_cache(query, udp_resolver_cache);
+}
+
 }
 
 

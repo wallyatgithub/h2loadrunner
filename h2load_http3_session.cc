@@ -46,6 +46,11 @@ void Http3Session::on_connect() {}
 
 int Http3Session::submit_request()
 {
+    if (client_->get_number_of_request_inflight() >= client_->get_max_concurrent_stream())
+    {
+        return MAX_CONCURRENT_STREAM_REACHED;
+    }
+
     if (npending_request_)
     {
         ++npending_request_;
@@ -137,11 +142,6 @@ void Http3Session::read_data(nghttp3_vec* vec, size_t veccnt,
 int64_t Http3Session::submit_request_internal()
 {
     auto config = client_->worker->config;
-
-    if (client_->get_number_of_request_inflight() >= client_->get_max_concurrent_stream())
-    {
-        return MAX_CONCURRENT_STREAM_REACHED;
-    }
 
     if (config->json_config_schema.scenarios.size())
     {

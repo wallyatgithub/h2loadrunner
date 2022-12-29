@@ -628,10 +628,12 @@ bool base_client::should_reconnect_on_disconnect()
 {
     if (!is_test_finished())
     {
+        /*
         if (is_controller_client())
         {
             return true;
         }
+        */
         if (config->json_config_schema.connection_retry_on_disconnect)
         {
             return true;

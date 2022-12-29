@@ -35,6 +35,8 @@ namespace h2load
 const auto single_buffer_size = 64 * 1024;
 const auto initial_number_of_quic_buffers = 5;
 const auto number_of_stream_output_buffer_groups = 2;
+static boost::asio::ip::tcp::resolver::iterator end_of_tcp_resolve_result;
+static boost::asio::ip::udp::resolver::iterator end_of_udp_resolve_result;
 
 
 asio_client_connection::asio_client_connection
@@ -381,6 +383,28 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
     {
         exit(1);
     }
+    boost::system::error_code ec;
+    auto remote_ip_address = boost::asio::ip::make_address(host, ec);
+    if (ec)
+    {
+        auto a_worker = static_cast<asio_worker*>(worker);
+        auto query = std::make_pair(host, port);
+#ifdef ENABLE_HTTP3
+        auto& result = is_quic() ? a_worker->get_from_udp_resolver_cache(query) : a_worker->get_from_tcp_resolver_cache(query);
+#else
+        auto& result = a_worker->get_from_tcp_resolver_cache(query);
+#endif
+        auto& address = result.first.size() ? result.first : result.second;
+        if (address.size())
+        {
+            auto index = rand() % address.size();
+            remote_ip_address = boost::asio::ip::make_address(address[index], ec);
+            if (config->verbose)
+            {
+                std::cerr<<"result from cache: "<<host<<":"<<remote_ip_address<<std::endl<<std::flush;
+            }
+        }
+    }
 #ifdef ENABLE_HTTP3
     if (is_quic())
     {
@@ -388,12 +412,20 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
         {
             std::cerr << "quic connect" << std::endl;
         }
-        boost::asio::ip::udp::resolver::query query(host, port);
-        udp_dns_resolver.async_resolve(query,
-                                       [this](const boost::system::error_code & err, boost::asio::ip::udp::resolver::iterator endpoint_iterator)
+        if (ec)
         {
-            on_udp_resolve_result_event(err, endpoint_iterator);
-        });
+            boost::asio::ip::udp::resolver::query query(host, port);
+            udp_dns_resolver.async_resolve(query,
+                                           [this](const boost::system::error_code & err, boost::asio::ip::udp::resolver::iterator endpoint_iterator)
+            {
+                on_udp_resolve_result_event(err, endpoint_iterator);
+            });
+        }
+        else
+        {
+            boost::asio::ip::udp::endpoint remote_endpoint(remote_ip_address, std::stoi(port));
+            start_udp_async_connect(remote_endpoint);
+        }
     }
     else
 #endif
@@ -416,14 +448,29 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
             do_read_fn = &asio_client_connection::do_tcp_read;
             do_write_fn = &asio_client_connection::do_tcp_write;
         }
-
-        boost::asio::ip::tcp::resolver::query query(host, port);
-        tcp_dns_resolver.async_resolve(query,
-                                       [this](const boost::system::error_code & err, boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
+        if (ec)
         {
-            on_resolve_result_event(err, endpoint_iterator);
-        });
+            boost::asio::ip::tcp::resolver::query query(host, port);
+            tcp_dns_resolver.async_resolve(query,
+                                           [this](const boost::system::error_code & err, boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
+            {
+                on_resolve_result_event(err, endpoint_iterator);
+            });
+        }
+        else
+        {
+            boost::asio::ip::tcp::endpoint remote_endpoint(remote_ip_address, std::stoi(port));
+            if (schema != "https")
+            {
+                start_async_connect(remote_endpoint, tcp_client_socket);
+            }
+            else
+            {
+                start_async_connect(remote_endpoint, *ssl_socket);
+            }
+        }
     }
+
     start_connect_timeout_timer();
     schema = dest_schema;
     authority = dest_authority;
@@ -737,7 +784,6 @@ void asio_client_connection::on_connected_event(const boost::system::error_code&
     {
         std::cerr << __FUNCTION__ << ":" << authority << ", connection timeout while attempting to connect" << std::endl;
     }
-    static thread_local boost::asio::ip::tcp::resolver::iterator end_of_resolve_result;
     if (!err)
     {
         socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
@@ -777,7 +823,7 @@ void asio_client_connection::on_connected_event(const boost::system::error_code&
         {
             return;
         }
-        if (endpoint_iterator != end_of_resolve_result)
+        if (endpoint_iterator != end_of_tcp_resolve_result)
         {
             socket.lowest_layer().close();
             boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
@@ -1085,8 +1131,8 @@ void asio_client_connection::start_async_connect(boost::asio::ip::tcp::endpoint 
     socket.lowest_layer().async_connect(endpoint,
                                         [this, &socket](const boost::system::error_code & err)
     {
-        boost::asio::ip::tcp::resolver::iterator end_of_resolve_result;
-        on_connected_event(err, end_of_resolve_result, socket);
+        boost::asio::ip::tcp::resolver::iterator end_of_tcp_resolve_result;
+        on_connected_event(err, end_of_tcp_resolve_result, socket);
     });
 }
 
@@ -1094,8 +1140,7 @@ template <typename SOCKET>
 void asio_client_connection::start_async_connect(boost::asio::ip::tcp::resolver::iterator endpoint_iterator,
                                                  SOCKET& socket)
 {
-    static thread_local boost::asio::ip::tcp::resolver::iterator end_of_resolve_result;
-    if (endpoint_iterator == end_of_resolve_result)
+    if (endpoint_iterator == end_of_tcp_resolve_result)
     {
         handle_connection_error();
         return;
@@ -1118,6 +1163,29 @@ void asio_client_connection::on_resolve_result_event(const boost::system::error_
     }
     if (!err && !is_client_stopped)
     {
+        std::string host;
+        std::string port;
+        if (get_host_and_port_from_authority(schema, authority, host, port))
+        {
+            auto cache_iter = endpoint_iterator;
+            std::pair<std::vector<std::string>, std::vector<std::string>> result;
+            while (cache_iter != end_of_tcp_resolve_result)
+            {
+                boost::asio::ip::tcp::endpoint endpoint = *cache_iter;
+                if (endpoint.address().is_v4())
+                {
+                    result.first.push_back(endpoint.address().to_string());
+                }
+                else
+                {
+                    result.second.push_back(endpoint.address().to_string());
+                }
+                cache_iter++;
+            }
+            auto a_worker = static_cast<asio_worker*>(worker);
+            a_worker->update_tcp_resolver_cache(std::make_pair(host, port), result);
+        }
+
         if (schema != "https")
         {
             start_async_connect(endpoint_iterator, tcp_client_socket);
@@ -1275,6 +1343,28 @@ void asio_client_connection::on_udp_resolve_result_event(const boost::system::er
     }
     if (!err && !is_client_stopped)
     {
+        std::string host;
+        std::string port;
+        if (get_host_and_port_from_authority(schema, authority, host, port))
+        {
+            auto cache_iter = endpoint_iterator;
+            std::pair<std::vector<std::string>, std::vector<std::string>> result;
+            while (cache_iter != end_of_udp_resolve_result)
+            {
+                boost::asio::ip::udp::endpoint endpoint = *cache_iter;
+                if (endpoint.address().is_v4())
+                {
+                    result.first.push_back(endpoint.address().to_string());
+                }
+                else
+                {
+                    result.second.push_back(endpoint.address().to_string());
+                }
+                cache_iter++;
+            }
+            auto a_worker = static_cast<asio_worker*>(worker);
+            a_worker->update_udp_resolver_cache(std::make_pair(host, port), result);
+        }
         start_udp_async_connect(endpoint_iterator);
     }
     else
@@ -1346,8 +1436,8 @@ void asio_client_connection::start_udp_async_connect(boost::asio::ip::udp::endpo
 
 void asio_client_connection::start_udp_async_connect(boost::asio::ip::udp::resolver::iterator endpoint_iterator)
 {
-    static thread_local boost::asio::ip::udp::resolver::iterator end_of_resolve_result;
-    if (endpoint_iterator == end_of_resolve_result)
+    static thread_local boost::asio::ip::udp::resolver::iterator end_of_tcp_resolve_result;
+    if (endpoint_iterator == end_of_tcp_resolve_result)
     {
         std::cerr << __FUNCTION__ << ": start_udp_async_connect failed " << std::endl;
         handle_connection_error();
@@ -1373,7 +1463,7 @@ void asio_client_connection::start_udp_async_connect(boost::asio::ip::udp::resol
             }
             auto iter = endpoint_iterator;
             auto next_endpoint_iterator = ++iter;
-            if (next_endpoint_iterator != end_of_resolve_result)
+            if (next_endpoint_iterator != end_of_tcp_resolve_result)
             {
                 start_udp_async_connect(next_endpoint_iterator);
             }
