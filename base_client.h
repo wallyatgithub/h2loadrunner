@@ -210,7 +210,7 @@ public:
     void clean_up_this_in_dest_client_map();
 
     PROTO_TYPE get_proto_type();
-    void return_unsent_request_to_controller(bool immediate_schedule = true);
+    void move_queued_request_to_controller_queue(bool immediate_schedule = true);
 
     size_t get_max_concurrent_stream();
 

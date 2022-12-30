@@ -586,7 +586,7 @@ void base_client::sanitize_request(Request_Response_Data& new_request)
     }
 }
 
-void base_client::return_unsent_request_to_controller(bool immediate_schedule)
+void base_client::move_queued_request_to_controller_queue(bool immediate_schedule)
 {
     if (get_controller_client() == this)
     {
@@ -843,7 +843,7 @@ void base_client::process_requests_to_submit_upon_error(bool fail_all)
             break;
         }
     }
-    return_unsent_request_to_controller(true);
+    move_queued_request_to_controller_queue(true);
 }
 
 void base_client::record_connect_start_time()
@@ -1953,6 +1953,8 @@ void base_client::on_stream_close(int64_t stream_id, bool success, bool final)
         return;
     }
 
+    move_queued_request_to_controller_queue(true);
+
     if (!final && !is_test_finished())
     {
         if (config->timing_script)
@@ -2234,7 +2236,7 @@ int base_client::connection_made()
 
     start_stream_timeout_timer();
 
-    return_unsent_request_to_controller(true);
+    move_queued_request_to_controller_queue(true);
 
     submit_request_upon_connected();
     if (!config->disable_connection_trace)
@@ -2782,74 +2784,95 @@ int base_client::submit_request()
         return -1;
     }
 
-    if (requests_to_submit.empty() && (config->json_config_schema.scenarios.size()))
+    auto submit_one_request = [this]()
     {
-        prepare_first_request();
-    }
-
-    decltype(this) destination_client = this;
-    if (config->json_config_schema.open_new_connection_based_on_authority_header)
-    {
-        destination_client = find_or_create_dest_client(*requests_to_submit.front());
-        if (destination_client != this)
+        if (requests_to_submit.empty() && (config->json_config_schema.scenarios.size()))
         {
-            destination_client->requests_to_submit.push_back(std::move(requests_to_submit.front()));
-            requests_to_submit.pop_front();
-        }
-    }
-
-    if (destination_client->state == CLIENT_CONNECTED)
-    {
-        size_t scenario_index = 0;
-        size_t request_index = 0;
-        if (config->json_config_schema.scenarios.size() && destination_client->requests_to_submit.size())
-        {
-            scenario_index = destination_client->requests_to_submit.front()->scenario_index;
-            request_index = destination_client->requests_to_submit.front()->curr_request_idx;
-        }
-        auto retCode = destination_client->session->submit_request();
-
-        if (retCode != 0)
-        {
-            destination_client->process_submit_request_failure(retCode);
-            return retCode;
+            prepare_first_request();
         }
 
-        destination_client->signal_write();
-
-        if (worker->current_phase != Phase::MAIN_DURATION)
+        decltype(this) destination_client = this;
+        if (config->json_config_schema.open_new_connection_based_on_authority_header)
         {
-            return 0;
-        }
-
-        ++worker->stats.req_started;
-        ++destination_client->req_started;
-        ++destination_client->req_inflight;
-        ++get_controller_client()->req_inflight_of_all_clients;
-        if (!worker->config->is_timing_based_mode())
-        {
-            dec_number_of_request_left();
-        }
-
-        if (scenario_index < worker->scenario_stats.size() &&
-            request_index < worker->scenario_stats[scenario_index].size())
-        {
-            ++worker->scenario_stats[scenario_index][request_index]->req_started;
-        }
-
-        // if an active timeout is set and this is the last request to be submitted
-        // on this connection, start the active timeout.
-        if (config->conn_active_timeout > 0. && get_number_of_request_left() == 0 && is_controller_client())
-        {
-            for (auto& dest_client_with_same_proto_version : client_registry) // "this" is also in client_registry
+            destination_client = find_or_create_dest_client(*requests_to_submit.front());
+            if (destination_client != this)
             {
-                for (auto& client : dest_client_with_same_proto_version.second)
-                {
-                    client.second->start_conn_active_watcher();
-                }
+                destination_client->requests_to_submit.push_back(std::move(requests_to_submit.front()));
+                requests_to_submit.pop_front();
             }
         }
-        return 0;
+
+        if (destination_client->state == CLIENT_CONNECTED)
+        {
+            size_t scenario_index = 0;
+            size_t request_index = 0;
+            if (config->json_config_schema.scenarios.size() && destination_client->requests_to_submit.size())
+            {
+                scenario_index = destination_client->requests_to_submit.front()->scenario_index;
+                request_index = destination_client->requests_to_submit.front()->curr_request_idx;
+            }
+            auto retCode = destination_client->session->submit_request();
+
+            if (retCode != 0)
+            {
+                destination_client->process_submit_request_failure(retCode);
+                return retCode;
+            }
+
+            destination_client->signal_write();
+
+            if (worker->current_phase != Phase::MAIN_DURATION)
+            {
+                return 0;
+            }
+
+            ++worker->stats.req_started;
+            ++destination_client->req_started;
+            ++destination_client->req_inflight;
+            ++get_controller_client()->req_inflight_of_all_clients;
+            if (!worker->config->is_timing_based_mode())
+            {
+                dec_number_of_request_left();
+            }
+
+            if (scenario_index < worker->scenario_stats.size() &&
+                request_index < worker->scenario_stats[scenario_index].size())
+            {
+                ++worker->scenario_stats[scenario_index][request_index]->req_started;
+            }
+
+            // if an active timeout is set and this is the last request to be submitted
+            // on this connection, start the active timeout.
+            if (config->conn_active_timeout > 0. && get_number_of_request_left() == 0 && is_controller_client())
+            {
+                for (auto& dest_client_with_same_proto_version : client_registry) // "this" is also in client_registry
+                {
+                    for (auto& client : dest_client_with_same_proto_version.second)
+                    {
+                        client.second->start_conn_active_watcher();
+                    }
+                }
+            }
+            return 0;
+        }
+        else
+        {
+            return CONNECTION_ESTABLISH_IN_PROGRESSS;
+        }
+    };
+
+    uint8_t retry_count = 0;
+    while (retry_count < max_concurrent_streams)
+    {
+        auto retCode = submit_one_request();
+        if (0 == retCode)
+        {
+            return retCode;
+        }
+        if (CONNECTION_ESTABLISH_IN_PROGRESSS == retCode || MAX_CONCURRENT_STREAM_REACHED == retCode)
+        {
+            ++retry_count;
+        }
     }
 
     return -1;
