@@ -233,6 +233,7 @@ set(ASIO_SV_SOURCES
   asio_server_http1_handler.cc
   asio_util.cc
   common_lua.cc
+  multipart_parser.c
 )
 
 set(THIRD_PARTY_LUA_MOD_SOURCE
