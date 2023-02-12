@@ -10,6 +10,7 @@
 #include "rapidjson/schema.h"
 #include "rapidjson/prettywriter.h"
 #include "multipart_parser.h"
+#include "nlohmann/json.hpp"
 
 const std::string CONTENT_ID = "Content-Id";
 const std::string CONTENT_TYPE = "Content-Type";
@@ -157,7 +158,6 @@ public:
     std::string ttl;
     std::string callbackReference;
     std::map<std::string, std::vector<std::string>> tags;
-    std::string id;
     std::string schemaId;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
@@ -219,6 +219,18 @@ public:
     std::vector<Block> blocks;
     RecordMeta meta;
     std::mutex blocks_mutex;
+    std::mutex meta_mutex;
+    ~Record()
+    {
+        try
+        {
+            std::lock_guard<std::mutex> block_guard(blocks_mutex);
+            std::lock_guard<std::mutex> meta_guard(meta_mutex);
+        }
+        catch(...)
+        {
+        }
+    }
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("blocks", &this->blocks, staticjson::Flags::Optional);
@@ -277,6 +289,7 @@ public:
 
     std::string get_block(const std::string& blockId)
     {
+        std::lock_guard<std::mutex> guard(blocks_mutex);
         std::string ret;
         auto iter = blockId_to_index.find(blockId);
         if (iter == blockId_to_index.end())
@@ -292,6 +305,8 @@ public:
     {
         std::string ret;
         size_t final_size = 0;
+        std::lock_guard<std::mutex> blocks_guard(blocks_mutex);
+        std::lock_guard<std::mutex> meta_guard(meta_mutex);
         auto metaString = std::move(staticjson::to_json_string(meta));
         std::vector<std::string> block_body_parts;
         for (auto& b : blocks)
@@ -331,6 +346,64 @@ public:
 
         return ret;
     }
+
+    std::string get_meta()
+    {
+        std::lock_guard<std::mutex> guard(meta_mutex);
+        auto metaString = std::move(staticjson::to_json_string(meta));
+        return metaString;
+    }
+
+    bool set_meta(const std::string& metaString)
+    {
+        std::lock_guard<std::mutex> guard(meta_mutex);
+        staticjson::ParseStatus result;
+        return staticjson::from_json_string(metaString.c_str(), &meta, &result);
+    }
+
+    RecordMeta& get_meta_object()
+    {
+        std::lock_guard<std::mutex> guard(meta_mutex);
+        return meta;
+    }
+
+    void set_meta_object(RecordMeta& new_meta)
+    {
+        std::lock_guard<std::mutex> guard(meta_mutex);
+        meta = std::move(new_meta);
+    }
+
+    bool validate_meta_with_schema(const RecordMeta& new_meta, const MetaSchema& schema_object)
+    {
+        auto ret = true;
+        for (auto& tag : schema_object.metaTags)
+        {
+            if (tag.presence && new_meta.tags.count(tag.tagName) == 0)
+            {
+                ret = false;
+                break;
+            }
+        }
+        return ret;
+    }
+
+    bool update_meta(const std::string& meta_patch, const MetaSchema& metaSchema)
+    {
+        std::lock_guard<std::mutex> guard(meta_mutex);
+        auto metaString = staticjson::to_json_string(meta);
+        nlohmann::json original_meta = nlohmann::json::parse(metaString);
+        nlohmann::json patch = nlohmann::json::parse(meta_patch);
+        nlohmann::json patched_meta = original_meta.patch(patch);
+        staticjson::ParseStatus result;
+        RecordMeta new_meta;
+        if (staticjson::from_json_string(patched_meta.dump().c_str(), &new_meta, &result)
+            && validate_meta_with_schema(new_meta, metaSchema))
+        {
+            meta = std::move(new_meta);
+            return true;
+        }
+        return false;
+    }
 };
 
 class Storage
@@ -349,7 +422,7 @@ public:
             return ret;
         }
         bool success;
-        auto& schema_object = get_schema_object(meta.schemaId, success);
+        auto schema_object = get_schema_object(meta.schemaId, success);
         if (success)
         {
             for (auto& tag : schema_object.metaTags)
@@ -389,12 +462,11 @@ public:
             validate_record_meta(record_meta))
         {
             uint16_t sum = get_u16_sum(record_id);
-            uint8_t row = sum >> 16;
+            uint8_t row = sum >> 8;
             uint8_t col = sum & 0xFF;
             std::unique_lock<std::mutex> guard(records_mutexes[row][col]);
             auto& record = records[row][col][record_id];
-            guard.release();
-            record.meta = std::move(record_meta);
+            record.set_meta_object(record_meta);
             for (size_t i = 1; i < parts.size(); i++)
             {
                 std::string content_id;
@@ -419,11 +491,10 @@ public:
         }
         return -3;
     }
-
     std::string delete_record(const std::string& record_id, bool get_previous = false)
     {
         uint16_t sum = get_u16_sum(record_id);
-        uint8_t row = sum >> 16;
+        uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
         std::lock_guard<std::mutex> guard(records_mutexes[row][col]);
         std::string ret;
@@ -442,7 +513,7 @@ public:
     std::string get_record(const std::string& record_id)
     {
         uint16_t sum = get_u16_sum(record_id);
-        uint8_t row = sum >> 16;
+        uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
         std::lock_guard<std::mutex> guard(records_mutexes[row][col]);
         std::string ret;
@@ -458,7 +529,7 @@ public:
     {
         std::string ret;
         uint16_t sum = get_u16_sum(schema_id);
-        uint8_t row = sum >> 16;
+        uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
         std::lock_guard<std::mutex> guard(schemas_mutexes[row][col]);
         auto iter = schemas[row][col].find(schema_id);
@@ -469,12 +540,12 @@ public:
         return ret;
     }
 
-    const MetaSchema& get_schema_object(const std::string& schema_id, bool& success)
+    MetaSchema get_schema_object(const std::string& schema_id, bool& success)
     {
         static MetaSchema dummyMetaSchama;
         success = false;
         uint16_t sum = get_u16_sum(schema_id);
-        uint8_t row = sum >> 16;
+        uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
         std::lock_guard<std::mutex> guard(schemas_mutexes[row][col]);
         auto iter = schemas[row][col].find(schema_id);
@@ -489,7 +560,7 @@ public:
     bool add_or_update_schema(const std::string& schema_id, const std::string& schema)
     {
         uint16_t sum = get_u16_sum(schema_id);
-        uint8_t row = sum >> 16;
+        uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
         staticjson::ParseStatus result;
         MetaSchema metaSchema;
@@ -509,7 +580,7 @@ public:
     {
         std::string ret;
         uint16_t sum = get_u16_sum(schema_id);
-        uint8_t row = sum >> 16;
+        uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
         std::lock_guard<std::mutex> guard(schemas_mutexes[row][col]);
         auto iter = schemas[row][col].find(schema_id);
@@ -524,6 +595,70 @@ public:
         return ret;
     }
 
+
+    bool update_record_meta(const std::string& record_id, const std::string& meta_patch)
+    {
+        uint16_t sum = get_u16_sum(record_id);
+        uint8_t row = sum >> 8;
+        uint8_t col = sum & 0xFF;
+        std::unique_lock<std::mutex> guard(records_mutexes[row][col]);
+        auto iter = records[row][col].find(record_id);
+        if (iter != records[row][col].end())
+        {
+            auto schema_id = iter->second.meta.schemaId;
+            bool success = false;
+            auto schema_object = get_schema_object(schema_id, success);
+            if (success)
+            {
+                return iter->second.update_meta(meta_patch, schema_object);
+            }
+        }
+        return false;
+    }
+
+    bool insert_or_update_block(const std::string& record_id, std::string& id, std::string& type, std::string& blockData,
+                                    std::map<std::string, std::string, Case_Independent_Less>& headers)
+    {
+        uint16_t sum = get_u16_sum(record_id);
+        uint8_t row = sum >> 8;
+        uint8_t col = sum & 0xFF;
+        std::lock_guard<std::mutex> guard(records_mutexes[row][col]);
+        auto iter = records[row][col].find(record_id);
+        if (iter != records[row][col].end())
+        {
+            return iter->second.insert_or_update_block(id, type, blockData, headers);
+        }
+        return false;
+    }
+
+    std::string delete_block(const std::string& record_id, const std::string& blockId, bool get_previous = false)
+    {
+        uint16_t sum = get_u16_sum(record_id);
+        uint8_t row = sum >> 8;
+        uint8_t col = sum & 0xFF;
+        std::lock_guard<std::mutex> guard(records_mutexes[row][col]);
+        auto iter = records[row][col].find(record_id);
+        if (iter != records[row][col].end())
+        {
+            return iter->second.delete_block(blockId, get_previous);
+        }
+        return "";
+    }
+
+    std::string get_block(const std::string& record_id, const std::string& blockId)
+    {
+        uint16_t sum = get_u16_sum(record_id);
+        uint8_t row = sum >> 8;
+        uint8_t col = sum & 0xFF;
+        std::lock_guard<std::mutex> guard(records_mutexes[row][col]);
+        auto iter = records[row][col].find(record_id);
+        if (iter != records[row][col].end())
+        {
+            return iter->second.get_block(blockId);
+        }
+        return "";
+    }
+
 };
 
 class Realm
@@ -535,19 +670,10 @@ public:
     Storage& get_storage(const std::string& storage_id)
     {
         uint16_t sum = get_u16_sum(storage_id);
-        uint8_t row = sum >> 16;
+        uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
         std::lock_guard<std::mutex> guard(storages_mutexes[row][col]);
         return storages[row][col][storage_id];
-    }
-
-    void delete_storage(const std::string& storage_id)
-    {
-        uint16_t sum = get_u16_sum(storage_id);
-        uint8_t row = sum >> 16;
-        uint8_t col = sum & 0xFF;
-        std::lock_guard<std::mutex> guard(storages_mutexes[row][col]);
-        storages[row][col].erase(storage_id);
     }
 };
 
