@@ -4,7 +4,7 @@
 #include <fstream>
 #include <cstring>
 #include <numeric>
-
+#include <shared_mutex>
 #include "staticjson/document.hpp"
 #include "staticjson/staticjson.hpp"
 #include "rapidjson/schema.h"
@@ -218,28 +218,43 @@ public:
     std::unordered_map<std::string, size_t> blockId_to_index;
     std::vector<Block> blocks;
     RecordMeta meta;
-    std::mutex blocks_mutex;
-    std::mutex meta_mutex;
+    std::unique_ptr<std::shared_timed_mutex> blocks_mutex;
+    std::unique_ptr<std::shared_timed_mutex> meta_mutex;
+
+    /*
+    // not needed as storage level write lock must be seized before delete record
+    // which will block any read operation from any record
     ~Record()
     {
         try
         {
-            std::lock_guard<std::mutex> block_guard(blocks_mutex);
-            std::lock_guard<std::mutex> meta_guard(meta_mutex);
+            std::unique_lock<std::shared_timed_mutex> block_guard(*blocks_mutex);
+            std::unique_lock<std::shared_timed_mutex> meta_guard(*meta_mutex);
         }
         catch(...)
         {
         }
     }
+
+    */
+
+    explicit Record():
+        blocks_mutex(std::make_unique<std::shared_timed_mutex>()),
+        meta_mutex(std::make_unique<std::shared_timed_mutex>())
+    {
+    }
+
+    /*
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("blocks", &this->blocks, staticjson::Flags::Optional);
         h->add_property("meta", &this->meta);
     }
+    */
     bool insert_or_update_block(std::string& id, std::string& type, std::string& blockData,
                                 std::map<std::string, std::string, Case_Independent_Less>& headers)
     {
-        std::lock_guard<std::mutex> guard(blocks_mutex);
+        std::unique_lock<std::shared_timed_mutex> write_guard(*blocks_mutex);
         auto iter = blockId_to_index.find(id);
         if (iter != blockId_to_index.end())
         {
@@ -263,7 +278,7 @@ public:
     std::string delete_block(const std::string& blockId, bool get_previous = false)
     {
         std::string ret;
-        std::lock_guard<std::mutex> guard(blocks_mutex);
+        std::unique_lock<std::shared_timed_mutex> guard(*blocks_mutex);
         auto iter = blockId_to_index.find(blockId);
         if (iter == blockId_to_index.end())
         {
@@ -289,7 +304,7 @@ public:
 
     std::string get_block(const std::string& blockId)
     {
-        std::lock_guard<std::mutex> guard(blocks_mutex);
+        std::shared_lock<std::shared_timed_mutex> guard(*blocks_mutex);
         std::string ret;
         auto iter = blockId_to_index.find(blockId);
         if (iter == blockId_to_index.end())
@@ -305,8 +320,8 @@ public:
     {
         std::string ret;
         size_t final_size = 0;
-        std::lock_guard<std::mutex> blocks_guard(blocks_mutex);
-        std::lock_guard<std::mutex> meta_guard(meta_mutex);
+        std::shared_lock<std::shared_timed_mutex> blocks_guard(*blocks_mutex);
+        std::shared_lock<std::shared_timed_mutex> meta_guard(*meta_mutex);
         auto metaString = std::move(staticjson::to_json_string(meta));
         std::vector<std::string> block_body_parts;
         for (auto& b : blocks)
@@ -349,27 +364,27 @@ public:
 
     std::string get_meta()
     {
-        std::lock_guard<std::mutex> guard(meta_mutex);
+        std::shared_lock<std::shared_timed_mutex> guard(*meta_mutex);
         auto metaString = std::move(staticjson::to_json_string(meta));
         return metaString;
     }
 
     bool set_meta(const std::string& metaString)
     {
-        std::lock_guard<std::mutex> guard(meta_mutex);
+        std::unique_lock<std::shared_timed_mutex> guard(*meta_mutex);
         staticjson::ParseStatus result;
         return staticjson::from_json_string(metaString.c_str(), &meta, &result);
     }
 
     RecordMeta& get_meta_object()
     {
-        std::lock_guard<std::mutex> guard(meta_mutex);
+        std::shared_lock<std::shared_timed_mutex> guard(*meta_mutex);
         return meta;
     }
 
     void set_meta_object(RecordMeta& new_meta)
     {
-        std::lock_guard<std::mutex> guard(meta_mutex);
+        std::unique_lock<std::shared_timed_mutex> guard(*meta_mutex);
         meta = std::move(new_meta);
     }
 
@@ -389,30 +404,179 @@ public:
 
     bool update_meta(const std::string& meta_patch, const MetaSchema& metaSchema)
     {
-        std::lock_guard<std::mutex> guard(meta_mutex);
-        auto metaString = staticjson::to_json_string(meta);
-        nlohmann::json original_meta = nlohmann::json::parse(metaString);
-        nlohmann::json patch = nlohmann::json::parse(meta_patch);
-        nlohmann::json patched_meta = original_meta.patch(patch);
-        staticjson::ParseStatus result;
-        RecordMeta new_meta;
-        if (staticjson::from_json_string(patched_meta.dump().c_str(), &new_meta, &result)
-            && validate_meta_with_schema(new_meta, metaSchema))
+        try
         {
-            meta = std::move(new_meta);
-            return true;
+            std::shared_lock<std::shared_timed_mutex> read_guard(*meta_mutex);
+            auto metaString = staticjson::to_json_string(meta);
+            read_guard.unlock();
+            nlohmann::json original_meta = nlohmann::json::parse(metaString);
+            nlohmann::json patch = nlohmann::json::parse(meta_patch);
+            nlohmann::json patched_meta = original_meta.patch(patch);
+            staticjson::ParseStatus result;
+            RecordMeta new_meta;
+            if (staticjson::from_json_string(patched_meta.dump().c_str(), &new_meta, &result)
+                && validate_meta_with_schema(new_meta, metaSchema))
+            {
+                set_meta_object(new_meta);
+                return true;
+            }
+        }
+        catch (...)
+        {
         }
         return false;
     }
 };
+
+class Tags_Value_Db_Of_One_Tag_Name
+{
+public:
+    std::unique_ptr<std::shared_timed_mutex> value_to_record_id_map_mutex;
+    std::multimap<std::string, std::string> value_to_record_id_map;
+    explicit Tags_Value_Db_Of_One_Tag_Name():
+        value_to_record_id_map_mutex(std::make_unique<std::shared_timed_mutex>())
+    {
+    }
+};
+
+class Tags_Name_Db_Of_One_Schema
+{
+public:
+    std::unique_ptr<std::shared_timed_mutex> name_to_value_db_map_mutex;
+    std::map<std::string, Tags_Value_Db_Of_One_Tag_Name> name_to_value_db_map;
+    explicit Tags_Name_Db_Of_One_Schema():
+        name_to_value_db_map_mutex(std::make_unique<std::shared_timed_mutex>())
+    {
+    }
+};
+
+using Tags_Db = std::map<std::string, Tags_Name_Db_Of_One_Schema>;
 
 class Storage
 {
 public:
     std::unordered_map<std::string, Record> records[0x100][0x100];
     std::unordered_map<std::string, MetaSchema> schemas[0x100][0x100];
-    std::mutex records_mutexes[0x100][0x100];
-    std::mutex schemas_mutexes[0x100][0x100];
+    std::shared_timed_mutex records_mutexes[0x100][0x100];
+    std::shared_timed_mutex schemas_mutexes[0x100][0x100];
+    Tags_Db tags_db;
+    std::shared_timed_mutex tags_db_main_mutex;
+
+    void install_tags_from_schema(const MetaSchema& schema)
+    {
+        Tags_Name_Db_Of_One_Schema tags_name_db;
+        for (auto& tag : schema.metaTags)
+        {
+            auto& tag_value_db = tags_name_db.name_to_value_db_map[tag.tagName];
+        }
+        std::unique_lock<std::shared_timed_mutex> tags_db_main_write_guard(tags_db_main_mutex);
+        std::string schema_id = schema.schemaId;
+        tags_db.emplace(std::move(schema_id), std::move(tags_name_db));
+    }
+
+    void delete_tags_from_schema(const std::string& schema_id)
+    {
+        std::unique_lock<std::shared_timed_mutex> tags_db_main_write_guard(tags_db_main_mutex);
+        tags_db.erase(schema_id);
+    }
+
+    void insert_tag_value(const std::string& schema_id, const std::string& tag_name, const std::string& tag_value,
+                          const std::string& record_id)
+    {
+        std::unique_lock<std::shared_timed_mutex> tags_db_main_read_guard(tags_db_main_mutex);
+        auto tags_db_iter = tags_db.find(schema_id);
+        if (tags_db_iter != tags_db.end())
+        {
+            auto& tags_name_db = tags_db_iter->second;
+            std::shared_lock<std::shared_timed_mutex> tags_name_db_read_lock(*tags_name_db.name_to_value_db_map_mutex);
+            auto tag_name_db_iter = tags_name_db.name_to_value_db_map.find(tag_name);
+            if (tag_name_db_iter != tags_name_db.name_to_value_db_map.end())
+            {
+                auto& tags_value_db = tag_name_db_iter->second;
+                std::unique_lock<std::shared_timed_mutex> tags_value_db_write_lock(*(tags_value_db.value_to_record_id_map_mutex));
+                tags_value_db.value_to_record_id_map.emplace(tag_value, record_id);
+            }
+        }
+    }
+
+    void remove_tag_value(const std::string& schema_id, const std::string& tag_name, const std::string& tag_value,
+                          const std::string& record_id)
+    {
+        std::unique_lock<std::shared_timed_mutex> tags_db_main_read_guard(tags_db_main_mutex);
+        auto tags_db_iter = tags_db.find(schema_id);
+        if (tags_db_iter != tags_db.end())
+        {
+            auto& tags_name_db = tags_db_iter->second;
+            std::shared_lock<std::shared_timed_mutex> tags_name_db_read_lock(*tags_name_db.name_to_value_db_map_mutex);
+            auto tag_name_db_iter = tags_name_db.name_to_value_db_map.find(tag_name);
+            if (tag_name_db_iter != tags_name_db.name_to_value_db_map.end())
+            {
+                auto& tags_value_db = tag_name_db_iter->second;
+                std::unique_lock<std::shared_timed_mutex> tags_value_db_write_lock(*(tags_value_db.value_to_record_id_map_mutex));
+                auto range = tags_value_db.value_to_record_id_map.equal_range(tag_value);
+                std::vector<decltype(range.first)> iters_to_erase;
+                for (auto i = range.first; i != range.second; ++i)
+                {
+                    if (i->second == record_id)
+                    {
+                        iters_to_erase.emplace_back(i);
+                    }
+                }
+                for (auto i : iters_to_erase)
+                {
+                    tags_value_db.value_to_record_id_map.erase(i);
+                }
+            }
+        }
+    }
+
+    std::vector<std::string> get_record_ids_with_tag_eq_to_value(const std::string& schema_id, const std::string& tag_name,
+                                                                 const std::string& tag_value)
+    {
+        std::vector<std::string> v;
+        std::unique_lock<std::shared_timed_mutex> tags_db_main_read_guard(tags_db_main_mutex);
+        auto tags_db_iter = tags_db.find(schema_id);
+        if (tags_db_iter != tags_db.end())
+        {
+            auto& tags_name_db = tags_db_iter->second;
+            std::shared_lock<std::shared_timed_mutex> tags_name_db_read_lock(*tags_name_db.name_to_value_db_map_mutex);
+            auto tag_name_db_iter = tags_name_db.name_to_value_db_map.find(tag_name);
+            if (tag_name_db_iter != tags_name_db.name_to_value_db_map.end())
+            {
+                auto& tags_value_db = tag_name_db_iter->second;
+                std::shared_lock<std::shared_timed_mutex> tags_value_db_read_lock(*(tags_value_db.value_to_record_id_map_mutex));
+                auto range = tags_value_db.value_to_record_id_map.equal_range(tag_value);
+                for (auto i = range.first; i != range.second; ++i)
+                {
+                    v.emplace_back(i->second);
+                }
+            }
+        }
+        return v;
+    }
+
+
+
+    size_t count_records_of_tag_name(const std::string& schema_id, const std::string& tag_name)
+    {
+        size_t ret = 0;
+        std::unique_lock<std::shared_timed_mutex> tags_db_main_read_guard(tags_db_main_mutex);
+        auto tags_db_iter = tags_db.find(schema_id);
+        if (tags_db_iter != tags_db.end())
+        {
+            auto& tags_name_db = tags_db_iter->second;
+
+            std::shared_lock<std::shared_timed_mutex> tags_name_db_read_lock(*tags_name_db.name_to_value_db_map_mutex);
+            auto tag_name_db_iter = tags_name_db.name_to_value_db_map.find(tag_name);
+            if (tag_name_db_iter != tags_name_db.name_to_value_db_map.end())
+            {
+                auto& tags_value_db = tag_name_db_iter->second;
+                std::shared_lock<std::shared_timed_mutex> tags_value_db_read_lock(*(tags_value_db.value_to_record_id_map_mutex));
+                ret = tags_value_db.value_to_record_id_map.size();
+            }
+        }
+        return ret;
+    }
 
     bool validate_record_meta(const RecordMeta& meta)
     {
@@ -447,7 +611,7 @@ public:
     *
     * @thows None
     * */
-    int insert_or_update_record(const std::string& record_id, const std::string& boundary,
+    int insert_or_update_record(std::string& record_id, const std::string& boundary,
                                 const std::string& multipart_content)
     {
         MultipartParser parser(boundary);
@@ -461,11 +625,8 @@ public:
         if (staticjson::from_json_string(parts[0].second.c_str(), &record_meta, &result) &&
             validate_record_meta(record_meta))
         {
-            uint16_t sum = get_u16_sum(record_id);
-            uint8_t row = sum >> 8;
-            uint8_t col = sum & 0xFF;
-            std::unique_lock<std::mutex> guard(records_mutexes[row][col]);
-            auto& record = records[row][col][record_id];
+            Record record;
+            auto record_meta_copy = record_meta;
             record.set_meta_object(record_meta);
             for (size_t i = 1; i < parts.size(); i++)
             {
@@ -487,27 +648,64 @@ public:
                 }
                 record.insert_or_update_block(content_id, content_type, parts[i].second, parts[i].first);
             }
+            uint16_t sum = get_u16_sum(record_id);
+            uint8_t row = sum >> 8;
+            uint8_t col = sum & 0xFF;
+            std::unique_lock<std::shared_timed_mutex> record_map_write_guard(records_mutexes[row][col]);
+            auto record_id_copy = record_id;
+            records[row][col].emplace(std::move(record_id), std::move(record));
+            for (auto& tag : record_meta_copy.tags)
+            {
+                auto& tag_name = tag.first;
+                auto& tag_values = tag.second;
+                for (auto& tag_value : tag_values)
+                {
+                    insert_tag_value(record_meta_copy.schemaId, tag_name, tag_value, record_id_copy);
+                }
+            }
+
             return 0;
         }
         return -3;
     }
     std::string delete_record(const std::string& record_id, bool get_previous = false)
     {
+        std::string ret;
+        if (!get_previous)
+        {
+            delete_record_directly(record_id);
+        }
+        else
+        {
+            ret = get_record(record_id);
+            delete_record_directly(record_id);
+        }
+        return ret;
+    }
+
+    void delete_record_directly(const std::string& record_id)
+    {
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
-        std::lock_guard<std::mutex> guard(records_mutexes[row][col]);
-        std::string ret;
+        std::unique_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
-            if (get_previous)
-            {
-                ret = iter->second.produce_multipart_body();
-            }
+            auto record = std::move(iter->second);
             records[row][col].erase(iter);
+            guard.unlock();
+
+            for (auto& tag : record.meta.tags)
+            {
+                auto& tag_name = tag.first;
+                auto& tag_values = tag.second;
+                for (auto& tag_value : tag_values)
+                {
+                    remove_tag_value(record.meta.schemaId, tag_name, tag_value, record_id);
+                }
+            }
         }
-        return ret;
     }
 
     std::string get_record(const std::string& record_id)
@@ -515,7 +713,7 @@ public:
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
-        std::lock_guard<std::mutex> guard(records_mutexes[row][col]);
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
         std::string ret;
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
@@ -531,7 +729,7 @@ public:
         uint16_t sum = get_u16_sum(schema_id);
         uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
-        std::lock_guard<std::mutex> guard(schemas_mutexes[row][col]);
+        std::shared_lock<std::shared_timed_mutex> guard(schemas_mutexes[row][col]);
         auto iter = schemas[row][col].find(schema_id);
         if (iter != schemas[row][col].end())
         {
@@ -547,7 +745,7 @@ public:
         uint16_t sum = get_u16_sum(schema_id);
         uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
-        std::lock_guard<std::mutex> guard(schemas_mutexes[row][col]);
+        std::shared_lock<std::shared_timed_mutex> guard(schemas_mutexes[row][col]);
         auto iter = schemas[row][col].find(schema_id);
         if (iter != schemas[row][col].end())
         {
@@ -567,8 +765,8 @@ public:
         if (staticjson::from_json_string(schema.c_str(), &metaSchema, &result) &&
             metaSchema.schemaId == schema_id)
         {
-            //metaSchema.build_index();
-            std::unique_lock<std::mutex> guard(schemas_mutexes[row][col]);
+            install_tags_from_schema(metaSchema);
+            std::unique_lock<std::shared_timed_mutex> guard(schemas_mutexes[row][col]);
             auto id = schema_id;
             schemas[row][col].emplace(std::move(id), std::move(metaSchema));
             return true;
@@ -579,29 +777,37 @@ public:
     std::string delete_schema(const std::string& schema_id, bool get_previous = false)
     {
         std::string ret;
+        if (!get_previous)
+        {
+            delete_schema_directly(schema_id);
+        }
+        else
+        {
+            ret = get_schema(schema_id);
+            delete_schema_directly(schema_id);
+        }
+        return ret;
+
+    }
+
+    std::string delete_schema_directly(const std::string& schema_id)
+    {
+        std::string ret;
         uint16_t sum = get_u16_sum(schema_id);
         uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
-        std::lock_guard<std::mutex> guard(schemas_mutexes[row][col]);
-        auto iter = schemas[row][col].find(schema_id);
-        if (iter != schemas[row][col].end())
-        {
-            if (get_previous)
-            {
-                ret = std::move(staticjson::to_json_string(iter->second));
-            }
-            schemas[row][col].erase(iter);
-        }
+        std::unique_lock<std::shared_timed_mutex> guard(schemas_mutexes[row][col]);
+        schemas[row][col].erase(schema_id);
+        delete_tags_from_schema(schema_id);
         return ret;
     }
-
 
     bool update_record_meta(const std::string& record_id, const std::string& meta_patch)
     {
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
-        std::unique_lock<std::mutex> guard(records_mutexes[row][col]);
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
@@ -617,12 +823,12 @@ public:
     }
 
     bool insert_or_update_block(const std::string& record_id, std::string& id, std::string& type, std::string& blockData,
-                                    std::map<std::string, std::string, Case_Independent_Less>& headers)
+                                std::map<std::string, std::string, Case_Independent_Less>& headers)
     {
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
-        std::lock_guard<std::mutex> guard(records_mutexes[row][col]);
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
@@ -636,7 +842,7 @@ public:
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
-        std::lock_guard<std::mutex> guard(records_mutexes[row][col]);
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
@@ -650,7 +856,7 @@ public:
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
-        std::lock_guard<std::mutex> guard(records_mutexes[row][col]);
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
@@ -688,6 +894,38 @@ Realm& get_realm(const std::string& realm_id)
 
 }
 
+class SearchComparison
+{
+public:
+    std::string op;
+    std::string tag;
+    std::string value;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("op", &this->op);
+        h->add_property("tag", &this->tag);
+        h->add_property("value", &this->value);
+    }
+};
 
+class RecordIdList
+{
+public:
+    std::vector<std::string> recordIdList;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("recordIdList", &this->recordIdList);
+    }
+};
+
+class SearchCondition
+{
+public:
+    std::string cond;
+    std::vector<SearchComparison> units_of_search_expression;
+    std::vector<SearchCondition> units_of_search_condition;
+    std::vector<SearchCondition> units_of_record_Id_List;
+    std::string schemaId;
+};
 #endif
 
