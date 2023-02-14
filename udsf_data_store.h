@@ -611,7 +611,7 @@ public:
     *
     * @thows None
     * */
-    int insert_or_update_record(std::string& record_id, const std::string& boundary,
+    int insert_or_update_record(const std::string& record_id, const std::string& boundary,
                                 const std::string& multipart_content)
     {
         MultipartParser parser(boundary);
@@ -653,14 +653,14 @@ public:
             uint8_t col = sum & 0xFF;
             std::unique_lock<std::shared_timed_mutex> record_map_write_guard(records_mutexes[row][col]);
             auto record_id_copy = record_id;
-            records[row][col].emplace(std::move(record_id), std::move(record));
+            records[row][col].emplace(std::move(record_id_copy), std::move(record));
             for (auto& tag : record_meta_copy.tags)
             {
                 auto& tag_name = tag.first;
                 auto& tag_values = tag.second;
                 for (auto& tag_value : tag_values)
                 {
-                    insert_tag_value(record_meta_copy.schemaId, tag_name, tag_value, record_id_copy);
+                    insert_tag_value(record_meta_copy.schemaId, tag_name, tag_value, record_id);
                 }
             }
 
