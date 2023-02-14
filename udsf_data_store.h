@@ -865,6 +865,20 @@ public:
         return "";
     }
 
+    std::string process_search_request(const std::string& search_expression)
+    {
+        const std::string RECORD_ID_LIST = "recordIdList";
+        const std::string CONDITION = "cond";
+        const std::string OPERATION = "op";
+        std::string ret;
+        rapidjson::Document document;
+        document.Parse(search_expression.c_str());
+        if (!document.HasParseError())
+        {
+            auto first_name = std::string(document.MemberBegin()->name.GetString());
+        }
+        return ret;
+    }
 };
 
 class Realm
