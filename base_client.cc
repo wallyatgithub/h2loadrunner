@@ -3855,6 +3855,8 @@ void base_client::request_connection_close()
     }
 }
 
+#endif // ENABLE_HTTP3
+
 bool base_client::is_quic()
 {
     if (PROTO_TYPE::PROTO_UNSPECIFIED == proto_type)
@@ -3867,6 +3869,6 @@ bool base_client::is_quic()
     }
 }
 
-#endif // ENABLE_HTTP3
+
 
 }

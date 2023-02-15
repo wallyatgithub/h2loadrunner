@@ -224,6 +224,8 @@ public:
 
     size_t get_number_of_request_inflight();
 
+    bool is_quic();
+
 #ifdef ENABLE_HTTP3
     // QUIC
     int quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
@@ -242,7 +244,6 @@ public:
 
     void request_connection_close();
 
-    bool is_quic();
 
 #endif // ENABLE_HTTP3
 

@@ -1,5 +1,8 @@
 #ifndef UDSF_STORAGE_H
 #define UDSF_STORAGE_H
+#include <set>
+#include <map>
+#include <vector>
 #include <iostream>
 #include <fstream>
 #include <cstring>
@@ -11,6 +14,7 @@
 #include "rapidjson/prettywriter.h"
 #include "multipart_parser.h"
 #include "nlohmann/json.hpp"
+
 
 const std::string CONTENT_ID = "Content-Id";
 const std::string CONTENT_TYPE = "Content-Type";
@@ -53,6 +57,80 @@ struct Case_Independent_Less
                 nocase_compare());   // comparison
     }
 };
+
+std::string get_string_value_from_Json_object(rapidjson::Value& object, const std::string& name)
+{
+    if (object.HasMember(name.c_str()))
+    {
+        auto& member_value = object[name.c_str()];
+        if (member_value.IsString())
+        {
+            return std::string(member_value.GetString(), member_value.GetStringLength());
+        }
+    }
+    return "";
+}
+
+std::set<std::string> run_and_operator(const std::vector<std::vector<std::string>>& operands)
+{
+    std::set<std::string> ret;
+    size_t shortest_vector_index = 0;
+    for (size_t i = 0; i < operands.size(); i ++)
+    {
+        if (operands[i].size() < operands[shortest_vector_index].size())
+        {
+            shortest_vector_index = i;
+        }
+    }
+    auto& smallest_vector = operands[shortest_vector_index];
+    for (auto& s : smallest_vector)
+    {
+        size_t i = 0;
+        for (i = 0; i < operands.size(); i++)
+        {
+            if (i == shortest_vector_index)
+            {
+                continue;
+            }
+            if (std::find(operands[i].begin(), operands[i].end(), s) == operands[i].end())
+            {
+                break;
+            }
+        }
+        if (i == operands.size())
+        {
+            ret.insert(s);
+        }
+    }
+    return ret;
+}
+
+std::set<std::string> run_or_operator(const std::vector<std::vector<std::string>>& operands)
+{
+    std::set<std::string> ret;
+    for (auto& v : operands)
+    {
+        for (auto& s : v)
+        {
+            ret.insert(s);
+        }
+    }
+    return ret;
+}
+
+std::set<std::string> run_not_operator(const std::vector<std::string>& source, const std::vector<std::string>& operands)
+{
+    std::set<std::string> ret;
+    for (auto& s : source)
+    {
+        if (std::find(operands.begin(), operands.end(), s) == operands.end())
+        {
+            ret.insert(s);
+        }
+    }
+    return ret;
+}
+
 
 class MultipartParser
 {
@@ -220,23 +298,6 @@ public:
     RecordMeta meta;
     std::unique_ptr<std::shared_timed_mutex> blocks_mutex;
     std::unique_ptr<std::shared_timed_mutex> meta_mutex;
-
-    /*
-    // not needed as storage level write lock must be seized before delete record
-    // which will block any read operation from any record
-    ~Record()
-    {
-        try
-        {
-            std::unique_lock<std::shared_timed_mutex> block_guard(*blocks_mutex);
-            std::unique_lock<std::shared_timed_mutex> meta_guard(*meta_mutex);
-        }
-        catch(...)
-        {
-        }
-    }
-
-    */
 
     explicit Record():
         blocks_mutex(std::make_unique<std::shared_timed_mutex>()),
@@ -406,9 +467,9 @@ public:
     {
         try
         {
-            std::shared_lock<std::shared_timed_mutex> read_guard(*meta_mutex);
+            std::shared_lock<std::shared_timed_mutex> read_lock(*meta_mutex);
             auto metaString = staticjson::to_json_string(meta);
-            read_guard.unlock();
+            read_lock.unlock();
             nlohmann::json original_meta = nlohmann::json::parse(metaString);
             nlohmann::json patch = nlohmann::json::parse(meta_patch);
             nlohmann::json patched_meta = original_meta.patch(patch);
@@ -469,7 +530,7 @@ public:
         {
             auto& tag_value_db = tags_name_db.name_to_value_db_map[tag.tagName];
         }
-        std::unique_lock<std::shared_timed_mutex> tags_db_main_write_guard(tags_db_main_mutex);
+        std::unique_lock<std::shared_timed_mutex> tags_db_main_write_lock(tags_db_main_mutex);
         std::string schema_id = schema.schemaId;
         tags_db.emplace(std::move(schema_id), std::move(tags_name_db));
     }
@@ -502,7 +563,7 @@ public:
     void remove_tag_value(const std::string& schema_id, const std::string& tag_name, const std::string& tag_value,
                           const std::string& record_id)
     {
-        std::unique_lock<std::shared_timed_mutex> tags_db_main_read_guard(tags_db_main_mutex);
+        std::unique_lock<std::shared_timed_mutex> tags_db_main_read_lock(tags_db_main_mutex);
         auto tags_db_iter = tags_db.find(schema_id);
         if (tags_db_iter != tags_db.end())
         {
@@ -530,13 +591,36 @@ public:
         }
     }
 
-    std::vector<std::string> get_record_ids_with_tag_eq_to_value(const std::string& schema_id, const std::string& tag_name,
+    std::set<std::string> get_record_ids_with_tag_eq_to_value(const std::string& schema_id, const std::string& tag_name,
                                                                  const std::string& tag_value)
     {
-        std::vector<std::string> v;
-        std::unique_lock<std::shared_timed_mutex> tags_db_main_read_guard(tags_db_main_mutex);
-        auto tags_db_iter = tags_db.find(schema_id);
-        if (tags_db_iter != tags_db.end())
+        return run_search_comparison(schema_id, "EQ", tag_name, tag_value);
+    }
+
+    std::set<std::string> run_search_comparison(const std::string& schema_id, const std::string& op,
+                                                   const std::string& tag_name, const std::string& tag_value)
+    {
+        std::set<std::string> s;
+        std::unique_lock<std::shared_timed_mutex> tags_db_main_read_lock(tags_db_main_mutex);
+        std::vector<Tags_Db::iterator> tag_db_iterators_to_go_through;
+        if (schema_id.size())
+        {
+            auto db_iter = tags_db.find(schema_id);
+            if (db_iter != tags_db.end())
+            {
+                tag_db_iterators_to_go_through.push_back(db_iter);
+            }
+        }
+        else
+        {
+            auto db_iter = tags_db.begin();
+            while (db_iter != tags_db.end())
+            {
+                tag_db_iterators_to_go_through.push_back(db_iter);
+                db_iter++;
+            }
+        }
+        for (auto tags_db_iter: tag_db_iterators_to_go_through)
         {
             auto& tags_name_db = tags_db_iter->second;
             std::shared_lock<std::shared_timed_mutex> tags_name_db_read_lock(*tags_name_db.name_to_value_db_map_mutex);
@@ -545,24 +629,94 @@ public:
             {
                 auto& tags_value_db = tag_name_db_iter->second;
                 std::shared_lock<std::shared_timed_mutex> tags_value_db_read_lock(*(tags_value_db.value_to_record_id_map_mutex));
-                auto range = tags_value_db.value_to_record_id_map.equal_range(tag_value);
-                for (auto i = range.first; i != range.second; ++i)
+
+                if (op == "EQ")
                 {
-                    v.emplace_back(i->second);
+                    auto range = tags_value_db.value_to_record_id_map.equal_range(tag_value);
+                    for (auto i = range.first; i != range.second; ++i)
+                    {
+                        s.insert(i->second);
+                    }
+                }
+                else if (op == "GT")
+                {
+                    auto iter = tags_value_db.value_to_record_id_map.upper_bound(tag_value);
+                    while (iter != tags_value_db.value_to_record_id_map.end())
+                    {
+                        s.insert(iter->second);
+                        iter++;
+                    }
+                }
+                else if (op == "GTE")
+                {
+                    auto iter = tags_value_db.value_to_record_id_map.lower_bound(tag_value);
+                    while (iter != tags_value_db.value_to_record_id_map.end())
+                    {
+                        s.insert(iter->second);
+                        iter++;
+                    }
+                }
+                else if (op == "LT")
+                {
+                    auto lower_bound = tags_value_db.value_to_record_id_map.lower_bound(tag_value);
+                    auto iter = tags_value_db.value_to_record_id_map.begin();
+                    while (iter != lower_bound)
+                    {
+                        s.insert(iter->second);
+                        iter++;
+                    }
+                }
+                else if (op == "LTE")
+                {
+                    auto upper_bound = tags_value_db.value_to_record_id_map.upper_bound(tag_value);
+                    auto iter = tags_value_db.value_to_record_id_map.begin();
+                    while (iter != upper_bound)
+                    {
+                        s.insert(iter->second);
+                        iter++;
+                    }
+                }
+                else if (op == "NEQ")
+                {
+                    auto lower_bound = tags_value_db.value_to_record_id_map.lower_bound(tag_value);
+                    auto upper_bound = tags_value_db.value_to_record_id_map.upper_bound(tag_value);
+                    for (auto iter = tags_value_db.value_to_record_id_map.begin(); iter != lower_bound; ++iter)
+                    {
+                        s.insert(iter->second);
+                    }
+                    for (auto iter = upper_bound; iter != tags_value_db.value_to_record_id_map.end(); ++iter)
+                    {
+                        s.insert(iter->second);
+                    }
                 }
             }
         }
-        return v;
-    }
-
-
+        return s;
+    };
 
     size_t count_records_of_tag_name(const std::string& schema_id, const std::string& tag_name)
     {
         size_t ret = 0;
-        std::unique_lock<std::shared_timed_mutex> tags_db_main_read_guard(tags_db_main_mutex);
-        auto tags_db_iter = tags_db.find(schema_id);
-        if (tags_db_iter != tags_db.end())
+        std::unique_lock<std::shared_timed_mutex> tags_db_main_read_lock(tags_db_main_mutex);
+        std::vector<Tags_Db::iterator> tag_db_iterators_to_go_through;
+        if (schema_id.size())
+        {
+            auto db_iter = tags_db.find(schema_id);
+            if (db_iter != tags_db.end())
+            {
+                tag_db_iterators_to_go_through.push_back(db_iter);
+            }
+        }
+        else
+        {
+            auto db_iter = tags_db.begin();
+            while (db_iter != tags_db.end())
+            {
+                tag_db_iterators_to_go_through.push_back(db_iter);
+                db_iter++;
+            }
+        }
+        for (auto tags_db_iter: tag_db_iterators_to_go_through)
         {
             auto& tags_name_db = tags_db_iter->second;
 
@@ -572,7 +726,7 @@ public:
             {
                 auto& tags_value_db = tag_name_db_iter->second;
                 std::shared_lock<std::shared_timed_mutex> tags_value_db_read_lock(*(tags_value_db.value_to_record_id_map_mutex));
-                ret = tags_value_db.value_to_record_id_map.size();
+                ret = +tags_value_db.value_to_record_id_map.size();
             }
         }
         return ret;
@@ -688,13 +842,13 @@ public:
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
-        std::unique_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
+        std::unique_lock<std::shared_timed_mutex> write_lock(records_mutexes[row][col]);
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
             auto record = std::move(iter->second);
             records[row][col].erase(iter);
-            guard.unlock();
+            write_lock.unlock();
 
             for (auto& tag : record.meta.tags)
             {
@@ -865,20 +1019,51 @@ public:
         return "";
     }
 
-    std::string process_search_request(const std::string& search_expression)
+    std::set<std::string> run_search_expression(const std::string& schema_id, rapidjson::Value& value)
     {
         const std::string RECORD_ID_LIST = "recordIdList";
         const std::string CONDITION = "cond";
         const std::string OPERATION = "op";
-        std::string ret;
-        rapidjson::Document document;
-        document.Parse(search_expression.c_str());
-        if (!document.HasParseError())
+        std::set<std::string> ret;
+        auto actual_schema_id = schema_id;
+
+        if (value.IsObject())
         {
-            auto first_name = std::string(document.MemberBegin()->name.GetString());
+            auto first_name = std::string(value.MemberBegin()->name.GetString(), value.MemberBegin()->name.GetStringLength());
+            if (first_name == CONDITION)
+            {
+                if (actual_schema_id.empty())
+                {
+                    actual_schema_id = get_string_value_from_Json_object(value, "schemaId");
+                }
+            }
+            else if (first_name == OPERATION)
+            {
+                std::string op = get_string_value_from_Json_object(value, OPERATION);
+                std::string tag = get_string_value_from_Json_object(value, "tag");
+                std::string val = get_string_value_from_Json_object(value, "value");
+                return (run_search_comparison(schema_id, op, tag, val));
+            }
+            else if (first_name == RECORD_ID_LIST)
+            {
+                auto& sub_value = value.MemberBegin()->value;
+
+                if (sub_value.IsArray())
+                {
+                    for (size_t i = 0; i < sub_value.Size(); i++)
+                    {
+                        auto& array_value = sub_value[i];
+                        if (array_value.IsString())
+                        {
+                            ret.emplace(array_value.GetString(), array_value.GetStringLength());
+                        }
+                    }
+                }
+            }
         }
         return ret;
     }
+
 };
 
 class Realm
@@ -908,38 +1093,6 @@ Realm& get_realm(const std::string& realm_id)
 
 }
 
-class SearchComparison
-{
-public:
-    std::string op;
-    std::string tag;
-    std::string value;
-    void staticjson_init(staticjson::ObjectHandler* h)
-    {
-        h->add_property("op", &this->op);
-        h->add_property("tag", &this->tag);
-        h->add_property("value", &this->value);
-    }
-};
 
-class RecordIdList
-{
-public:
-    std::vector<std::string> recordIdList;
-    void staticjson_init(staticjson::ObjectHandler* h)
-    {
-        h->add_property("recordIdList", &this->recordIdList);
-    }
-};
-
-class SearchCondition
-{
-public:
-    std::string cond;
-    std::vector<SearchComparison> units_of_search_expression;
-    std::vector<SearchCondition> units_of_search_condition;
-    std::vector<SearchCondition> units_of_record_Id_List;
-    std::string schemaId;
-};
 #endif
 
