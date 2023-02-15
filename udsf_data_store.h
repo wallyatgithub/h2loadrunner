@@ -26,6 +26,9 @@ const std::string JSON_CONTENT = "application/json";
 const std::string META_CONTENT_ID = "meta";
 const std::string MULTIPART_CONTENT_TYPE = "multipart/mixed; boundary=---wallyweiwallzzllawiewyllaw---";
 
+const int8_t PLUS = 1;
+const int8_t MINUS = -1;
+
 namespace udsf
 {
 uint16_t get_u16_sum(const std::string& key)
@@ -71,7 +74,7 @@ std::string get_string_value_from_Json_object(rapidjson::Value& object, const st
     return "";
 }
 
-std::set<std::string> run_and_operator(const std::vector<std::vector<std::string>>& operands)
+std::set<std::string> run_and_operator(const std::vector<std::set<std::string>>& operands)
 {
     std::set<std::string> ret;
     size_t shortest_vector_index = 0;
@@ -92,7 +95,7 @@ std::set<std::string> run_and_operator(const std::vector<std::vector<std::string
             {
                 continue;
             }
-            if (std::find(operands[i].begin(), operands[i].end(), s) == operands[i].end())
+            if (operands[i].count(s) == 0)
             {
                 break;
             }
@@ -105,7 +108,7 @@ std::set<std::string> run_and_operator(const std::vector<std::vector<std::string
     return ret;
 }
 
-std::set<std::string> run_or_operator(const std::vector<std::vector<std::string>>& operands)
+std::set<std::string> run_or_operator(const std::vector<std::set<std::string>>& operands)
 {
     std::set<std::string> ret;
     for (auto& v : operands)
@@ -118,12 +121,12 @@ std::set<std::string> run_or_operator(const std::vector<std::vector<std::string>
     return ret;
 }
 
-std::set<std::string> run_not_operator(const std::vector<std::string>& source, const std::vector<std::string>& operands)
+std::set<std::string> run_not_operator(const std::set<std::string>& source, const std::set<std::string>& operands)
 {
     std::set<std::string> ret;
     for (auto& s : source)
     {
-        if (std::find(operands.begin(), operands.end(), s) == operands.end())
+        if (operands.count(s) == 0)
         {
             ret.insert(s);
         }
@@ -1024,8 +1027,13 @@ public:
         const std::string RECORD_ID_LIST = "recordIdList";
         const std::string CONDITION = "cond";
         const std::string OPERATION = "op";
+        const std::string UNITS = "units";
+        const std::string CONDITION_OP_AND = "AND";
+        const std::string CONDITION_OP_OR = "OR";
+        const std::string CONDITION_OP_NOT = "NOT";
         std::set<std::string> ret;
         auto actual_schema_id = schema_id;
+        int8_t ret_op = PLUS;
 
         if (value.IsObject())
         {
@@ -1036,13 +1044,45 @@ public:
                 {
                     actual_schema_id = get_string_value_from_Json_object(value, "schemaId");
                 }
+                auto condition_operator = get_string_value_from_Json_object(value, CONDITION);
+                std::vector<std::set<std::string>> operands;
+                if (value.HasMember(UNITS.c_str()))
+                {
+                    auto& units = value[UNITS.c_str()];
+                    if (units.IsArray())
+                    {
+                        for (size_t i = 0; i < units.Size(); i++)
+                        {
+                            auto& array_value = units[i];
+                            if (array_value.IsString())
+                            {
+                                operands.emplace_back(run_search_expression(actual_schema_id, array_value));
+                            }
+                        }
+                    }
+                }
+                if (condition_operator == CONDITION_OP_AND)
+                {
+                    ret = run_and_operator(operands);
+                }
+                else if (condition_operator == CONDITION_OP_OR)
+                {
+                    ret = run_or_operator(operands);
+                }
+                else if (condition_operator == CONDITION_OP_NOT)
+                {
+                    // operands.size() should be 1, but do and on it anyway and set to MINUS at last
+                    ret = run_and_operator(operands);
+                    ret_op = MINUS;
+                    // TODO: 
+                }
             }
             else if (first_name == OPERATION)
             {
                 std::string op = get_string_value_from_Json_object(value, OPERATION);
                 std::string tag = get_string_value_from_Json_object(value, "tag");
                 std::string val = get_string_value_from_Json_object(value, "value");
-                return (run_search_comparison(schema_id, op, tag, val));
+                ret = run_search_comparison(schema_id, op, tag, val);
             }
             else if (first_name == RECORD_ID_LIST)
             {
@@ -1063,7 +1103,6 @@ public:
         }
         return ret;
     }
-
 };
 
 class Realm
