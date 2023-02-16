@@ -1395,13 +1395,13 @@ int resolve_hostname(lua_State* L)
         auto resolve_callback = [return_addresses, hostname, L, worker_id, group_id,
                                                    ttl](std::vector<std::string>& resolved_addresses)
         {
-            auto& lua_sates_await_result = get_runtime_data(L).host_resolution_data[hostname].lua_sates_await_result;
-            if (lua_sates_await_result.size() && lua_sates_await_result[0] == L)
+            auto& lua_states_await_result = get_runtime_data(L).host_resolution_data[hostname].lua_states_await_result;
+            if (lua_states_await_result.size() && lua_states_await_result[0] == L)
             {
                 get_runtime_data(L).host_resolution_data[hostname].ip_addresses = std::move(resolved_addresses);
                 get_runtime_data(L).host_resolution_data[hostname].expire_time_point = std::chrono::steady_clock::now() +
                                                                                        std::chrono::milliseconds(ttl);
-                auto lua_states_to_resume = std::move(lua_sates_await_result);
+                auto lua_states_to_resume = std::move(lua_states_await_result);
                 auto& ip_addresses = get_runtime_data(L).host_resolution_data[hostname].ip_addresses;
                 for (auto& l : lua_states_to_resume)
                 {
@@ -1425,13 +1425,13 @@ int resolve_hostname(lua_State* L)
             {
                 resolve_callback(get_runtime_data(L).host_resolution_data[hostname].ip_addresses);
             }
-            else if (get_runtime_data(L).host_resolution_data[hostname].lua_sates_await_result.size())
+            else if (get_runtime_data(L).host_resolution_data[hostname].lua_states_await_result.size())
             {
-                get_runtime_data(L).host_resolution_data[hostname].lua_sates_await_result.push_back(L);
+                get_runtime_data(L).host_resolution_data[hostname].lua_states_await_result.push_back(L);
             }
             else
             {
-                get_runtime_data(L).host_resolution_data[hostname].lua_sates_await_result.push_back(L);
+                get_runtime_data(L).host_resolution_data[hostname].lua_states_await_result.push_back(L);
                 worker->resolve_hostname(hostname, resolve_callback);
             }
         };
