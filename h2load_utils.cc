@@ -2255,7 +2255,7 @@ uint64_t current_timestamp_nanoseconds()
            (std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
-uint64_t convert_iso8601_to_epoch_ignore_tz(const std::string iso8601)
+uint64_t convert_iso8601_to_ms_since_epoch_ignore_tz(const std::string& iso8601)
 {
     uint32_t y, M, d, h, m;
     float s;

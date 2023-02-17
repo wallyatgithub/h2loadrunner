@@ -27,6 +27,18 @@ const std::string ENDING_TWO_DASH = "--";
 const std::string JSON_CONTENT = "application/json";
 const std::string META_CONTENT_ID = "meta";
 const std::string MULTIPART_CONTENT_TYPE = "multipart/mixed; boundary=---wallyweiwallzzllawiewyllaw---";
+const std::string RECORD_ID_LIST = "recordIdList";
+const std::string CONDITION = "cond";
+const std::string OPERATION = "op";
+const std::string UNITS = "units";
+const std::string CONDITION_OP_AND = "AND";
+const std::string CONDITION_OP_OR = "OR";
+const std::string CONDITION_OP_NOT = "NOT";
+
+const int DECODE_MULTIPART_FAILURE = -1;
+const int CONTENT_ID_NOT_PRESDENT = -2;
+const int RECORD_META_DECODE_FAILURE = -3;
+const int RECORD_DOES_NOT_EXIST = -4;
 
 namespace udsf
 {
@@ -133,6 +145,60 @@ std::set<std::string> run_not_operator(const std::set<std::string>& source, cons
     return ret;
 }
 
+uint64_t iso8601_timestamp_to_seconds_since_epoch(const std::string& iso8601_timestamp)
+{
+    const std::string sample_tz_offset = "+08:00";
+    std::tm timeinfo = {};
+    std::istringstream ss(iso8601_timestamp);
+    ss >> std::get_time(&timeinfo, "%Y-%m-%dT%H:%M:%S");
+
+    std::time_t t = std::mktime(&timeinfo);
+    if (t == -1)
+    {
+        std::cerr << "Error: mktime() failed" << std::endl;
+        return 0;
+    }
+
+    std::chrono::system_clock::time_point tp =
+        std::chrono::system_clock::from_time_t(t);
+    auto duration = tp.time_since_epoch();
+
+    std::string incoming_tz;
+    if (iso8601_timestamp[iso8601_timestamp.size() - 1] == 'z' || iso8601_timestamp[iso8601_timestamp.size() - 1] == 'Z')
+    {
+        incoming_tz = "+00:00";
+    }
+    else
+    {
+        incoming_tz = iso8601_timestamp.substr(iso8601_timestamp.size() - sample_tz_offset.size());
+    }
+    int incoming_tz_hours, incoming_tz_minutes;
+    std::sscanf(incoming_tz.substr(1).c_str(), "%d:%d", &incoming_tz_hours, &incoming_tz_minutes);
+    auto incoming_tz_offset = (std::chrono::hours(incoming_tz_hours) + std::chrono::minutes(incoming_tz_minutes));
+    if (incoming_tz[0] == '-')
+    {
+        incoming_tz_offset = -incoming_tz_offset;
+    }
+
+    std::time_t local_t = std::time(nullptr);
+    std::tm tm = *std::localtime(&local_t);
+    std::stringstream buffer;
+    buffer << std::put_time(&tm, "%a, %d %b %Y %H:%M:%S %z");
+    auto local_time_stamp = buffer.str();
+    std::string local_tz = local_time_stamp.substr(local_time_stamp.size() - 5);
+    int local_tz_hours, local_tz_minutes;
+    local_tz_hours = std::atoi(local_tz.substr(1, 2).c_str());
+    local_tz_minutes = std::atoi(local_tz.substr(3, 2).c_str());
+    auto local_tz_offset = (std::chrono::hours(local_tz_hours) + std::chrono::minutes(local_tz_minutes));
+    if (local_tz[0] == '-')
+    {
+        local_tz_offset = -local_tz_offset;
+    }
+
+    auto tz_difference = local_tz_offset - incoming_tz_offset;
+    duration = duration + tz_difference;
+    return std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+}
 
 class MultipartParser
 {
@@ -314,10 +380,11 @@ public:
         h->add_property("meta", &this->meta);
     }
     */
-    bool insert_or_update_block(std::string& id, std::string& type, std::string& blockData,
-                                std::map<std::string, std::string, Case_Independent_Less>& headers)
+    bool update_block(std::string& id, std::string& type, std::string& blockData,
+                      std::map<std::string, std::string, Case_Independent_Less>& headers)
     {
         std::unique_lock<std::shared_timed_mutex> write_guard(*blocks_mutex);
+        //TODO: add block mutex, then change the lock to blocks_mutex to read lock to allow concurrent update to different blocks
         auto iter = blockId_to_index.find(id);
         if (iter != blockId_to_index.end())
         {
@@ -325,16 +392,21 @@ public:
             blocks[iter->second].content_id = std::move(id);
             blocks[iter->second].content_type = std::move(type);
             blocks[iter->second].headers = std::move(headers);
+            return true;
         }
-        else
-        {
-            blocks.emplace_back();
-            blocks.back().content = std::move(blockData);
-            blocks.back().content_id = std::move(id);
-            blocks.back().content_type = std::move(type);
-            blocks.back().headers = std::move(headers);
-            blockId_to_index[blocks.back().content_id] = (blocks.size() - 1);
-        }
+        return false;
+    }
+
+    bool insert_block(std::string& id, std::string& type, std::string& blockData,
+                      std::map<std::string, std::string, Case_Independent_Less>& headers)
+    {
+        std::unique_lock<std::shared_timed_mutex> write_guard(*blocks_mutex);
+        blocks.emplace_back();
+        blocks.back().content = std::move(blockData);
+        blocks.back().content_id = std::move(id);
+        blocks.back().content_type = std::move(type);
+        blocks.back().headers = std::move(headers);
+        blockId_to_index[blocks.back().content_id] = (blocks.size() - 1);
         return true;
     }
 
@@ -526,6 +598,8 @@ public:
     std::shared_timed_mutex schemas_mutexes[0x100][0x100];
     Tags_Db tags_db;
     std::shared_timed_mutex tags_db_main_mutex;
+    std::map<uint64_t, std::set<std::string>> records_ttl;
+    std::shared_timed_mutex record_ttl_mutex;
 
     void init_default_schema_with_empty_schema_id()
     {
@@ -799,15 +873,57 @@ public:
         return ret;
     }
 
-    void track_record_id(const std::string& schema_id, const std::string& record_id)
+    void track_record_id(const std::string& schema_id, const std::string& record_id, bool insert = true)
     {
         std::shared_lock<std::shared_timed_mutex> record_ids_read_lock(record_ids_mutex);
         auto iter = record_ids.find(schema_id);
         if (iter != record_ids.end())
         {
             std::unique_lock<std::shared_timed_mutex> per_schema_record_ids_write_lock(*iter->second.first);
-            iter->second.second.insert(record_id);
+            if (insert)
+            {
+                iter->second.second.insert(record_id);
+            }
+            else
+            {
+                iter->second.second.erase(record_id);
+            }
         }
+    }
+
+    void track_record_ttl(const std::string& ttl_in_iso8601, const std::string& record_id, bool insert = true)
+    {
+        auto ttl = iso8601_timestamp_to_seconds_since_epoch(ttl_in_iso8601);
+        std::unique_lock<std::shared_timed_mutex> record_ttl_write_lock(record_ttl_mutex);
+        if (insert)
+        {
+            auto& s = records_ttl[ttl];
+            s.insert(record_id);
+        }
+        else
+        {
+            auto iter = records_ttl.find(ttl);
+            if (iter != records_ttl.end())
+            {
+                iter->second.erase(record_id);
+            }
+        }
+    }
+
+    std::set<std::string> get_ttl_expired_records()
+    {
+        std::set<std::string> s;
+        auto curr_time_point = std::chrono::system_clock::now();
+        auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>(curr_time_point.time_since_epoch()).count();
+        std::unique_lock<std::shared_timed_mutex> record_ttl_read_lock(record_ttl_mutex);
+        auto upper_bound = records_ttl.upper_bound(seconds_since_epoch);
+        auto iter = records_ttl.begin();
+        while (iter != upper_bound)
+        {
+            s.insert(iter->second.begin(), iter->second.end());
+            iter++;
+        }
+        return s;
     }
 
     /**
@@ -817,17 +933,17 @@ public:
     * return -1: decode multipart failure
     * return -2: block content-id absent
     * return -3: meta decode or validation failure
-    *
+    * return -4: record does not exist while trying to update the record
     * @thows None
     * */
     int insert_or_update_record(const std::string& record_id, const std::string& boundary,
-                                const std::string& multipart_content)
+                                const std::string& multipart_content, bool update = false)
     {
         MultipartParser parser(boundary);
         auto parts = std::move(parser.get_parts(multipart_content));
         if (parts.empty())
         {
-            return -1;
+            return DECODE_MULTIPART_FAILURE;
         }
         RecordMeta record_meta;
         staticjson::ParseStatus result;
@@ -844,7 +960,7 @@ public:
                 auto iter = parts[i].first.find(CONTENT_ID);
                 if (iter == parts[i].first.end())
                 {
-                    return -2;
+                    return CONTENT_ID_NOT_PRESDENT;
                 }
                 content_id = std::move(iter->second);
                 parts[i].first.erase(iter);
@@ -855,13 +971,28 @@ public:
                     content_type = std::move(iter->second);
                     parts[i].first.erase(iter);
                 }
-                record.insert_or_update_block(content_id, content_type, parts[i].second, parts[i].first);
+                record.insert_block(content_id, content_type, parts[i].second, parts[i].first);
             }
             uint16_t sum = get_u16_sum(record_id);
             uint8_t row = sum >> 8;
             uint8_t col = sum & 0xFF;
             std::unique_lock<std::shared_timed_mutex> record_map_write_guard(records_mutexes[row][col]);
-            records[row][col][record_id] = std::move(record);
+            Record* target = nullptr;
+            auto iter = records[row][col].find(record_id);
+            if (iter == records[row][col].end())
+            {
+                if (update)
+                {
+                    return RECORD_DOES_NOT_EXIST;
+                }
+                target = &records[row][col][record_id];
+            }
+            else
+            {
+                target = &iter->second;
+            }
+            auto old_ttl = target->meta.ttl;
+            *target = std::move(record);
             // this is commented out to prevent record from being deleted from other thread before tags value insertion is done here
             // record_map_write_guard.unlock();
 
@@ -876,9 +1007,17 @@ public:
             }
 
             track_record_id(record_meta_copy.schemaId, record_id);
+            if (update && old_ttl.size())
+            {
+                track_record_ttl(old_ttl, record_id, false);
+            }
+            if (record_meta_copy.ttl.size())
+            {
+                track_record_ttl(record_meta_copy.ttl, record_id, true);
+            }
             return 0;
         }
-        return -3;
+        return RECORD_META_DECODE_FAILURE;
     }
     std::string delete_record(const std::string& record_id, bool get_previous = false)
     {
@@ -906,7 +1045,6 @@ public:
         {
             auto record = std::move(iter->second);
             records[row][col].erase(iter);
-            write_lock.unlock();
 
             for (auto& tag : record.meta.tags)
             {
@@ -917,6 +1055,8 @@ public:
                     remove_tag_value(record.meta.schemaId, tag_name, tag_value, record_id);
                 }
             }
+            track_record_id(record.meta.schemaId, record_id, false);
+            track_record_ttl(record.meta.ttl, record_id, false);
         }
     }
 
@@ -1043,8 +1183,8 @@ public:
         return false;
     }
 
-    bool insert_or_update_block(const std::string& record_id, std::string& id, std::string& type, std::string& blockData,
-                                std::map<std::string, std::string, Case_Independent_Less>& headers)
+    bool insert_block(const std::string& record_id, std::string& id, std::string& type, std::string& blockData,
+                      std::map<std::string, std::string, Case_Independent_Less>& headers)
     {
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
@@ -1053,7 +1193,22 @@ public:
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
-            return iter->second.insert_or_update_block(id, type, blockData, headers);
+            return iter->second.insert_block(id, type, blockData, headers);
+        }
+        return false;
+    }
+
+    bool update_block(const std::string& record_id, std::string& id, std::string& type, std::string& blockData,
+                      std::map<std::string, std::string, Case_Independent_Less>& headers)
+    {
+        uint16_t sum = get_u16_sum(record_id);
+        uint8_t row = sum >> 8;
+        uint8_t col = sum & 0xFF;
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
+        auto iter = records[row][col].find(record_id);
+        if (iter != records[row][col].end())
+        {
+            return iter->second.update_block(id, type, blockData, headers);
         }
         return false;
     }
@@ -1089,13 +1244,6 @@ public:
     std::set<std::string> run_search_expression(const std::set<std::string>& curr_set, const std::string& schema_id,
                                                 rapidjson::Value& value)
     {
-        const std::string RECORD_ID_LIST = "recordIdList";
-        const std::string CONDITION = "cond";
-        const std::string OPERATION = "op";
-        const std::string UNITS = "units";
-        const std::string CONDITION_OP_AND = "AND";
-        const std::string CONDITION_OP_OR = "OR";
-        const std::string CONDITION_OP_NOT = "NOT";
         std::set<std::string> ret;
         auto actual_schema_id = schema_id;
 
@@ -1143,13 +1291,39 @@ public:
                     auto& units = value[UNITS.c_str()];
                     if (units.IsArray())
                     {
+                        std::vector<rapidjson::Value*> simple_values;
+                        std::vector<rapidjson::Value*> nested_values;
                         for (size_t i = 0; i < units.Size(); i++)
                         {
                             auto& array_value = units[i];
                             if (array_value.IsObject())
                             {
-                                operands.emplace_back(run_search_expression(curr_set, actual_schema_id, array_value));
+                                auto first_name = std::string(array_value.MemberBegin()->name.GetString(),
+                                                              array_value.MemberBegin()->name.GetStringLength());
+                                if (first_name == CONDITION)
+                                {
+                                    nested_values.push_back(&array_value);
+                                }
+                                else
+                                {
+                                    simple_values.push_back(&array_value);
+                                }
                             }
+                        }
+                        for (auto v : simple_values)
+                        {
+                            operands.emplace_back(run_search_expression(curr_set, actual_schema_id, *v));
+
+                        }
+                        if (condition_operator == CONDITION_OP_AND)
+                        {
+                            auto s = run_and_operator(operands);
+                            operands.clear();
+                            operands.emplace_back(std::move(s));
+                        }
+                        for (auto v : nested_values)
+                        {
+                            operands.emplace_back(run_search_expression(*operands.rbegin(), actual_schema_id, *v));
                         }
                     }
                     else
@@ -1167,8 +1341,14 @@ public:
                 }
                 else if (condition_operator == CONDITION_OP_NOT)
                 {
-                    // operands.size() should be 1, but do and on it anyway and set to MINUS at last
-                    //ret = run_or_operator(operands);
+                    if (curr_set.empty())
+                    {
+                        ret = run_not_operator(get_all_record_ids(schema_id), run_or_operator(operands));
+                    }
+                    else
+                    {
+                        ret = run_not_operator(curr_set, run_or_operator(operands));
+                    }
                     // TODO:
                 }
             }

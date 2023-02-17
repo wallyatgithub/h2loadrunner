@@ -9,7 +9,7 @@ auto& realm = udsf::get_realm("realm1");
 auto& storage = realm.get_storage("storage1");
 std::vector<std::string> record_names;
 std::vector<std::string> multipartBodies;
-size_t number_records = 5000000;
+size_t number_records = 1000;
 
 void test_run_search_expression()
 {
@@ -247,7 +247,7 @@ int main(void)
   ]
 }
 )";
-/*
+
     for (size_t i = 0; i < number_records; i++)
     {
         record_names.emplace_back(std::string("record").append(std::to_string(i)));
@@ -281,14 +281,14 @@ int main(void)
     }
 
     storage.add_or_update_schema("schema_1", schema);
-*/
+
     //std::thread add_thread(add_record);
     //std::thread delete_thread(delete_record);
     //add_thread.join();
     //delete_thread.join();
-    //add_record();
-    //get_record();
-    //delete_record();
+    add_record();
+    get_record();
+    delete_record();
     test_run_search_expression();
     return 0;
 }
