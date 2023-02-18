@@ -39,6 +39,7 @@ const int DECODE_MULTIPART_FAILURE = -1;
 const int CONTENT_ID_NOT_PRESDENT = -2;
 const int RECORD_META_DECODE_FAILURE = -3;
 const int RECORD_DOES_NOT_EXIST = -4;
+const int TTL_EXPIRED = -5;
 
 namespace udsf
 {
@@ -902,9 +903,8 @@ public:
         }
     }
 
-    void track_record_ttl(const std::string& ttl_in_iso8601, const std::string& record_id, bool insert = true)
+    void track_record_ttl(uint64_t ttl, const std::string& record_id, bool insert = true)
     {
-        auto ttl = iso8601_timestamp_to_seconds_since_epoch(ttl_in_iso8601);
         std::unique_lock<std::shared_timed_mutex> record_ttl_write_lock(record_ttl_mutex);
         if (insert)
         {
@@ -945,6 +945,7 @@ public:
     * return -2: block content-id absent
     * return -3: meta decode or validation failure
     * return -4: record does not exist while trying to update the record
+    * return -5: record ttl already expired
     * @thows None
     * */
     int insert_or_update_record(const std::string& record_id, const std::string& boundary,
@@ -961,6 +962,16 @@ public:
         if (staticjson::from_json_string(parts[0].second.c_str(), &record_meta, &result) &&
             validate_record_meta(record_meta))
         {
+            uint64_t ttl = 0;
+            if (record_meta.ttl.size())
+            {
+                ttl = iso8601_timestamp_to_seconds_since_epoch(record_meta.ttl);
+                auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                if (ttl <= seconds_since_epoch)
+                {
+                    return TTL_EXPIRED;
+                }
+            }
             Record record;
             auto record_meta_copy = record_meta;
             record.set_meta_object(record_meta);
@@ -1002,7 +1013,7 @@ public:
             {
                 target = &iter->second;
             }
-            auto old_ttl = target->meta.ttl;
+            auto old_ttl = iso8601_timestamp_to_seconds_since_epoch(target->meta.ttl);
             *target = std::move(record);
             // this is commented out to prevent record from being deleted from other thread before tags value insertion is done here
             // record_map_write_guard.unlock();
@@ -1018,13 +1029,13 @@ public:
             }
 
             track_record_id(record_meta_copy.schemaId, record_id);
-            if (update && old_ttl.size())
+            if (update && old_ttl)
             {
                 track_record_ttl(old_ttl, record_id, false);
             }
-            if (record_meta_copy.ttl.size())
+            if (ttl)
             {
-                track_record_ttl(record_meta_copy.ttl, record_id, true);
+                track_record_ttl(ttl, record_id, true);
             }
             return 0;
         }
@@ -1067,7 +1078,10 @@ public:
                 }
             }
             track_record_id(record.meta.schemaId, record_id, false);
-            track_record_ttl(record.meta.ttl, record_id, false);
+            if (record.meta.ttl.size())
+            {
+                track_record_ttl(iso8601_timestamp_to_seconds_since_epoch(record.meta.ttl), record_id, false);
+            }
         }
     }
 

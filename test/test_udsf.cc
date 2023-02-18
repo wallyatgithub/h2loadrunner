@@ -146,7 +146,9 @@ void test_run_search_expression()
     multipartBody2 += "This is the second part of the HTTP body.\r\n";
     multipartBody2 += "-----MULTIPART_BOUNDARY-----\r\n";
 
-    storage.insert_or_update_record(record_id2, "-----MULTIPART_BOUNDARY---", multipartBody2);
+    auto retCode = storage.insert_or_update_record(record_id2, "-----MULTIPART_BOUNDARY---", multipartBody2);
+
+    std::cout<<"insert_or_update_record returned: "<<retCode<<std::endl;
 
     auto r = storage.get_all_record_ids("schema_1");
     for (auto& s: r)
@@ -257,7 +259,7 @@ int main(void)
         multipartBody += "Content-id: meta\r\n";
         multipartBody += "Content-Type: application/json\r\n";
         multipartBody += "\r\n";
-        multipartBody += "{\"schemaId\": \"schema_1\",\"tags\":{\"ueId\" : [ \"";
+        multipartBody += "{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [ \"";
         multipartBody += std::to_string(10000+i);
         multipartBody += "\", \"";
         multipartBody += std::to_string(20000+i);
@@ -290,6 +292,6 @@ int main(void)
     get_record();
     delete_record();
     test_run_search_expression();
-    std::cout<<"time since epoch of 2023-02-18T21:07:00+08:00 is: "<<udsf::iso8601_timestamp_to_seconds_since_epoch("2023-02-18T21:07:00+08:00")<<std::endl;
+    std::cout<<"time since epoch of 2023-02-18T19:07:00+06:00 is: "<<udsf::iso8601_timestamp_to_seconds_since_epoch("2023-02-18T21:07:00+08:00")<<std::endl;
     return 0;
 }
