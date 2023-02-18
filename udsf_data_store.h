@@ -148,7 +148,33 @@ std::set<std::string> run_not_operator(const std::set<std::string>& source, cons
 uint64_t iso8601_timestamp_to_seconds_since_epoch(const std::string& iso8601_timestamp)
 {
     const std::string sample_tz_offset = "+08:00";
+
+    if (iso8601_timestamp.empty())
+    {
+        return 0;
+    }
+    std::time_t local_t = std::time(nullptr);
+    std::tm tm = {};
+#ifdef _WINDOWS
+    tm = *localtime(&local_t);
+#else
+    localtime_r(&local_t, &tm);
+#endif
+    std::stringstream buffer;
+    buffer << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S%z");
+    auto local_time_stamp = buffer.str();
+    std::string local_tz = local_time_stamp.substr(local_time_stamp.size() - 5);
+    int local_tz_hours, local_tz_minutes;
+    local_tz_hours = std::atoi(local_tz.substr(1, 2).c_str());
+    local_tz_minutes = std::atoi(local_tz.substr(3, 2).c_str());
+    auto local_tz_offset = (std::chrono::hours(local_tz_hours) + std::chrono::minutes(local_tz_minutes));
+    if (local_tz[0] == '-')
+    {
+        local_tz_offset = -local_tz_offset;
+    }
+
     std::tm timeinfo = {};
+    timeinfo.tm_isdst = tm.tm_isdst;
     std::istringstream ss(iso8601_timestamp);
     ss >> std::get_time(&timeinfo, "%Y-%m-%dT%H:%M:%S");
 
@@ -178,21 +204,6 @@ uint64_t iso8601_timestamp_to_seconds_since_epoch(const std::string& iso8601_tim
     if (incoming_tz[0] == '-')
     {
         incoming_tz_offset = -incoming_tz_offset;
-    }
-
-    std::time_t local_t = std::time(nullptr);
-    std::tm tm = *std::localtime(&local_t);
-    std::stringstream buffer;
-    buffer << std::put_time(&tm, "%a, %d %b %Y %H:%M:%S %z");
-    auto local_time_stamp = buffer.str();
-    std::string local_tz = local_time_stamp.substr(local_time_stamp.size() - 5);
-    int local_tz_hours, local_tz_minutes;
-    local_tz_hours = std::atoi(local_tz.substr(1, 2).c_str());
-    local_tz_minutes = std::atoi(local_tz.substr(3, 2).c_str());
-    auto local_tz_offset = (std::chrono::hours(local_tz_hours) + std::chrono::minutes(local_tz_minutes));
-    if (local_tz[0] == '-')
-    {
-        local_tz_offset = -local_tz_offset;
     }
 
     auto tz_difference = local_tz_offset - incoming_tz_offset;

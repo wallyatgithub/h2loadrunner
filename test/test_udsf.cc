@@ -290,5 +290,6 @@ int main(void)
     get_record();
     delete_record();
     test_run_search_expression();
+    std::cout<<"time since epoch of 2023-02-18T21:07:00+08:00 is: "<<udsf::iso8601_timestamp_to_seconds_since_epoch("2023-02-18T21:07:00+08:00")<<std::endl;
     return 0;
 }

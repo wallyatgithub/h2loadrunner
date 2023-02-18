@@ -108,7 +108,7 @@ struct Lua_State_Data
 
 struct Host_Resolution_Data
 {
-    std::vector<lua_State*> lua_sates_await_result;
+    std::vector<lua_State*> lua_states_await_result;
     std::vector<std::string> ip_addresses;
     std::chrono::steady_clock::time_point expire_time_point;
 };
