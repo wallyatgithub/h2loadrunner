@@ -270,8 +270,16 @@ set(H2LOAD_SOURCES
   ${THIRD_PARTY_LUA_MOD_SOURCE}
 )
 
+#udsf
+set (UDSF_SOURCES
+  udsf_util.cc
+  ${H2LOAD_SOURCES}
+)
 
 add_executable(h2loadrunner ${H2LOAD_SOURCES} $<TARGET_OBJECTS:llhttp>
+  $<TARGET_OBJECTS:url-parser> $<TARGET_OBJECTS:staticjson>)
+
+add_executable(openudsf ${UDSF_SOURCES} $<TARGET_OBJECTS:llhttp>
   $<TARGET_OBJECTS:url-parser> $<TARGET_OBJECTS:staticjson>)
 
 if(DEFINED USE_LIBEV)

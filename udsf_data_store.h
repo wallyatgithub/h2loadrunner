@@ -16,6 +16,7 @@
 #include "nlohmann/json.hpp"
 #include "rapidjson/writer.h"
 #include "rapidjson/stringbuffer.h"
+#include "common_types.h"
 
 
 const std::string CONTENT_ID = "Content-Id";
@@ -43,7 +44,7 @@ const int TTL_EXPIRED = -5;
 
 namespace udsf
 {
-uint16_t get_u16_sum(const std::string& key)
+inline uint16_t get_u16_sum(const std::string& key)
 {
     return (std::accumulate(key.begin(),
                             key.end(),
@@ -54,26 +55,7 @@ uint16_t get_u16_sum(const std::string& key)
     }));
 }
 
-struct Case_Independent_Less
-{
-    // case-independent (ci) compare_less binary function
-    struct nocase_compare
-    {
-        bool operator()(const unsigned char& c1, const unsigned char& c2) const
-        {
-            return tolower(c1) < tolower(c2);
-        }
-    };
-    bool operator()(const std::string& s1, const std::string& s2) const
-    {
-        return std::lexicographical_compare
-               (s1.begin(), s1.end(),     // source range
-                s2.begin(), s2.end(),     // dest range
-                nocase_compare());   // comparison
-    }
-};
-
-std::string get_string_value_from_Json_object(rapidjson::Value& object, const std::string& name)
+inline std::string get_string_value_from_Json_object(rapidjson::Value& object, const std::string& name)
 {
     if (object.HasMember(name.c_str()))
     {
@@ -86,7 +68,7 @@ std::string get_string_value_from_Json_object(rapidjson::Value& object, const st
     return "";
 }
 
-std::set<std::string> run_and_operator(const std::vector<std::set<std::string>>& operands)
+inline std::set<std::string> run_and_operator(const std::vector<std::set<std::string>>& operands)
 {
     std::set<std::string> ret;
     size_t shortest_vector_index = 0;
@@ -120,7 +102,7 @@ std::set<std::string> run_and_operator(const std::vector<std::set<std::string>>&
     return ret;
 }
 
-std::set<std::string> run_or_operator(const std::vector<std::set<std::string>>& operands)
+inline std::set<std::string> run_or_operator(const std::vector<std::set<std::string>>& operands)
 {
     std::set<std::string> ret;
     for (auto& v : operands)
@@ -133,7 +115,7 @@ std::set<std::string> run_or_operator(const std::vector<std::set<std::string>>& 
     return ret;
 }
 
-std::set<std::string> run_not_operator(const std::set<std::string>& source, const std::set<std::string>& operands)
+inline std::set<std::string> run_not_operator(const std::set<std::string>& source, const std::set<std::string>& operands)
 {
     std::set<std::string> ret;
     for (auto& s : source)
@@ -146,7 +128,7 @@ std::set<std::string> run_not_operator(const std::set<std::string>& source, cons
     return ret;
 }
 
-uint64_t iso8601_timestamp_to_seconds_since_epoch(const std::string& iso8601_timestamp)
+inline uint64_t iso8601_timestamp_to_seconds_since_epoch(const std::string& iso8601_timestamp)
 {
     const std::string sample_tz_offset = "+08:00";
 
@@ -215,7 +197,7 @@ uint64_t iso8601_timestamp_to_seconds_since_epoch(const std::string& iso8601_tim
 class MultipartParser
 {
 public:
-    using MutiParts = std::vector<std::pair<std::map<std::string, std::string, Case_Independent_Less>, std::string>>;
+    using MutiParts = std::vector<std::pair<std::map<std::string, std::string, ci_less>, std::string>>;
     MultipartParser(const std::string& boundary)
     {
         memset(&m_callbacks, 0, sizeof(multipart_parser_settings));
@@ -332,7 +314,7 @@ public:
     std::string content_id;
     std::string content_type;
     std::string content;
-    std::map<std::string, std::string, Case_Independent_Less> headers;
+    std::map<std::string, std::string, ci_less> headers;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("Content-Id", &this->content_id);
@@ -393,7 +375,7 @@ public:
     }
     */
     bool update_block(std::string& id, std::string& type, std::string& blockData,
-                      std::map<std::string, std::string, Case_Independent_Less>& headers)
+                      std::map<std::string, std::string, ci_less>& headers)
     {
         std::unique_lock<std::shared_timed_mutex> write_guard(*blocks_mutex);
         //TODO: add block mutex, then change the lock to blocks_mutex to read lock to allow concurrent update to different blocks
@@ -410,7 +392,7 @@ public:
     }
 
     bool insert_block(std::string& id, std::string& type, std::string& blockData,
-                      std::map<std::string, std::string, Case_Independent_Less>& headers)
+                      std::map<std::string, std::string, ci_less>& headers)
     {
         std::unique_lock<std::shared_timed_mutex> write_guard(*blocks_mutex);
         blocks.emplace_back();
@@ -1209,7 +1191,7 @@ public:
     }
 
     bool insert_block(const std::string& record_id, std::string& id, std::string& type, std::string& blockData,
-                      std::map<std::string, std::string, Case_Independent_Less>& headers)
+                      std::map<std::string, std::string, ci_less>& headers)
     {
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
@@ -1224,7 +1206,7 @@ public:
     }
 
     bool update_block(const std::string& record_id, std::string& id, std::string& type, std::string& blockData,
-                      std::map<std::string, std::string, Case_Independent_Less>& headers)
+                      std::map<std::string, std::string, ci_less>& headers)
     {
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
@@ -1421,7 +1403,7 @@ public:
 static std::unordered_map<std::string, Realm> Realms;
 static std::mutex realm_mutex;
 
-Realm& get_realm(const std::string& realm_id)
+inline Realm& get_realm(const std::string& realm_id)
 {
     std::lock_guard<std::mutex> guard(realm_mutex);
     return Realms[realm_id];

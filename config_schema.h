@@ -11,6 +11,7 @@
 #include "rapidjson/schema.h"
 #include "rapidjson/prettywriter.h"
 
+#include "common_types.h"
 #include "H2Server_Request.h"
 
 static const char* validate_response = "validate_response";

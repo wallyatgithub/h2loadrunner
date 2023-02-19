@@ -35,7 +35,7 @@
 #include "memchunk.h"
 #endif
 #include "template.h"
-#include "H2Server_Request.h"
+#include "common_types.h"
 #include "config_schema.h"
 
 #ifdef ENABLE_HTTP3
