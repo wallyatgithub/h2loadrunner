@@ -91,6 +91,8 @@ public:
 
     void reset_writefun();
 
+    const H2Server_Config_Schema& get_config();
+
 protected:
     std::map<int32_t, std::shared_ptr<asio_server_stream>> streams_;
     connection_write writefun_;

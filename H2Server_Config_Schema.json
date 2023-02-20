@@ -127,7 +127,7 @@
                       "enum": ["EqualsTo", "StartsWith", "EndsWith", "Contains", "RegexMatch"]
                     },
                     "input":{
-                      "description": "Input used to run the matchType above with the received header value; i.e., received header value should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression in POSIX grep grammar, and it should match the entire target character sequence, i.e., the header value",
+                      "description": "Input used to run the matchType above with the received header value; i.e., received header value should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression of ECMAScript flavor, and it should match the entire target character sequence, i.e., the header value",
                       "default": "/",
                       "type":"string"
                     }
@@ -152,7 +152,7 @@
                       "enum": ["EqualsTo", "StartsWith", "EndsWith", "Contains", "RegexMatch"]
                     },
                     "input": {
-                      "description": "Input used to execute the matchType above with the value specified by JsonPointer field above; the value specified by JsonPointer above should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression in POSIX grep grammar, and it should match the entire target character sequence, i.e., the value specified by JsonPointer",
+                      "description": "Input used to execute the matchType above with the value specified by JsonPointer field above; the value specified by JsonPointer above should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression of ECMAScript flavor, and it should match the entire target character sequence, i.e., the value specified by JsonPointer",
                       "type":"string"
                     }
                   }
@@ -225,7 +225,8 @@
                             "type":"string"
                           },
                           "regex":{
-                            "description": "Regular expression in ECMAScript grammar, if given, it would be used to extract a sub string from the value.",
+                            "description": "Regular expression of ECMAScript flavor, if given, it would be used to extract a sub string from the value.",
+                            "default": ".*",
                             "type":"string"
                           },
                           "sub-string-start":{
@@ -276,7 +277,8 @@
                               "type":"string"
                             },
                             "regex":{
-                              "description": "Regular expression in ECMAScript grammar, if given, it would be used to extract a sub string from the value.",
+                              "description": "Regular expression of ECMAScript flavor, if given, it would be used to extract a sub string from the value.",
+                              "default": ".*",
                               "type":"string"
                             },
                             "sub-string-start":{

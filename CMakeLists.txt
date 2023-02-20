@@ -192,6 +192,8 @@ include_directories(
   "${Boost_INCLUDE_DIRS}"
   "${GETOPT_INCLUDE_DIR}"
   "${NGHTTP2_INCLUDE_DIR}"
+  ${OPENSSL_INCLUDE_DIRS}
+  ${Boost_INCLUDE_DIRS}
 )
 
 link_directories(
@@ -233,7 +235,6 @@ set(ASIO_SV_SOURCES
   asio_server_http1_handler.cc
   asio_util.cc
   common_lua.cc
-  multipart_parser.c
 )
 
 set(THIRD_PARTY_LUA_MOD_SOURCE
@@ -273,20 +274,59 @@ set(H2LOAD_SOURCES
 #udsf
 set (UDSF_SOURCES
   udsf_util.cc
+  multipart_parser.c
   ${H2LOAD_SOURCES}
 )
 
-add_executable(h2loadrunner ${H2LOAD_SOURCES} $<TARGET_OBJECTS:llhttp>
-  $<TARGET_OBJECTS:url-parser> $<TARGET_OBJECTS:staticjson>)
+add_executable(h2loadrunner ${H2LOAD_SOURCES}
+  $<TARGET_OBJECTS:llhttp>
+  $<TARGET_OBJECTS:url-parser>
+  $<TARGET_OBJECTS:staticjson>
+)
 
-add_executable(openudsf ${UDSF_SOURCES} $<TARGET_OBJECTS:llhttp>
-  $<TARGET_OBJECTS:url-parser> $<TARGET_OBJECTS:staticjson>)
+add_executable(openudsf ${UDSF_SOURCES}
+  $<TARGET_OBJECTS:llhttp>
+  $<TARGET_OBJECTS:url-parser>
+  $<TARGET_OBJECTS:staticjson>
+)
 
 if(DEFINED USE_LIBEV)
     target_link_libraries(h2loadrunner cares_static)
+    target_link_libraries(openudsf cares_static)
 endif()
 
 install(TARGETS h2loadrunner
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+
+set(NGHTTP2_ASIO_SV_SOURCES
+  util.cc
+  http2.cc
+  tls.cc
+  timegm.c
+  ${ASIO_SV_SOURCES}
+  ${THIRD_PARTY_LUA_MOD_SOURCE}
+)
+
+add_library(nghttp2_asio_sv OBJECT
+   ${NGHTTP2_ASIO_SV_SOURCES}
+   $<TARGET_OBJECTS:llhttp>
+   $<TARGET_OBJECTS:url-parser>
+)
+
+target_link_libraries(nghttp2_asio_sv PUBLIC
+  ${NGHTTP2_LIBRARY}
+  ${OPENSSL_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${LUA_LIBRARIES}
+  ${MIMALLOC_LIB}
+)
+
+add_executable(maock asio-sv.cc
+  $<TARGET_OBJECTS:llhttp>
+  $<TARGET_OBJECTS:nghttp2_asio_sv>
+  $<TARGET_OBJECTS:url-parser>
+  $<TARGET_OBJECTS:staticjson>
+)
+
 
 

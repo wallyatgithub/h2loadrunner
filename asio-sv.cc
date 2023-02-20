@@ -60,8 +60,6 @@
 using namespace nghttp2::asio_http2;
 using namespace nghttp2::asio_http2::server;
 
-H2Server_Config_Schema config_schema;
-
 int main(int argc, char *argv[]) {
   if (argc < 2)
   {
