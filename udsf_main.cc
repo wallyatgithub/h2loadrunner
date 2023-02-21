@@ -17,7 +17,7 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
     {
         return nghttp2::asio_http2::server::base_handler::find_io_service(handler_id);
     };
-
+    static const size_t number_of_tokens_in_api_root = 0;
     static thread_local auto io_service = get_server_io_service();
     const std::string PATH_DELIMETER = "/";
     const std::string QUERY_DELIMETER = "&";

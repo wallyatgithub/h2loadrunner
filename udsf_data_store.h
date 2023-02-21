@@ -581,6 +581,52 @@ public:
 
 using Tags_Db = std::map<std::string, Tags_Name_Db_Of_One_Schema>;
 
+class SubscriptionFilter
+{
+public:
+    std::vector<std::string> monitoredResourceUris;
+    std::vector<std::string> operations;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("monitoredResourceUris", &this->monitoredResourceUris);
+        h->add_property("operations", &this->operations);
+    }
+};
+
+class ClientId
+{
+public:
+    std::string nfId;
+    std::string nfSetId;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("nfId", &this->nfId, staticjson::Flags::Optional);
+        h->add_property("nfSetId", &this->nfSetId, staticjson::Flags::Optional);
+    }
+};
+
+class NotificationSubscription
+{
+public:
+    ClientId clientId;
+    std::string callbackReference;
+    std::string expiryCallbackReference;
+    std::string expiry;
+    uint32_t expiryNotification;
+    SubscriptionFilter subFilter;
+    std::string supportedFeatures;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("clientId", &this->clientId);
+        h->add_property("callbackReference", &this->callbackReference);
+        h->add_property("expiryCallbackReference", &this->expiryCallbackReference, staticjson::Flags::Optional);
+        h->add_property("expiry", &this->expiry, staticjson::Flags::Optional);
+        h->add_property("expiryNotification", &this->expiryNotification, staticjson::Flags::Optional);
+        h->add_property("subFilter", &this->subFilter, staticjson::Flags::Optional);
+        h->add_property("supportedFeatures", &this->supportedFeatures, staticjson::Flags::Optional);
+    }
+};
+
 class Storage
 {
 public:
@@ -590,10 +636,17 @@ public:
     std::shared_timed_mutex record_ids_mutex;
     std::shared_timed_mutex records_mutexes[0x100][0x100];
     std::shared_timed_mutex schemas_mutexes[0x100][0x100];
+
     Tags_Db tags_db;
     std::shared_timed_mutex tags_db_main_mutex;
+
     std::map<uint64_t, std::set<std::string>> records_ttl;
     std::shared_timed_mutex record_ttl_mutex;
+
+    std::map<std::string, NotificationSubscription> subscription_id_to_subscriptions;
+    std::map<std::string, std::string> monitored_resource_uri_to_subscription_id;
+    std::map<uint64_t, std::set<std::string>> subscription_ttl_to_subscription_id;
+    std::shared_timed_mutex subscription_mutex;
 
     void init_default_schema_with_empty_schema_id()
     {
@@ -1382,6 +1435,43 @@ public:
         }
         return ret;
     }
+
+    bool create_subscription(const std::string& subscription_id, const std::string& subscription_body)
+    {
+        std::unique_lock<std::shared_timed_mutex> guard(subscription_mutex);
+        return false;
+    }
+
+    bool update_subscription(const std::string& subscription_id, const std::string& subscription_body)
+    {
+        std::unique_lock<std::shared_timed_mutex> guard(subscription_mutex);
+        return false;
+    }
+
+    bool delete_subscription(const std::string& subscription_id)
+    {
+        std::unique_lock<std::shared_timed_mutex> guard(subscription_mutex);
+        return false;
+    }
+
+    std::string get_subscription(const std::string& subscription_id)
+    {
+        std::shared_lock<std::shared_timed_mutex> guard(subscription_mutex);
+        return "";
+    }
+
+    std::vector<std::string> get_expired_subscription_ids()
+    {
+        std::shared_lock<std::shared_timed_mutex> guard(subscription_mutex);
+        std::vector<std::string> v;
+        return v;
+    }
+
+    bool is_resource_monitored(const std::string& relative_uri)
+    {
+        return false;
+    }
+
 };
 
 class Realm
