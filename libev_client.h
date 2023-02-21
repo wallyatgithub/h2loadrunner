@@ -20,7 +20,6 @@ extern "C" {
 #include "h2load_Config.h"
 #include "libev_worker.h"
 #include "h2load_session.h"
-#include "h2load_stats.h"
 #include "h2load_Cookie.h"
 #include "h2load_utils.h"
 #include "base_client.h"

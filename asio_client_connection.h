@@ -33,7 +33,6 @@
 #include "h2load_utils.h"
 #include "base_client.h"
 #include "h2load_Config.h"
-#include "h2load_stats.h"
 #include "config_schema.h"
 #include <deque>
 

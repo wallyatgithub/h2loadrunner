@@ -17,7 +17,6 @@ extern "C" {
 
 
 #include "config_schema.h"
-#include "h2load_stats.h"
 //#include "base_worker.h"
 #include "h2load_session.h"
 #include "h2load.h"

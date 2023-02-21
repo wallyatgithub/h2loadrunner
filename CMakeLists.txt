@@ -248,11 +248,11 @@ set(THIRD_PARTY_LUA_MOD_SOURCE
     third-party/lua-rapidJson/values.hpp
     pb.c
 )
+
 # h2load
 set(H2LOAD_SOURCES
   util.cc
   http2.cc
-  h2load.cc
   h2load_utils.cc
   h2load_Config.cc
   h2load_Cookie.cc
@@ -271,14 +271,21 @@ set(H2LOAD_SOURCES
   ${THIRD_PARTY_LUA_MOD_SOURCE}
 )
 
+set (H2LOAD_SRC_MAIN
+  h2load.cc
+)
+
 #udsf
 set (UDSF_SOURCES
   udsf_util.cc
   multipart_parser.c
+  udsf_main.cc
   ${H2LOAD_SOURCES}
 )
 
-add_executable(h2loadrunner ${H2LOAD_SOURCES}
+add_executable(h2loadrunner
+  ${H2LOAD_SOURCES}
+  ${H2LOAD_SRC_MAIN}
   $<TARGET_OBJECTS:llhttp>
   $<TARGET_OBJECTS:url-parser>
   $<TARGET_OBJECTS:staticjson>

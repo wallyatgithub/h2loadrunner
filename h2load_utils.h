@@ -30,7 +30,6 @@ extern "C" {
 #include "asio_worker.h"
 
 #include "h2load_Cookie.h"
-#include "h2load_stats.h"
 
 
 #include "h2load_http1_session.h"

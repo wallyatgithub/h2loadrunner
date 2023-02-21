@@ -95,7 +95,6 @@ extern "C" {
 #include "libev_client.h"
 #endif
 #include "base_worker.h"
-#include "h2load_stats.h"
 #include "staticjson/document.hpp"
 #include "staticjson/staticjson.hpp"
 #include "rapidjson/schema.h"
@@ -134,33 +133,6 @@ constexpr size_t MAX_SAMPLES = 100000;
 constexpr size_t MAX_SAMPLES_PER_THREAD = 10000;
 
 } // namespace
-
-Stats::Stats(size_t req_todo, size_t nclients)
-    : req_todo(req_todo),
-      req_started(0),
-      req_done(0),
-      req_success(0),
-      req_status_success(0),
-      req_failed(0),
-      req_error(0),
-      req_timedout(0),
-      bytes_total(0),
-      bytes_head(0),
-      bytes_head_decomp(0),
-      bytes_body(0),
-      status()
-{}
-
-Stream::Stream(bool stats_eligible, std::unique_ptr<Request_Response_Data>& rr_data)
-    : req_stat(rr_data ? rr_data->scenario_index : 0, rr_data ? rr_data->curr_request_idx : 0),
-      status_success(-1),
-      statistics_eligible(stats_eligible)
-      {
-        if (rr_data)
-        {
-            request_response = std::move(rr_data);
-        }
-      }
 
 namespace
 {

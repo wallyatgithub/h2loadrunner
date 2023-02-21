@@ -28,7 +28,6 @@
 #include "h2load_session.h"
 #include "base_client.h"
 #include "h2load_Config.h"
-#include "h2load_stats.h"
 
 #include "llhttp.h"
 
