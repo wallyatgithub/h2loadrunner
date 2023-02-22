@@ -17,6 +17,8 @@
 #include "rapidjson/writer.h"
 #include "rapidjson/stringbuffer.h"
 #include "common_types.h"
+#include "h2load_utils.h"
+#include "udsf_util.h"
 
 
 const std::string CONTENT_ID = "Content-Id";
@@ -36,14 +38,69 @@ const std::string CONDITION_OP_AND = "AND";
 const std::string CONDITION_OP_OR = "OR";
 const std::string CONDITION_OP_NOT = "NOT";
 
+const std::string RECORDS = "records";
+
+const std::string RECORD_OPERATION_CREATED = "CREATED";
+const std::string RECORD_OPERATION_UPDATED = "UPDATED";
+const std::string RECORD_OPERATION_DELETED = "DELETED";
+
+const int OPERATION_SUCCESSFUL = 0;
 const int DECODE_MULTIPART_FAILURE = -1;
 const int CONTENT_ID_NOT_PRESDENT = -2;
 const int RECORD_META_DECODE_FAILURE = -3;
 const int RECORD_DOES_NOT_EXIST = -4;
 const int TTL_EXPIRED = -5;
+const int DECODE_SUBCRIPTION_FAILURE = -6;
+const int SUBSCRIPTION_EXPIRY_INVALID = -7;
+
+static const size_t number_of_tokens_in_api_root = 0;
+const std::string PATH_DELIMETER = "/";
+const std::string QUERY_DELIMETER = "&";
+const size_t REALM_ID_INDEX = 2;
+const size_t STORAGE_ID_INDEX = 3;
+const size_t RECORDS_INDEX = 4;
+const size_t RECORD_ID_INDEX = 5;
 
 namespace udsf
 {
+
+std::string get_path(const std::string& uri)
+{
+    http_parser_url u {};
+    if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0)
+    {
+        std::cerr << "invalid uri:" << uri << std::endl;
+        return "";
+    }
+    return get_reqline(uri.c_str(), u);
+}
+
+std::string get_relative_path_starting_from_records(const std::string& path)
+{
+    std::string s = "";
+
+    auto tokens = tokenize_string(path, PATH_DELIMETER);
+    size_t size = 0;
+    for (size_t i = RECORDS_INDEX; i < tokens.size(); i++)
+    {
+        if (i != RECORDS_INDEX)
+        {
+            size += PATH_DELIMETER.size();
+        }
+        size += tokens[i].size();
+    }
+    for (size_t i = RECORDS_INDEX; i < tokens.size(); i++)
+    {
+        if (i != RECORDS_INDEX)
+        {
+            s += PATH_DELIMETER;
+        }
+        s += tokens[i];
+    }
+    return s;
+}
+
+
 inline uint16_t get_u16_sum(const std::string& key)
 {
     return (std::accumulate(key.begin(),
@@ -115,7 +172,8 @@ inline std::set<std::string> run_or_operator(const std::vector<std::set<std::str
     return ret;
 }
 
-inline std::set<std::string> run_not_operator(const std::set<std::string>& source, const std::set<std::string>& operands)
+inline std::set<std::string> run_not_operator(const std::set<std::string>& source,
+                                              const std::set<std::string>& operands)
 {
     std::set<std::string> ret;
     for (auto& s : source)
@@ -612,7 +670,7 @@ public:
     std::string callbackReference;
     std::string expiryCallbackReference;
     std::string expiry;
-    uint32_t expiryNotification;
+    uint64_t expiryNotification = 0;
     SubscriptionFilter subFilter;
     std::string supportedFeatures;
     void staticjson_init(staticjson::ObjectHandler* h)
@@ -643,10 +701,15 @@ public:
     std::map<uint64_t, std::set<std::string>> records_ttl;
     std::shared_timed_mutex record_ttl_mutex;
 
-    std::map<std::string, NotificationSubscription> subscription_id_to_subscriptions;
-    std::map<std::string, std::string> monitored_resource_uri_to_subscription_id;
-    std::map<uint64_t, std::set<std::string>> subscription_ttl_to_subscription_id;
-    std::shared_timed_mutex subscription_mutex;
+    std::unordered_map<std::string, NotificationSubscription> subscription_id_to_subscription[0x100][0x100];
+    std::shared_timed_mutex subscription_id_to_subscription_mutex[0x100][0x100];
+    std::unordered_map<std::string, std::set<std::string>> monitored_resource_uri_to_subscription_id[0x100][0x100];
+    std::shared_timed_mutex monitored_resource_uri_to_subscription_id_mutex[0x100][0x100];
+    std::map<uint64_t, std::set<std::string>> subscription_expiry_to_subscription_id;
+    std::shared_timed_mutex subscription_expiry_to_subscription_id_mutex;
+    std::map<uint64_t, std::set<std::string>> subscription_expiryNotification_to_subscription_id;
+    std::shared_timed_mutex subscription_expiryNotification_to_subscription_id_mutex;
+
 
     void init_default_schema_with_empty_schema_id()
     {
@@ -1001,7 +1064,8 @@ public:
             if (record_meta.ttl.size())
             {
                 ttl = iso8601_timestamp_to_seconds_since_epoch(record_meta.ttl);
-                auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
+                                           (std::chrono::system_clock::now().time_since_epoch()).count();
                 if (ttl <= seconds_since_epoch)
                 {
                     return TTL_EXPIRED;
@@ -1436,42 +1500,250 @@ public:
         return ret;
     }
 
-    bool create_subscription(const std::string& subscription_id, const std::string& subscription_body)
+    int create_subscription(const std::string& subscription_id, const std::string& subscription_body)
     {
-        std::unique_lock<std::shared_timed_mutex> guard(subscription_mutex);
-        return false;
+        NotificationSubscription subscription;
+        staticjson::ParseStatus result;
+        if (staticjson::from_json_string(subscription_body.c_str(), &subscription, &result))
+        {
+            for (size_t i = 0; i < subscription.subFilter.monitoredResourceUris.size(); i++)
+            {
+                subscription.subFilter.monitoredResourceUris[i] = get_path(subscription.subFilter.monitoredResourceUris[i]);
+            }
+            auto expiry = iso8601_timestamp_to_seconds_since_epoch(subscription.expiry);
+            auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
+                                       (std::chrono::system_clock::now().time_since_epoch()).count();
+            if (expiry <= seconds_since_epoch)
+            {
+                return SUBSCRIPTION_EXPIRY_INVALID;
+            }
+            if (expiry - subscription.expiryNotification <= seconds_since_epoch)
+            {
+                subscription.expiryNotification = 0;
+            }
+            uint16_t sum = get_u16_sum(subscription_id);
+            auto row = sum >> 8;
+            auto col = sum & 0xFF;
+            std::unique_lock<std::shared_timed_mutex> subscription_id_to_subscriptions_write_lock(
+                subscription_id_to_subscription_mutex[row][col]);
+            subscription_id_to_subscription[row][col][subscription_id] = subscription;
+
+            std::unique_lock<std::shared_timed_mutex> subscription_expiry_to_subscription_id_write_lock(
+                subscription_expiry_to_subscription_id_mutex);
+            subscription_expiry_to_subscription_id[expiry].insert(subscription_id);
+
+            if (subscription.expiryNotification)
+            {
+                std::unique_lock<std::shared_timed_mutex> subscription_expiryNotification_to_subscription_id_write_lock(
+                    subscription_expiryNotification_to_subscription_id_mutex);
+                subscription_expiryNotification_to_subscription_id[seconds_since_epoch - subscription.expiryNotification].insert(
+                    subscription_id);
+            }
+
+            for (auto& monUri : subscription.subFilter.monitoredResourceUris)
+            {
+                uint16_t sum = get_u16_sum(monUri);
+                auto row = sum >> 8;
+                auto col = sum & 0xFF;
+                std::unique_lock<std::shared_timed_mutex> monitored_resource_uri_to_subscription_id_write_lock(
+                    monitored_resource_uri_to_subscription_id_mutex[row][col]);
+                monitored_resource_uri_to_subscription_id[row][col][monUri].insert(subscription_id);
+            }
+            return OPERATION_SUCCESSFUL;
+        }
+        return DECODE_SUBCRIPTION_FAILURE;
     }
 
-    bool update_subscription(const std::string& subscription_id, const std::string& subscription_body)
+    int update_subscription(const std::string& subscription_id, const std::string& subscription_body)
     {
-        std::unique_lock<std::shared_timed_mutex> guard(subscription_mutex);
-        return false;
+        delete_subscription(subscription_id);
+        return create_subscription(subscription_id, subscription_body);
+    }
+
+    template<typename M, typename K, typename V>
+    void remove_from_map(M& m, const K& k, const V& value)
+    {
+        auto i = m.find(k);
+        if (i != m.end())
+        {
+            i->second.erase(value);
+            if (i->second.empty())
+            {
+                m.erase(i);
+            }
+        }
     }
 
     bool delete_subscription(const std::string& subscription_id)
     {
-        std::unique_lock<std::shared_timed_mutex> guard(subscription_mutex);
+        uint16_t sum = get_u16_sum(subscription_id);
+        auto row = sum >> 8;
+        auto col = sum & 0xFF;
+        std::unique_lock<std::shared_timed_mutex> subscription_id_to_subscription_write_lock(
+            subscription_id_to_subscription_mutex[row][col]);
+        auto& id_to_s = subscription_id_to_subscription[row][col];
+        auto iter = id_to_s.find(subscription_id);
+        if (iter != id_to_s.end())
+        {
+            auto& subscription = iter->second;
+            auto expiry = iso8601_timestamp_to_seconds_since_epoch(subscription.expiry);
+            auto expiryNotification = expiry - subscription.expiryNotification;
+
+            std::unique_lock<std::shared_timed_mutex> subscription_expiry_to_subscription_id_write_lock(
+                subscription_expiry_to_subscription_id_mutex);
+            remove_from_map(subscription_expiry_to_subscription_id, expiry, subscription_id);
+
+            if (subscription.expiryNotification)
+            {
+                std::unique_lock<std::shared_timed_mutex> subscription_expiryNotification_to_subscription_id_write_lock(
+                    subscription_expiryNotification_to_subscription_id_mutex);
+                remove_from_map(subscription_expiryNotification_to_subscription_id, expiry - subscription.expiryNotification,
+                                subscription_id);
+            }
+
+            for (auto& monUri : subscription.subFilter.monitoredResourceUris)
+            {
+                uint16_t sum = get_u16_sum(monUri);
+                auto row = sum >> 8;
+                auto col = sum & 0xFF;
+                std::unique_lock<std::shared_timed_mutex> monitored_resource_uri_to_subscription_id_write_lock(
+                    monitored_resource_uri_to_subscription_id_mutex[row][col]);
+                remove_from_map(monitored_resource_uri_to_subscription_id[row][col], monUri, subscription_id);
+            }
+
+            id_to_s.erase(iter);
+            return true;
+        }
         return false;
     }
 
     std::string get_subscription(const std::string& subscription_id)
     {
-        std::shared_lock<std::shared_timed_mutex> guard(subscription_mutex);
+        uint16_t sum = get_u16_sum(subscription_id);
+        auto row = sum >> 8;
+        auto col = sum & 0xFF;
+        std::shared_lock<std::shared_timed_mutex> subscription_id_to_subscription_read_lock(
+            subscription_id_to_subscription_mutex[row][col]);
+        auto& id_to_s = subscription_id_to_subscription[row][col];
+        auto iter = id_to_s.find(subscription_id);
+        if (iter != id_to_s.end())
+        {
+            return staticjson::to_json_string(iter->second);
+        }
         return "";
     }
 
-    std::vector<std::string> get_expired_subscription_ids()
+    auto get_decoded_subscription(const std::string& subscription_id)
     {
-        std::shared_lock<std::shared_timed_mutex> guard(subscription_mutex);
-        std::vector<std::string> v;
-        return v;
+        uint16_t sum = get_u16_sum(subscription_id);
+        auto row = sum >> 8;
+        auto col = sum & 0xFF;
+        std::shared_lock<std::shared_timed_mutex> subscription_id_to_subscription_read_lock(
+            subscription_id_to_subscription_mutex[row][col]);
+        auto& id_to_s = subscription_id_to_subscription[row][col];
+        auto iter = id_to_s.find(subscription_id);
+        if (iter != id_to_s.end())
+        {
+            return (iter->second);
+        }
+        NotificationSubscription subscription;
+        return subscription;
     }
 
-    bool is_resource_monitored(const std::string& relative_uri)
+    std::set<std::string> get_expired_subscription_ids()
     {
-        return false;
+        std::shared_lock<std::shared_timed_mutex> read_lock(subscription_expiry_to_subscription_id_mutex);
+        std::set<std::string> s;
+        auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
+                                   (std::chrono::system_clock::now().time_since_epoch()).count();
+        auto end = subscription_expiry_to_subscription_id.upper_bound(seconds_since_epoch);
+        for (auto iter = subscription_expiry_to_subscription_id.begin(); iter != end; iter++)
+        {
+            s.insert(iter->second.begin(), iter->second.end());
+        }
+        return s;
     }
 
+    std::set<std::string> get_subscription_ids_about_to_expire()
+    {
+        std::shared_lock<std::shared_timed_mutex> read_lock(subscription_expiryNotification_to_subscription_id_mutex);
+        std::set<std::string> s;
+        auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
+                                   (std::chrono::system_clock::now().time_since_epoch()).count();
+        auto end = subscription_expiryNotification_to_subscription_id.upper_bound(seconds_since_epoch);
+        for (auto iter = subscription_expiryNotification_to_subscription_id.begin(); iter != end; iter++)
+        {
+            s.insert(iter->second.begin(), iter->second.end());
+        }
+        return s;
+    }
+
+    std::set<std::string> get_subscription_ids_to_notify(std::string& record_id, const std::string& block_id,
+                                                         const std::string& operation)
+    {
+        auto uri = RECORDS;
+        if (record_id.size())
+        {
+            uri.append(PATH_DELIMETER).append(record_id);
+            if (block_id.size())
+            {
+                uri.append(PATH_DELIMETER).append(block_id);
+            }
+        }
+
+        auto subscription_ids_to_notify = [this](const std::string & path)
+        {
+            std::set<std::string> s;
+            uint16_t sum = get_u16_sum(path);
+            auto row = sum >> 8;
+            auto col = sum & 0xFF;
+            std::shared_lock<std::shared_timed_mutex> read_lock(monitored_resource_uri_to_subscription_id_mutex[row][col]);
+            auto iter = monitored_resource_uri_to_subscription_id[row][col].find(path);
+            if (iter != monitored_resource_uri_to_subscription_id[row][col].end())
+            {
+                return iter->second;
+            }
+            return s;
+        };
+
+        std::set<std::string> ret;
+        auto v = subscription_ids_to_notify(RECORDS);
+        ret.insert(v.begin(), v.end());
+
+        if (uri.size() > RECORDS.size())
+        {
+            auto v = subscription_ids_to_notify(RECORDS);
+            for (auto& s : v)
+            {
+                ret.insert(s);
+            }
+        }
+        return ret;
+    }
+
+    void send_notify(std::string& record_id, const std::string& block_id, const std::string& operation)
+    {
+        std::string recordNotificationBody;
+        const std::map<std::string, std::string, ci_less> additionalHeaders;
+
+        auto v = get_subscription_ids_to_notify(record_id, block_id, operation);
+        for (auto& s : v)
+        {
+            auto subscription = get_decoded_subscription(s);
+            if (std::find(subscription.subFilter.operations.begin(), subscription.subFilter.operations.end(),
+                          operation) != subscription.subFilter.operations.end())
+            {
+                if (recordNotificationBody.empty())
+                {
+                    // TODO: generate recordNotificationBody
+                }
+                for (auto& uri : subscription.subFilter.monitoredResourceUris)
+                {
+                    send_http2_request("post", uri, additionalHeaders, recordNotificationBody);
+                }
+            }
+        }
+    }
 };
 
 class Realm
