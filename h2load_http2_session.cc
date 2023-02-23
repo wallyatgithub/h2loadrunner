@@ -453,7 +453,7 @@ int Http2Session::_submit_request()
     nghttp2_data_provider prd {{0}, buffer_read_callback};
 
     std::vector<nghttp2_nv> http2_nvs;
-    auto ptr = std::move(client_->get_request_to_submit());
+    auto ptr = client_->get_request_to_submit();
     auto& data = *ptr;
     if (data.is_empty())
     {

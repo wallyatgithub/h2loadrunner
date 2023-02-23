@@ -359,7 +359,7 @@ int Http1Session::on_write()
 
 int Http1Session::_submit_request()
 {
-    auto ptr = std::move(client_->get_request_to_submit());
+    auto ptr = client_->get_request_to_submit();
     auto& data = *ptr;
     if (data.is_empty())
     {

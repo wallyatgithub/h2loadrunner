@@ -23,12 +23,14 @@
 
 const std::string CONTENT_ID = "Content-Id";
 const std::string CONTENT_TYPE = "Content-Type";
+const std::string CONTENT_TRANSFER_ENCODDING = "Content-Transfer-Encoding";
 const std::string COLON  = ":";
 const std::string CRLF = "\r\n";
 const std::string VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES = "-----wallyweiwallzzllawiewyllaw---";
 const std::string ENDING_TWO_DASH = "--";
 const std::string JSON_CONTENT = "application/json";
 const std::string META_CONTENT_ID = "meta";
+const std::string NOTIFICATION_DESCRIPTION_ID = "notification-description";
 const std::string MULTIPART_CONTENT_TYPE = "multipart/mixed; boundary=---wallyweiwallzzllawiewyllaw---";
 const std::string RECORD_ID_LIST = "recordIdList";
 const std::string CONDITION = "cond";
@@ -53,13 +55,16 @@ const int TTL_EXPIRED = -5;
 const int DECODE_SUBCRIPTION_FAILURE = -6;
 const int SUBSCRIPTION_EXPIRY_INVALID = -7;
 
-static const size_t number_of_tokens_in_api_root = 0;
 const std::string PATH_DELIMETER = "/";
 const std::string QUERY_DELIMETER = "&";
 const size_t REALM_ID_INDEX = 2;
 const size_t STORAGE_ID_INDEX = 3;
 const size_t RECORDS_INDEX = 4;
 const size_t RECORD_ID_INDEX = 5;
+
+const std::string api_prefix = "";
+const std::string udsf_base_uri = "/nudsf-dr/v1";
+const size_t number_of_tokens_in_api_root = 0;
 
 namespace udsf
 {
@@ -272,10 +277,10 @@ public:
         multipart_parser_free(m_parser);
     }
 
-    MutiParts get_parts(const std::string& content)
+    MutiParts& get_parts(const std::string& content)
     {
         auto size = multipart_parser_execute(m_parser, content.c_str(), content.size());
-        return std::move(parts);
+        return parts;
     }
 
 
@@ -385,9 +390,15 @@ public:
     {
         std::string ret;
         auto final_size = 0;
+        bool insert_content_transfer_encoding = (!headers.count(CONTENT_TRANSFER_ENCODDING));
+        const static std::string binary = "binary";
         //final_size += CRLF.size();
         final_size += CONTENT_ID.size() + COLON.size() + content_id.size() + CRLF.size();
         final_size += CONTENT_TYPE.size() + COLON.size() + content_type.size() + CRLF.size();
+        if (insert_content_transfer_encoding)
+        {
+            final_size += CONTENT_TRANSFER_ENCODDING.size() + COLON.size() + binary.size() + CRLF.size();
+        }
         for (auto& h : headers)
         {
             final_size += (h.first.size() + COLON.size() + h.second.size() + CRLF.size());
@@ -400,6 +411,10 @@ public:
         //ret.append(CRLF);
         ret.append(CONTENT_ID).append(COLON).append(content_id).append(CRLF);
         ret.append(CONTENT_TYPE).append(COLON).append(content_type).append(CRLF);
+        if (insert_content_transfer_encoding)
+        {
+            ret.append(CONTENT_TRANSFER_ENCODDING).append(COLON).append(binary).append(CRLF);
+        }
         for (auto& h : headers)
         {
             ret.append(h.first).append(COLON).append(h.second).append(CRLF);
@@ -407,6 +422,20 @@ public:
         ret.append(CRLF);
         ret.append(content).append(CRLF);
         return ret;
+    }
+};
+
+class NotificationDescription
+{
+public:
+    std::string recordRef;
+    std::string operationType;
+    std::string subscriptionId;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("recordRef", &this->recordRef);
+        h->add_property("operationType", &this->operationType);
+        h->add_property("subscriptionId", &this->subscriptionId, staticjson::Flags::Optional);
     }
 };
 
@@ -476,7 +505,7 @@ public:
         blockId_to_index.erase(iter);
         if (get_previous)
         {
-            ret = std::move(blocks[index].produce_body_part());
+            ret = blocks[index].produce_body_part();
         }
         blocks.erase(blocks.begin() + index);
         for (auto& m : blockId_to_index)
@@ -503,21 +532,31 @@ public:
         return blocks[index].produce_body_part();
     }
 
-    std::string produce_multipart_body()
+    std::string produce_multipart_body(const std::string& notificationDescription = "")
     {
         std::string ret;
         size_t final_size = 0;
         std::shared_lock<std::shared_timed_mutex> blocks_guard(*blocks_mutex);
         std::shared_lock<std::shared_timed_mutex> meta_guard(*meta_mutex);
-        auto metaString = std::move(staticjson::to_json_string(meta));
+        auto metaString = staticjson::to_json_string(meta);
         std::vector<std::string> block_body_parts;
         for (auto& b : blocks)
         {
             block_body_parts.emplace_back(b.produce_body_part());
         }
-        final_size += CRLF.size();
-        final_size += VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES.size() + CRLF.size();
 
+        final_size += CRLF.size();
+
+        if (notificationDescription.size())
+        {
+            final_size += VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES.size() + CRLF.size();
+            final_size += CONTENT_ID.size() + COLON.size() + NOTIFICATION_DESCRIPTION_ID.size() + CRLF.size();
+            final_size += CONTENT_TYPE.size() + COLON.size() + JSON_CONTENT.size() + CRLF.size();
+            final_size += CRLF.size();
+            final_size += notificationDescription.size() + CRLF.size();
+        }
+
+        final_size += VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES.size() + CRLF.size();
         final_size += CONTENT_ID.size() + COLON.size() + META_CONTENT_ID.size() + CRLF.size();
         final_size += CONTENT_TYPE.size() + COLON.size() + JSON_CONTENT.size() + CRLF.size();
         final_size += CRLF.size();
@@ -532,6 +571,16 @@ public:
         final_size += VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES.size() + ENDING_TWO_DASH.size() + CRLF.size();
 
         ret.append(CRLF);
+
+        if (notificationDescription.size())
+        {
+            ret.append(VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES).append(CRLF);
+            ret.append(CONTENT_ID).append(COLON).append(NOTIFICATION_DESCRIPTION_ID).append(CRLF);
+            ret.append(CONTENT_TYPE).append(COLON).append(JSON_CONTENT).append(CRLF);
+            ret.append(CRLF);
+            ret.append(notificationDescription).append(CRLF);
+        }
+
         ret.append(VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES).append(CRLF);
         ret.append(CONTENT_ID).append(COLON).append(META_CONTENT_ID).append(CRLF);
         ret.append(CONTENT_TYPE).append(COLON).append(JSON_CONTENT).append(CRLF);
@@ -552,7 +601,7 @@ public:
     std::string get_meta()
     {
         std::shared_lock<std::shared_timed_mutex> guard(*meta_mutex);
-        auto metaString = std::move(staticjson::to_json_string(meta));
+        auto metaString = staticjson::to_json_string(meta);
         return metaString;
     }
 
@@ -688,6 +737,8 @@ public:
 class Storage
 {
 public:
+    std::string realm_id;
+    std::string storage_id;
     std::unordered_map<std::string, Record> records[0x100][0x100];
     std::unordered_map<std::string, MetaSchema> schemas[0x100][0x100];
     std::map<std::string, std::pair<std::unique_ptr<std::shared_timed_mutex>, std::set<std::string>>> record_ids;
@@ -1136,12 +1187,15 @@ public:
             {
                 track_record_ttl(ttl, record_id, true);
             }
+            record_map_write_guard.unlock();
+            send_notify(record_id, "", update ? RECORD_OPERATION_UPDATED : RECORD_OPERATION_CREATED);
             return 0;
         }
         return RECORD_META_DECODE_FAILURE;
     }
     std::string delete_record(const std::string& record_id, bool get_previous = false)
     {
+        send_notify(record_id, "", RECORD_OPERATION_DELETED);
         std::string ret;
         if (!get_previous)
         {
@@ -1184,7 +1238,7 @@ public:
         }
     }
 
-    std::string get_record(const std::string& record_id)
+    std::string get_record(const std::string& record_id, const std::string& notificationDescription = "")
     {
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
@@ -1194,7 +1248,7 @@ public:
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
-            ret = iter->second.produce_multipart_body();
+            ret = iter->second.produce_multipart_body(notificationDescription);
         }
         return ret;
     }
@@ -1209,7 +1263,7 @@ public:
         auto iter = schemas[row][col].find(schema_id);
         if (iter != schemas[row][col].end())
         {
-            ret = std::move(staticjson::to_json_string(iter->second));
+            ret = staticjson::to_json_string(iter->second);
         }
         return ret;
     }
@@ -1487,7 +1541,7 @@ public:
             {
                 auto& sub_value = value.MemberBegin()->value;
 
-                ret = std::move(get_record_id_list_from_array(sub_value));
+                ret = get_record_id_list_from_array(sub_value);
             }
         }
         else
@@ -1509,6 +1563,7 @@ public:
             for (size_t i = 0; i < subscription.subFilter.monitoredResourceUris.size(); i++)
             {
                 subscription.subFilter.monitoredResourceUris[i] = get_path(subscription.subFilter.monitoredResourceUris[i]);
+                // TODO: The operations that shall generate a notification. If the monitoredResourceUris is present, only "UPDATED" and "DELETED" are allowed values
             }
             auto expiry = iso8601_timestamp_to_seconds_since_epoch(subscription.expiry);
             auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
@@ -1678,7 +1733,7 @@ public:
         return s;
     }
 
-    std::set<std::string> get_subscription_ids_to_notify(std::string& record_id, const std::string& block_id,
+    std::set<std::string> get_subscription_ids_to_notify(const std::string& record_id, const std::string& block_id,
                                                          const std::string& operation)
     {
         auto uri = RECORDS;
@@ -1721,7 +1776,7 @@ public:
         return ret;
     }
 
-    void send_notify(std::string& record_id, const std::string& block_id, const std::string& operation)
+    void send_notify(const std::string& record_id, const std::string& block_id, const std::string& operation)
     {
         std::string recordNotificationBody;
         const std::map<std::string, std::string, ci_less> additionalHeaders;
@@ -1735,7 +1790,24 @@ public:
             {
                 if (recordNotificationBody.empty())
                 {
-                    // TODO: generate recordNotificationBody
+                    NotificationDescription notificationDescription;
+                    notificationDescription.operationType = operation;
+                    notificationDescription.recordRef.reserve(udsf_base_uri.size() +
+                                                              PATH_DELIMETER.size() +
+                                                              realm_id.size() +
+                                                              PATH_DELIMETER.size() +
+                                                              storage_id.size() +
+                                                              PATH_DELIMETER.size() +
+                                                              record_id.size());
+                    notificationDescription.recordRef += udsf_base_uri;
+                    notificationDescription.recordRef += PATH_DELIMETER;
+                    notificationDescription.recordRef += realm_id;
+                    notificationDescription.recordRef += PATH_DELIMETER;
+                    notificationDescription.recordRef += storage_id;
+                    notificationDescription.recordRef += PATH_DELIMETER;
+                    notificationDescription.recordRef += record_id;
+                    auto description = staticjson::to_json_string(notificationDescription);
+                    recordNotificationBody = get_record(record_id, description);
                 }
                 for (auto& uri : subscription.subFilter.monitoredResourceUris)
                 {
@@ -1749,26 +1821,41 @@ public:
 class Realm
 {
 public:
-    std::unordered_map<std::string, Storage> storages[0x100][0x100];
-    std::mutex storages_mutexes[0x100][0x100];
-
+    std::unordered_map<std::string, Storage> storages;
+    std::shared_timed_mutex storages_mutexes;
+    std::string realm_id;
     Storage& get_storage(const std::string& storage_id)
     {
-        uint16_t sum = get_u16_sum(storage_id);
-        uint8_t row = sum >> 8;
-        uint8_t col = sum & 0xFF;
-        std::lock_guard<std::mutex> guard(storages_mutexes[row][col]);
-        return storages[row][col][storage_id];
+        std::shared_lock<std::shared_timed_mutex> read_lock(storages_mutexes);
+        auto iter = storages.find(storage_id);
+        if (iter == storages.end())
+        {
+            read_lock.unlock();
+            std::unique_lock<std::shared_timed_mutex> read_lock(storages_mutexes);
+            auto& ret = storages[storage_id];
+            ret.storage_id = storage_id;
+            ret.realm_id = realm_id;
+        }
+        return iter->second;
     }
 };
 
-static std::unordered_map<std::string, Realm> Realms;
-static std::mutex realm_mutex;
+static std::unordered_map<std::string, Realm> realms;
+static std::shared_timed_mutex realm_mutex;
 
 inline Realm& get_realm(const std::string& realm_id)
 {
-    std::lock_guard<std::mutex> guard(realm_mutex);
-    return Realms[realm_id];
+    std::shared_lock<std::shared_timed_mutex> read_lock(realm_mutex);
+    auto iter = realms.find(realm_id);
+    if (iter == realms.end())
+    {
+        read_lock.unlock();
+        std::unique_lock<std::shared_timed_mutex> write_lock(realm_mutex);
+        auto& ret = realms[realm_id];
+        ret.realm_id = realm_id;
+        return ret;
+    }
+    return iter->second;
 }
 
 }

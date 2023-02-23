@@ -592,7 +592,7 @@ int Http3Session::_submit_request()
     dr.read_data = h2load::_read_data;
 
     std::vector<nghttp2_nv> http2_nvs;
-    auto ptr = std::move(client_->get_request_to_submit());
+    auto ptr = client_->get_request_to_submit();
     auto& data = *ptr;
     if (data.is_empty())
     {
