@@ -1809,13 +1809,11 @@ public:
                     auto description = staticjson::to_json_string(notificationDescription);
                     recordNotificationBody = get_record(record_id, description);
                 }
-                for (auto& uri : subscription.subFilter.monitoredResourceUris)
-                {
-                    send_http2_request("post", uri, additionalHeaders, recordNotificationBody);
-                }
+                send_http2_request("post", subscription.callbackReference, additionalHeaders, recordNotificationBody);
             }
         }
     }
+
 };
 
 class Realm
