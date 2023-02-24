@@ -20,7 +20,7 @@ namespace udsf
 h2load::asio_worker* get_worker();
 
 bool send_http2_request(const std::string& method, const std::string& uri,
-                               const std::map<std::string, std::string, ci_less>& headers,
-                               const std::string& message_body);
+                        const std::map<std::string, std::string, ci_less>& headers,
+                        const std::string& message_body);
 }
 #endif

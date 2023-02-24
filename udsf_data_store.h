@@ -57,14 +57,36 @@ const int SUBSCRIPTION_EXPIRY_INVALID = -7;
 
 const std::string PATH_DELIMETER = "/";
 const std::string QUERY_DELIMETER = "&";
-const size_t REALM_ID_INDEX = 2;
-const size_t STORAGE_ID_INDEX = 3;
-const size_t RECORDS_INDEX = 4;
-const size_t RECORD_ID_INDEX = 5;
 
-const std::string api_prefix = "";
 const std::string udsf_base_uri = "/nudsf-dr/v1";
-const size_t number_of_tokens_in_api_root = 0;
+const size_t number_of_tokens_in_api_prefix = 0;
+const std::string api_prefix = "";
+
+const size_t REALM_ID_INDEX = number_of_tokens_in_api_prefix + 2;
+const size_t STORAGE_ID_INDEX = number_of_tokens_in_api_prefix + 3;
+const size_t RESOURCE_TYPE_INDEX = number_of_tokens_in_api_prefix + 4;
+const size_t RECORD_ID_INDEX = number_of_tokens_in_api_prefix + 5;
+const size_t BLOCK_ID_INDEX = number_of_tokens_in_api_prefix + 5;
+
+const std::string RESOUCE_RECORDS = "records";
+
+const std::string RESOUCE_SUBS_TO_NOTIFY = "subs-to-notify";
+
+const std::string RESOUCE_META_SCHEMAS = "meta-schemas";
+
+const std::string& METHOD_PUT = "put";
+const std::string& METHOD_POST = "post";
+const std::string& METHOD_PATCH = "patch";
+const std::string& METHOD_DELETE = "delete";
+const std::string& METHOD_GET = "get";
+
+const std::string& LOCATION = "location";
+
+const std::string EQUAL = "=";
+const std::string GET_PREVIOUS = "get-previous";
+const std::string TRUE = "true";
+const std::string FALSE = "FALSE";
+
 
 namespace udsf
 {
@@ -86,17 +108,17 @@ std::string get_relative_path_starting_from_records(const std::string& path)
 
     auto tokens = tokenize_string(path, PATH_DELIMETER);
     size_t size = 0;
-    for (size_t i = RECORDS_INDEX; i < tokens.size(); i++)
+    for (size_t i = RESOURCE_TYPE_INDEX; i < tokens.size(); i++)
     {
-        if (i != RECORDS_INDEX)
+        if (i != RESOURCE_TYPE_INDEX)
         {
             size += PATH_DELIMETER.size();
         }
         size += tokens[i].size();
     }
-    for (size_t i = RECORDS_INDEX; i < tokens.size(); i++)
+    for (size_t i = RESOURCE_TYPE_INDEX; i < tokens.size(); i++)
     {
-        if (i != RECORDS_INDEX)
+        if (i != RESOURCE_TYPE_INDEX)
         {
             s += PATH_DELIMETER;
         }
@@ -104,7 +126,6 @@ std::string get_relative_path_starting_from_records(const std::string& path)
     }
     return s;
 }
-
 
 inline uint16_t get_u16_sum(const std::string& key)
 {
@@ -1090,15 +1111,15 @@ public:
     * @brief insert or update record
     *
     * @returns int
+    * return 0: successful
     * return -1: decode multipart failure
     * return -2: block content-id absent
     * return -3: meta decode or validation failure
-    * return -4: record does not exist while trying to update the record
     * return -5: record ttl already expired
     * @thows None
     * */
     int insert_or_update_record(const std::string& record_id, const std::string& boundary,
-                                const std::string& multipart_content, bool update = false)
+                                const std::string& multipart_content, bool& update)
     {
         MultipartParser parser(boundary);
         auto parts = std::move(parser.get_parts(multipart_content));
@@ -1153,15 +1174,12 @@ public:
             auto iter = records[row][col].find(record_id);
             if (iter == records[row][col].end())
             {
-                if (update)
-                {
-                    return RECORD_DOES_NOT_EXIST;
-                }
                 target = &records[row][col][record_id];
             }
             else
             {
                 target = &iter->second;
+                update = true;
             }
             auto old_ttl = iso8601_timestamp_to_seconds_since_epoch(target->meta.ttl);
             *target = std::move(record);
@@ -1209,7 +1227,7 @@ public:
         return ret;
     }
 
-    void delete_record_directly(const std::string& record_id)
+    bool delete_record_directly(const std::string& record_id)
     {
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
@@ -1235,7 +1253,9 @@ public:
             {
                 track_record_ttl(iso8601_timestamp_to_seconds_since_epoch(record.meta.ttl), record_id, false);
             }
+            return true;
         }
+        return false;
     }
 
     std::string get_record(const std::string& record_id, const std::string& notificationDescription = "")
@@ -1371,7 +1391,10 @@ public:
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
-            return iter->second.insert_block(id, type, blockData, headers);
+            auto ret = iter->second.insert_block(id, type, blockData, headers);
+            guard.unlock();
+            send_notify(record_id, id, RECORD_OPERATION_CREATED);
+            return ret;
         }
         return false;
     }
@@ -1386,7 +1409,10 @@ public:
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
-            return iter->second.update_block(id, type, blockData, headers);
+            auto ret = iter->second.update_block(id, type, blockData, headers);
+            guard.unlock();
+            send_notify(record_id, id, RECORD_OPERATION_UPDATED);
+            return ret;
         }
         return false;
     }
@@ -1400,7 +1426,10 @@ public:
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
-            return iter->second.delete_block(blockId, get_previous);
+            auto ret = iter->second.delete_block(blockId, get_previous);
+            guard.unlock();
+            send_notify(record_id, blockId, RECORD_OPERATION_DELETED);
+            return ret;
         }
         return "";
     }
@@ -1563,7 +1592,7 @@ public:
             for (size_t i = 0; i < subscription.subFilter.monitoredResourceUris.size(); i++)
             {
                 subscription.subFilter.monitoredResourceUris[i] = get_path(subscription.subFilter.monitoredResourceUris[i]);
-                // TODO: The operations that shall generate a notification. If the monitoredResourceUris is present, only "UPDATED" and "DELETED" are allowed values
+                // TODO: If the monitoredResourceUris is present, only "UPDATED" and "DELETED" are allowed values
             }
             auto expiry = iso8601_timestamp_to_seconds_since_epoch(subscription.expiry);
             auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
@@ -1809,7 +1838,7 @@ public:
                     auto description = staticjson::to_json_string(notificationDescription);
                     recordNotificationBody = get_record(record_id, description);
                 }
-                send_http2_request("post", subscription.callbackReference, additionalHeaders, recordNotificationBody);
+                send_http2_request(METHOD_POST, subscription.callbackReference, additionalHeaders, recordNotificationBody);
             }
         }
     }

@@ -2,7 +2,7 @@
 #include <h2load_utils.h>
 
 
-namespace
+namespace udsf
 {
 
 h2load::asio_worker* get_worker()
@@ -17,8 +17,9 @@ h2load::asio_worker* get_worker()
         return true;
     };
     thread_local static auto init_config_ret_code = init_config();
-    
-    thread_local static std::shared_ptr<h2load::asio_worker> worker = std::make_shared<h2load::asio_worker>(0, 0xFFFFFFFF, 1, 0, 1000, &conf);
+
+    thread_local static std::shared_ptr<h2load::asio_worker> worker = std::make_shared<h2load::asio_worker>(0, 0xFFFFFFFF,
+                                                                                                            1, 0, 1000, &conf);
 
     thread_local static auto work = boost::asio::io_service::work(worker->get_io_context());
 
@@ -38,8 +39,8 @@ h2load::asio_worker* get_worker()
 }
 
 bool send_http2_request(const std::string& method, const std::string& uri,
-                               const std::map<std::string, std::string, ci_less>& headers,
-                               const std::string& message_body)
+                        const std::map<std::string, std::string, ci_less>& headers,
+                        const std::string& message_body)
 {
     static std::map<std::string, std::string, ci_less> dummyHeaders;
 
@@ -80,9 +81,9 @@ bool send_http2_request(const std::string& method, const std::string& uri,
         auto& clients = worker->get_client_pool();
         PROTO_TYPE proto_type = PROTO_HTTP2;
 
-       h2load::base_client* dest_client = nullptr;
+        h2load::base_client* dest_client = nullptr;
 
-        for (auto& client: clients[proto_type][base_uri])
+        for (auto& client : clients[proto_type][base_uri])
         {
             if (client->get_total_pending_streams() < client->get_max_concurrent_stream())
             {
