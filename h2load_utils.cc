@@ -1372,7 +1372,6 @@ void transform_old_style_variable(h2load::Config& config)
             for (auto& request : scenario.requests)
             {
                 transform_variable(request.uri.input, scenario.variable_name_in_path_and_data);
-                load_file_content(request.payload);
                 transform_variable(request.payload, scenario.variable_name_in_path_and_data);
             }
             if (scenario.user_id_list_file.size())
@@ -1425,6 +1424,13 @@ void split_string_and_var(const std::string& source, String_With_Variables_In_Be
 
 void process_variables(h2load::Config& config)
 {
+    for (auto& scenario : config.json_config_schema.scenarios)
+    {
+        for (auto& request : scenario.requests)
+        {
+            load_file_content(request.payload);
+        }
+    }
     transform_old_style_variable(config);
 
     for (auto& scenario : config.json_config_schema.scenarios)
@@ -2217,10 +2223,9 @@ bool variable_present(const std::string& source, size_t start_offset, size_t& va
         return false;
     }
     var_start = source.find("${", start_offset);
-    var_end = source.find("}", start_offset);
+    var_end = source.find("}", var_start);
     if ((var_start == std::string::npos) ||
-        (var_end == std::string::npos) ||
-        (var_end < var_start))
+        (var_end == std::string::npos))
     {
         return false;
     }

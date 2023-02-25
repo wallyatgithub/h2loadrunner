@@ -45,6 +45,10 @@ std::string get_boundary(const std::string& content_type)
     {
         boundary = content_type.substr(boundary_start + BOUNDARY.size(), std::string::npos);
         boundary = boundary.substr(0, boundary.find(";"));
+        std::string tmp;
+        tmp.reserve(TWO_LEADING_DASH.size() + boundary.size());
+        tmp.append(TWO_LEADING_DASH).append(boundary);
+        boundary = std::move(tmp);
     }
     return boundary;
 }
@@ -107,6 +111,7 @@ bool process_create_or_update_record(const nghttp2::asio_http2::server::asio_ser
             else
             {
                 std::string location = get_local_api_root();
+                location.reserve(location.size() + udsf_base_uri.size() + PATH_DELIMETER.size() + RECORDS.size() + PATH_DELIMETER.size() + record_id.size());
                 location.append(udsf_base_uri).append(PATH_DELIMETER);
                 location.append(RECORDS).append(PATH_DELIMETER).append(record_id);
                 res.write_head(201, {{LOCATION, {location}}});
@@ -233,7 +238,7 @@ bool process_delete_block(const nghttp2::asio_http2::server::asio_server_request
     {
         if (get_previous && previous_content.size())
         {
-            res.write_head(200, headers);
+            res.write_head(200, std::move(headers));
             res.end(std::move(previous_content));
         }
         else
@@ -325,6 +330,9 @@ bool process_insert_or_update_block(const nghttp2::asio_http2::server::asio_serv
         else
         {
             std::string location = get_local_api_root();
+            location.reserve(location.size() + udsf_base_uri.size() + PATH_DELIMETER.size() +
+                             RECORDS.size() + PATH_DELIMETER.size() + record_id.size() +
+                             PATH_DELIMETER.size() + block_id.size());
             location.append(udsf_base_uri).append(PATH_DELIMETER);
             location.append(RECORDS).append(PATH_DELIMETER).append(record_id).append(PATH_DELIMETER).append(block_id);
             res.write_head(201, {{LOCATION, {location}}});
@@ -353,7 +361,7 @@ bool process_record(const nghttp2::asio_http2::server::asio_server_request& req,
 
     auto& storage = realm.get_storage(storage_id);
 
-    if (path_tokens.size() > BLOCK_ID_INDEX)
+    if (path_tokens.size() == BLOCK_ID_INDEX + 1)
     {
         const std::string& block_id = path_tokens[BLOCK_ID_INDEX];
         if (method == METHOD_PUT)
@@ -375,7 +383,13 @@ bool process_record(const nghttp2::asio_http2::server::asio_server_request& req,
             res.end(response);
         }
     }
-    else
+    else if (path_tokens.size() == BLOCKS_INDEX + 1)
+    {
+        // TODO: get /{realmId}/{storageId}/records/{recordId}/blocks
+
+        // TODO:   patch get /{realmId}/{storageId}/records/{recordId}/meta
+    }
+    else if (path_tokens.size() == RECORD_ID_INDEX + 1)
     {
         if (method == METHOD_PUT)
         {
@@ -455,6 +469,7 @@ bool process_meta_schema(const nghttp2::asio_http2::server::asio_server_request&
             else
             {
                 std::string location = get_local_api_root();
+                location.reserve(location.size() + udsf_base_uri.size() + PATH_DELIMETER.size() + RESOURCE_META_SCHEMAS.size() + PATH_DELIMETER.size() + schema_id.size());
                 location.append(udsf_base_uri).append(PATH_DELIMETER);
                 location.append(RESOURCE_META_SCHEMAS).append(PATH_DELIMETER).append(schema_id);
                 res.write_head(201, {{LOCATION, {location}}});
@@ -553,7 +568,7 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
             }
             else
             {
-                //ret = process_records(req, res, handler_id, stream_id, method, realm_id, storage_id, path_tokens, payload);
+                // TODO: get delete /{realmId}/{storageId}/records with search expression
             }
         }
         else if (resource == RESOURCE_META_SCHEMAS)

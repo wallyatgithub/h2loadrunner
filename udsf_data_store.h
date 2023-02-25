@@ -28,6 +28,7 @@ const std::string CONTENT_TRANSFER_ENCODDING = "Content-Transfer-Encoding";
 const std::string COLON  = ":";
 const std::string CRLF = "\r\n";
 const std::string VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES = "-----wallyweiwallzzllawiewyllaw---";
+const std::string TWO_LEADING_DASH = "--";
 const std::string ENDING_TWO_DASH = "--";
 const std::string JSON_CONTENT = "application/json";
 const std::string META_CONTENT_ID = "meta";
@@ -67,7 +68,8 @@ const size_t REALM_ID_INDEX = number_of_tokens_in_api_prefix + 2;
 const size_t STORAGE_ID_INDEX = number_of_tokens_in_api_prefix + 3;
 const size_t RESOURCE_TYPE_INDEX = number_of_tokens_in_api_prefix + 4;
 const size_t RECORD_ID_INDEX = number_of_tokens_in_api_prefix + 5;
-const size_t BLOCK_ID_INDEX = number_of_tokens_in_api_prefix + 5;
+const size_t BLOCKS_INDEX = number_of_tokens_in_api_prefix + 6;
+const size_t BLOCK_ID_INDEX = number_of_tokens_in_api_prefix + 7;
 
 const std::string RESOUCE_RECORDS = "records";
 
