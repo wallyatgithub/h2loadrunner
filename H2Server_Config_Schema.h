@@ -174,6 +174,8 @@ public:
     std::vector<Schema_Service> service;
     std::string statistics_file;
     explicit H2Server_Config_Schema():
+        port(8081),
+        threads(1),
         enable_mTLS(false),
         verbose(false),
         skt_recv_buffer_size(4 * 1024 * 1024),

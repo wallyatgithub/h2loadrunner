@@ -23,6 +23,7 @@
 
 const std::string CONTENT_ID = "Content-Id";
 const std::string CONTENT_TYPE = "Content-Type";
+const std::string CONTENT_LENGTH = "content-length";
 const std::string CONTENT_TRANSFER_ENCODDING = "Content-Transfer-Encoding";
 const std::string COLON  = ":";
 const std::string CRLF = "\r\n";
@@ -72,7 +73,7 @@ const std::string RESOUCE_RECORDS = "records";
 
 const std::string RESOUCE_SUBS_TO_NOTIFY = "subs-to-notify";
 
-const std::string RESOUCE_META_SCHEMAS = "meta-schemas";
+const std::string RESOURCE_META_SCHEMAS = "meta-schemas";
 
 const std::string& METHOD_PUT = "put";
 const std::string& METHOD_POST = "post";
@@ -87,6 +88,7 @@ const std::string GET_PREVIOUS = "get-previous";
 const std::string TRUE = "true";
 const std::string FALSE = "FALSE";
 
+constexpr uint16_t ONE_DIMENSION_SIZE = 0x100;
 
 namespace udsf
 {
@@ -133,6 +135,17 @@ inline uint16_t get_u16_sum(const std::string& key)
                             key.end(),
                             0,
                             [](uint16_t sum, const char& c)
+    {
+        return sum + uint8_t(c);
+    }));
+}
+
+inline uint8_t get_u8_sum(const std::string& key)
+{
+    return (std::accumulate(key.begin(),
+                            key.end(),
+                            0,
+                            [](uint8_t sum, const char& c)
     {
         return sum + uint8_t(c);
     }));
@@ -482,52 +495,48 @@ public:
         h->add_property("meta", &this->meta);
     }
     */
-    bool update_block(std::string& id, std::string& type, std::string& blockData,
-                      std::map<std::string, std::string, ci_less>& headers)
+    bool insert_or_update_block(const std::string& id, const std::string& type, const std::string& blockData,
+                                const std::map<std::string, std::string, ci_less>& headers,
+                                bool& update)
     {
         std::unique_lock<std::shared_timed_mutex> write_guard(*blocks_mutex);
-        //TODO: add block mutex, then change the lock to blocks_mutex to read lock to allow concurrent update to different blocks
         auto iter = blockId_to_index.find(id);
         if (iter != blockId_to_index.end())
         {
-            blocks[iter->second].content = std::move(blockData);
-            blocks[iter->second].content_id = std::move(id);
-            blocks[iter->second].content_type = std::move(type);
-            blocks[iter->second].headers = std::move(headers);
+            blocks[iter->second].content = blockData;
+            blocks[iter->second].content_id = id;
+            blocks[iter->second].content_type = type;
+            blocks[iter->second].headers = headers;
+            update = true;
+            return true;
+        }
+        else
+        {
+            blocks.emplace_back();
+            blocks.back().content = blockData;
+            blocks.back().content_id = id;
+            blocks.back().content_type = type;
+            blocks.back().headers = headers;
+            blockId_to_index[blocks.back().content_id] = (blocks.size() - 1);
+            update = false;
             return true;
         }
         return false;
     }
 
-    bool insert_block(std::string& id, std::string& type, std::string& blockData,
-                      std::map<std::string, std::string, ci_less>& headers)
+    bool delete_block(const std::string& blockId)
     {
-        std::unique_lock<std::shared_timed_mutex> write_guard(*blocks_mutex);
-        blocks.emplace_back();
-        blocks.back().content = std::move(blockData);
-        blocks.back().content_id = std::move(id);
-        blocks.back().content_type = std::move(type);
-        blocks.back().headers = std::move(headers);
-        blockId_to_index[blocks.back().content_id] = (blocks.size() - 1);
-        return true;
-    }
-
-    std::string delete_block(const std::string& blockId, bool get_previous = false)
-    {
-        std::string ret;
+        bool delete_successful = true;
         std::unique_lock<std::shared_timed_mutex> guard(*blocks_mutex);
         auto iter = blockId_to_index.find(blockId);
         if (iter == blockId_to_index.end())
         {
-            return ret;
+            delete_successful = false;
+            return delete_successful;
         }
-
+        delete_successful = true;
         auto index = iter->second;
         blockId_to_index.erase(iter);
-        if (get_previous)
-        {
-            ret = blocks[index].produce_body_part();
-        }
         blocks.erase(blocks.begin() + index);
         for (auto& m : blockId_to_index)
         {
@@ -536,21 +545,21 @@ public:
                 m.second--;
             }
         }
-        return ret;
+        return delete_successful;
     }
 
-    std::string get_block(const std::string& blockId)
+    Block get_block_object(const std::string& blockId)
     {
         std::shared_lock<std::shared_timed_mutex> guard(*blocks_mutex);
         std::string ret;
         auto iter = blockId_to_index.find(blockId);
         if (iter == blockId_to_index.end())
         {
-            return ret;
-        }
 
+            return Block();
+        }
         auto index = iter->second;
-        return blocks[index].produce_body_part();
+        return blocks[index];
     }
 
     std::string produce_multipart_body(const std::string& notificationDescription = "")
@@ -760,12 +769,13 @@ class Storage
 public:
     std::string realm_id;
     std::string storage_id;
-    std::unordered_map<std::string, Record> records[0x100][0x100];
-    std::unordered_map<std::string, MetaSchema> schemas[0x100][0x100];
-    std::map<std::string, std::pair<std::unique_ptr<std::shared_timed_mutex>, std::set<std::string>>> record_ids;
-    std::shared_timed_mutex record_ids_mutex;
-    std::shared_timed_mutex records_mutexes[0x100][0x100];
-    std::shared_timed_mutex schemas_mutexes[0x100][0x100];
+    std::unordered_map<std::string, Record> records[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
+    std::unordered_map<std::string, MetaSchema> schemas[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
+    std::map<std::string, std::pair<std::unique_ptr<std::shared_timed_mutex>, std::set<std::string>>>
+    schema_id_to_record_ids[ONE_DIMENSION_SIZE];
+    std::shared_timed_mutex schema_id_to_record_ids_mutex[ONE_DIMENSION_SIZE];
+    std::shared_timed_mutex records_mutexes[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
+    std::shared_timed_mutex schemas_mutexes[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
 
     Tags_Db tags_db;
     std::shared_timed_mutex tags_db_main_mutex;
@@ -773,10 +783,12 @@ public:
     std::map<uint64_t, std::set<std::string>> records_ttl;
     std::shared_timed_mutex record_ttl_mutex;
 
-    std::unordered_map<std::string, NotificationSubscription> subscription_id_to_subscription[0x100][0x100];
-    std::shared_timed_mutex subscription_id_to_subscription_mutex[0x100][0x100];
-    std::unordered_map<std::string, std::set<std::string>> monitored_resource_uri_to_subscription_id[0x100][0x100];
-    std::shared_timed_mutex monitored_resource_uri_to_subscription_id_mutex[0x100][0x100];
+    std::unordered_map<std::string, NotificationSubscription>
+    subscription_id_to_subscription[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
+    std::shared_timed_mutex subscription_id_to_subscription_mutex[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
+    std::unordered_map<std::string, std::set<std::string>>
+                                                        monitored_resource_uri_to_subscription_id[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
+    std::shared_timed_mutex monitored_resource_uri_to_subscription_id_mutex[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
     std::map<uint64_t, std::set<std::string>> subscription_expiry_to_subscription_id;
     std::shared_timed_mutex subscription_expiry_to_subscription_id_mutex;
     std::map<uint64_t, std::set<std::string>> subscription_expiryNotification_to_subscription_id;
@@ -789,8 +801,8 @@ public:
         auto& s = schemas[0][0][""];
         schemas_write_lock.unlock();
 
-        std::unique_lock<std::shared_timed_mutex> record_ids_write_lock(record_ids_mutex);
-        auto& r = record_ids[""];
+        std::unique_lock<std::shared_timed_mutex> record_ids_write_lock(schema_id_to_record_ids_mutex[0]);
+        auto& r = schema_id_to_record_ids[0][""];
         r.first = std::make_unique<std::shared_timed_mutex>();
     }
     void install_tags_from_schema(const MetaSchema& schema)
@@ -808,23 +820,28 @@ public:
     std::set<std::string> get_all_record_ids(const std::string& schema_id)
     {
         std::set<std::string> ret;
-        std::shared_lock<std::shared_timed_mutex> record_ids_read_lock(record_ids_mutex);
-        std::vector<decltype(record_ids.begin())> iters_to_go_through;
+        auto u8 = get_u8_sum(schema_id);
+        std::vector<decltype(schema_id_to_record_ids[0].begin())> iters_to_go_through;
         if (schema_id.size())
         {
-            auto iter = record_ids.find(schema_id);
-            if (iter != record_ids.end())
+            std::shared_lock<std::shared_timed_mutex> record_ids_read_lock(schema_id_to_record_ids_mutex[u8]);
+            auto iter = schema_id_to_record_ids[u8].find(schema_id);
+            if (iter != schema_id_to_record_ids[u8].end())
             {
                 iters_to_go_through.push_back(iter);
             }
         }
         else
         {
-            auto iter = record_ids.begin();
-            while (iter != record_ids.end())
+            for (size_t i = 0; i < ONE_DIMENSION_SIZE; i++)
             {
-                iters_to_go_through.push_back(iter);
-                iter++;
+                std::shared_lock<std::shared_timed_mutex> record_ids_read_lock(schema_id_to_record_ids_mutex[i]);
+                auto iter = schema_id_to_record_ids[i].begin();
+                while (iter != schema_id_to_record_ids[i].end())
+                {
+                    iters_to_go_through.push_back(iter);
+                    iter++;
+                }
             }
         }
         for (auto iter : iters_to_go_through)
@@ -1057,9 +1074,10 @@ public:
 
     void track_record_id(const std::string& schema_id, const std::string& record_id, bool insert = true)
     {
-        std::shared_lock<std::shared_timed_mutex> record_ids_read_lock(record_ids_mutex);
-        auto iter = record_ids.find(schema_id);
-        if (iter != record_ids.end())
+        auto u8 = get_u8_sum(schema_id);
+        std::shared_lock<std::shared_timed_mutex> record_ids_read_lock(schema_id_to_record_ids_mutex[u8]);
+        auto iter = schema_id_to_record_ids[u8].find(schema_id);
+        if (iter != schema_id_to_record_ids[u8].end())
         {
             std::unique_lock<std::shared_timed_mutex> per_schema_record_ids_write_lock(*iter->second.first);
             if (insert)
@@ -1164,7 +1182,8 @@ public:
                     content_type = std::move(iter->second);
                     parts[i].first.erase(iter);
                 }
-                record.insert_block(content_id, content_type, parts[i].second, parts[i].first);
+                bool dummy;
+                record.insert_or_update_block(content_id, content_type, parts[i].second, parts[i].first, dummy);
             }
             uint16_t sum = get_u16_sum(record_id);
             uint8_t row = sum >> 8;
@@ -1175,6 +1194,7 @@ public:
             if (iter == records[row][col].end())
             {
                 target = &records[row][col][record_id];
+                update = false;
             }
             else
             {
@@ -1211,18 +1231,18 @@ public:
         }
         return RECORD_META_DECODE_FAILURE;
     }
-    std::string delete_record(const std::string& record_id, bool get_previous = false)
+    std::string delete_record(const std::string& record_id, bool& record_exist_before, bool get_previous = false)
     {
         send_notify(record_id, "", RECORD_OPERATION_DELETED);
         std::string ret;
         if (!get_previous)
         {
-            delete_record_directly(record_id);
+            record_exist_before = delete_record_directly(record_id);
         }
         else
         {
             ret = get_record(record_id);
-            delete_record_directly(record_id);
+            record_exist_before = delete_record_directly(record_id);
         }
         return ret;
     }
@@ -1273,7 +1293,7 @@ public:
         return ret;
     }
 
-    std::string get_schema(const std::string& schema_id)
+    std::string get_schema(const std::string& schema_id, bool& found)
     {
         std::string ret;
         uint16_t sum = get_u16_sum(schema_id);
@@ -1284,6 +1304,11 @@ public:
         if (iter != schemas[row][col].end())
         {
             ret = staticjson::to_json_string(iter->second);
+            found = true;
+        }
+        else
+        {
+            found = false;
         }
         return ret;
     }
@@ -1305,7 +1330,7 @@ public:
         return dummyMetaSchama;
     }
 
-    bool add_or_update_schema(const std::string& schema_id, const std::string& schema)
+    bool create_or_update_schema(const std::string& schema_id, const std::string& schema, bool& update)
     {
         uint16_t sum = get_u16_sum(schema_id);
         uint8_t row = sum >> 8;
@@ -1317,15 +1342,25 @@ public:
         {
             install_tags_from_schema(metaSchema);
             std::unique_lock<std::shared_timed_mutex> schemas_mutexes_write_lock(schemas_mutexes[row][col]);
+            auto& target = schemas[row][col][schema_id];
+            if (target.schemaId.empty())
+            {
+                update = false;
+            }
+            else
+            {
+                update = true;
+            }
             schemas[row][col][schema_id] = std::move(metaSchema);
             schemas_mutexes_write_lock.unlock();
 
-            std::shared_lock<std::shared_timed_mutex> record_ids_read_lock(record_ids_mutex);
-            if (record_ids.find(schema_id) == record_ids.end())
+            auto u8 = get_u8_sum(schema_id);
+            std::shared_lock<std::shared_timed_mutex> record_ids_read_lock(schema_id_to_record_ids_mutex[u8]);
+            if (schema_id_to_record_ids[u8].find(schema_id) == schema_id_to_record_ids[u8].end())
             {
                 record_ids_read_lock.unlock();
-                std::unique_lock<std::shared_timed_mutex> record_ids_write_lock(record_ids_mutex);
-                auto& r = record_ids[schema_id];
+                std::unique_lock<std::shared_timed_mutex> record_ids_write_lock(schema_id_to_record_ids_mutex[u8]);
+                auto& r = schema_id_to_record_ids[u8][schema_id];
                 r.first = std::make_unique<std::shared_timed_mutex>();
             }
             return true;
@@ -1333,30 +1368,19 @@ public:
         return false;
     }
 
-    std::string delete_schema(const std::string& schema_id, bool get_previous = false)
+    bool delete_schema(const std::string& schema_id)
     {
-        std::string ret;
-        if (!get_previous)
-        {
-            delete_schema_directly(schema_id);
-        }
-        else
-        {
-            ret = get_schema(schema_id);
-            delete_schema_directly(schema_id);
-        }
-        return ret;
-
-    }
-
-    std::string delete_schema_directly(const std::string& schema_id)
-    {
-        std::string ret;
+        bool ret = false;
         uint16_t sum = get_u16_sum(schema_id);
         uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
         std::unique_lock<std::shared_timed_mutex> guard(schemas_mutexes[row][col]);
-        schemas[row][col].erase(schema_id);
+        auto iter = schemas[row][col].find(schema_id);
+        if (iter != schemas[row][col].end())
+        {
+            ret = true;
+            schemas[row][col].erase(iter);
+        }
         delete_tags_from_schema(schema_id);
         return ret;
     }
@@ -1381,8 +1405,9 @@ public:
         return false;
     }
 
-    bool insert_block(const std::string& record_id, std::string& id, std::string& type, std::string& blockData,
-                      std::map<std::string, std::string, ci_less>& headers)
+    bool insert_or_update_block(const std::string& record_id, const std::string& id, const std::string& type,
+                                const std::string& blockData,
+                                const std::map<std::string, std::string, ci_less>& headers, bool& update)
     {
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
@@ -1391,7 +1416,7 @@ public:
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
-            auto ret = iter->second.insert_block(id, type, blockData, headers);
+            auto ret = iter->second.insert_or_update_block(id, type, blockData, headers, update);
             guard.unlock();
             send_notify(record_id, id, RECORD_OPERATION_CREATED);
             return ret;
@@ -1399,9 +1424,9 @@ public:
         return false;
     }
 
-    bool update_block(const std::string& record_id, std::string& id, std::string& type, std::string& blockData,
-                      std::map<std::string, std::string, ci_less>& headers)
+    bool delete_block(const std::string& record_id, const std::string& blockId)
     {
+        bool delete_successful = true;
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
@@ -1409,15 +1434,17 @@ public:
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
-            auto ret = iter->second.update_block(id, type, blockData, headers);
+            delete_successful = iter->second.delete_block(blockId);
             guard.unlock();
-            send_notify(record_id, id, RECORD_OPERATION_UPDATED);
-            return ret;
+            if (delete_successful)
+            {
+                send_notify(record_id, blockId, RECORD_OPERATION_DELETED);
+            }
         }
-        return false;
+        return delete_successful;
     }
 
-    std::string delete_block(const std::string& record_id, const std::string& blockId, bool get_previous = false)
+    Block get_block(const std::string& record_id, const std::string& blockId)
     {
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
@@ -1426,26 +1453,9 @@ public:
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
-            auto ret = iter->second.delete_block(blockId, get_previous);
-            guard.unlock();
-            send_notify(record_id, blockId, RECORD_OPERATION_DELETED);
-            return ret;
+            return iter->second.get_block_object(blockId);
         }
-        return "";
-    }
-
-    std::string get_block(const std::string& record_id, const std::string& blockId)
-    {
-        uint16_t sum = get_u16_sum(record_id);
-        uint8_t row = sum >> 8;
-        uint8_t col = sum & 0xFF;
-        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
-        auto iter = records[row][col].find(record_id);
-        if (iter != records[row][col].end())
-        {
-            return iter->second.get_block(blockId);
-        }
-        return "";
+        return Block();
     }
 
     std::set<std::string> run_search_expression(const std::set<std::string>& curr_set, const std::string& schema_id,
@@ -1838,7 +1848,10 @@ public:
                     auto description = staticjson::to_json_string(notificationDescription);
                     recordNotificationBody = get_record(record_id, description);
                 }
-                send_http2_request(METHOD_POST, subscription.callbackReference, additionalHeaders, recordNotificationBody);
+                if (recordNotificationBody.size())
+                {
+                    send_http2_request(METHOD_POST, subscription.callbackReference, additionalHeaders, recordNotificationBody);
+                }
             }
         }
     }
@@ -1858,12 +1871,17 @@ public:
         if (iter == storages.end())
         {
             read_lock.unlock();
-            std::unique_lock<std::shared_timed_mutex> read_lock(storages_mutexes);
+            std::unique_lock<std::shared_timed_mutex> write_lock(storages_mutexes);
             auto& ret = storages[storage_id];
             ret.storage_id = storage_id;
             ret.realm_id = realm_id;
+            ret.init_default_schema_with_empty_schema_id();
+            return ret;
         }
-        return iter->second;
+        else
+        {
+            return iter->second;
+        }
     }
 };
 

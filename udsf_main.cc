@@ -9,27 +9,29 @@
 #include "util.h"
 #include "H2Server_Response.h"
 
-
 std::string get_local_api_root()
 {
-    return ""; // TODO:
+    return "http://127.0.0.1:8081"; // TODO:
 }
 
 std::map<std::string, std::string> get_queries(const nghttp2::asio_http2::server::asio_server_request& req)
 {
     auto& raw_query = req.uri().raw_query;
-    auto query = util::percent_decode(raw_query.begin(), raw_query.end());
-    auto query_tokens = tokenize_string(query, QUERY_DELIMETER);
     std::map<std::string, std::string> queries;
-    for (auto& q : query_tokens)
+    if (raw_query.size())
     {
-        auto p = tokenize_string(q, EQUAL);
-        if (p.size() != 2)
+        auto query = util::percent_decode(raw_query.begin(), raw_query.end());
+        auto query_tokens = tokenize_string(query, QUERY_DELIMETER);
+        for (auto& q : query_tokens)
         {
-            std::cerr << "illformed query: " << q << std::endl;
-            continue;
+            auto p = tokenize_string(q, EQUAL);
+            if (p.size() != 2)
+            {
+                std::cerr << "illformed query: " << q << std::endl;
+                continue;
+            }
+            queries[p[0]] = p[1];
         }
-        queries[p[0]] = p[1];
     }
     return queries;
 }
@@ -74,11 +76,13 @@ bool process_create_or_update_record(const nghttp2::asio_http2::server::asio_ser
         return error_return();
     }
 
-    std::string previous_body;
+    std::string body;
     auto queries = get_queries(req);
+    bool get_previous = false;
     if (queries[GET_PREVIOUS] == TRUE)
     {
-        previous_body = storage.get_record(record_id);
+        body = storage.get_record(record_id);
+        get_previous = true;
     }
 
     bool update = false;
@@ -89,10 +93,10 @@ bool process_create_or_update_record(const nghttp2::asio_http2::server::asio_ser
         {
             if (update)
             {
-                if (previous_body.size())
+                if (get_previous && body.size())
                 {
-                    res.write_head(200);
-                    res.end(std::move(previous_body));
+                    res.write_head(200, {{CONTENT_TYPE, {MULTIPART_CONTENT_TYPE}}, {CONTENT_LENGTH, {std::to_string(body.size())}}});
+                    res.end(std::move(body));
                 }
                 else
                 {
@@ -103,7 +107,7 @@ bool process_create_or_update_record(const nghttp2::asio_http2::server::asio_ser
             else
             {
                 std::string location = get_local_api_root();
-                location.append(udsf_base_uri);
+                location.append(udsf_base_uri).append(PATH_DELIMETER);
                 location.append(RECORDS).append(PATH_DELIMETER).append(record_id);
                 res.write_head(201, {{LOCATION, {location}}});
                 res.end();
@@ -130,7 +134,7 @@ bool process_get_record(const nghttp2::asio_http2::server::asio_server_request& 
     auto body = storage.get_record(record_id);
     if (body.size())
     {
-        res.write_head(200);
+        res.write_head(200, {{CONTENT_TYPE, {MULTIPART_CONTENT_TYPE}}, {CONTENT_LENGTH, {std::to_string(body.size())}}});
         res.end(std::move(body));
     }
     else
@@ -142,6 +146,43 @@ bool process_get_record(const nghttp2::asio_http2::server::asio_server_request& 
     return true;
 }
 
+void populate_block_header_and_body(const nghttp2::asio_http2::server::asio_server_request& req,
+                                    nghttp2::asio_http2::server::asio_server_response& res,
+                                    uint64_t handler_id, int32_t stream_id,
+                                    const std::string& record_id, const std::string& block_id,
+                                    std::string& previous_content,
+                                    nghttp2::asio_http2::header_map& headers,
+                                    udsf::Storage& storage)
+{
+    auto block = storage.get_block(record_id, block_id);
+    if (block.content.size() && block.content_id.size())
+    {
+        nghttp2::asio_http2::header_value hdr_val;
+        hdr_val.sensitive = false;
+
+        hdr_val.value = block.content_id;
+        headers.insert(std::make_pair(CONTENT_ID, hdr_val));
+
+        if (block.content_type.size())
+        {
+            hdr_val.value = block.content_type;
+            headers.insert(std::make_pair(CONTENT_TYPE, hdr_val));
+        }
+
+        for (auto& hdr : block.headers)
+        {
+            hdr_val.value = hdr.second;
+            headers.insert(std::make_pair(hdr.first, hdr_val));
+        }
+        if (block.content.size() && headers.count(CONTENT_LENGTH) == 0)
+        {
+            hdr_val.value = std::to_string(block.content.size());
+            headers.insert(std::make_pair(CONTENT_LENGTH, hdr_val));
+        }
+        previous_content = std::move(block.content);
+    }
+}
+
 bool process_delete_record(const nghttp2::asio_http2::server::asio_server_request& req,
                            nghttp2::asio_http2::server::asio_server_response& res,
                            uint64_t handler_id, int32_t stream_id,
@@ -149,31 +190,155 @@ bool process_delete_record(const nghttp2::asio_http2::server::asio_server_reques
                            udsf::Storage& storage)
 {
     auto queries = get_queries(req);
-    if (queries[GET_PREVIOUS] == TRUE)
+    bool get_previous = (queries[GET_PREVIOUS] == TRUE);
+    bool record_delete_success;
+    auto body = storage.delete_record(record_id, record_delete_success, get_previous);
+    if (record_delete_success)
     {
-        auto body = storage.get_record(record_id);
-        auto ret = storage.delete_record_directly(record_id);
-        if (ret && body.size())
+        if (get_previous && body.size())
         {
-            res.write_head(200);
+            res.write_head(200, {{CONTENT_TYPE, {MULTIPART_CONTENT_TYPE}}, {CONTENT_LENGTH, {std::to_string(body.size())}}});
             res.end(std::move(body));
-            return true;
+        }
+        else
+        {
+            res.write_head(204);
+            res.end();
+        }
+        return true;
+    }
+    const std::string msg = "record not found";
+    res.write_head(404);
+    res.end(msg);
+    return true;
+}
+
+bool process_delete_block(const nghttp2::asio_http2::server::asio_server_request& req,
+                          nghttp2::asio_http2::server::asio_server_response& res,
+                          uint64_t handler_id, int32_t stream_id,
+                          const std::string& record_id, const std::string& block_id, const std::string& msg_body,
+                          udsf::Storage& storage)
+{
+    auto queries = get_queries(req);
+    bool get_previous = (queries[GET_PREVIOUS] == TRUE);
+    std::string previous_content;
+    nghttp2::asio_http2::header_map headers;
+    if (get_previous)
+    {
+        populate_block_header_and_body(req, res, handler_id, stream_id, record_id, block_id, previous_content, headers,
+                                       storage);
+    }
+    auto delete_success = storage.delete_block(record_id, block_id);
+    if (delete_success)
+    {
+        if (get_previous && previous_content.size())
+        {
+            res.write_head(200, headers);
+            res.end(std::move(previous_content));
+        }
+        else
+        {
+            res.write_head(204);
+            res.end();
         }
     }
     else
     {
-        auto ret = storage.delete_record_directly(record_id);
-        if (ret)
+        const std::string msg = "not found";
+        res.write_head(404);
+        res.end(msg);
+    }
+    return true;
+}
+
+bool process_get_block(const nghttp2::asio_http2::server::asio_server_request& req,
+                       nghttp2::asio_http2::server::asio_server_response& res,
+                       uint64_t handler_id, int32_t stream_id,
+                       const std::string& record_id, const std::string& block_id, const std::string& msg_body,
+                       udsf::Storage& storage)
+{
+    std::string content;
+    nghttp2::asio_http2::header_map headers;
+    populate_block_header_and_body(req, res, handler_id, stream_id, record_id, block_id, content, headers, storage);
+    if (headers.size())
+    {
+        res.write_head(content.size() ? 200 : 204, std::move(headers));
+        res.end(std::move(content));
+    }
+    else
+    {
+        const std::string msg = "not found";
+        res.write_head(404);
+        res.end(msg);
+    }
+    return true;
+}
+
+bool process_insert_or_update_block(const nghttp2::asio_http2::server::asio_server_request& req,
+                                    nghttp2::asio_http2::server::asio_server_response& res,
+                                    uint64_t handler_id, int32_t stream_id,
+                                    const std::string& record_id, const std::string& block_id,
+                                    const std::string& msg_body,
+                                    udsf::Storage& storage)
+{
+    auto& req_headers =  req.header();
+    std::map<std::string, std::string, ci_less> headers;
+    //std::string content_id;
+    std::string content_type;
+    for (auto& hdr : req_headers)
+    {
+        if (hdr.first == CONTENT_ID)
         {
-            res.write_head(204);
+            //content_id = hdr.second.value;
+            continue;
+        }
+        if (hdr.first == CONTENT_TYPE)
+        {
+            content_type = hdr.second.value;
+            continue;
+        }
+        headers.insert(std::make_pair(hdr.first, hdr.second.value));
+    }
+
+    udsf::Block previous_block;
+    auto queries = get_queries(req);
+    bool get_previous = false;
+    std::string previous_content;
+    nghttp2::asio_http2::header_map previous_headers;
+    if (queries[GET_PREVIOUS] == TRUE)
+    {
+        previous_block = storage.get_block(record_id, block_id);
+        get_previous = true;
+        populate_block_header_and_body(req, res, handler_id, stream_id, record_id, block_id, previous_content, previous_headers,
+                                       storage);
+    }
+
+    bool update = false;
+    auto ret = storage.insert_or_update_block(record_id, block_id, content_type, msg_body, headers, update);
+    if (ret)
+    {
+        if (update)
+        {
+            res.write_head(previous_content.size() ? 200 : 204, std::move(previous_headers));
+            res.end(std::move(previous_content));
+        }
+        else
+        {
+            std::string location = get_local_api_root();
+            location.append(udsf_base_uri).append(PATH_DELIMETER);
+            location.append(RECORDS).append(PATH_DELIMETER).append(record_id).append(PATH_DELIMETER).append(block_id);
+            res.write_head(201, {{LOCATION, {location}}});
             res.end();
-            return true;
         }
     }
-    const std::string body = "record not found";
-    res.write_head(404);
-    res.end(body);
+    else
+    {
+        res.write_head(404);
+        const std::string msg = "not found";
+        res.end(msg);
+    }
     return true;
+
 }
 
 bool process_record(const nghttp2::asio_http2::server::asio_server_request& req,
@@ -188,14 +353,31 @@ bool process_record(const nghttp2::asio_http2::server::asio_server_request& req,
 
     auto& storage = realm.get_storage(storage_id);
 
-    if (path_tokens.size() > BLOCK_ID_INDEX + 1)
+    if (path_tokens.size() > BLOCK_ID_INDEX)
     {
         const std::string& block_id = path_tokens[BLOCK_ID_INDEX];
-        // TODO:  CRUD
+        if (method == METHOD_PUT)
+        {
+            return process_insert_or_update_block(req, res, handler_id, stream_id, record_id, block_id, msg_body, storage);
+        }
+        else if (method == METHOD_GET)
+        {
+            return process_get_block(req, res, handler_id, stream_id, record_id, block_id, msg_body, storage);
+        }
+        else if (method == METHOD_DELETE)
+        {
+            return process_delete_block(req, res, handler_id, stream_id, record_id, block_id, msg_body, storage);
+        }
+        else
+        {
+            const std::string response = "method not allowed";
+            res.write_head(403);
+            res.end(response);
+        }
     }
     else
     {
-        if (method == METHOD_PUT || method == METHOD_PATCH)
+        if (method == METHOD_PUT)
         {
             return process_create_or_update_record(req, res, handler_id, stream_id, record_id, msg_body, storage);
         }
@@ -225,6 +407,114 @@ void send_error_response(nghttp2::asio_http2::server::asio_server_response& res)
     res.end(std::move(resp_payload));
 }
 
+bool process_meta_schema(const nghttp2::asio_http2::server::asio_server_request& req,
+                         nghttp2::asio_http2::server::asio_server_response& res,
+                         uint64_t handler_id, int32_t stream_id,
+                         const std::string& method,
+                         const std::string& realm_id, const std::string& storage_id,
+                         const std::string& schema_id, const std::vector<std::string>& path_tokens,
+                         const std::string& msg_body)
+
+{
+    if (schema_id.empty())
+    {
+        return false;
+    }
+    auto& realm = udsf::get_realm(realm_id);
+    auto& storage = realm.get_storage(storage_id);
+    static auto send_200_or_204 = [](nghttp2::asio_http2::server::asio_server_response & res, std::string & body)
+    {
+        if (body.size())
+        {
+            res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(body.size())}}});
+            res.end(std::move(body));
+        }
+        else
+        {
+            res.write_head(204);
+            res.end();
+        }
+    };
+    if (method == METHOD_PUT)
+    {
+        std::string previous;
+        bool found;
+        auto queries = get_queries(req);
+        if (queries[GET_PREVIOUS] == TRUE)
+        {
+            previous = storage.get_schema(schema_id, found);
+        }
+        bool update = false;
+        auto ret = storage.create_or_update_schema(schema_id, msg_body, update);
+        if (ret)
+        {
+            if (update)
+            {
+                send_200_or_204(res, previous);
+            }
+            else
+            {
+                std::string location = get_local_api_root();
+                location.append(udsf_base_uri).append(PATH_DELIMETER);
+                location.append(RESOURCE_META_SCHEMAS).append(PATH_DELIMETER).append(schema_id);
+                res.write_head(201, {{LOCATION, {location}}});
+                res.end();
+            }
+        }
+        else
+        {
+            res.write_head(400);
+            const std::string msg = "bad request";
+            res.end(msg);
+        }
+        return true;
+    }
+    else if (method == METHOD_GET)
+    {
+        bool found = false;
+        auto body = storage.get_schema(schema_id, found);
+        if (found)
+        {
+            send_200_or_204(res, body);
+        }
+        else
+        {
+            res.write_head(404);
+            const std::string msg = "not found";
+            res.end(msg);
+        }
+        return true;
+    }
+    else if (method == METHOD_DELETE)
+    {
+        std::string previous;
+        bool found = true;
+        auto queries = get_queries(req);
+        if (queries[GET_PREVIOUS] == TRUE)
+        {
+            previous = storage.get_schema(schema_id, found);
+        }
+        auto deleted = storage.delete_schema(schema_id);
+        if (deleted)
+        {
+            send_200_or_204(res, previous);
+        }
+        else
+        {
+            res.write_head(404);
+            const std::string msg = "not found";
+            res.end(msg);
+        }
+        return true;
+    }
+    else
+    {
+        const std::string response = "method not allowed";
+        res.write_head(403);
+        res.end(response);
+        return true;
+    }
+}
 void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_server_request& req,
                                    nghttp2::asio_http2::server::asio_server_response& res,
                                    uint64_t handler_id, int32_t stream_id)
@@ -244,15 +534,19 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
     auto query = util::percent_decode(raw_query.begin(), raw_query.end());
 
     auto path_tokens = tokenize_string(path, PATH_DELIMETER);
+    if (path_tokens.size() && path_tokens[0].empty())
+    {
+        path_tokens.erase(path_tokens.begin());
+    }
 
-    if (path_tokens.size() > RESOURCE_TYPE_INDEX + 1)
+    if (path_tokens.size() > RESOURCE_TYPE_INDEX)
     {
         std::string& realm_id = path_tokens[REALM_ID_INDEX];
         std::string& storage_id = path_tokens[STORAGE_ID_INDEX];
         std::string& resource = path_tokens[RESOURCE_TYPE_INDEX];
         if (resource == RESOUCE_RECORDS)
         {
-            if (path_tokens.size() > RECORD_ID_INDEX + 1)
+            if (path_tokens.size() > RECORD_ID_INDEX)
             {
                 std::string& record_id = path_tokens[RECORD_ID_INDEX];
                 ret = process_record(req, res, handler_id, stream_id, method, realm_id, storage_id, record_id, path_tokens, payload);
@@ -262,6 +556,16 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
                 //ret = process_records(req, res, handler_id, stream_id, method, realm_id, storage_id, path_tokens, payload);
             }
         }
+        else if (resource == RESOURCE_META_SCHEMAS)
+        {
+            if (path_tokens.size() > RECORD_ID_INDEX)
+            {
+                std::string& meta_schema_id = path_tokens[RECORD_ID_INDEX];
+                ret = process_meta_schema(req, res, handler_id, stream_id, method, realm_id, storage_id, meta_schema_id, path_tokens,
+                                          payload);
+            }
+        }
+
     }
 
     if (!ret)
@@ -272,7 +576,7 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
 
 
 
-void asio_svr_entry(const H2Server_Config_Schema& config_schema)
+void udsf_entry(const H2Server_Config_Schema& config_schema)
 {
     try
     {
@@ -340,6 +644,12 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema)
 
 int main(int argc, char** argv)
 {
+    H2Server_Config_Schema config;
+    config.address = "0.0.0.0";
+    config.port = 8081;
+    config.threads = 8;
+    udsf_entry(config);
+
     return 0;
 }
 
