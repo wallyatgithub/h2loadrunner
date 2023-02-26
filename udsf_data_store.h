@@ -77,7 +77,9 @@ const std::string RESOUCE_SUBS_TO_NOTIFY = "subs-to-notify";
 
 const std::string RESOURCE_META_SCHEMAS = "meta-schemas";
 
-const std::string RESOUCE_BLOCKS = "records";
+const std::string RESOURCE_BLOCKS = "blocks";
+
+const std::string RESOURCE_META = "meta";
 
 const std::string& METHOD_PUT = "put";
 const std::string& METHOD_POST = "post";
@@ -483,10 +485,12 @@ public:
     std::unordered_map<std::string, size_t> blockId_to_index;
     std::vector<Block> blocks;
     RecordMeta meta;
+    std::string record_id;
     std::unique_ptr<std::shared_timed_mutex> blocks_mutex;
     std::unique_ptr<std::shared_timed_mutex> meta_mutex;
 
-    explicit Record():
+    explicit Record(const std::string& id):
+        record_id(id),
         blocks_mutex(std::make_unique<std::shared_timed_mutex>()),
         meta_mutex(std::make_unique<std::shared_timed_mutex>())
     {
@@ -566,7 +570,7 @@ public:
         return blocks[index];
     }
 
-    std::string produce_multipart_body(const std::string& notificationDescription = "")
+    std::string produce_multipart_body(bool include_meta, const std::string& notificationDescription)
     {
         std::string ret;
         size_t final_size = 0;
@@ -589,12 +593,14 @@ public:
             final_size += CRLF.size();
             final_size += notificationDescription.size() + CRLF.size();
         }
-
-        final_size += VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES.size() + CRLF.size();
-        final_size += CONTENT_ID.size() + COLON.size() + META_CONTENT_ID.size() + CRLF.size();
-        final_size += CONTENT_TYPE.size() + COLON.size() + JSON_CONTENT.size() + CRLF.size();
-        final_size += CRLF.size();
-        final_size += metaString.size() + CRLF.size();
+        if (include_meta)
+        {
+            final_size += VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES.size() + CRLF.size();
+            final_size += CONTENT_ID.size() + COLON.size() + META_CONTENT_ID.size() + CRLF.size();
+            final_size += CONTENT_TYPE.size() + COLON.size() + JSON_CONTENT.size() + CRLF.size();
+            final_size += CRLF.size();
+            final_size += metaString.size() + CRLF.size();
+        }
 
         for (auto& bb : block_body_parts)
         {
@@ -615,11 +621,14 @@ public:
             ret.append(notificationDescription).append(CRLF);
         }
 
-        ret.append(VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES).append(CRLF);
-        ret.append(CONTENT_ID).append(COLON).append(META_CONTENT_ID).append(CRLF);
-        ret.append(CONTENT_TYPE).append(COLON).append(JSON_CONTENT).append(CRLF);
-        ret.append(CRLF);
-        ret.append(metaString).append(CRLF);
+        if (include_meta)
+        {
+            ret.append(VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES).append(CRLF);
+            ret.append(CONTENT_ID).append(COLON).append(META_CONTENT_ID).append(CRLF);
+            ret.append(CONTENT_TYPE).append(COLON).append(JSON_CONTENT).append(CRLF);
+            ret.append(CRLF);
+            ret.append(metaString).append(CRLF);
+        }
 
         for (auto& bb : block_body_parts)
         {
@@ -658,7 +667,7 @@ public:
         meta = std::move(new_meta);
     }
 
-    bool validate_meta_with_schema(const RecordMeta& new_meta, const MetaSchema& schema_object)
+    static bool validate_meta_with_schema(const RecordMeta& new_meta, const MetaSchema& schema_object)
     {
         auto ret = true;
         for (auto& tag : schema_object.metaTags)
@@ -1064,14 +1073,7 @@ public:
         auto schema_object = get_schema_object(meta.schemaId, success);
         if (success)
         {
-            for (auto& tag : schema_object.metaTags)
-            {
-                if (tag.presence && meta.tags.count(tag.tagName) == 0)
-                {
-                    ret = false;
-                    break;
-                }
-            }
+            ret = Record::validate_meta_with_schema(meta, schema_object);
         }
         return ret;
     }
@@ -1165,7 +1167,7 @@ public:
                     return TTL_EXPIRED;
                 }
             }
-            Record record;
+            Record record(record_id);
             auto record_meta_copy = record_meta;
             record.set_meta_object(record_meta);
             for (size_t i = 1; i < parts.size(); i++)
@@ -1197,38 +1199,20 @@ public:
             auto iter = records[row][col].find(record_id);
             if (iter == records[row][col].end())
             {
-                target = &records[row][col][record_id];
+                records[row][col].emplace(std::make_pair(record_id, record_id));
+                target = &records[row][col].find(record_id)->second;
                 update = false;
             }
             else
             {
                 target = &iter->second;
+                checkout_record(record_id, iter->second.meta);
                 update = true;
             }
-            auto old_ttl = iso8601_timestamp_to_seconds_since_epoch(target->meta.ttl);
+            checkin_record(record_id, record.meta);
             *target = std::move(record);
             // this is commented out to prevent record from being deleted from other thread before tags value insertion is done here
             // record_map_write_guard.unlock();
-
-            for (auto& tag : record_meta_copy.tags)
-            {
-                auto& tag_name = tag.first;
-                auto& tag_values = tag.second;
-                for (auto& tag_value : tag_values)
-                {
-                    insert_tag_value(record_meta_copy.schemaId, tag_name, tag_value, record_id);
-                }
-            }
-
-            track_record_id(record_meta_copy.schemaId, record_id);
-            if (update && old_ttl)
-            {
-                track_record_ttl(old_ttl, record_id, false);
-            }
-            if (ttl)
-            {
-                track_record_ttl(ttl, record_id, true);
-            }
             record_map_write_guard.unlock();
             send_notify(record_id, "", update ? RECORD_OPERATION_UPDATED : RECORD_OPERATION_CREATED);
             return 0;
@@ -1251,6 +1235,42 @@ public:
         return ret;
     }
 
+    void checkout_record(const std::string& record_id, const RecordMeta& old_meta)
+    {
+        for (auto& tag : old_meta.tags)
+        {
+            auto& tag_name = tag.first;
+            auto& tag_values = tag.second;
+            for (auto& tag_value : tag_values)
+            {
+                remove_tag_value(old_meta.schemaId, tag_name, tag_value, record_id);
+            }
+        }
+        track_record_id(old_meta.schemaId, record_id, false);
+        if (old_meta.ttl.size())
+        {
+            track_record_ttl(iso8601_timestamp_to_seconds_since_epoch(old_meta.ttl), record_id, false);
+        }
+    }
+
+    void checkin_record(const std::string& record_id, const RecordMeta& new_meta)
+    {
+        for (auto& tag : new_meta.tags)
+        {
+            auto& tag_name = tag.first;
+            auto& tag_values = tag.second;
+            for (auto& tag_value : tag_values)
+            {
+                insert_tag_value(new_meta.schemaId, tag_name, tag_value, record_id);
+            }
+        }
+        track_record_id(new_meta.schemaId, record_id);
+        if (new_meta.ttl.size())
+        {
+            track_record_ttl(iso8601_timestamp_to_seconds_since_epoch(new_meta.ttl), record_id);
+        }
+    }
+
     bool delete_record_directly(const std::string& record_id)
     {
         uint16_t sum = get_u16_sum(record_id);
@@ -1262,27 +1282,13 @@ public:
         {
             auto record = std::move(iter->second);
             records[row][col].erase(iter);
-
-            for (auto& tag : record.meta.tags)
-            {
-                auto& tag_name = tag.first;
-                auto& tag_values = tag.second;
-                for (auto& tag_value : tag_values)
-                {
-                    remove_tag_value(record.meta.schemaId, tag_name, tag_value, record_id);
-                }
-            }
-            track_record_id(record.meta.schemaId, record_id, false);
-            if (record.meta.ttl.size())
-            {
-                track_record_ttl(iso8601_timestamp_to_seconds_since_epoch(record.meta.ttl), record_id, false);
-            }
+            checkout_record(record_id, record.meta);
             return true;
         }
         return false;
     }
 
-    std::string get_record(const std::string& record_id, const std::string& notificationDescription = "")
+    std::string get_record(const std::string& record_id, bool include_meta = true, const std::string& notificationDescription = "")
     {
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
@@ -1292,7 +1298,22 @@ public:
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
-            ret = iter->second.produce_multipart_body(notificationDescription);
+            ret = iter->second.produce_multipart_body(include_meta, notificationDescription);
+        }
+        return ret;
+    }
+
+    std::string get_record_meta(const std::string& record_id)
+    {
+        uint16_t sum = get_u16_sum(record_id);
+        uint8_t row = sum >> 8;
+        uint8_t col = sum & 0xFF;
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
+        std::string ret;
+        auto iter = records[row][col].find(record_id);
+        if (iter != records[row][col].end())
+        {
+            ret = iter->second.get_meta();
         }
         return ret;
     }
@@ -1389,22 +1410,29 @@ public:
         return ret;
     }
 
-    bool update_record_meta(const std::string& record_id, const std::string& meta_patch)
+    bool update_record_meta(const std::string& record_id, const std::string& meta_patch, bool& record_found)
     {
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
         uint8_t col = sum & 0xFF;
+        record_found = false;
         std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
+            record_found = true;
             auto schema_id = iter->second.meta.schemaId;
-            bool success = false;
-            auto schema_object = get_schema_object(schema_id, success);
-            if (success)
+            bool schema_found;
+            auto schema_object = get_schema_object(schema_id, schema_found);
+            auto old_meta_object = iter->second.get_meta_object();
+            auto ret = iter->second.update_meta(meta_patch, schema_object);
+            if (ret)
             {
-                return iter->second.update_meta(meta_patch, schema_object);
+                checkout_record(record_id, old_meta_object);
+                auto new_meta_object = iter->second.get_meta_object();
+                checkin_record(record_id, new_meta_object);
             }
+            return ret;
         }
         return false;
     }
@@ -1850,7 +1878,7 @@ public:
                     notificationDescription.recordRef += PATH_DELIMETER;
                     notificationDescription.recordRef += record_id;
                     auto description = staticjson::to_json_string(notificationDescription);
-                    recordNotificationBody = get_record(record_id, description);
+                    recordNotificationBody = get_record(record_id, true, description);
                 }
                 if (recordNotificationBody.size())
                 {

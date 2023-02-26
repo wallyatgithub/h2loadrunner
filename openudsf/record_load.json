@@ -6,13 +6,13 @@
   "open-new-connection-based-on-authority-header": false,
   "connection-retry": true,
   "switch-back-after-connection-retry": false,
-  "threads": 1,
-  "clients": 1,
-  "duration": 0,
+  "threads": 4,
+  "clients": 20,
+  "duration": 60,
   "total-requests": 0,
   "warm-up-time": 0,
   "max-concurrent-streams": 2048,
-  "request-per-second": 0,
+  "request-per-second": 500,
   "request-per-second-feed-file": "",
   "rate": 0,
   "rate-period": 1,
@@ -78,7 +78,7 @@
           "clear-old-cookies": false,
           "method": "put",
           "http-version": "default",
-          "payload": "record.txt",
+          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n\r\n\r\n\r\n",
           "additonalHeaders": [
             "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
           ],
@@ -100,7 +100,7 @@
           "clear-old-cookies": false,
           "method": "put",
           "http-version": "default",
-          "payload": "record.txt",
+          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n\r\n\r\n\r\n",
           "additonalHeaders": [
             "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
           ],
@@ -194,7 +194,7 @@
           "clear-old-cookies": false,
           "method": "put",
           "http-version": "default",
-          "payload": "record.txt",
+          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n\r\n\r\n\r\n",
           "additonalHeaders": [
             "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
           ],
@@ -216,7 +216,7 @@
           "clear-old-cookies": false,
           "method": "put",
           "http-version": "default",
-          "payload": "record.txt",
+          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n\r\n\r\n\r\n",
           "additonalHeaders": [
             "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
           ],

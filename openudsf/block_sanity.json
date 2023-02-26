@@ -9,7 +9,7 @@
   "threads": 1,
   "clients": 1,
   "duration": 0,
-  "total-requests": 16,
+  "total-requests": 17,
   "warm-up-time": 0,
   "max-concurrent-streams": 2048,
   "request-per-second": 1,
@@ -363,6 +363,23 @@
           ],
           "luaScript": "",
           "expected-status-code": 404,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          }
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}/blocks"
+          },
+          "clear-old-cookies": false,
+          "method": "get",
+          "http-version": "default",
+          "additonalHeaders": [],
+          "luaScript": "",
+          "expected-status-code": 200,
           "page-id": 0,
           "response-match": {
             "headers": [],

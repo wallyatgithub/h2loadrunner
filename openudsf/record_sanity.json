@@ -9,7 +9,7 @@
   "threads": 1,
   "clients": 1,
   "duration": 0,
-  "total-requests": 6,
+  "total-requests": 9,
   "warm-up-time": 0,
   "max-concurrent-streams": 2048,
   "request-per-second": 1,
@@ -84,6 +84,66 @@
           ],
           "luaScript": "",
           "expected-status-code": 201,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}/meta"
+          },
+          "clear-old-cookies": false,
+          "method": "get",
+          "http-version": "default",
+          "additonalHeaders": [],
+          "luaScript": "",
+          "expected-status-code": 200,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}/meta"
+          },
+          "clear-old-cookies": false,
+          "method": "patch",
+          "http-version": "default",
+          "payload": "[  {   \"op\": \"add\",   \"path\": \"/tags/aux-recordId\",   \"value\": [    \"rec-${supi}\"   ]  } ]",
+          "additonalHeaders": [
+            "application/json-patch+json"
+          ],
+          "luaScript": "",
+          "expected-status-code": 204,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}/meta"
+          },
+          "clear-old-cookies": false,
+          "method": "get",
+          "http-version": "default",
+          "additonalHeaders": [],
+          "luaScript": "",
+          "expected-status-code": 200,
           "page-id": 0,
           "response-match": {
             "headers": [],

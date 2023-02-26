@@ -334,10 +334,10 @@ bool process_insert_or_update_block(const nghttp2::asio_http2::server::asio_serv
             std::string location = get_local_api_root();
             location.reserve(location.size() + udsf_base_uri.size() + PATH_DELIMETER.size() +
                              RECORDS.size() + PATH_DELIMETER.size() + record_id.size() +
-                             PATH_DELIMETER.size() + RESOUCE_BLOCKS.size() +
+                             PATH_DELIMETER.size() + RESOURCE_BLOCKS.size() +
                              PATH_DELIMETER.size() + block_id.size());
             location.append(udsf_base_uri).append(PATH_DELIMETER);
-            location.append(RECORDS).append(PATH_DELIMETER).append(record_id).append(PATH_DELIMETER).append(RESOUCE_BLOCKS).append(PATH_DELIMETER).append(block_id);
+            location.append(RECORDS).append(PATH_DELIMETER).append(record_id).append(PATH_DELIMETER).append(RESOURCE_BLOCKS).append(PATH_DELIMETER).append(block_id);
             res.write_head(201, {{LOCATION, {location}}});
             res.end();
         }
@@ -352,6 +352,81 @@ bool process_insert_or_update_block(const nghttp2::asio_http2::server::asio_serv
 
 }
 
+bool proces_get_blocks(const nghttp2::asio_http2::server::asio_server_request& req,
+                    nghttp2::asio_http2::server::asio_server_response& res,
+                    uint64_t handler_id, int32_t stream_id,
+                    const std::string& record_id,
+                    udsf::Storage& storage)
+{
+    auto body = storage.get_record(record_id, false);
+    if (body.size())
+    {
+        res.write_head(200, {{CONTENT_TYPE, {MULTIPART_CONTENT_TYPE}}, {CONTENT_LENGTH, {std::to_string(body.size())}}});
+        res.end(std::move(body));
+    }
+    else
+    {
+        const std::string record_not_found = "record not found";
+        res.write_head(404);
+        res.end(record_not_found);
+    }
+    return true;
+}
+
+bool proces_get_record_meta(const nghttp2::asio_http2::server::asio_server_request& req,
+                    nghttp2::asio_http2::server::asio_server_response& res,
+                    uint64_t handler_id, int32_t stream_id,
+                    const std::string& record_id,
+                    udsf::Storage& storage)
+{
+    auto body = storage.get_record_meta(record_id);
+    if (body.size())
+    {
+        res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(body.size())}}});
+        res.end(std::move(body));
+    }
+    else
+    {
+        const std::string record_not_found = "record not found";
+        res.write_head(404);
+        res.end(record_not_found);
+    }
+    return true;
+}
+
+bool proces_update_record_meta(const nghttp2::asio_http2::server::asio_server_request& req,
+                    nghttp2::asio_http2::server::asio_server_response& res,
+                    uint64_t handler_id, int32_t stream_id,
+                    const std::string& record_id,
+                    const std::string& msg_body,
+                    udsf::Storage& storage)
+{
+    bool record_found = false;
+    auto ret = storage.update_record_meta(record_id, msg_body, record_found);
+    if (!record_found)
+    {
+        const std::string record_not_found = "record not found";
+        res.write_head(404);
+        res.end(record_not_found);
+    }
+    else
+    {
+        if (ret)
+        {
+            res.write_head(204);
+            res.end();
+        }
+        else
+        {
+            const std::string record_not_found = "meta patch failed";
+            res.write_head(400);
+            res.end(record_not_found);
+        }
+    }
+    return true;
+}
+
+
 bool process_record(const nghttp2::asio_http2::server::asio_server_request& req,
                     nghttp2::asio_http2::server::asio_server_response& res,
                     uint64_t handler_id, int32_t stream_id,
@@ -363,6 +438,14 @@ bool process_record(const nghttp2::asio_http2::server::asio_server_request& req,
     auto& realm = udsf::get_realm(realm_id);
 
     auto& storage = realm.get_storage(storage_id);
+
+    static auto send_method_not_allowed = [](nghttp2::asio_http2::server::asio_server_response& res)
+    {
+        const std::string response = "method not allowed";
+        res.write_head(405);
+        res.end(response);
+        return true;
+    };
 
     if (path_tokens.size() == BLOCK_ID_INDEX + 1)
     {
@@ -381,16 +464,38 @@ bool process_record(const nghttp2::asio_http2::server::asio_server_request& req,
         }
         else
         {
-            const std::string response = "method not allowed";
-            res.write_head(403);
-            res.end(response);
+            return send_method_not_allowed(res);
         }
     }
     else if (path_tokens.size() == BLOCKS_INDEX + 1)
     {
-        // TODO: get /{realmId}/{storageId}/records/{recordId}/blocks
-
-        // TODO:   patch get /{realmId}/{storageId}/records/{recordId}/meta
+        auto& resource = path_tokens[path_tokens.size() -1];
+        if (resource == RESOURCE_BLOCKS)
+        {
+            if (method == METHOD_GET)
+            {
+                return proces_get_blocks(req, res, handler_id, stream_id, record_id, storage);
+            }
+            else
+            {
+                return send_method_not_allowed(res);
+            }
+        }
+        else if (resource == RESOURCE_META)
+        {
+            if (method == METHOD_GET)
+            {
+                return proces_get_record_meta(req, res, handler_id, stream_id, record_id, storage);
+            }
+            else if (method == METHOD_PATCH)
+            {
+                return proces_update_record_meta(req, res, handler_id, stream_id, record_id, msg_body, storage);
+            }
+            else
+            {
+                return send_method_not_allowed(res);
+            }
+        }
     }
     else if (path_tokens.size() == RECORD_ID_INDEX + 1)
     {
@@ -408,9 +513,7 @@ bool process_record(const nghttp2::asio_http2::server::asio_server_request& req,
         }
         else
         {
-            const std::string response = "method not allowed";
-            res.write_head(403);
-            res.end(response);
+            return send_method_not_allowed(res);
         }
     }
     return false;
@@ -418,8 +521,8 @@ bool process_record(const nghttp2::asio_http2::server::asio_server_request& req,
 
 void send_error_response(nghttp2::asio_http2::server::asio_server_response& res)
 {
-    uint32_t status_code = 403;
-    std::string resp_payload = "request not allowed";
+    uint32_t status_code = 501;
+    std::string resp_payload = "Operation not implemented";
     res.write_head(status_code);
     res.end(std::move(resp_payload));
 }
@@ -528,7 +631,7 @@ bool process_meta_schema(const nghttp2::asio_http2::server::asio_server_request&
     else
     {
         const std::string response = "method not allowed";
-        res.write_head(403);
+        res.write_head(405);
         res.end(response);
         return true;
     }
@@ -576,7 +679,7 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
         }
         else if (resource == RESOURCE_META_SCHEMAS)
         {
-            if (path_tokens.size() > RECORD_ID_INDEX)
+            if (path_tokens.size() == RECORD_ID_INDEX + 1)
             {
                 std::string& meta_schema_id = path_tokens[RECORD_ID_INDEX];
                 ret = process_meta_schema(req, res, handler_id, stream_id, method, realm_id, storage_id, meta_schema_id, path_tokens,
