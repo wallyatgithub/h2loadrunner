@@ -886,7 +886,7 @@ void asio_client_connection::handle_connection_error()
 void asio_client_connection::handle_read_complete(bool is_quic, const boost::system::error_code& e,
                                                   const std::size_t bytes_transferred)
 {
-    if (config->verbose)
+    if (false)
     {
         std::cerr << "read return code: " << e << ", bytes read: " << bytes_transferred << ", timestamp:" <<
                   current_timestamp_nanoseconds() << std::endl;
@@ -972,7 +972,7 @@ bool asio_client_connection::handle_write_complete(bool is_quic, const boost::sy
 {
     if (config->verbose)
     {
-        std::cerr << "write return code: " << e << ", bytes sent: " << bytes_transferred << std::endl;
+        //std::cerr << "write return code: " << e << ", bytes sent: " << bytes_transferred << std::endl;
     }
 
     if (e)
@@ -1735,15 +1735,15 @@ void asio_client_connection::quic_close_connection()
             {
                 if (verbose)
                 {
-                    std::cerr << "bytes sent:" << bytes_transferred << ", timestamp:" << current_timestamp_nanoseconds() << std::endl;
+                    //std::cerr << "bytes sent:" << bytes_transferred << ", timestamp:" << current_timestamp_nanoseconds() << std::endl;
                 }
                 old_udp_client_socket->close();
                 handle_write_complete(true, e, bytes_transferred);
             });
             if (config->verbose)
             {
-                std::cerr << __FUNCTION__ << ": bytes to send:" << nwrite << ", timestamp:" << current_timestamp_nanoseconds() <<
-                          std::endl;
+                //std::cerr << __FUNCTION__ << ": bytes to send:" << nwrite << ", timestamp:" << current_timestamp_nanoseconds() <<
+                //          std::endl;
             }
         }
     }

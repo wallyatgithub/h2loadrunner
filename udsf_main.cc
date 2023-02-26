@@ -290,19 +290,21 @@ bool process_insert_or_update_block(const nghttp2::asio_http2::server::asio_serv
     std::map<std::string, std::string, ci_less> headers;
     //std::string content_id;
     std::string content_type;
-    for (auto& hdr : req_headers)
+    auto content_id_iter = req_headers.find(CONTENT_ID);
+    auto content_type_iter = req_headers.find(CONTENT_TYPE);
+
+    if (content_type_iter != req_headers.end())
     {
-        if (hdr.first == CONTENT_ID)
+        content_type = content_type_iter->second.value;
+    }
+    auto iter = req_headers.begin();
+    while (iter != req_headers.end())
+    {
+        if (iter != content_id_iter && iter != content_type_iter)
         {
-            //content_id = hdr.second.value;
-            continue;
+            headers.insert(std::make_pair(iter->first, iter->second.value));
         }
-        if (hdr.first == CONTENT_TYPE)
-        {
-            content_type = hdr.second.value;
-            continue;
-        }
-        headers.insert(std::make_pair(hdr.first, hdr.second.value));
+        iter++;
     }
 
     udsf::Block previous_block;
@@ -332,9 +334,10 @@ bool process_insert_or_update_block(const nghttp2::asio_http2::server::asio_serv
             std::string location = get_local_api_root();
             location.reserve(location.size() + udsf_base_uri.size() + PATH_DELIMETER.size() +
                              RECORDS.size() + PATH_DELIMETER.size() + record_id.size() +
+                             PATH_DELIMETER.size() + RESOUCE_BLOCKS.size() +
                              PATH_DELIMETER.size() + block_id.size());
             location.append(udsf_base_uri).append(PATH_DELIMETER);
-            location.append(RECORDS).append(PATH_DELIMETER).append(record_id).append(PATH_DELIMETER).append(block_id);
+            location.append(RECORDS).append(PATH_DELIMETER).append(record_id).append(PATH_DELIMETER).append(RESOUCE_BLOCKS).append(PATH_DELIMETER).append(block_id);
             res.write_head(201, {{LOCATION, {location}}});
             res.end();
         }

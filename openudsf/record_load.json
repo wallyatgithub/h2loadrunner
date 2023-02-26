@@ -9,10 +9,10 @@
   "threads": 1,
   "clients": 1,
   "duration": 0,
-  "total-requests": 6,
+  "total-requests": 0,
   "warm-up-time": 0,
   "max-concurrent-streams": 2048,
-  "request-per-second": 1,
+  "request-per-second": 0,
   "request-per-second-feed-file": "",
   "rate": 0,
   "rate-period": 1,
@@ -78,12 +78,12 @@
           "clear-old-cookies": false,
           "method": "put",
           "http-version": "default",
-          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n\r\n\r\n\r\n",
+          "payload": "record.txt",
           "additonalHeaders": [
             "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
           ],
           "luaScript": "",
-          "expected-status-code": 201,
+          "expected-status-code": 0,
           "page-id": 0,
           "response-match": {
             "headers": [],
@@ -100,7 +100,7 @@
           "clear-old-cookies": false,
           "method": "put",
           "http-version": "default",
-          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n\r\n\r\n\r\n",
+          "payload": "record.txt",
           "additonalHeaders": [
             "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
           ],
@@ -178,6 +178,50 @@
           "http-version": "default",
           "luaScript": "",
           "expected-status-code": 404,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}"
+          },
+          "clear-old-cookies": false,
+          "method": "put",
+          "http-version": "default",
+          "payload": "record.txt",
+          "additonalHeaders": [
+            "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
+          ],
+          "luaScript": "",
+          "expected-status-code": 201,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}"
+          },
+          "clear-old-cookies": false,
+          "method": "put",
+          "http-version": "default",
+          "payload": "record.txt",
+          "additonalHeaders": [
+            "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
+          ],
+          "luaScript": "",
+          "expected-status-code": 204,
           "page-id": 0,
           "response-match": {
             "headers": [],

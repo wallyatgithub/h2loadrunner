@@ -1101,7 +1101,7 @@ void base_client::run_post_response_action(Request_Response_Data& finished_reque
             result.clear();
         }
         finished_request.scenario_data_per_user->variable_index_to_value[value_picker.unique_id] = std::move(result);
-        if (config->verbose)
+        if (false)
         {
             std::cout << "where_to_pick_up_from: " << value_picker.where_to_pick_up_from << std::endl;
             std::cout << "target:" << value_picker.source << std::endl;
@@ -1111,7 +1111,7 @@ void base_client::run_post_response_action(Request_Response_Data& finished_reque
                       finished_request.scenario_data_per_user->variable_index_to_value[value_picker.unique_id] << std::endl;
         }
     }
-    if (config->verbose)
+    if (false)
     {
         std::cout << "variable_index_to_value size: " << finished_request.scenario_data_per_user->variable_index_to_value.size()
                   << std::endl;
@@ -2458,7 +2458,7 @@ bool base_client::not_connected()
 
 base_client* base_client::find_or_create_dest_client(Request_Response_Data& request_to_send)
 {
-    if (config->verbose)
+    if (false)
     {
         std::cerr<<__func__<<": request_to_send: "<<request_to_send<<std::endl;
     }
@@ -2861,18 +2861,29 @@ int base_client::submit_request()
         }
     };
 
+    static auto count_total_request = [this]()
+    {
+        size_t ret;
+        for (auto& s: config->json_config_schema.scenarios)
+        {
+            for (auto& r: s.requests)
+            {
+                ret++;
+            }
+        }
+        return ret;
+    };
+    thread_local static auto total_request = count_total_request();
+
     uint8_t retry_count = 0;
-    while (retry_count < max_concurrent_streams)
+    while (retry_count < total_request)
     {
         auto retCode = submit_one_request();
         if (0 == retCode)
         {
             return retCode;
         }
-        if (CONNECTION_ESTABLISH_IN_PROGRESSS == retCode || MAX_CONCURRENT_STREAM_REACHED == retCode)
-        {
-            ++retry_count;
-        }
+        ++retry_count;
     }
 
     return -1;
@@ -3296,7 +3307,7 @@ std::string base_client::assemble_string(const String_With_Variables_In_Between&
         }
     }
 
-    if (config->verbose)
+    if (false)
     {
         std::cout << source << std::endl;
         std::cout << "variable_index_to_value size: " << scenario_data_per_user.variable_index_to_value.size() << std::endl;

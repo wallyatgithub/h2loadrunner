@@ -274,6 +274,7 @@ constexpr auto BACKOFF_WRITE_BUFFER_THRES = 16_k;
 constexpr int MAX_STREAM_TO_BE_EXHAUSTED = -2;
 constexpr int MAX_CONCURRENT_STREAM_REACHED = -3;
 constexpr int CONNECTION_ESTABLISH_IN_PROGRESSS = -4;
+constexpr int REQUEST_SENDING_FAILURE = -1;
 
 
 

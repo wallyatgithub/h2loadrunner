@@ -345,7 +345,7 @@ int Http2Session::submit_request()
 {
     if (nghttp2_session_check_request_allowed(session_) == 0)
     {
-        return -1;
+        return REQUEST_SENDING_FAILURE;
     }
 
     if (client_->get_number_of_request_inflight() >= client_->get_max_concurrent_stream())

@@ -9,7 +9,7 @@
   "threads": 1,
   "clients": 1,
   "duration": 0,
-  "total-requests": 6,
+  "total-requests": 16,
   "warm-up-time": 0,
   "max-concurrent-streams": 2048,
   "request-per-second": 1,
@@ -178,6 +178,207 @@
           "http-version": "default",
           "luaScript": "",
           "expected-status-code": 404,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+            "additonalHeaders": [
+                "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
+            ],
+            "clear-old-cookies": false,
+            "delay-before-executing-next": 0,
+            "expected-status-code": 201,
+            "http-version": "default",
+            "luaScript": "",
+            "method": "put",
+            "page-id": 0,
+            "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n\r\n\r\n\r\n",
+            "response-match": {
+                "headers": [],
+                "payload": []
+            },
+            "uri": {
+                "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}",
+                "typeOfAction": "input"
+            },
+            "value-pickers": []
+        },
+        {
+            "clear-old-cookies": false,
+            "delay-before-executing-next": 0,
+            "expected-status-code": 200,
+            "http-version": "default",
+            "luaScript": "",
+            "method": "get",
+            "page-id": 0,
+            "response-match": {
+                "headers": [],
+                "payload": []
+            },
+            "uri": {
+                "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}/blocks/block1",
+                "typeOfAction": "input"
+            },
+            "value-pickers": []
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}/blocks/block1?get-previous=true"
+          },
+          "clear-old-cookies": false,
+          "method": "put",
+          "http-version": "default",
+          "payload": "this is the body of block1 for ${supi} of the first update",
+          "additonalHeaders": [
+            "content-id:block1",
+            "content-type:text"
+          ],
+          "luaScript": "",
+          "expected-status-code": 200,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          }
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}/blocks/block1"
+          },
+          "clear-old-cookies": false,
+          "method": "put",
+          "http-version": "default",
+          "payload": "this is the body of block1 for ${supi} of the second update",
+          "additonalHeaders": [
+            "content-id:block1",
+            "content-type:text"
+          ],
+          "luaScript": "",
+          "expected-status-code": 204,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          }
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}/blocks/block1?get-previous=true"
+          },
+          "clear-old-cookies": false,
+          "method": "delete",
+          "http-version": "default",
+          "additonalHeaders": [
+            "content-id:block1",
+            "content-type:text"
+          ],
+          "luaScript": "",
+          "expected-status-code": 200,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          }
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}/blocks/block1"
+          },
+          "clear-old-cookies": false,
+          "method": "put",
+          "http-version": "default",
+          "payload": "this is the body of block1 for ${supi} created again",
+          "additonalHeaders": [
+            "content-id:block1",
+            "content-type:text"
+          ],
+          "luaScript": "",
+          "expected-status-code": 201,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          }
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}/blocks/block1?get-previous=false"
+          },
+          "clear-old-cookies": false,
+          "method": "delete",
+          "http-version": "default",
+          "additonalHeaders": [
+            "content-id:block1",
+            "content-type:text"
+          ],
+          "luaScript": "",
+          "expected-status-code": 204,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          }
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}/blocks/block1?get-previous=false"
+          },
+          "clear-old-cookies": false,
+          "method": "delete",
+          "http-version": "default",
+          "additonalHeaders": [
+            "content-id:block1",
+            "content-type:text"
+          ],
+          "luaScript": "",
+          "expected-status-code": 404,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          }
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}/blocks/block1"
+          },
+          "clear-old-cookies": false,
+          "method": "get",
+          "http-version": "default",
+          "additonalHeaders": [
+            "content-id:block1",
+            "content-type:text"
+          ],
+          "luaScript": "",
+          "expected-status-code": 404,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          }
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}?get-previous=true"
+          },
+          "clear-old-cookies": false,
+          "method": "delete",
+          "http-version": "default",
+          "luaScript": "",
+          "expected-status-code": 200,
           "page-id": 0,
           "response-match": {
             "headers": [],

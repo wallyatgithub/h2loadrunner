@@ -77,6 +77,8 @@ const std::string RESOUCE_SUBS_TO_NOTIFY = "subs-to-notify";
 
 const std::string RESOURCE_META_SCHEMAS = "meta-schemas";
 
+const std::string RESOUCE_BLOCKS = "records";
+
 const std::string& METHOD_PUT = "put";
 const std::string& METHOD_POST = "post";
 const std::string& METHOD_PATCH = "patch";
