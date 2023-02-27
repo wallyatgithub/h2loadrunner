@@ -10,6 +10,7 @@
 #include <shared_mutex>
 #include "staticjson/document.hpp"
 #include "staticjson/staticjson.hpp"
+#include "rapidjson/pointer.h"
 #include "rapidjson/schema.h"
 #include "rapidjson/prettywriter.h"
 #include "multipart_parser.h"
@@ -91,6 +92,8 @@ const std::string& LOCATION = "location";
 
 const std::string EQUAL = "=";
 const std::string GET_PREVIOUS = "get-previous";
+const std::string LIMIT_RANGE = "limit-range";
+
 const std::string TRUE = "true";
 const std::string FALSE = "FALSE";
 
@@ -420,13 +423,13 @@ public:
     std::map<std::string, std::string, ci_less> headers;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
-        h->add_property("Content-Id", &this->content_id);
-        h->add_property("Content-Type", &this->content_type);
+        h->add_property(CONTENT_ID, &this->content_id);
+        h->add_property(CONTENT_TYPE, &this->content_type);
         h->add_property("content", &this->content);
         //h->add_property("additional-headers", &this->headers);
     }
 
-    std::string produce_body_part()
+    std::string produce_multipart_body()
     {
         std::string ret;
         auto final_size = 0;
@@ -496,13 +499,12 @@ public:
     {
     }
 
-    /*
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("blocks", &this->blocks, staticjson::Flags::Optional);
         h->add_property("meta", &this->meta);
     }
-    */
+
     bool insert_or_update_block(const std::string& id, const std::string& type, const std::string& blockData,
                                 const std::map<std::string, std::string, ci_less>& headers,
                                 bool& update)
@@ -570,6 +572,22 @@ public:
         return blocks[index];
     }
 
+    std::string produce_json_body(bool meta_only)
+    {
+        if (meta_only)
+        {
+            std::shared_lock<std::shared_timed_mutex> meta_guard(*meta_mutex);
+            return staticjson::to_json_string(meta);
+        }
+
+        else
+        {
+            std::shared_lock<std::shared_timed_mutex> blocks_guard(*blocks_mutex);
+            std::shared_lock<std::shared_timed_mutex> meta_guard(*meta_mutex);
+            return staticjson::to_json_string(*this);
+        }
+    }
+
     std::string produce_multipart_body(bool include_meta, const std::string& notificationDescription)
     {
         std::string ret;
@@ -580,7 +598,7 @@ public:
         std::vector<std::string> block_body_parts;
         for (auto& b : blocks)
         {
-            block_body_parts.emplace_back(b.produce_body_part());
+            block_body_parts.emplace_back(b.produce_multipart_body());
         }
 
         final_size += CRLF.size();
@@ -1229,7 +1247,7 @@ public:
         }
         else
         {
-            ret = get_record(record_id);
+            ret = get_record_multipart_body(record_id);
             record_exist_before = delete_record_directly(record_id);
         }
         return ret;
@@ -1288,7 +1306,8 @@ public:
         return false;
     }
 
-    std::string get_record(const std::string& record_id, bool include_meta = true, const std::string& notificationDescription = "")
+    std::string get_record_multipart_body(const std::string& record_id, bool include_meta = true,
+                                          const std::string& notificationDescription = "")
     {
         uint16_t sum = get_u16_sum(record_id);
         uint8_t row = sum >> 8;
@@ -1299,6 +1318,21 @@ public:
         if (iter != records[row][col].end())
         {
             ret = iter->second.produce_multipart_body(include_meta, notificationDescription);
+        }
+        return ret;
+    }
+
+    std::string get_record_json_body(const std::string& record_id, bool meta_only)
+    {
+        uint16_t sum = get_u16_sum(record_id);
+        uint8_t row = sum >> 8;
+        uint8_t col = sum & 0xFF;
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
+        std::string ret;
+        auto iter = records[row][col].find(record_id);
+        if (iter != records[row][col].end())
+        {
+            ret = iter->second.produce_json_body(meta_only);
         }
         return ret;
     }
@@ -1622,6 +1656,17 @@ public:
             value.Accept(writer);
             std::cerr << "Invalid SearchExpression: " << buffer.GetString() << std::endl;
         }
+        /*
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        value.Accept(writer);
+        std::cerr << "search expression result of: " << buffer.GetString() << std::endl<<std::flush;
+        for (auto& r: ret)
+        {
+            std::cerr << "result: " << r << std::endl<<std::flush;
+        }
+        std::cerr << "search expression done " << std::endl<<std::flush;
+        */
         return ret;
     }
 
@@ -1878,7 +1923,7 @@ public:
                     notificationDescription.recordRef += PATH_DELIMETER;
                     notificationDescription.recordRef += record_id;
                     auto description = staticjson::to_json_string(notificationDescription);
-                    recordNotificationBody = get_record(record_id, true, description);
+                    recordNotificationBody = get_record_multipart_body(record_id, true, description);
                 }
                 if (recordNotificationBody.size())
                 {

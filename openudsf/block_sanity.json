@@ -9,7 +9,7 @@
   "threads": 1,
   "clients": 1,
   "duration": 0,
-  "total-requests": 17,
+  "total-requests": 19,
   "warm-up-time": 0,
   "max-concurrent-streams": 2048,
   "request-per-second": 1,
@@ -303,6 +303,44 @@
           ],
           "luaScript": "",
           "expected-status-code": 201,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          }
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}/blocks/block3?get-previous=true"
+          },
+          "clear-old-cookies": false,
+          "method": "put",
+          "http-version": "default",
+          "payload": "this is the body of block3 for ${supi}",
+          "additonalHeaders": [
+            "content-id:block3",
+            "content-type:text"
+          ],
+          "luaScript": "",
+          "expected-status-code": 201,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          }
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}/blocks/block3"
+          },
+          "clear-old-cookies": false,
+          "method": "get",
+          "http-version": "default",
+          "additonalHeaders": [],
+          "luaScript": "",
+          "expected-status-code": 200,
           "page-id": 0,
           "response-match": {
             "headers": [],

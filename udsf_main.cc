@@ -85,7 +85,7 @@ bool process_create_or_update_record(const nghttp2::asio_http2::server::asio_ser
     bool get_previous = false;
     if (queries[GET_PREVIOUS] == TRUE)
     {
-        body = storage.get_record(record_id);
+        body = storage.get_record_multipart_body(record_id);
         get_previous = true;
     }
 
@@ -110,10 +110,9 @@ bool process_create_or_update_record(const nghttp2::asio_http2::server::asio_ser
             }
             else
             {
-                std::string location = get_local_api_root();
-                location.reserve(location.size() + udsf_base_uri.size() + PATH_DELIMETER.size() + RECORDS.size() + PATH_DELIMETER.size() + record_id.size());
-                location.append(udsf_base_uri).append(PATH_DELIMETER);
-                location.append(RECORDS).append(PATH_DELIMETER).append(record_id);
+                std::string location;
+                location.reserve(req.uri().scheme.size() + 3 + req.uri().host.size() + req.uri().path.size());
+                location.append(req.uri().scheme).append("://").append(req.uri().host).append(req.uri().path);
                 res.write_head(201, {{LOCATION, {location}}});
                 res.end();
             }
@@ -136,7 +135,7 @@ bool process_get_record(const nghttp2::asio_http2::server::asio_server_request& 
                         const std::string& record_id, const std::string& msg_body,
                         udsf::Storage& storage)
 {
-    auto body = storage.get_record(record_id);
+    auto body = storage.get_record_multipart_body(record_id);
     if (body.size())
     {
         res.write_head(200, {{CONTENT_TYPE, {MULTIPART_CONTENT_TYPE}}, {CONTENT_LENGTH, {std::to_string(body.size())}}});
@@ -331,13 +330,9 @@ bool process_insert_or_update_block(const nghttp2::asio_http2::server::asio_serv
         }
         else
         {
-            std::string location = get_local_api_root();
-            location.reserve(location.size() + udsf_base_uri.size() + PATH_DELIMETER.size() +
-                             RECORDS.size() + PATH_DELIMETER.size() + record_id.size() +
-                             PATH_DELIMETER.size() + RESOURCE_BLOCKS.size() +
-                             PATH_DELIMETER.size() + block_id.size());
-            location.append(udsf_base_uri).append(PATH_DELIMETER);
-            location.append(RECORDS).append(PATH_DELIMETER).append(record_id).append(PATH_DELIMETER).append(RESOURCE_BLOCKS).append(PATH_DELIMETER).append(block_id);
+            std::string location;
+            location.reserve(req.uri().scheme.size() + 3 + req.uri().host.size() + req.uri().path.size());
+            location.append(req.uri().scheme).append("://").append(req.uri().host).append(req.uri().path);
             res.write_head(201, {{LOCATION, {location}}});
             res.end();
         }
@@ -353,12 +348,12 @@ bool process_insert_or_update_block(const nghttp2::asio_http2::server::asio_serv
 }
 
 bool proces_get_blocks(const nghttp2::asio_http2::server::asio_server_request& req,
-                    nghttp2::asio_http2::server::asio_server_response& res,
-                    uint64_t handler_id, int32_t stream_id,
-                    const std::string& record_id,
-                    udsf::Storage& storage)
+                       nghttp2::asio_http2::server::asio_server_response& res,
+                       uint64_t handler_id, int32_t stream_id,
+                       const std::string& record_id,
+                       udsf::Storage& storage)
 {
-    auto body = storage.get_record(record_id, false);
+    auto body = storage.get_record_multipart_body(record_id, false);
     if (body.size())
     {
         res.write_head(200, {{CONTENT_TYPE, {MULTIPART_CONTENT_TYPE}}, {CONTENT_LENGTH, {std::to_string(body.size())}}});
@@ -374,10 +369,10 @@ bool proces_get_blocks(const nghttp2::asio_http2::server::asio_server_request& r
 }
 
 bool proces_get_record_meta(const nghttp2::asio_http2::server::asio_server_request& req,
-                    nghttp2::asio_http2::server::asio_server_response& res,
-                    uint64_t handler_id, int32_t stream_id,
-                    const std::string& record_id,
-                    udsf::Storage& storage)
+                            nghttp2::asio_http2::server::asio_server_response& res,
+                            uint64_t handler_id, int32_t stream_id,
+                            const std::string& record_id,
+                            udsf::Storage& storage)
 {
     auto body = storage.get_record_meta(record_id);
     if (body.size())
@@ -395,11 +390,11 @@ bool proces_get_record_meta(const nghttp2::asio_http2::server::asio_server_reque
 }
 
 bool proces_update_record_meta(const nghttp2::asio_http2::server::asio_server_request& req,
-                    nghttp2::asio_http2::server::asio_server_response& res,
-                    uint64_t handler_id, int32_t stream_id,
-                    const std::string& record_id,
-                    const std::string& msg_body,
-                    udsf::Storage& storage)
+                               nghttp2::asio_http2::server::asio_server_response& res,
+                               uint64_t handler_id, int32_t stream_id,
+                               const std::string& record_id,
+                               const std::string& msg_body,
+                               udsf::Storage& storage)
 {
     bool record_found = false;
     auto ret = storage.update_record_meta(record_id, msg_body, record_found);
@@ -426,7 +421,6 @@ bool proces_update_record_meta(const nghttp2::asio_http2::server::asio_server_re
     return true;
 }
 
-
 bool process_record(const nghttp2::asio_http2::server::asio_server_request& req,
                     nghttp2::asio_http2::server::asio_server_response& res,
                     uint64_t handler_id, int32_t stream_id,
@@ -439,7 +433,7 @@ bool process_record(const nghttp2::asio_http2::server::asio_server_request& req,
 
     auto& storage = realm.get_storage(storage_id);
 
-    static auto send_method_not_allowed = [](nghttp2::asio_http2::server::asio_server_response& res)
+    static auto send_method_not_allowed = [](nghttp2::asio_http2::server::asio_server_response & res)
     {
         const std::string response = "method not allowed";
         res.write_head(405);
@@ -469,7 +463,7 @@ bool process_record(const nghttp2::asio_http2::server::asio_server_request& req,
     }
     else if (path_tokens.size() == BLOCKS_INDEX + 1)
     {
-        auto& resource = path_tokens[path_tokens.size() -1];
+        auto& resource = path_tokens[path_tokens.size() - 1];
         if (resource == RESOURCE_BLOCKS)
         {
             if (method == METHOD_GET)
@@ -517,6 +511,103 @@ bool process_record(const nghttp2::asio_http2::server::asio_server_request& req,
         }
     }
     return false;
+}
+
+bool process_records(const nghttp2::asio_http2::server::asio_server_request& req,
+                     nghttp2::asio_http2::server::asio_server_response& res,
+                     uint64_t handler_id, int32_t stream_id,
+                     const std::string& method,
+                     const std::string& realm_id, const std::string& storage_id,
+                     const std::vector<std::string>& path_tokens,
+                     const std::string& msg_body)
+{
+    const static std::string ONLY_META = "ONLY_META";
+    const static std::string META_AND_BLOCKS = "META_AND_BLOCKS";
+
+    auto& realm = udsf::get_realm(realm_id);
+    auto& storage = realm.get_storage(storage_id);
+    auto queries = get_queries(req);
+
+    auto number_limit_string = queries["limit-range"];
+    auto max_payload_size_string = queries["max-payload-size"];
+    auto retrieve_records_string = queries["retrieve-records"];
+
+    bool meta_only = (retrieve_records_string == ONLY_META);
+    bool count_indicator = (queries["count-indicator"] == "true");
+    size_t number_limit = 0;
+    if (number_limit_string.size())
+    {
+        number_limit = std::atoi(number_limit_string.c_str());
+    }
+
+    size_t max_payload_size = 0;
+    if (max_payload_size_string.size())
+    {
+        max_payload_size = std::atoi(max_payload_size_string.c_str());
+    }
+
+    rapidjson::Document doc;
+    doc.Parse(msg_body.c_str());
+    std::string response_body;
+    if (!doc.HasParseError())
+    {
+        auto records = storage.run_search_expression({}, "", doc);
+        rapidjson::Document d;
+        rapidjson::Pointer("/count").Set(d, records.size());
+        auto count = 0;
+        auto payload_size = 0;
+        for (auto& r : records)
+        {
+            if (!count_indicator)
+            {
+                std::string location;
+                location.reserve(req.uri().scheme.size() + 3 + req.uri().host.size() + req.uri().path.size() + PATH_DELIMETER.size() +
+                                 r.size());
+                location.append(req.uri().scheme).append("://").append(req.uri().host).append(req.uri().path);
+                location.append(PATH_DELIMETER).append(r);
+                std::string jptr = "/references/";
+                jptr.append(std::to_string(count));
+                rapidjson::Pointer(jptr.c_str()).Set(d, location.c_str());
+            }
+            if (max_payload_size && payload_size < max_payload_size)
+            {
+                std::string body = storage.get_record_json_body(r, meta_only);
+                if (payload_size + body.size() < max_payload_size)
+                {
+                    rapidjson::Document record_doc;
+                    record_doc.Parse(body.c_str());
+                    if (!record_doc.HasParseError())
+                    {
+                        std::string jptr = "/matchingRecords/";
+                        jptr.append(r);
+                        rapidjson::Value value(record_doc, d.GetAllocator());
+                        rapidjson::Pointer(jptr.c_str()).Set(d, value);
+                        payload_size += body.size();
+                    }
+                }
+            }
+
+            count++;
+            if (number_limit && count > number_limit)
+            {
+                break;
+            }
+        }
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        d.Accept(writer);
+        response_body = std::string(buffer.GetString());
+        res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(response_body.size())}}});
+        res.end(std::move(response_body));
+        return true;
+    }
+    else
+    {
+        res.write_head(400);
+        const std::string msg = "bad request: SearchExpression filter decode failure";
+        res.end(msg);
+        return true;
+    }
 }
 
 void send_error_response(nghttp2::asio_http2::server::asio_server_response& res)
@@ -574,10 +665,9 @@ bool process_meta_schema(const nghttp2::asio_http2::server::asio_server_request&
             }
             else
             {
-                std::string location = get_local_api_root();
-                location.reserve(location.size() + udsf_base_uri.size() + PATH_DELIMETER.size() + RESOURCE_META_SCHEMAS.size() + PATH_DELIMETER.size() + schema_id.size());
-                location.append(udsf_base_uri).append(PATH_DELIMETER);
-                location.append(RESOURCE_META_SCHEMAS).append(PATH_DELIMETER).append(schema_id);
+                std::string location;
+                location.reserve(req.uri().scheme.size() + 3 + req.uri().host.size() + req.uri().path.size());
+                location.append(req.uri().scheme).append("://").append(req.uri().host).append(req.uri().path);
                 res.write_head(201, {{LOCATION, {location}}});
                 res.end();
             }
@@ -674,7 +764,7 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
             }
             else
             {
-                // TODO: get delete /{realmId}/{storageId}/records with search expression
+                ret = process_records(req, res, handler_id, stream_id, method, realm_id, storage_id, path_tokens, payload);
             }
         }
         else if (resource == RESOURCE_META_SCHEMAS)
