@@ -528,12 +528,12 @@ bool process_records(const nghttp2::asio_http2::server::asio_server_request& req
     auto& storage = realm.get_storage(storage_id);
     auto queries = get_queries(req);
 
-    auto number_limit_string = queries["limit-range"];
-    auto max_payload_size_string = queries["max-payload-size"];
-    auto retrieve_records_string = queries["retrieve-records"];
+    auto number_limit_string = queries[LIMIT_RANGE];
+    auto max_payload_size_string = queries[MAX_PAYLOAD_SIZE];
+    auto retrieve_records_string = queries[RETRIEVE_RECORDS];
 
     bool meta_only = (retrieve_records_string == ONLY_META);
-    bool count_indicator = (queries["count-indicator"] == "true");
+    bool count_indicator = (queries[COUNT_INDICATOR] == "true");
     size_t number_limit = 0;
     if (number_limit_string.size())
     {
@@ -616,6 +616,162 @@ void send_error_response(nghttp2::asio_http2::server::asio_server_response& res)
     std::string resp_payload = "Operation not implemented";
     res.write_head(status_code);
     res.end(std::move(resp_payload));
+}
+
+
+bool process_get_subscriptions(const nghttp2::asio_http2::server::asio_server_request& req,
+                     nghttp2::asio_http2::server::asio_server_response& res,
+                     uint64_t handler_id, int32_t stream_id,
+                     const std::string& method,
+                     const std::string& realm_id, const std::string& storage_id,
+                     const std::vector<std::string>& path_tokens,
+                     const std::string& msg_body)
+{
+    if (method == METHOD_GET)
+    {
+        auto queries = get_queries(req);
+        auto number_limit_string = queries[LIMIT_RANGE];
+        size_t number_limit = 0;
+        if (number_limit_string.size())
+        {
+            number_limit = std::atoi(number_limit_string.c_str());
+        }
+        auto& realm = udsf::get_realm(realm_id);
+        auto& storage = realm.get_storage(storage_id);
+        auto subs = storage.get_subscriptions(number_limit);
+        auto body = staticjson::to_json_string(subs);
+        res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(body.size())}}});
+        res.end(std::move(body));
+        return true;
+    }
+    else
+    {
+        const std::string response = "method not allowed";
+        res.write_head(405);
+        res.end(response);
+        return true;
+    }
+}
+
+
+bool process_individual_subscription(const nghttp2::asio_http2::server::asio_server_request& req,
+                         nghttp2::asio_http2::server::asio_server_response& res,
+                         uint64_t handler_id, int32_t stream_id,
+                         const std::string& method,
+                         const std::string& realm_id, const std::string& storage_id,
+                         const std::string& subscription_id,
+                         const std::string& msg_body)
+
+{
+    if (subscription_id.empty())
+    {
+        return false;
+    }
+    auto& realm = udsf::get_realm(realm_id);
+    auto& storage = realm.get_storage(storage_id);
+    static auto send_200_or_404 = [](nghttp2::asio_http2::server::asio_server_response & res, std::string & body)
+    {
+        if (body.size())
+        {
+            res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(body.size())}}});
+            res.end(std::move(body));
+        }
+        else
+        {
+            const std::string response = "subscription not found";
+            res.write_head(404);
+            res.end(response);
+        }
+    };
+    if (method == METHOD_PUT)
+    {
+        auto ret = storage.update_subscription(subscription_id, msg_body);
+        if (ret == OPERATION_SUCCESSFUL)
+        {
+            auto new_body = msg_body;
+            send_200_or_404(res, new_body);
+        }
+        else
+        {
+            const std::string response = "subscription decode failure";
+            res.write_head(403);
+            res.end(response);
+        }
+        return true;
+    }
+    else if (method == METHOD_GET)
+    {
+        auto body = storage.get_subscription(subscription_id);
+        send_200_or_404(res, body);
+        return true;
+    }
+    else if (method == METHOD_DELETE)
+    {
+        std::string previous_subscription_body;
+        auto queries = get_queries(req);
+        std::string client_id = queries[CLIENT_ID];
+        bool get_previous = (queries[GET_PREVIOUS] == TRUE);
+        udsf::ClientId clientId;
+        staticjson::ParseStatus result;
+        if (!staticjson::from_json_string(client_id.c_str(), &clientId, &result))
+        {
+            const std::string response = "client-id decode failure";
+            res.write_head(403);
+            res.end(response);
+        }
+
+        bool found = false;
+        bool delete_success = false;
+        auto body = storage.delete_subscription(subscription_id, clientId, get_previous, found, delete_success);
+        if (delete_success)
+        {
+            if (get_previous)
+            {
+                send_200_or_404(res, body);
+            }
+            else
+            {
+                res.write_head(204);
+                res.end();
+            }
+        }
+        else if (found)
+        {
+            res.write_head(403);
+            const std::string msg = "client id does not match";
+            res.end(msg);
+        }
+        else
+        {
+            const std::string response = "subscription not found";
+            res.write_head(404);
+            res.end(response);
+        }
+        return true;
+    }
+    else if (method == METHOD_PATCH)
+    {
+        auto ret = storage.patch_subscription(subscription_id, msg_body);
+        if (ret == OPERATION_SUCCESSFUL)
+        {
+            res.write_head(204);
+            res.end();
+        }
+        else
+        {
+            const std::string response = "subscription patch decode failure";
+            res.write_head(403);
+            res.end(response);
+        }
+        return true;
+    }
+    else
+    {
+        const std::string response = "method not allowed";
+        res.write_head(405);
+        res.end(response);
+        return true;
+    }
 }
 
 bool process_meta_schema(const nghttp2::asio_http2::server::asio_server_request& req,
@@ -774,6 +930,19 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
                 std::string& meta_schema_id = path_tokens[RECORD_ID_INDEX];
                 ret = process_meta_schema(req, res, handler_id, stream_id, method, realm_id, storage_id, meta_schema_id, path_tokens,
                                           payload);
+            }
+        }
+        else if (resource == RESOUCE_SUBS_TO_NOTIFY)
+        {
+            if (path_tokens.size() == RECORD_ID_INDEX + 1)
+            {
+                std::string& subscription_id = path_tokens[RECORD_ID_INDEX];
+                ret = process_individual_subscription(req, res, handler_id, stream_id, method, realm_id, storage_id, subscription_id,
+                                          payload);
+            }
+            else if (path_tokens.size() == RESOURCE_TYPE_INDEX + 1)
+            {
+                ret = process_get_subscriptions(req, res, handler_id, stream_id, method, realm_id, storage_id, path_tokens, payload);
             }
         }
 

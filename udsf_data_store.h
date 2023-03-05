@@ -49,13 +49,19 @@ const std::string RECORD_OPERATION_CREATED = "CREATED";
 const std::string RECORD_OPERATION_UPDATED = "UPDATED";
 const std::string RECORD_OPERATION_DELETED = "DELETED";
 
+const std::string LIMIT_RANGE = "limit-range";
+const std::string MAX_PAYLOAD_SIZE = "max-payload-size";
+const std::string RETRIEVE_RECORDS = "retrieve-records";
+const std::string COUNT_INDICATOR = "count-indicator";
+const std::string CLIENT_ID = "client-id";
+
 const int OPERATION_SUCCESSFUL = 0;
 const int DECODE_MULTIPART_FAILURE = -1;
 const int CONTENT_ID_NOT_PRESDENT = -2;
 const int RECORD_META_DECODE_FAILURE = -3;
-const int RECORD_DOES_NOT_EXIST = -4;
+const int RESOURCE_DOES_NOT_EXIST = -4;
 const int TTL_EXPIRED = -5;
-const int DECODE_SUBCRIPTION_FAILURE = -6;
+const int DECODE_FAILURE = -6;
 const int SUBSCRIPTION_EXPIRY_INVALID = -7;
 
 const std::string PATH_DELIMETER = "/";
@@ -92,7 +98,6 @@ const std::string& LOCATION = "location";
 
 const std::string EQUAL = "=";
 const std::string GET_PREVIOUS = "get-previous";
-const std::string LIMIT_RANGE = "limit-range";
 
 const std::string TRUE = "true";
 const std::string FALSE = "FALSE";
@@ -766,6 +771,10 @@ class ClientId
 public:
     std::string nfId;
     std::string nfSetId;
+    bool operator== (const ClientId& rh)
+    {
+        return (nfId == rh.nfId && nfSetId == rh.nfSetId);
+    }
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("nfId", &this->nfId, staticjson::Flags::Optional);
@@ -1670,65 +1679,53 @@ public:
         return ret;
     }
 
-    int create_subscription(const std::string& subscription_id, const std::string& subscription_body)
+    int create_subscription(const std::string& subscription_id, NotificationSubscription subscription)
     {
-        NotificationSubscription subscription;
-        staticjson::ParseStatus result;
-        if (staticjson::from_json_string(subscription_body.c_str(), &subscription, &result))
+        for (size_t i = 0; i < subscription.subFilter.monitoredResourceUris.size(); i++)
         {
-            for (size_t i = 0; i < subscription.subFilter.monitoredResourceUris.size(); i++)
-            {
-                subscription.subFilter.monitoredResourceUris[i] = get_path(subscription.subFilter.monitoredResourceUris[i]);
-                // TODO: If the monitoredResourceUris is present, only "UPDATED" and "DELETED" are allowed values
-            }
-            auto expiry = iso8601_timestamp_to_seconds_since_epoch(subscription.expiry);
-            auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
-                                       (std::chrono::system_clock::now().time_since_epoch()).count();
-            if (expiry <= seconds_since_epoch)
-            {
-                return SUBSCRIPTION_EXPIRY_INVALID;
-            }
-            if (expiry - subscription.expiryNotification <= seconds_since_epoch)
-            {
-                subscription.expiryNotification = 0;
-            }
-            uint16_t sum = get_u16_sum(subscription_id);
+            subscription.subFilter.monitoredResourceUris[i] = get_path(subscription.subFilter.monitoredResourceUris[i]);
+            // TODO: If the monitoredResourceUris is present, only "UPDATED" and "DELETED" are allowed values
+        }
+        auto expiry = iso8601_timestamp_to_seconds_since_epoch(subscription.expiry);
+        auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
+                                   (std::chrono::system_clock::now().time_since_epoch()).count();
+        if (expiry <= seconds_since_epoch)
+        {
+            return SUBSCRIPTION_EXPIRY_INVALID;
+        }
+        if (expiry - subscription.expiryNotification <= seconds_since_epoch)
+        {
+            subscription.expiryNotification = 0;
+        }
+        uint16_t sum = get_u16_sum(subscription_id);
+        auto row = sum >> 8;
+        auto col = sum & 0xFF;
+        std::unique_lock<std::shared_timed_mutex> subscription_id_to_subscriptions_write_lock(
+            subscription_id_to_subscription_mutex[row][col]);
+
+        std::unique_lock<std::shared_timed_mutex> subscription_expiry_to_subscription_id_write_lock(
+            subscription_expiry_to_subscription_id_mutex);
+        subscription_expiry_to_subscription_id[expiry].insert(subscription_id);
+
+        if (subscription.expiryNotification)
+        {
+            std::unique_lock<std::shared_timed_mutex> subscription_expiryNotification_to_subscription_id_write_lock(
+                subscription_expiryNotification_to_subscription_id_mutex);
+            subscription_expiryNotification_to_subscription_id[seconds_since_epoch - subscription.expiryNotification].insert(
+                subscription_id);
+        }
+
+        for (auto& monUri : subscription.subFilter.monitoredResourceUris)
+        {
+            uint16_t sum = get_u16_sum(monUri);
             auto row = sum >> 8;
             auto col = sum & 0xFF;
-            std::unique_lock<std::shared_timed_mutex> subscription_id_to_subscriptions_write_lock(
-                subscription_id_to_subscription_mutex[row][col]);
-            subscription_id_to_subscription[row][col][subscription_id] = subscription;
-
-            std::unique_lock<std::shared_timed_mutex> subscription_expiry_to_subscription_id_write_lock(
-                subscription_expiry_to_subscription_id_mutex);
-            subscription_expiry_to_subscription_id[expiry].insert(subscription_id);
-
-            if (subscription.expiryNotification)
-            {
-                std::unique_lock<std::shared_timed_mutex> subscription_expiryNotification_to_subscription_id_write_lock(
-                    subscription_expiryNotification_to_subscription_id_mutex);
-                subscription_expiryNotification_to_subscription_id[seconds_since_epoch - subscription.expiryNotification].insert(
-                    subscription_id);
-            }
-
-            for (auto& monUri : subscription.subFilter.monitoredResourceUris)
-            {
-                uint16_t sum = get_u16_sum(monUri);
-                auto row = sum >> 8;
-                auto col = sum & 0xFF;
-                std::unique_lock<std::shared_timed_mutex> monitored_resource_uri_to_subscription_id_write_lock(
-                    monitored_resource_uri_to_subscription_id_mutex[row][col]);
-                monitored_resource_uri_to_subscription_id[row][col][monUri].insert(subscription_id);
-            }
-            return OPERATION_SUCCESSFUL;
+            std::unique_lock<std::shared_timed_mutex> monitored_resource_uri_to_subscription_id_write_lock(
+                monitored_resource_uri_to_subscription_id_mutex[row][col]);
+            monitored_resource_uri_to_subscription_id[row][col][monUri].insert(subscription_id);
         }
-        return DECODE_SUBCRIPTION_FAILURE;
-    }
-
-    int update_subscription(const std::string& subscription_id, const std::string& subscription_body)
-    {
-        delete_subscription(subscription_id);
-        return create_subscription(subscription_id, subscription_body);
+        subscription_id_to_subscription[row][col][subscription_id] = std::move(subscription);
+        return OPERATION_SUCCESSFUL;
     }
 
     template<typename M, typename K, typename V>
@@ -1745,8 +1742,11 @@ public:
         }
     }
 
-    bool delete_subscription(const std::string& subscription_id)
+    std::string delete_subscription(const std::string& subscription_id, ClientId& client_id, bool get_previous, bool& found, bool& delete_success)
     {
+        found = false;
+        delete_success = false;
+        std::string ret;
         uint16_t sum = get_u16_sum(subscription_id);
         auto row = sum >> 8;
         auto col = sum & 0xFF;
@@ -1756,6 +1756,11 @@ public:
         auto iter = id_to_s.find(subscription_id);
         if (iter != id_to_s.end())
         {
+            found = true;
+            if (!(iter->second.clientId == client_id))
+            {
+                return ret;
+            }
             auto& subscription = iter->second;
             auto expiry = iso8601_timestamp_to_seconds_since_epoch(subscription.expiry);
             auto expiryNotification = expiry - subscription.expiryNotification;
@@ -1781,11 +1786,14 @@ public:
                     monitored_resource_uri_to_subscription_id_mutex[row][col]);
                 remove_from_map(monitored_resource_uri_to_subscription_id[row][col], monUri, subscription_id);
             }
-
+            if (get_previous)
+            {
+                ret = staticjson::to_json_string(iter->second);
+            }
             id_to_s.erase(iter);
-            return true;
+            delete_success = true;
         }
-        return false;
+        return ret;
     }
 
     std::string get_subscription(const std::string& subscription_id)
@@ -1804,6 +1812,27 @@ public:
         return "";
     }
 
+    std::vector<NotificationSubscription> get_subscriptions(size_t count)
+    {
+        std::vector<NotificationSubscription> ret;
+        for (size_t row = 0; row < ONE_DIMENSION_SIZE; row++)
+        {
+            for (size_t col = 0; col < ONE_DIMENSION_SIZE; col++)
+            {
+                std::shared_lock<std::shared_timed_mutex> subscription_id_to_subscription_read_lock(
+                    subscription_id_to_subscription_mutex[row][col]);
+                for (auto& s: subscription_id_to_subscription[row][col])
+                {
+                    if ((!count) || (ret.size() < count))
+                    {
+                        ret.push_back(s.second);
+                    }
+                }
+            }
+        }
+        return ret;
+    }
+
     auto get_decoded_subscription(const std::string& subscription_id)
     {
         uint16_t sum = get_u16_sum(subscription_id);
@@ -1819,6 +1848,46 @@ public:
         }
         NotificationSubscription subscription;
         return subscription;
+    }
+
+
+    int update_subscription(const std::string& subscription_id, const std::string& subscription_body)
+    {
+        NotificationSubscription subscription;
+        staticjson::ParseStatus result;
+        if (staticjson::from_json_string(subscription_body.c_str(), &subscription, &result))
+        {
+            auto s = get_decoded_subscription(subscription_id);
+            bool found;
+            bool delete_success;
+            delete_subscription(subscription_id, s.clientId, false, found, delete_success);
+            return create_subscription(subscription_id, std::move(subscription));
+        }
+        else
+        {
+            return DECODE_FAILURE;
+        }
+    }
+
+    int patch_subscription(const std::string& subscription_id, const std::string& patch_data)
+    {
+        auto s = get_decoded_subscription(subscription_id);
+        if (s.clientId.nfId.empty() && s.clientId.nfSetId.empty())
+        {
+            return RESOURCE_DOES_NOT_EXIST;
+        }
+        try
+        {
+            nlohmann::json original_json = nlohmann::json::parse(staticjson::to_json_string(s));
+            nlohmann::json patch_json = nlohmann::json::parse(patch_data);
+            nlohmann::json patched_obj = original_json.patch(patch_json);
+            update_subscription(subscription_id, patched_obj.dump());
+            return OPERATION_SUCCESSFUL;
+        }
+        catch (...)
+        {
+        }
+        return DECODE_FAILURE;
     }
 
     std::set<std::string> get_expired_subscription_ids()
