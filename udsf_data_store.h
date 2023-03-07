@@ -1742,7 +1742,7 @@ public:
         }
     }
 
-    std::string delete_subscription(const std::string& subscription_id, ClientId& client_id, bool get_previous, bool& found, bool& delete_success)
+    std::string delete_subscription(const std::string& subscription_id, const ClientId& client_id, bool get_previous, bool& found, bool& delete_success)
     {
         found = false;
         delete_success = false;
@@ -1757,7 +1757,7 @@ public:
         if (iter != id_to_s.end())
         {
             found = true;
-            if (!(iter->second.clientId == client_id))
+            if ((client_id.nfId.size() || client_id.nfSetId.size()) && !(iter->second.clientId == client_id))
             {
                 return ret;
             }
@@ -1851,16 +1851,20 @@ public:
     }
 
 
-    int update_subscription(const std::string& subscription_id, const std::string& subscription_body)
+    int update_subscription(const std::string& subscription_id, const std::string& subscription_body, bool& existing_found)
     {
         NotificationSubscription subscription;
         staticjson::ParseStatus result;
         if (staticjson::from_json_string(subscription_body.c_str(), &subscription, &result))
         {
-            auto s = get_decoded_subscription(subscription_id);
             bool found;
             bool delete_success;
-            delete_subscription(subscription_id, s.clientId, false, found, delete_success);
+            ClientId emptyClientId;
+            delete_subscription(subscription_id, emptyClientId, false, found, delete_success);
+            if (found && delete_success)
+            {
+                existing_found = true;
+            }
             return create_subscription(subscription_id, std::move(subscription));
         }
         else
@@ -1881,7 +1885,8 @@ public:
             nlohmann::json original_json = nlohmann::json::parse(staticjson::to_json_string(s));
             nlohmann::json patch_json = nlohmann::json::parse(patch_data);
             nlohmann::json patched_obj = original_json.patch(patch_json);
-            update_subscription(subscription_id, patched_obj.dump());
+            bool is_update = false;
+            update_subscription(subscription_id, patched_obj.dump(), is_update);
             return OPERATION_SUCCESSFUL;
         }
         catch (...)

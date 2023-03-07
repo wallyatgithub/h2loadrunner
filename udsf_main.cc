@@ -9,11 +9,6 @@
 #include "util.h"
 #include "H2Server_Response.h"
 
-std::string get_local_api_root()
-{
-    return "http://127.0.0.1:8081"; // TODO:
-}
-
 std::map<std::string, std::string> get_queries(const nghttp2::asio_http2::server::asio_server_request& req)
 {
     auto& raw_query = req.uri().raw_query;
@@ -685,11 +680,20 @@ bool process_individual_subscription(const nghttp2::asio_http2::server::asio_ser
     };
     if (method == METHOD_PUT)
     {
-        auto ret = storage.update_subscription(subscription_id, msg_body);
+        bool is_update = false;
+        auto ret = storage.update_subscription(subscription_id, msg_body, is_update);
         if (ret == OPERATION_SUCCESSFUL)
         {
             auto new_body = msg_body;
-            send_200_or_404(res, new_body);
+            if (is_update)
+            {
+                send_200_or_404(res, new_body);
+            }
+            else
+            {
+                res.write_head(201);
+                res.end();
+            }
         }
         else
         {
@@ -709,15 +713,16 @@ bool process_individual_subscription(const nghttp2::asio_http2::server::asio_ser
     {
         std::string previous_subscription_body;
         auto queries = get_queries(req);
-        std::string client_id = queries[CLIENT_ID];
+        std::string& client_id = queries[CLIENT_ID];
         bool get_previous = (queries[GET_PREVIOUS] == TRUE);
         udsf::ClientId clientId;
         staticjson::ParseStatus result;
-        if (!staticjson::from_json_string(client_id.c_str(), &clientId, &result))
+        if (client_id.empty() || !staticjson::from_json_string(client_id.c_str(), &clientId, &result))
         {
-            const std::string response = "client-id decode failure";
+            const std::string response = "client-id not present or decode failure";
             res.write_head(403);
             res.end(response);
+            return true;
         }
 
         bool found = false;
