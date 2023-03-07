@@ -9,7 +9,7 @@
   "threads": 1,
   "clients": 1,
   "duration": 0,
-  "total-requests": 6,
+  "total-requests": 8,
   "warm-up-time": 0,
   "max-concurrent-streams": 2048,
   "request-per-second": 1,
@@ -122,6 +122,48 @@
           "additonalHeaders": [],
           "luaScript": "",
           "expected-status-code": 201,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/subs-to-notify/subs-${supi}"
+          },
+          "clear-old-cookies": false,
+          "method": "put",
+          "http-version": "default",
+          "payload": "{   \"clientId\": {     \"nfId\": \"nfId2\",     \"nfSetId\": \"nfSetId1\"   },   \"callbackReference\": \"http://127.0.0.1:8080/\",   \"expiryCallbackReference\": \"http://127.0.0.1:8080/\",   \"expiry\": \"2046-02-18T19:07:00+06:00\",   \"SubscriptionFilter\": {     \"monitoredResourceUris\": [       \"http:///nudsf-dr/v1/realm/storage/records\"     ],     \"operations\": [       \"CREATED\",       \"UPPDATED\",       \"DELETED\"     ]   } }",
+          "additonalHeaders": [],
+          "luaScript": "",
+          "expected-status-code": 200,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/subs-to-notify/subs-${supi}"
+          },
+          "clear-old-cookies": false,
+          "method": "patch",
+          "http-version": "default",
+          "payload": "[     {         \"op\": \"replace\",         \"path\": \"/clientId/nfId\",         \"value\": \"nfId1\"     } ]",
+          "additonalHeaders": [
+            "application/json-patch+json"
+          ],
+          "luaScript": "",
+          "expected-status-code": 204,
           "page-id": 0,
           "response-match": {
             "headers": [],
