@@ -684,9 +684,9 @@ bool process_individual_subscription(const nghttp2::asio_http2::server::asio_ser
         auto ret = storage.update_subscription(subscription_id, msg_body, is_update);
         if (ret == OPERATION_SUCCESSFUL)
         {
-            auto new_body = msg_body;
             if (is_update)
             {
+                auto new_body = storage.get_subscription(subscription_id);
                 send_200_or_404(res, new_body);
             }
             else
@@ -998,7 +998,7 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
 
     if (!ret)
     {
-        //send_error_response(res);
+        send_error_response(res);
     }
 }
 

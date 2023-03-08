@@ -25,6 +25,7 @@
 const std::string CONTENT_ID = "Content-Id";
 const std::string CONTENT_TYPE = "Content-Type";
 const std::string CONTENT_LENGTH = "content-length";
+const std::string CONTENT_LOCATION = "content-location";
 const std::string CONTENT_TRANSFER_ENCODDING = "Content-Transfer-Encoding";
 const std::string COLON  = ":";
 const std::string CRLF = "\r\n";
@@ -682,7 +683,7 @@ public:
         return staticjson::from_json_string(metaString.c_str(), &meta, &result);
     }
 
-    RecordMeta& get_meta_object()
+    RecordMeta get_meta_object()
     {
         std::shared_lock<std::shared_timed_mutex> guard(*meta_mutex);
         return meta;
@@ -793,18 +794,29 @@ public:
     std::string callbackReference;
     std::string expiryCallbackReference;
     std::string expiry;
-    uint64_t expiryNotification = 0;
+    int64_t expiryNotification = -1;
     SubscriptionFilter subFilter;
     std::string supportedFeatures;
+    unsigned expiryNotificationFlag = staticjson::Flags::Optional | staticjson::Flags::IgnoreWrite;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("clientId", &this->clientId);
         h->add_property("callbackReference", &this->callbackReference);
         h->add_property("expiryCallbackReference", &this->expiryCallbackReference, staticjson::Flags::Optional);
         h->add_property("expiry", &this->expiry, staticjson::Flags::Optional);
-        h->add_property("expiryNotification", &this->expiryNotification, staticjson::Flags::Optional);
+        h->add_property("expiryNotification", &this->expiryNotification, expiryNotificationFlag);
         h->add_property("subFilter", &this->subFilter, staticjson::Flags::Optional);
         h->add_property("supportedFeatures", &this->supportedFeatures, staticjson::Flags::Optional);
+    }
+};
+
+class NotificationInfo
+{
+public:
+    std::vector<std::string> expiredSubscriptions;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("expiredSubscriptions", &this->expiredSubscriptions);
     }
 };
 
@@ -1365,6 +1377,20 @@ public:
         return ret;
     }
 
+    RecordMeta get_record_meta_object(const std::string& record_id)
+    {
+        uint16_t sum = get_u16_sum(record_id);
+        uint8_t row = sum >> 8;
+        uint8_t col = sum & 0xFF;
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
+        auto iter = records[row][col].find(record_id);
+        if (iter != records[row][col].end())
+        {
+            return iter->second.get_meta_object();
+        }
+        return RecordMeta();
+    }
+
     std::string get_schema(const std::string& schema_id, bool& found)
     {
         std::string ret;
@@ -1707,7 +1733,12 @@ public:
         {
             return SUBSCRIPTION_EXPIRY_INVALID;
         }
-        if (expiry - subscription.expiryNotification <= seconds_since_epoch)
+        if (subscription.expiryNotification >= 0)
+        {
+            subscription.expiryNotificationFlag &= ~staticjson::Flags::IgnoreWrite;
+        }
+        if ((subscription.expiryNotification >= 0) &&
+            (expiry - subscription.expiryNotification <= seconds_since_epoch))
         {
             subscription.expiryNotification = 0;
         }
@@ -1721,11 +1752,11 @@ public:
             subscription_expiry_to_subscription_id_mutex);
         subscription_expiry_to_subscription_id[expiry].insert(subscription_id);
 
-        if (subscription.expiryNotification)
+        if (subscription.expiryNotification >= 0)
         {
             std::unique_lock<std::shared_timed_mutex> subscription_expiryNotification_to_subscription_id_write_lock(
                 subscription_expiryNotification_to_subscription_id_mutex);
-            subscription_expiryNotification_to_subscription_id[seconds_since_epoch - subscription.expiryNotification].insert(
+            subscription_expiryNotification_to_subscription_id[expiry - subscription.expiryNotification].insert(
                 subscription_id);
         }
 
@@ -1784,7 +1815,7 @@ public:
                 subscription_expiry_to_subscription_id_mutex);
             remove_from_map(subscription_expiry_to_subscription_id, expiry, subscription_id);
 
-            if (subscription.expiryNotification)
+            if (subscription.expiryNotification >= 0)
             {
                 std::unique_lock<std::shared_timed_mutex> subscription_expiryNotification_to_subscription_id_write_lock(
                     subscription_expiryNotification_to_subscription_id_mutex);
@@ -1822,6 +1853,10 @@ public:
         auto iter = id_to_s.find(subscription_id);
         if (iter != id_to_s.end())
         {
+            if (iter->second.expiryNotification >= 0)
+            {
+                iter->second.expiryNotificationFlag &= ~staticjson::Flags::IgnoreWrite;
+            }
             return staticjson::to_json_string(iter->second);
         }
         return "";
@@ -1841,6 +1876,10 @@ public:
                     if ((!count) || (ret.size() < count))
                     {
                         ret.push_back(s.second);
+                        if (ret.back().expiryNotification >= 0)
+                        {
+                            ret.back().expiryNotificationFlag &= ~staticjson::Flags::IgnoreWrite;
+                        }
                     }
                 }
             }
@@ -1994,7 +2033,7 @@ public:
     void send_notify(const std::string& record_id, const std::string& block_id, const std::string& operation)
     {
         std::string recordNotificationBody;
-        const std::map<std::string, std::string, ci_less> additionalHeaders;
+        std::map<std::string, std::string, ci_less> additionalHeaders;
 
         auto v = get_subscription_ids_to_notify(record_id, block_id);
         for (auto& s : v)
@@ -2030,7 +2069,87 @@ public:
                 }
                 if (recordNotificationBody.size())
                 {
+                    additionalHeaders.insert(std::make_pair(CONTENT_TYPE, MULTIPART_CONTENT_TYPE));
                     send_http2_request(METHOD_POST, subscription.callbackReference, additionalHeaders, recordNotificationBody);
+                }
+            }
+        }
+    }
+
+
+    void disable_expiryNotification_of_subscription(const std::string& subscription_id)
+    {
+        auto subscription = get_decoded_subscription(subscription_id);
+        if (subscription.expiryNotification >= 0)
+        {
+            std::unique_lock<std::shared_timed_mutex> subscription_expiryNotification_to_subscription_id_write_lock(
+                subscription_expiryNotification_to_subscription_id_mutex);
+            remove_from_map(subscription_expiryNotification_to_subscription_id, iso8601_timestamp_to_seconds_since_epoch(subscription.expiry) - subscription.expiryNotification,
+                            subscription_id);
+        }
+    }
+
+    static void ttl_routine(Storage& storage)
+    {
+        while (true)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            auto subs_to_expire = storage.get_subscription_ids_about_to_expire();
+            for (auto& s: subs_to_expire)
+            {
+                storage.disable_expiryNotification_of_subscription(s);
+                auto subs = storage.get_decoded_subscription(s);
+                if (subs.expiryCallbackReference.size())
+                {
+                    NotificationInfo notifInfo;
+                    notifInfo.expiredSubscriptions.emplace_back(s);
+                    std::map<std::string, std::string, ci_less> additionalHeaders;
+                    additionalHeaders.insert(std::make_pair(CONTENT_TYPE, JSON_CONTENT));
+                    send_http2_request(METHOD_POST, subs.callbackReference, additionalHeaders, staticjson::to_json_string(notifInfo));
+                }
+            }
+
+            auto expired_subs = storage.get_expired_subscription_ids();
+            for (auto& s: expired_subs)
+            {
+                bool found;
+                bool delete_success;
+                ClientId emptyClientId;
+                storage.delete_subscription(s, emptyClientId, false, found, delete_success);
+            }
+
+            auto expired_records = storage.get_ttl_expired_records();
+            for (auto& r: expired_records)
+            {
+                auto meta = storage.get_record_meta_object(r);
+                if (meta.callbackReference.size())
+                {
+                    std::string content_location;
+                    content_location.reserve(udsf_base_uri.size() +
+                                             PATH_DELIMETER.size() +
+                                             storage.realm_id.size() +
+                                             PATH_DELIMETER.size() +
+                                             storage.storage_id.size() +
+                                             PATH_DELIMETER.size() +
+                                             RECORDS.size() +
+                                             PATH_DELIMETER.size() +
+                                             r.size());
+                    content_location += udsf_base_uri;
+                    content_location += PATH_DELIMETER;
+                    content_location += storage.realm_id;
+                    content_location += PATH_DELIMETER;
+                    content_location += storage.storage_id;
+                    content_location += PATH_DELIMETER;
+                    content_location += RECORDS;
+                    content_location += PATH_DELIMETER;
+                    content_location += r;
+                    auto body = storage.get_record_multipart_body(r, true);
+                    std::map<std::string, std::string, ci_less> additionalHeaders;
+                    additionalHeaders.insert(std::make_pair(CONTENT_TYPE, MULTIPART_CONTENT_TYPE));
+                    additionalHeaders.insert(std::make_pair(CONTENT_LOCATION, content_location));
+                    send_http2_request(METHOD_POST, meta.callbackReference, additionalHeaders, body);
+
+                    storage.delete_record_directly(r);
                 }
             }
         }
@@ -2056,6 +2175,8 @@ public:
             ret.storage_id = storage_id;
             ret.realm_id = realm_id;
             ret.init_default_schema_with_empty_schema_id();
+            std::thread ttl(Storage::ttl_routine, std::ref(ret));
+            ttl.detach();
             return ret;
         }
         else
