@@ -9,7 +9,7 @@
   "threads": 1,
   "clients": 1,
   "duration": 0,
-  "total-requests": 8,
+  "total-requests": 9,
   "warm-up-time": 0,
   "max-concurrent-streams": 2048,
   "request-per-second": 1,
@@ -118,7 +118,27 @@
           "clear-old-cookies": false,
           "method": "put",
           "http-version": "default",
-          "payload": "{   \"clientId\": {     \"nfId\": \"nfId1\",     \"nfSetId\": \"nfSetId1\"   },   \"callbackReference\": \"http://127.0.0.1:8080/\",   \"expiryCallbackReference\": \"http://127.0.0.1:8080/\",   \"expiry\": \"2046-02-18T19:07:00+06:00\",   \"SubscriptionFilter\": {     \"monitoredResourceUris\": [       \"http:///nudsf-dr/v1/realm/storage/records\"     ],     \"operations\": [       \"CREATED\",       \"UPPDATED\",       \"DELETED\"     ]   } }",
+          "payload": "{   \"clientId\": {     \"nfId\": \"nfId1\",     \"nfSetId\": \"nfSetId1\"   },   \"callbackReference\": \"http://127.0.0.1:8080/\",   \"expiryCallbackReference\": \"http://127.0.0.1:8080/\",   \"expiry\": \"2046-02-18T19:07:00+06:00\",   \"subFilter\": {     \"monitoredResourceUris\": [       \"http://127.0.0.1:8080/nudsf-dr/v1/realm/storage/records\"     ],     \"operations\": [       \"CREATED\",       \"UPPDATED\",       \"DELETED\"     ]   } }",
+          "additonalHeaders": [],
+          "luaScript": "",
+          "expected-status-code": 403,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/subs-to-notify/subs-${supi}"
+          },
+          "clear-old-cookies": false,
+          "method": "put",
+          "http-version": "default",
+          "payload": "{   \"clientId\": {     \"nfId\": \"nfId1\",     \"nfSetId\": \"nfSetId1\"   },   \"callbackReference\": \"http://127.0.0.1:8080/\",   \"expiryCallbackReference\": \"http://127.0.0.1:8080/\",   \"expiry\": \"2046-02-18T19:07:00+06:00\",   \"subFilter\": {     \"monitoredResourceUris\": [       \"http://127.0.0.1:8080/nudsf-dr/v1/realm/storage/records\"     ],     \"operations\": [       \"CREATED\",       \"UPDATED\",       \"DELETED\"     ]   } }",
           "additonalHeaders": [],
           "luaScript": "",
           "expected-status-code": 201,
@@ -138,7 +158,7 @@
           "clear-old-cookies": false,
           "method": "put",
           "http-version": "default",
-          "payload": "{   \"clientId\": {     \"nfId\": \"nfId2\",     \"nfSetId\": \"nfSetId1\"   },   \"callbackReference\": \"http://127.0.0.1:8080/\",   \"expiryCallbackReference\": \"http://127.0.0.1:8080/\",   \"expiry\": \"2046-02-18T19:07:00+06:00\",   \"SubscriptionFilter\": {     \"monitoredResourceUris\": [       \"http:///nudsf-dr/v1/realm/storage/records\"     ],     \"operations\": [       \"CREATED\",       \"UPPDATED\",       \"DELETED\"     ]   } }",
+          "payload": "{   \"clientId\": {     \"nfId\": \"nfId2\",     \"nfSetId\": \"nfSetId1\"   },   \"callbackReference\": \"http://127.0.0.1:8080/\",   \"expiryCallbackReference\": \"http://127.0.0.1:8080/\",   \"expiry\": \"2046-02-18T19:07:00+06:00\",   \"subFilter\": {     \"monitoredResourceUris\": [       \"http://127.0.0.1:8080/nudsf-dr/v1/realm/storage/records\"     ],     \"operations\": [       \"CREATED\",       \"UPDATED\",       \"DELETED\"     ]   } }",
           "additonalHeaders": [],
           "luaScript": "",
           "expected-status-code": 200,

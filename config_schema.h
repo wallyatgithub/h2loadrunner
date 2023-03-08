@@ -291,10 +291,8 @@ public:
             exit(1);
         }
     };
-    explicit Range_Based_Variable()
+    explicit Range_Based_Variable():variable_range_start(0), variable_range_end(0)
     {
-        variable_range_start = 0;
-        variable_range_end = 0;
     }
     void staticjson_init(staticjson::ObjectHandler* h)
     {
@@ -474,20 +472,20 @@ class Scenario
 {
 public:
     std::string name;
-    uint32_t weight;
+    uint32_t weight = 0;
     std::string variable_name_in_path_and_data;
     std::string user_id_list_file;
     std::vector<Range_Based_Variable> range_based_variables;
     std::vector<Two_Dimensioning_Variable> two_dim_variables;
-    uint32_t interval_to_wait_before_start;
-    uint64_t variable_range_start;
-    uint64_t variable_range_end;
-    bool variable_range_slicing;
+    uint32_t interval_to_wait_before_start = 0;
+    uint64_t variable_range_start = 0;
+    uint64_t variable_range_end = 0;
+    bool variable_range_slicing = false;
     std::vector<Request> requests;
     std::string user_variables_input_file;
     Variable_Manager variable_manager; // content populated by post_process_json_config_schema
     // TODO:  refactor the next line
-    size_t number_of_variables_from_value_pickers;  // set by post_process_json_config_schema
+    size_t number_of_variables_from_value_pickers = 0;  // set by post_process_json_config_schema
     std::string har_file_name;
     void staticjson_init(staticjson::ObjectHandler* h)
     {

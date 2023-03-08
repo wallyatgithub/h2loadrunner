@@ -7,34 +7,24 @@ namespace udsf
 
 h2load::asio_worker* get_worker()
 {
-    thread_local static h2load::Config conf;
-    auto init_config = []()
+    auto create_worker = []()
     {
+        auto conf = std::make_shared<h2load::Config>();
         Request request;
         Scenario scenario;
         scenario.requests.push_back(request);
-        conf.json_config_schema.scenarios.push_back(scenario);
-        return true;
-    };
-    thread_local static auto init_config_ret_code = init_config();
-
-    thread_local static std::shared_ptr<h2load::asio_worker> worker = std::make_shared<h2load::asio_worker>(0, 0xFFFFFFFF,
-                                                                                                            1, 0, 1000, &conf);
-
-    thread_local static auto work = boost::asio::io_service::work(worker->get_io_context());
-
-    auto start_worker = []()
-    {
-        auto thread_func = []()
+        conf->json_config_schema.scenarios.push_back(scenario);
+        auto worker = std::make_shared<h2load::asio_worker>(0, 0xFFFFFFFF, 1, 0, 1000, conf.get());
+        auto work = std::make_shared<boost::asio::io_service::work> (worker->get_io_context());
+        std::thread worker_thread([worker, work, conf]()
         {
             worker->run_event_loop();
-        };
-
-        std::thread worker_thread(thread_func);
+        });
         worker_thread.detach();
-        return true;
+        return worker;
     };
-    thread_local static auto dummy = start_worker();
+
+    static thread_local auto worker = create_worker();
     return worker.get();
 }
 
@@ -43,7 +33,6 @@ bool send_http2_request(const std::string& method, const std::string& uri,
                         const std::string& message_body)
 {
     static std::map<std::string, std::string, ci_less> dummyHeaders;
-
     http_parser_url u {};
     if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0 ||
         !util::has_uri_field(u, UF_SCHEMA) || !util::has_uri_field(u, UF_HOST))
@@ -117,7 +106,8 @@ bool send_http2_request(const std::string& method, const std::string& uri,
 
         if (h2load::CLIENT_IDLE == dest_client->state)
         {
-            dest_client->connect_to_host(schema, authority);
+            dest_client->connect_to_host(*dest_client->requests_to_submit.back()->schema,
+                                         *dest_client->requests_to_submit.back()->authority);
         }
         else if (h2load::CLIENT_CONNECTED == dest_client->state)
         {

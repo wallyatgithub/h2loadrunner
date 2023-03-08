@@ -49,6 +49,8 @@ const std::string RECORD_OPERATION_CREATED = "CREATED";
 const std::string RECORD_OPERATION_UPDATED = "UPDATED";
 const std::string RECORD_OPERATION_DELETED = "DELETED";
 
+const std::set<std::string> ALLOWED_OPERATIONS = {RECORD_OPERATION_CREATED, RECORD_OPERATION_UPDATED, RECORD_OPERATION_DELETED};
+
 const std::string LIMIT_RANGE = "limit-range";
 const std::string MAX_PAYLOAD_SIZE = "max-payload-size";
 const std::string RETRIEVE_RECORDS = "retrieve-records";
@@ -63,6 +65,8 @@ const int RESOURCE_DOES_NOT_EXIST = -4;
 const int TTL_EXPIRED = -5;
 const int DECODE_FAILURE = -6;
 const int SUBSCRIPTION_EXPIRY_INVALID = -7;
+const int INVALID_OPERATIONS_IN_SUBSCRIPTION = -8;
+
 
 const std::string PATH_DELIMETER = "/";
 const std::string QUERY_DELIMETER = "&";
@@ -1474,6 +1478,7 @@ public:
                 checkout_record(record_id, old_meta_object);
                 auto new_meta_object = iter->second.get_meta_object();
                 checkin_record(record_id, new_meta_object);
+                send_notify(record_id, "", RECORD_OPERATION_UPDATED);
             }
             return ret;
         }
@@ -1686,6 +1691,15 @@ public:
             subscription.subFilter.monitoredResourceUris[i] = get_path(subscription.subFilter.monitoredResourceUris[i]);
             // TODO: If the monitoredResourceUris is present, only "UPDATED" and "DELETED" are allowed values
         }
+        for (size_t i = 0; i < subscription.subFilter.operations.size(); i++)
+        {
+            if (ALLOWED_OPERATIONS.count(subscription.subFilter.operations[i]) == 0)
+            {
+                return INVALID_OPERATIONS_IN_SUBSCRIPTION;
+            }
+            // TODO: If the monitoredResourceUris is present, only "UPDATED" and "DELETED" are allowed values
+        }
+
         auto expiry = iso8601_timestamp_to_seconds_since_epoch(subscription.expiry);
         auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
                                    (std::chrono::system_clock::now().time_since_epoch()).count();
@@ -1742,7 +1756,8 @@ public:
         }
     }
 
-    std::string delete_subscription(const std::string& subscription_id, const ClientId& client_id, bool get_previous, bool& found, bool& delete_success)
+    std::string delete_subscription(const std::string& subscription_id, const ClientId& client_id, bool get_previous,
+                                    bool& found, bool& delete_success)
     {
         found = false;
         delete_success = false;
@@ -1821,7 +1836,7 @@ public:
             {
                 std::shared_lock<std::shared_timed_mutex> subscription_id_to_subscription_read_lock(
                     subscription_id_to_subscription_mutex[row][col]);
-                for (auto& s: subscription_id_to_subscription[row][col])
+                for (auto& s : subscription_id_to_subscription[row][col])
                 {
                     if ((!count) || (ret.size() < count))
                     {
@@ -1923,18 +1938,23 @@ public:
         return s;
     }
 
-    std::set<std::string> get_subscription_ids_to_notify(const std::string& record_id, const std::string& block_id,
-                                                         const std::string& operation)
+    std::set<std::string> get_subscription_ids_to_notify(const std::string& record_id, const std::string& block_id)
     {
-        auto uri = RECORDS;
-        if (record_id.size())
-        {
-            uri.append(PATH_DELIMETER).append(record_id);
-            if (block_id.size())
-            {
-                uri.append(PATH_DELIMETER).append(block_id);
-            }
-        }
+        auto uri = udsf_base_uri;
+        auto size = udsf_base_uri.size() +
+                    PATH_DELIMETER.size() +
+                    realm_id.size() +
+                    PATH_DELIMETER.size() +
+                    storage_id.size() +
+                    PATH_DELIMETER.size() +
+                    RECORDS.size() +
+                    PATH_DELIMETER.size() +
+                    record_id.size() +
+                    PATH_DELIMETER.size() +
+                    block_id.size();
+        uri.reserve(size);
+        uri.append(PATH_DELIMETER).append(realm_id).append(PATH_DELIMETER).append(storage_id).append(PATH_DELIMETER).append(
+            RECORDS);
 
         auto subscription_ids_to_notify = [this](const std::string & path)
         {
@@ -1952,12 +1972,17 @@ public:
         };
 
         std::set<std::string> ret;
-        auto v = subscription_ids_to_notify(RECORDS);
+        auto v = subscription_ids_to_notify(uri);
         ret.insert(v.begin(), v.end());
 
-        if (uri.size() > RECORDS.size())
+        if (record_id.size())
         {
-            auto v = subscription_ids_to_notify(RECORDS);
+            uri.append(PATH_DELIMETER).append(record_id);
+            if (block_id.size())
+            {
+                uri.append(PATH_DELIMETER).append(block_id);
+            }
+            auto v = subscription_ids_to_notify(uri);
             for (auto& s : v)
             {
                 ret.insert(s);
@@ -1971,7 +1996,7 @@ public:
         std::string recordNotificationBody;
         const std::map<std::string, std::string, ci_less> additionalHeaders;
 
-        auto v = get_subscription_ids_to_notify(record_id, block_id, operation);
+        auto v = get_subscription_ids_to_notify(record_id, block_id);
         for (auto& s : v)
         {
             auto subscription = get_decoded_subscription(s);
@@ -1988,12 +2013,16 @@ public:
                                                               PATH_DELIMETER.size() +
                                                               storage_id.size() +
                                                               PATH_DELIMETER.size() +
+                                                              RECORDS.size() +
+                                                              PATH_DELIMETER.size() +
                                                               record_id.size());
                     notificationDescription.recordRef += udsf_base_uri;
                     notificationDescription.recordRef += PATH_DELIMETER;
                     notificationDescription.recordRef += realm_id;
                     notificationDescription.recordRef += PATH_DELIMETER;
                     notificationDescription.recordRef += storage_id;
+                    notificationDescription.recordRef += PATH_DELIMETER;
+                    notificationDescription.recordRef += RECORDS;
                     notificationDescription.recordRef += PATH_DELIMETER;
                     notificationDescription.recordRef += record_id;
                     auto description = staticjson::to_json_string(notificationDescription);
