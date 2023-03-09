@@ -515,7 +515,7 @@ public:
         h->add_property("meta", &this->meta);
     }
 
-    bool insert_or_update_block(const std::string& id, const std::string& type, const std::string& blockData,
+    bool create_or_update_block(const std::string& id, const std::string& type, const std::string& blockData,
                                 const std::map<std::string, std::string, ci_less>& headers,
                                 bool& update)
     {
@@ -738,26 +738,26 @@ public:
 class Tags_Value_Db_Of_One_Tag_Name
 {
 public:
-    std::unique_ptr<std::shared_timed_mutex> value_to_record_id_map_mutex;
-    std::multimap<std::string, std::string> value_to_record_id_map;
+    std::unique_ptr<std::shared_timed_mutex> value_to_resource_id_map_mutex;
+    std::multimap<std::string, std::string> value_to_resource_id_map;
     explicit Tags_Value_Db_Of_One_Tag_Name():
-        value_to_record_id_map_mutex(std::make_unique<std::shared_timed_mutex>())
+        value_to_resource_id_map_mutex(std::make_unique<std::shared_timed_mutex>())
     {
     }
 };
 
-class Tags_Name_Db_Of_One_Schema
+class Tags_Values_Db_With_Tags_Name_As_Key
 {
 public:
     std::unique_ptr<std::shared_timed_mutex> name_to_value_db_map_mutex;
     std::map<std::string, Tags_Value_Db_Of_One_Tag_Name> name_to_value_db_map;
-    explicit Tags_Name_Db_Of_One_Schema():
+    explicit Tags_Values_Db_With_Tags_Name_As_Key():
         name_to_value_db_map_mutex(std::make_unique<std::shared_timed_mutex>())
     {
     }
 };
 
-using Tags_Db = std::map<std::string, Tags_Name_Db_Of_One_Schema>;
+using Record_Tags_Db = std::map<std::string, Tags_Values_Db_With_Tags_Name_As_Key>;
 
 class SubscriptionFilter
 {
@@ -820,6 +820,24 @@ public:
     }
 };
 
+class Timer
+{
+public:
+    std::string timerId;
+    std::string expires;
+    std::map<std::string, std::string> metaTags;
+    std::string callbackReference;
+    uint64_t deleteAfter;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("timerId", &this->timerId, staticjson::Flags::Optional);
+        h->add_property("expires", &this->expires);
+        h->add_property("metaTags", &this->metaTags, staticjson::Flags::Optional);
+        h->add_property("callbackReference", &this->callbackReference, staticjson::Flags::Optional);
+        h->add_property("deleteAfter", &this->deleteAfter, staticjson::Flags::Optional);
+    }
+};
+
 class Storage
 {
 public:
@@ -833,8 +851,8 @@ public:
     std::shared_timed_mutex records_mutexes[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
     std::shared_timed_mutex schemas_mutexes[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
 
-    Tags_Db tags_db;
-    std::shared_timed_mutex tags_db_main_mutex;
+    Record_Tags_Db record_tags_db;
+    std::shared_timed_mutex record_tags_db_main_mutex;
 
     std::map<uint64_t, std::set<std::string>> records_ttl;
     std::shared_timed_mutex record_ttl_mutex;
@@ -850,6 +868,15 @@ public:
     std::map<uint64_t, std::set<std::string>> subscription_expiryNotification_to_subscription_id;
     std::shared_timed_mutex subscription_expiryNotification_to_subscription_id_mutex;
 
+    std::unordered_map<std::string, Timer> timers[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
+    std::shared_timed_mutex timers_mutexes[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
+
+    Tags_Values_Db_With_Tags_Name_As_Key timer_tags_db;
+
+    std::map<uint64_t, std::set<std::string>> timer_expires_to_timer_id;
+    std::shared_timed_mutex timer_expires_to_timer_id_mutex;
+    std::map<uint64_t, std::set<std::string>> timer_deleteAfter_to_timer_id;
+    std::shared_timed_mutex timer_deleteAfter_to_timer_id_mutex;
 
     void init_default_schema_with_empty_schema_id()
     {
@@ -863,14 +890,14 @@ public:
     }
     void install_tags_from_schema(const MetaSchema& schema)
     {
-        Tags_Name_Db_Of_One_Schema tags_name_db;
+        Tags_Values_Db_With_Tags_Name_As_Key tags_name_db;
         for (auto& tag : schema.metaTags)
         {
             auto& tag_value_db = tags_name_db.name_to_value_db_map[tag.tagName];
         }
         std::string schema_id = schema.schemaId;
-        std::unique_lock<std::shared_timed_mutex> tags_db_main_write_lock(tags_db_main_mutex);
-        tags_db.emplace(std::move(schema_id), std::move(tags_name_db));
+        std::unique_lock<std::shared_timed_mutex> tags_db_main_write_lock(record_tags_db_main_mutex);
+        record_tags_db.emplace(std::move(schema_id), std::move(tags_name_db));
     }
 
     std::set<std::string> get_all_record_ids(const std::string& schema_id)
@@ -910,57 +937,81 @@ public:
 
     void delete_tags_from_schema(const std::string& schema_id)
     {
-        std::unique_lock<std::shared_timed_mutex> tags_db_main_write_guard(tags_db_main_mutex);
-        tags_db.erase(schema_id);
+        std::unique_lock<std::shared_timed_mutex> tags_db_main_write_guard(record_tags_db_main_mutex);
+        record_tags_db.erase(schema_id);
     }
 
-    void insert_tag_value(const std::string& schema_id, const std::string& tag_name, const std::string& tag_value,
+    void insert_value_to_tags_db(const std::string& tag_name, const std::string& tag_value,
+                                             const std::string& reource_id,
+                                             Tags_Values_Db_With_Tags_Name_As_Key& tags_name_db, 
+                                             bool create_new_value_db_if_not_exist = false)
+    {
+        std::shared_lock<std::shared_timed_mutex> tags_name_db_read_lock(*tags_name_db.name_to_value_db_map_mutex);
+        auto tag_name_db_iter = tags_name_db.name_to_value_db_map.find(tag_name);
+        if (tag_name_db_iter != tags_name_db.name_to_value_db_map.end())
+        {
+            auto& tags_value_db = tag_name_db_iter->second;
+            std::unique_lock<std::shared_timed_mutex> tags_value_db_write_lock(*(tags_value_db.value_to_resource_id_map_mutex));
+            tags_value_db.value_to_resource_id_map.emplace(tag_value, reource_id);
+        }
+        else if (create_new_value_db_if_not_exist)
+        {
+            tags_name_db_read_lock.unlock();
+            std::unique_lock<std::shared_timed_mutex> tags_name_db_write_lock(*tags_name_db.name_to_value_db_map_mutex);
+            auto& tags_value_db = tags_name_db.name_to_value_db_map[tag_name];
+            std::unique_lock<std::shared_timed_mutex> tags_value_db_write_lock(*(tags_value_db.value_to_resource_id_map_mutex));
+            tags_value_db.value_to_resource_id_map.emplace(tag_value, reource_id);
+        }
+    }
+
+    void insert_record_tag_value(const std::string& schema_id, const std::string& tag_name, const std::string& tag_value,
                           const std::string& record_id)
     {
-        std::shared_lock<std::shared_timed_mutex> tags_db_main_read_guard(tags_db_main_mutex);
-        auto tags_db_iter = tags_db.find(schema_id);
-        if (tags_db_iter != tags_db.end())
+        std::shared_lock<std::shared_timed_mutex> tags_db_main_read_guard(record_tags_db_main_mutex);
+        auto tags_db_iter = record_tags_db.find(schema_id);
+        if (tags_db_iter != record_tags_db.end())
         {
             auto& tags_name_db = tags_db_iter->second;
-            std::shared_lock<std::shared_timed_mutex> tags_name_db_read_lock(*tags_name_db.name_to_value_db_map_mutex);
-            auto tag_name_db_iter = tags_name_db.name_to_value_db_map.find(tag_name);
-            if (tag_name_db_iter != tags_name_db.name_to_value_db_map.end())
+            insert_value_to_tags_db(tag_name, tag_value, record_id, tags_name_db, false);
+        }
+    }
+
+    void remove_value_from_tags_db(const std::string& tag_name, const std::string& tag_value,
+                                             const std::string& reource_id,
+                                             Tags_Values_Db_With_Tags_Name_As_Key& tags_name_db
+                                             )
+    {
+        std::shared_lock<std::shared_timed_mutex> tags_name_db_read_lock(*tags_name_db.name_to_value_db_map_mutex);
+        auto tag_name_db_iter = tags_name_db.name_to_value_db_map.find(tag_name);
+        if (tag_name_db_iter != tags_name_db.name_to_value_db_map.end())
+        {
+            auto& tags_value_db = tag_name_db_iter->second;
+            std::unique_lock<std::shared_timed_mutex> tags_value_db_write_lock(*(tags_value_db.value_to_resource_id_map_mutex));
+            auto range = tags_value_db.value_to_resource_id_map.equal_range(tag_value);
+            std::vector<decltype(range.first)> iters_to_erase;
+            for (auto i = range.first; i != range.second; ++i)
             {
-                auto& tags_value_db = tag_name_db_iter->second;
-                std::unique_lock<std::shared_timed_mutex> tags_value_db_write_lock(*(tags_value_db.value_to_record_id_map_mutex));
-                tags_value_db.value_to_record_id_map.emplace(tag_value, record_id);
+                if (i->second == reource_id)
+                {
+                    iters_to_erase.emplace_back(i);
+                }
+            }
+            for (auto i : iters_to_erase)
+            {
+                tags_value_db.value_to_resource_id_map.erase(i);
             }
         }
     }
 
-    void remove_tag_value(const std::string& schema_id, const std::string& tag_name, const std::string& tag_value,
+    void remove_record_tag_value(const std::string& schema_id, const std::string& tag_name, const std::string& tag_value,
                           const std::string& record_id)
     {
-        std::shared_lock<std::shared_timed_mutex> tags_db_main_read_lock(tags_db_main_mutex);
-        auto tags_db_iter = tags_db.find(schema_id);
-        if (tags_db_iter != tags_db.end())
+        std::shared_lock<std::shared_timed_mutex> tags_db_main_read_lock(record_tags_db_main_mutex);
+        auto tags_db_iter = record_tags_db.find(schema_id);
+        if (tags_db_iter != record_tags_db.end())
         {
             auto& tags_name_db = tags_db_iter->second;
-            std::shared_lock<std::shared_timed_mutex> tags_name_db_read_lock(*tags_name_db.name_to_value_db_map_mutex);
-            auto tag_name_db_iter = tags_name_db.name_to_value_db_map.find(tag_name);
-            if (tag_name_db_iter != tags_name_db.name_to_value_db_map.end())
-            {
-                auto& tags_value_db = tag_name_db_iter->second;
-                std::unique_lock<std::shared_timed_mutex> tags_value_db_write_lock(*(tags_value_db.value_to_record_id_map_mutex));
-                auto range = tags_value_db.value_to_record_id_map.equal_range(tag_value);
-                std::vector<decltype(range.first)> iters_to_erase;
-                for (auto i = range.first; i != range.second; ++i)
-                {
-                    if (i->second == record_id)
-                    {
-                        iters_to_erase.emplace_back(i);
-                    }
-                }
-                for (auto i : iters_to_erase)
-                {
-                    tags_value_db.value_to_record_id_map.erase(i);
-                }
-            }
+            remove_value_from_tags_db(tag_name, tag_value, record_id, tags_name_db);
         }
     }
 
@@ -974,20 +1025,20 @@ public:
                                                 const std::string& tag_name, const std::string& tag_value)
     {
         std::set<std::string> s;
-        std::shared_lock<std::shared_timed_mutex> tags_db_main_read_lock(tags_db_main_mutex);
-        std::vector<Tags_Db::iterator> tag_db_iterators_to_go_through;
+        std::shared_lock<std::shared_timed_mutex> tags_db_main_read_lock(record_tags_db_main_mutex);
+        std::vector<Record_Tags_Db::iterator> tag_db_iterators_to_go_through;
         if (schema_id.size())
         {
-            auto db_iter = tags_db.find(schema_id);
-            if (db_iter != tags_db.end())
+            auto db_iter = record_tags_db.find(schema_id);
+            if (db_iter != record_tags_db.end())
             {
                 tag_db_iterators_to_go_through.push_back(db_iter);
             }
         }
         else
         {
-            auto db_iter = tags_db.begin();
-            while (db_iter != tags_db.end())
+            auto db_iter = record_tags_db.begin();
+            while (db_iter != record_tags_db.end())
             {
                 tag_db_iterators_to_go_through.push_back(db_iter);
                 db_iter++;
@@ -1001,11 +1052,11 @@ public:
             if (tag_name_db_iter != tags_name_db.name_to_value_db_map.end())
             {
                 auto& tags_value_db = tag_name_db_iter->second;
-                std::shared_lock<std::shared_timed_mutex> tags_value_db_read_lock(*(tags_value_db.value_to_record_id_map_mutex));
+                std::shared_lock<std::shared_timed_mutex> tags_value_db_read_lock(*(tags_value_db.value_to_resource_id_map_mutex));
 
                 if (op == "EQ")
                 {
-                    auto range = tags_value_db.value_to_record_id_map.equal_range(tag_value);
+                    auto range = tags_value_db.value_to_resource_id_map.equal_range(tag_value);
                     for (auto i = range.first; i != range.second; ++i)
                     {
                         s.insert(i->second);
@@ -1013,8 +1064,8 @@ public:
                 }
                 else if (op == "GT")
                 {
-                    auto iter = tags_value_db.value_to_record_id_map.upper_bound(tag_value);
-                    while (iter != tags_value_db.value_to_record_id_map.end())
+                    auto iter = tags_value_db.value_to_resource_id_map.upper_bound(tag_value);
+                    while (iter != tags_value_db.value_to_resource_id_map.end())
                     {
                         s.insert(iter->second);
                         iter++;
@@ -1022,8 +1073,8 @@ public:
                 }
                 else if (op == "GTE")
                 {
-                    auto iter = tags_value_db.value_to_record_id_map.lower_bound(tag_value);
-                    while (iter != tags_value_db.value_to_record_id_map.end())
+                    auto iter = tags_value_db.value_to_resource_id_map.lower_bound(tag_value);
+                    while (iter != tags_value_db.value_to_resource_id_map.end())
                     {
                         s.insert(iter->second);
                         iter++;
@@ -1031,8 +1082,8 @@ public:
                 }
                 else if (op == "LT")
                 {
-                    auto lower_bound = tags_value_db.value_to_record_id_map.lower_bound(tag_value);
-                    auto iter = tags_value_db.value_to_record_id_map.begin();
+                    auto lower_bound = tags_value_db.value_to_resource_id_map.lower_bound(tag_value);
+                    auto iter = tags_value_db.value_to_resource_id_map.begin();
                     while (iter != lower_bound)
                     {
                         s.insert(iter->second);
@@ -1041,8 +1092,8 @@ public:
                 }
                 else if (op == "LTE")
                 {
-                    auto upper_bound = tags_value_db.value_to_record_id_map.upper_bound(tag_value);
-                    auto iter = tags_value_db.value_to_record_id_map.begin();
+                    auto upper_bound = tags_value_db.value_to_resource_id_map.upper_bound(tag_value);
+                    auto iter = tags_value_db.value_to_resource_id_map.begin();
                     while (iter != upper_bound)
                     {
                         s.insert(iter->second);
@@ -1051,13 +1102,13 @@ public:
                 }
                 else if (op == "NEQ")
                 {
-                    auto lower_bound = tags_value_db.value_to_record_id_map.lower_bound(tag_value);
-                    auto upper_bound = tags_value_db.value_to_record_id_map.upper_bound(tag_value);
-                    for (auto iter = tags_value_db.value_to_record_id_map.begin(); iter != lower_bound; ++iter)
+                    auto lower_bound = tags_value_db.value_to_resource_id_map.lower_bound(tag_value);
+                    auto upper_bound = tags_value_db.value_to_resource_id_map.upper_bound(tag_value);
+                    for (auto iter = tags_value_db.value_to_resource_id_map.begin(); iter != lower_bound; ++iter)
                     {
                         s.insert(iter->second);
                     }
-                    for (auto iter = upper_bound; iter != tags_value_db.value_to_record_id_map.end(); ++iter)
+                    for (auto iter = upper_bound; iter != tags_value_db.value_to_resource_id_map.end(); ++iter)
                     {
                         s.insert(iter->second);
                     }
@@ -1070,20 +1121,20 @@ public:
     size_t count_records_of_tag_name(const std::string& schema_id, const std::string& tag_name)
     {
         size_t ret = 0;
-        std::shared_lock<std::shared_timed_mutex> tags_db_main_read_lock(tags_db_main_mutex);
-        std::vector<Tags_Db::iterator> tag_db_iterators_to_go_through;
+        std::shared_lock<std::shared_timed_mutex> tags_db_main_read_lock(record_tags_db_main_mutex);
+        std::vector<Record_Tags_Db::iterator> tag_db_iterators_to_go_through;
         if (schema_id.size())
         {
-            auto db_iter = tags_db.find(schema_id);
-            if (db_iter != tags_db.end())
+            auto db_iter = record_tags_db.find(schema_id);
+            if (db_iter != record_tags_db.end())
             {
                 tag_db_iterators_to_go_through.push_back(db_iter);
             }
         }
         else
         {
-            auto db_iter = tags_db.begin();
-            while (db_iter != tags_db.end())
+            auto db_iter = record_tags_db.begin();
+            while (db_iter != record_tags_db.end())
             {
                 tag_db_iterators_to_go_through.push_back(db_iter);
                 db_iter++;
@@ -1098,8 +1149,8 @@ public:
             if (tag_name_db_iter != tags_name_db.name_to_value_db_map.end())
             {
                 auto& tags_value_db = tag_name_db_iter->second;
-                std::shared_lock<std::shared_timed_mutex> tags_value_db_read_lock(*(tags_value_db.value_to_record_id_map_mutex));
-                ret = +tags_value_db.value_to_record_id_map.size();
+                std::shared_lock<std::shared_timed_mutex> tags_value_db_read_lock(*(tags_value_db.value_to_resource_id_map_mutex));
+                ret = +tags_value_db.value_to_resource_id_map.size();
             }
         }
         return ret;
@@ -1185,7 +1236,7 @@ public:
     * return -5: record ttl already expired
     * @thows None
     * */
-    int insert_or_update_record(const std::string& record_id, const std::string& boundary,
+    int create_or_update_record(const std::string& record_id, const std::string& boundary,
                                 const std::string& multipart_content, bool& update)
     {
         MultipartParser parser(boundary);
@@ -1232,7 +1283,7 @@ public:
                     parts[i].first.erase(iter);
                 }
                 bool dummy;
-                record.insert_or_update_block(content_id, content_type, parts[i].second, parts[i].first, dummy);
+                record.create_or_update_block(content_id, content_type, parts[i].second, parts[i].first, dummy);
             }
             uint16_t sum = get_u16_sum(record_id);
             uint8_t row = sum >> 8;
@@ -1286,7 +1337,7 @@ public:
             auto& tag_values = tag.second;
             for (auto& tag_value : tag_values)
             {
-                remove_tag_value(old_meta.schemaId, tag_name, tag_value, record_id);
+                remove_record_tag_value(old_meta.schemaId, tag_name, tag_value, record_id);
             }
         }
         track_record_id(old_meta.schemaId, record_id, false);
@@ -1304,7 +1355,7 @@ public:
             auto& tag_values = tag.second;
             for (auto& tag_value : tag_values)
             {
-                insert_tag_value(new_meta.schemaId, tag_name, tag_value, record_id);
+                insert_record_tag_value(new_meta.schemaId, tag_name, tag_value, record_id);
             }
         }
         track_record_id(new_meta.schemaId, record_id);
@@ -1435,8 +1486,7 @@ public:
         uint8_t col = sum & 0xFF;
         staticjson::ParseStatus result;
         MetaSchema metaSchema;
-        if (staticjson::from_json_string(schema.c_str(), &metaSchema, &result) &&
-            metaSchema.schemaId == schema_id)
+        if (staticjson::from_json_string(schema.c_str(), &metaSchema, &result))
         {
             install_tags_from_schema(metaSchema);
             std::unique_lock<std::shared_timed_mutex> schemas_mutexes_write_lock(schemas_mutexes[row][col]);
@@ -1449,6 +1499,7 @@ public:
             {
                 update = true;
             }
+            metaSchema.schemaId == schema_id;
             schemas[row][col][schema_id] = std::move(metaSchema);
             schemas_mutexes_write_lock.unlock();
 
@@ -1511,7 +1562,7 @@ public:
         return false;
     }
 
-    bool insert_or_update_block(const std::string& record_id, const std::string& id, const std::string& type,
+    bool create_or_update_block(const std::string& record_id, const std::string& id, const std::string& type,
                                 const std::string& blockData,
                                 const std::map<std::string, std::string, ci_less>& headers, bool& update)
     {
@@ -1522,7 +1573,7 @@ public:
         auto iter = records[row][col].find(record_id);
         if (iter != records[row][col].end())
         {
-            auto ret = iter->second.insert_or_update_block(id, type, blockData, headers, update);
+            auto ret = iter->second.create_or_update_block(id, type, blockData, headers, update);
             guard.unlock();
             send_notify(record_id, id, RECORD_OPERATION_CREATED);
             return ret;
@@ -2087,6 +2138,122 @@ public:
             remove_from_map(subscription_expiryNotification_to_subscription_id, iso8601_timestamp_to_seconds_since_epoch(subscription.expiry) - subscription.expiryNotification,
                             subscription_id);
         }
+    }
+
+    void track_timer_ttl(uint64_t ttl, const std::string& timer_id, bool insert = true)
+    {
+        std::unique_lock<std::shared_timed_mutex> ttl_write_lock(timer_expires_to_timer_id_mutex);
+        if (insert)
+        {
+            auto& s = timer_expires_to_timer_id[ttl];
+            s.insert(timer_id);
+        }
+        else
+        {
+            auto iter = timer_expires_to_timer_id.find(ttl);
+            if (iter != timer_expires_to_timer_id.end())
+            {
+                iter->second.erase(timer_id);
+            }
+        }
+    }
+
+    void track_timer_deleteAfter(uint64_t ttl, const std::string& timer_id, bool insert = true)
+    {
+        std::unique_lock<std::shared_timed_mutex> ttl_write_lock(timer_deleteAfter_to_timer_id_mutex);
+        if (insert)
+        {
+            auto& s = timer_deleteAfter_to_timer_id[ttl];
+            s.insert(timer_id);
+        }
+        else
+        {
+            auto iter = timer_deleteAfter_to_timer_id.find(ttl);
+            if (iter != timer_deleteAfter_to_timer_id.end())
+            {
+                iter->second.erase(timer_id);
+            }
+        }
+    }
+
+    void checkin_timer(const std::string& timer_id, const Timer& timer)
+    {
+        for (auto& t: timer.metaTags)
+        {
+            auto& tag_name = t.first;
+            auto& tag_value = t.second;
+            auto& tags_name_db = timer_tags_db;
+            insert_value_to_tags_db(tag_name, tag_value, timer_id, tags_name_db, true);
+        }
+    }
+
+    void checkout_timer(const std::string& timer_id, const Timer& timer)
+    {
+        for (auto& t: timer.metaTags)
+        {
+            auto& tag_name = t.first;
+            auto& tag_value = t.second;
+            auto& tags_name_db = timer_tags_db;
+            remove_value_from_tags_db(tag_name, tag_value, timer_id, tags_name_db);
+        }
+    }
+
+    int delete_timer(const std::string& timer_id)
+    {
+        return 0;
+    }
+
+    int create_timer(const std::string& timer_id, const std::string& timer_body, bool& update)
+    {
+        Timer timer;
+        staticjson::ParseStatus result;
+        if (staticjson::from_json_string(timer_body.c_str(), &timer, &result))
+        {
+            auto ttl = iso8601_timestamp_to_seconds_since_epoch(timer.expires);
+            auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
+                                       (std::chrono::system_clock::now().time_since_epoch()).count();
+            if (ttl <= seconds_since_epoch)
+            {
+                return TTL_EXPIRED;
+            }
+
+            uint16_t sum = get_u16_sum(timer_id);
+            auto row = sum >> 8;
+            auto col = sum & 0xFF;
+            std::unique_lock<std::shared_timed_mutex> timers_mutexes_write_lock(
+                timers_mutexes[row][col]);
+            auto& id_to_timers = timers[row][col];
+            Timer& timer_object = id_to_timers[timer_id];
+            update = false;
+            if (timer_object.expires.size())
+            {
+                update = true;
+            }
+
+            if (update)
+            {
+                checkout_timer(timer_id, timer_object);
+                track_timer_ttl(iso8601_timestamp_to_seconds_since_epoch(timer_object.expires), timer_id, false);
+            }
+
+            checkin_timer(timer_id, timer);
+
+            track_timer_ttl(ttl, timer_id);
+
+            timer_object = timer;
+            timer_object.timerId = timer_id;
+
+        }
+        else
+        {
+            return DECODE_FAILURE;
+        }
+        return 0;
+    }
+
+    std::string get_timer(const std::string& time_id)
+    {
+        return "";
     }
 
     static void ttl_routine(Storage& storage)

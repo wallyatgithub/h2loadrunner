@@ -85,7 +85,7 @@ bool process_create_or_update_record(const nghttp2::asio_http2::server::asio_ser
     }
 
     bool update = false;
-    auto ret = storage.insert_or_update_record(record_id, boundary, msg_body, update);
+    auto ret = storage.create_or_update_record(record_id, boundary, msg_body, update);
     switch (ret)
     {
         case 0:
@@ -315,7 +315,7 @@ bool process_insert_or_update_block(const nghttp2::asio_http2::server::asio_serv
     }
 
     bool update = false;
-    auto ret = storage.insert_or_update_block(record_id, block_id, content_type, msg_body, headers, update);
+    auto ret = storage.create_or_update_block(record_id, block_id, content_type, msg_body, headers, update);
     if (ret)
     {
         if (update)
