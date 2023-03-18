@@ -474,8 +474,8 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
         uint64_t total_unmatched_responses_till_now = 0;
         uint64_t counter = 0;
 
-        const size_t billion_width = 10 + 6;
-        const size_t million_width = 7 + 2;
+        const size_t rps_width = 6 + 3;
+        const size_t total_number_width = rps_width + 7;
         auto req_name_width = get_req_name_max_size(config_schema);
         auto resp_name_width = get_resp_name_max_size(config_schema) + 1;
         size_t request_width = 0;
@@ -485,16 +485,16 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
         {
             std::stringstream SStream;
             std::this_thread::sleep_for(std::chrono::seconds(1));
-            // if (counter % 10 == 0)
-            // {
+             if (counter % 10 == 0)
+             {
                 SStream << std::endl << std::setw(req_name_width) << "req-name"
                     << "," << std::setw(resp_name_width) << "resp-name"
-                    << "," << std::setw(billion_width) << "msg-total"
-                    << "," << std::setw(billion_width) << "throttled-total"
-                    << "," << std::setw(million_width) << "rps"
-                    << "," << std::setw(billion_width) << "throttled-rps"
+                    << "," << std::setw(total_number_width) << "msg-total"
+                    << "," << std::setw(total_number_width) << "throttled-total"
+                    << "," << std::setw(rps_width) << "rps"
+                    << "," << std::setw(total_number_width) << "throttled-rps"
                     << std::endl;
-            // }
+            }
             counter++;
 
             auto resp_sent_till_last = resp_sent_till_now;
@@ -556,31 +556,31 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
                 {
                     SStream <<     std::setw(req_name_width) << config_schema.service[req_index].request.name
                             << "," << std::setw(resp_name_width) << config_schema.service[req_index].responses[resp_index].name
-                            << "," << std::setw(billion_width) << resp_sent_till_now[req_index][resp_index]
-                            << "," << std::setw(billion_width) << resp_throttled_till_now[req_index][resp_index]
-                            << "," << std::setw(million_width) << ((resp_sent_till_now[req_index][resp_index] -
+                            << "," << std::setw(total_number_width) << resp_sent_till_now[req_index][resp_index]
+                            << "," << std::setw(total_number_width) << resp_throttled_till_now[req_index][resp_index]
+                            << "," << std::setw(rps_width) << ((resp_sent_till_now[req_index][resp_index] -
                                                                      resp_sent_till_last[req_index][resp_index])*std::milli::den) / period_duration
-                            << "," << std::setw(billion_width) << ((resp_throttled_till_now[req_index][resp_index] -
+                            << "," << std::setw(rps_width) << ((resp_throttled_till_now[req_index][resp_index] -
                                                                      resp_throttled_till_last[req_index][resp_index])*std::milli::den) / period_duration
                             << std::endl;
                 }
             }
             SStream <<     std::setw(req_name_width) << "SUM"
                     << "," << std::setw(resp_name_width) << "SUM"
-                    << "," << std::setw(billion_width) << total_resp_sent_till_now
-                    << "," << std::setw(billion_width) << total_resp_throttled_till_now
-                    << "," << std::setw(million_width) << ((total_resp_sent_till_now - total_resp_sent_till_last)*std::milli::den) /
+                    << "," << std::setw(total_number_width) << total_resp_sent_till_now
+                    << "," << std::setw(total_number_width) << total_resp_throttled_till_now
+                    << "," << std::setw(rps_width) << ((total_resp_sent_till_now - total_resp_sent_till_last)*std::milli::den) /
                     period_duration
-                    << "," << std::setw(billion_width) << ((total_resp_throttled_till_now - total_resp_throttled_till_last)
+                    << "," << std::setw(rps_width) << ((total_resp_throttled_till_now - total_resp_throttled_till_last)
                                                             *std::milli::den) / period_duration
                     << std::endl;
 
             SStream <<     std::setw(req_name_width) << "UNMATCHED"
                     << "," << std::setw(resp_name_width) << "---"
-                    << "," << std::setw(billion_width) << total_unmatched_responses_till_now
-                    << "," << std::setw(billion_width) << "---"
-                    << "," << std::setw(million_width) << ((total_unmatched_responses_till_now - total_unmatched_responses_till_last)*std::milli::den) / period_duration
-                    << "," << std::setw(billion_width) << "---"
+                    << "," << std::setw(total_number_width) << total_unmatched_responses_till_now
+                    << "," << std::setw(total_number_width) << "---"
+                    << "," << std::setw(rps_width) << ((total_unmatched_responses_till_now - total_unmatched_responses_till_last)*std::milli::den) / period_duration
+                    << "," << std::setw(rps_width) << "---"
                     << std::endl;
             if (config_schema.statistics_file.empty())
             {

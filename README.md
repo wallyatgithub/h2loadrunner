@@ -3,7 +3,7 @@
 
 *Read this in other languages: [简体中文](README.zh-cn.md).*
 
-# h2loadrunner is an HTTP and HTTP2 benchmarking / load testing / performance testing tool
+# h2loadrunner is an HTTP1.1, HTTP2 and HTTP3 benchmarking / load testing / performance testing tool
   h2loadrunner is a benchmarking tool supporting both HTTP 1.x, HTTP2, and HTTP3 over QUIC.
 
   h2loadrunner was initially created from h2load utility of the nghttp2 project.
@@ -49,6 +49,8 @@
   13. Connection failover and failback.
   
   14. Native support of Linux and Windows platforms, with very high performance on both platform, thanks to Boost ASIO, for best leveraging the power of Linux epoll and Windows IOCP respectively.
+
+  15. HAR file support. h2loadrunner can directly load and run an HTTP Archive file.
 
 # How to have a quick try
 
@@ -360,3 +362,9 @@
     $ cmake -DENABLE_HTTP3=ON ../
     $ cmake --build ./
 
+# HAR support
+
+  HAR file can be exported from browsers like chrome or firefox. H2loadrunner can directly load and run an HAR file like this:
+  
+    ./h2loadrunner --run-har=192.168.1.121.har -t 1 -c 100 --rps=10 -D 60 -m 1 --skip-host=www.google.com --skip-host=cse.google.com --skip-host=fonts.gstatic.com --skip-host=www.apache.org
+  
