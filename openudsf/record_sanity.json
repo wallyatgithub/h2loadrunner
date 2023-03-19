@@ -9,7 +9,7 @@
   "threads": 1,
   "clients": 1,
   "duration": 0,
-  "total-requests": 9,
+  "total-requests": 11,
   "warm-up-time": 0,
   "max-concurrent-streams": 2048,
   "request-per-second": 1,
@@ -70,6 +70,26 @@
       "two-dimensional-variables": [],
       "HAR-file": "",
       "Requests": [
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/meta-schemas/schema_1?get-previous=true"
+          },
+          "clear-old-cookies": false,
+          "method": "put",
+          "http-version": "default",
+          "payload": "{   \"schemaId\": \"schema_1\",   \"metaTags\": [     {       \"tagName\": \"ueId\",       \"keyType\": \"UNIQUE_KEY\",       \"sort\": true,       \"presence\": true     },     {       \"tagName\": \"hashId\",       \"keyType\": \"UNIQUE_KEY\",       \"sort\": false,       \"presence\": false     },     {       \"tagName\": \"recordId\",       \"keyType\": \"UNIQUE_KEY\",       \"sort\": false,       \"presence\": true     }   ] }",
+          "additonalHeaders": [],
+          "luaScript": "",
+          "expected-status-code": 201,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
         {
           "uri": {
             "typeOfAction": "input",
@@ -238,6 +258,26 @@
           "http-version": "default",
           "luaScript": "",
           "expected-status-code": 404,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/meta-schemas/schema_1"
+          },
+          "clear-old-cookies": false,
+          "method": "delete",
+          "http-version": "default",
+          "payload": "",
+          "additonalHeaders": [],
+          "luaScript": "",
+          "expected-status-code": 204,
           "page-id": 0,
           "response-match": {
             "headers": [],
