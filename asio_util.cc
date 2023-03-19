@@ -478,13 +478,12 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
         const size_t total_number_width = rps_width + 7;
         auto req_name_width = get_req_name_max_size(config_schema);
         auto resp_name_width = get_resp_name_max_size(config_schema) + 1;
-        size_t request_width = 0;
 
         auto period_start = std::chrono::steady_clock::now();
         while (true)
         {
             std::stringstream SStream;
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            std::this_thread::sleep_for(std::chrono::seconds(config_schema.statistics_interval));
              if (counter % 10 == 0)
              {
                 SStream << std::endl << std::setw(req_name_width) << "req-name"
@@ -592,9 +591,6 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
                 log_file << SStream.str();
                 log_file.flush();
             }
-
-            auto new_request_width = std::to_string(total_resp_sent_till_now).size();
-            request_width = request_width > new_request_width ? request_width : new_request_width;
         }
     };
     std::thread stats_thread(stats_func);

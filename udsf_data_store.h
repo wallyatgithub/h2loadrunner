@@ -93,6 +93,8 @@ const std::string RESOURCE_BLOCKS = "blocks";
 
 const std::string RESOURCE_META = "meta";
 
+const std::string RESOURCE_TIMERS = "timers";
+
 const std::string& METHOD_PUT = "put";
 const std::string& METHOD_POST = "post";
 const std::string& METHOD_PATCH = "patch";
@@ -827,17 +829,27 @@ public:
     std::string expires;
     std::map<std::string, std::string> metaTags;
     std::string callbackReference;
+    unsigned callbackReferenceFlag = staticjson::Flags::Optional | staticjson::Flags::IgnoreWrite;
     uint64_t deleteAfter;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("timerId", &this->timerId, staticjson::Flags::Optional);
         h->add_property("expires", &this->expires);
         h->add_property("metaTags", &this->metaTags, staticjson::Flags::Optional);
-        h->add_property("callbackReference", &this->callbackReference, staticjson::Flags::Optional);
+        h->add_property("callbackReference", &this->callbackReference, callbackReferenceFlag);
         h->add_property("deleteAfter", &this->deleteAfter, staticjson::Flags::Optional);
     }
 };
 
+class TimerIdList
+{
+public:
+    std::vector<std::string> timerIds;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("timerIds", &this->timerIds);
+    }
+};
 class Storage
 {
 public:
@@ -1191,38 +1203,49 @@ public:
         }
     }
 
-    void track_record_ttl(uint64_t ttl, const std::string& record_id, bool insert = true)
+    void track_ttl(std::shared_timed_mutex& mutex, std::map<uint64_t, std::set<std::string>>& ttl_map,
+                      uint64_t ttl, const std::string& id, bool insert = true)
     {
-        std::unique_lock<std::shared_timed_mutex> record_ttl_write_lock(record_ttl_mutex);
+        std::unique_lock<std::shared_timed_mutex> write_lock(mutex);
         if (insert)
         {
-            auto& s = records_ttl[ttl];
-            s.insert(record_id);
+            auto& s = ttl_map[ttl];
+            s.insert(id);
         }
         else
         {
-            auto iter = records_ttl.find(ttl);
-            if (iter != records_ttl.end())
+            auto iter = ttl_map.find(ttl);
+            if (iter != ttl_map.end())
             {
-                iter->second.erase(record_id);
+                iter->second.erase(id);
             }
         }
+
+    }
+
+    std::set<std::string> get_expired_items(std::shared_timed_mutex& mutex,
+                                                   std::map<uint64_t, std::set<std::string>>& tracking_map)
+    {
+        std::shared_lock<std::shared_timed_mutex> read_lock(mutex);
+        std::set<std::string> s;
+        auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
+                                   (std::chrono::system_clock::now().time_since_epoch()).count();
+        auto end = tracking_map.upper_bound(seconds_since_epoch);
+        for (auto iter = tracking_map.begin(); iter != end; iter++)
+        {
+            s.insert(iter->second.begin(), iter->second.end());
+        }
+        return s;
+    }
+
+    void track_record_ttl(uint64_t ttl, const std::string& record_id, bool insert = true)
+    {
+        track_ttl(record_ttl_mutex, records_ttl, ttl, record_id, insert);
     }
 
     std::set<std::string> get_ttl_expired_records()
     {
-        std::set<std::string> s;
-        auto curr_time_point = std::chrono::system_clock::now();
-        auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>(curr_time_point.time_since_epoch()).count();
-        std::unique_lock<std::shared_timed_mutex> record_ttl_read_lock(record_ttl_mutex);
-        auto upper_bound = records_ttl.upper_bound(seconds_since_epoch);
-        auto iter = records_ttl.begin();
-        while (iter != upper_bound)
-        {
-            s.insert(iter->second.begin(), iter->second.end());
-            iter++;
-        }
-        return s;
+        return get_expired_items(record_ttl_mutex, records_ttl);
     }
 
     /**
@@ -1717,13 +1740,12 @@ public:
                 {
                     if (curr_set.empty())
                     {
-                        ret = run_not_operator(get_all_record_ids(schema_id), run_or_operator(operands));
+                        ret = run_not_operator(get_all_record_ids(actual_schema_id), run_or_operator(operands));
                     }
                     else
                     {
                         ret = run_not_operator(curr_set, run_or_operator(operands));
                     }
-                    // TODO:
                 }
             }
             else if (first_name == OPERATION)
@@ -2002,30 +2024,12 @@ public:
 
     std::set<std::string> get_expired_subscription_ids()
     {
-        std::shared_lock<std::shared_timed_mutex> read_lock(subscription_expiry_to_subscription_id_mutex);
-        std::set<std::string> s;
-        auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
-                                   (std::chrono::system_clock::now().time_since_epoch()).count();
-        auto end = subscription_expiry_to_subscription_id.upper_bound(seconds_since_epoch);
-        for (auto iter = subscription_expiry_to_subscription_id.begin(); iter != end; iter++)
-        {
-            s.insert(iter->second.begin(), iter->second.end());
-        }
-        return s;
+        return get_expired_items(subscription_expiry_to_subscription_id_mutex, subscription_expiry_to_subscription_id);
     }
 
     std::set<std::string> get_subscription_ids_about_to_expire()
     {
-        std::shared_lock<std::shared_timed_mutex> read_lock(subscription_expiryNotification_to_subscription_id_mutex);
-        std::set<std::string> s;
-        auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
-                                   (std::chrono::system_clock::now().time_since_epoch()).count();
-        auto end = subscription_expiryNotification_to_subscription_id.upper_bound(seconds_since_epoch);
-        for (auto iter = subscription_expiryNotification_to_subscription_id.begin(); iter != end; iter++)
-        {
-            s.insert(iter->second.begin(), iter->second.end());
-        }
-        return s;
+        return get_expired_items(subscription_expiryNotification_to_subscription_id_mutex, subscription_expiryNotification_to_subscription_id);
     }
 
     std::set<std::string> get_subscription_ids_to_notify(const std::string& record_id, const std::string& block_id)
@@ -2142,38 +2146,12 @@ public:
 
     void track_timer_ttl(uint64_t ttl, const std::string& timer_id, bool insert = true)
     {
-        std::unique_lock<std::shared_timed_mutex> ttl_write_lock(timer_expires_to_timer_id_mutex);
-        if (insert)
-        {
-            auto& s = timer_expires_to_timer_id[ttl];
-            s.insert(timer_id);
-        }
-        else
-        {
-            auto iter = timer_expires_to_timer_id.find(ttl);
-            if (iter != timer_expires_to_timer_id.end())
-            {
-                iter->second.erase(timer_id);
-            }
-        }
+        track_ttl(timer_expires_to_timer_id_mutex, timer_expires_to_timer_id, ttl, timer_id, insert);
     }
 
     void track_timer_deleteAfter(uint64_t ttl, const std::string& timer_id, bool insert = true)
     {
-        std::unique_lock<std::shared_timed_mutex> ttl_write_lock(timer_deleteAfter_to_timer_id_mutex);
-        if (insert)
-        {
-            auto& s = timer_deleteAfter_to_timer_id[ttl];
-            s.insert(timer_id);
-        }
-        else
-        {
-            auto iter = timer_deleteAfter_to_timer_id.find(ttl);
-            if (iter != timer_deleteAfter_to_timer_id.end())
-            {
-                iter->second.erase(timer_id);
-            }
-        }
+        track_ttl(timer_deleteAfter_to_timer_id_mutex, timer_deleteAfter_to_timer_id, ttl, timer_id, insert);
     }
 
     void checkin_timer(const std::string& timer_id, const Timer& timer)
@@ -2198,12 +2176,27 @@ public:
         }
     }
 
-    int delete_timer(const std::string& timer_id)
+    Timer delete_timer(const std::string& timer_id)
     {
-        return 0;
+        uint16_t sum = get_u16_sum(timer_id);
+        auto row = sum >> 8;
+        auto col = sum & 0xFF;
+        std::shared_lock<std::shared_timed_mutex> timers_mutexes_read_lock(
+            timers_mutexes[row][col]);
+        auto& id_to_timers = timers[row][col];
+        auto iter = id_to_timers.find(timer_id);
+        if (iter == id_to_timers.end())
+        {
+            return Timer();
+        }
+        auto timer_object = std::move(iter->second);
+        checkout_timer(timer_id, timer_object);
+        track_timer_ttl(iso8601_timestamp_to_seconds_since_epoch(timer_object.expires), timer_id, false);
+        id_to_timers.erase(iter);
+        return timer_object;
     }
 
-    int create_timer(const std::string& timer_id, const std::string& timer_body, bool& update)
+    int create_or_update_timer(const std::string& timer_id, const std::string& timer_body, bool& update)
     {
         Timer timer;
         staticjson::ParseStatus result;
@@ -2248,12 +2241,65 @@ public:
         {
             return DECODE_FAILURE;
         }
-        return 0;
+        return OPERATION_SUCCESSFUL;
     }
 
-    std::string get_timer(const std::string& time_id)
+    int patch_timer(const std::string& timer_id, const std::string& patch_data)
     {
-        return "";
+        auto t = get_timer_object(timer_id);
+        if (t.expires.empty())
+        {
+            return RESOURCE_DOES_NOT_EXIST;
+        }
+        try
+        {
+            nlohmann::json original_json = nlohmann::json::parse(staticjson::to_json_string(t));
+            nlohmann::json patch_json = nlohmann::json::parse(patch_data);
+            nlohmann::json patched_obj = original_json.patch(patch_json);
+            bool is_update = true;
+            return create_or_update_timer(timer_id, patched_obj.dump(), is_update);
+        }
+        catch (...)
+        {
+        }
+        return DECODE_FAILURE;
+    }
+
+    Timer get_timer_object(const std::string& timer_id)
+    {
+        uint16_t sum = get_u16_sum(timer_id);
+        auto row = sum >> 8;
+        auto col = sum & 0xFF;
+        std::shared_lock<std::shared_timed_mutex> timers_mutexes_read_lock(
+            timers_mutexes[row][col]);
+        auto& id_to_timers = timers[row][col];
+        auto iter = id_to_timers.find(timer_id);
+        if (iter != id_to_timers.end())
+        {
+            iter->second;
+        }
+        return Timer();
+    }
+
+    std::set<std::string> get_expired_timers()
+    {
+        return get_expired_items(timer_expires_to_timer_id_mutex, timer_expires_to_timer_id);
+    }
+
+    void delete_deleteAfter_expired_timers()
+    {
+        std::unique_lock<std::shared_timed_mutex> write_lock(timer_deleteAfter_to_timer_id_mutex);
+        auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
+                                   (std::chrono::system_clock::now().time_since_epoch()).count();
+        auto end = timer_deleteAfter_to_timer_id.upper_bound(seconds_since_epoch);
+        for (auto iter = timer_deleteAfter_to_timer_id.begin(); iter != end; iter++)
+        {
+            for (auto& t: iter->second)
+            {
+                delete_timer(t);
+            }
+            timer_deleteAfter_to_timer_id.erase(iter);
+        }
     }
 
     static void ttl_routine(Storage& storage)
@@ -2272,7 +2318,9 @@ public:
                     notifInfo.expiredSubscriptions.emplace_back(s);
                     std::map<std::string, std::string, ci_less> additionalHeaders;
                     additionalHeaders.insert(std::make_pair(CONTENT_TYPE, JSON_CONTENT));
-                    send_http2_request(METHOD_POST, subs.callbackReference, additionalHeaders, staticjson::to_json_string(notifInfo));
+                    auto body = staticjson::to_json_string(notifInfo);
+                    additionalHeaders.insert(std::make_pair(CONTENT_LENGTH, std::to_string(body.size())));
+                    send_http2_request(METHOD_POST, subs.callbackReference, additionalHeaders, body);
                 }
             }
 
@@ -2314,11 +2362,36 @@ public:
                     std::map<std::string, std::string, ci_less> additionalHeaders;
                     additionalHeaders.insert(std::make_pair(CONTENT_TYPE, MULTIPART_CONTENT_TYPE));
                     additionalHeaders.insert(std::make_pair(CONTENT_LOCATION, content_location));
+                    additionalHeaders.insert(std::make_pair(CONTENT_LENGTH, std::to_string(body.size())));
                     send_http2_request(METHOD_POST, meta.callbackReference, additionalHeaders, body);
 
                     storage.delete_record_directly(r);
                 }
             }
+
+            auto timers = storage.get_expired_timers();
+            for (auto& t: timers)
+            {
+                auto timer_object = storage.get_timer_object(t);
+                if (timer_object.expires.size() && timer_object.callbackReference.size())
+                {
+                    std::map<std::string, std::string, ci_less> additionalHeaders;
+                    additionalHeaders.insert(std::make_pair(CONTENT_TYPE, JSON_CONTENT));
+                    auto body = staticjson::to_json_string(timer_object);
+                    additionalHeaders.insert(std::make_pair(CONTENT_LENGTH, std::to_string(body.size())));
+                    send_http2_request(METHOD_POST, timer_object.callbackReference, additionalHeaders, staticjson::to_json_string(timer_object));
+                }
+                if (timer_object.deleteAfter)
+                {
+                    storage.track_timer_deleteAfter(timer_object.deleteAfter, t, true);
+                }
+                else
+                {
+                    storage.delete_timer(t);
+                }
+            }
+
+            storage.delete_deleteAfter_expired_timers();
         }
     }
 
@@ -2342,8 +2415,8 @@ public:
             ret.storage_id = storage_id;
             ret.realm_id = realm_id;
             ret.init_default_schema_with_empty_schema_id();
-            std::thread ttl(Storage::ttl_routine, std::ref(ret));
-            ttl.detach();
+            std::thread ttl_thead(Storage::ttl_routine, std::ref(ret));
+            ttl_thead.detach();
             return ret;
         }
         else

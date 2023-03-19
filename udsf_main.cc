@@ -925,6 +925,168 @@ bool start_tick_timer(boost::asio::deadline_timer& timer,
     return true;
 }
 
+bool process_individual_timer(const nghttp2::asio_http2::server::asio_server_request& req,
+                                     nghttp2::asio_http2::server::asio_server_response& res,
+                                     uint64_t handler_id, int32_t stream_id,
+                                     const std::string& method,
+                                     const std::string& realm_id, const std::string& storage_id,
+                                     const std::string& timer_id,
+                                     const std::string& msg_body)
+
+{
+    if (timer_id.empty())
+    {
+        return false;
+    }
+    auto& realm = udsf::get_realm(realm_id);
+    auto& storage = realm.get_storage(storage_id);
+    if (method == METHOD_PUT)
+    {
+        bool is_update = false;
+        auto ret = storage.create_or_update_timer(timer_id, msg_body, is_update);
+        if (ret == OPERATION_SUCCESSFUL)
+        {
+            if (is_update)
+            {
+                res.write_head(204);
+                res.end();
+            }
+            else
+            {
+                std::string location;
+                location.reserve(req.uri().scheme.size() + 3 + req.uri().host.size() + req.uri().path.size());
+                location.append(req.uri().scheme).append("://").append(req.uri().host).append(req.uri().path);
+                res.write_head(201, {{LOCATION, {location}}});
+                res.end();
+            }
+
+        }
+        else
+        {
+            const std::string response = "invalid timer";
+            res.write_head(403);
+            res.end(response);
+        }
+        return true;
+    }
+    else if (method == METHOD_GET)
+    {
+        auto timer = storage.get_timer_object(timer_id);
+        if (timer.expires.size())
+        {
+            auto body = staticjson::to_json_string(timer);
+            res.write_head(200);
+            res.end(std::move(body));
+        }
+        else
+        {
+            const std::string response = "timer not found";
+            res.write_head(404);
+            res.end(response);
+        }
+        return true;
+    }
+    else if (method == METHOD_DELETE)
+    {
+        auto timer = storage.delete_timer(timer_id);
+        if (timer.expires.size())
+        {
+            res.write_head(204);
+            res.end();
+        }
+        else
+        {
+            const std::string response = "timer not found";
+            res.write_head(404);
+            res.end(response);
+        }
+        return true;
+    }
+    else if (method == METHOD_PATCH)
+    {
+        auto ret = storage.patch_timer(timer_id, msg_body);
+        if (ret == OPERATION_SUCCESSFUL)
+        {
+            res.write_head(204);
+            res.end();
+        }
+        else if (ret == RESOURCE_DOES_NOT_EXIST)
+        {
+            const std::string response = "timer not found";
+            res.write_head(404);
+            res.end(response);
+        }
+        else
+        {
+            const std::string response = "bad patch request";
+            res.write_head(400);
+            res.end(response);
+        }
+        return true;
+    }
+    else
+    {
+        const std::string response = "method not allowed";
+        res.write_head(405);
+        res.end(response);
+        return true;
+    }
+}
+
+bool process_timers(const nghttp2::asio_http2::server::asio_server_request& req,
+                     nghttp2::asio_http2::server::asio_server_response& res,
+                     uint64_t handler_id, int32_t stream_id,
+                     const std::string& method,
+                     const std::string& realm_id, const std::string& storage_id,
+                     const std::vector<std::string>& path_tokens,
+                     const std::string& msg_body)
+{
+    auto& realm = udsf::get_realm(realm_id);
+    auto& storage = realm.get_storage(storage_id);
+    auto queries = get_queries(req);
+    bool expired_filter = (queries.find("expired-filter") != queries.end());
+    std::set<std::string> timers;
+    if (!expired_filter)
+    {
+        rapidjson::Document doc;
+        doc.Parse(msg_body.c_str());
+        std::string response_body;
+        if (!doc.HasParseError())
+        {
+            // TODO:  run timer search expression
+        }
+    }
+    else
+    {
+        timers = storage.get_expired_timers();
+    }
+    if (timers.size())
+    {
+        udsf::TimerIdList timerIds;
+        timerIds.timerIds = std::move(std::vector<std::string>(timers.begin(), timers.end()));
+        auto response_body = staticjson::to_json_string(timerIds);
+        res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(response_body.size())}}});
+        res.end(std::move(response_body));
+        if (method == METHOD_DELETE)
+        {
+            for (auto& t: timers)
+            {
+                storage.delete_timer(t);
+            }
+        }
+    }
+    else
+    {
+        res.write_head(404);
+        const std::string msg = "not found";
+        res.end(msg);
+        return true;
+    }
+    return true;
+
+}
+
+
 void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_server_request& req,
                                    nghttp2::asio_http2::server::asio_server_response& res,
                                    uint64_t handler_id, int32_t stream_id)
@@ -993,7 +1155,19 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
                 ret = process_get_subscriptions(req, res, handler_id, stream_id, method, realm_id, storage_id, path_tokens, payload);
             }
         }
-
+        else if (resource == RESOURCE_TIMERS)
+        {
+            if (path_tokens.size() == RECORD_ID_INDEX + 1)
+            {
+                std::string& timer_id = path_tokens[RECORD_ID_INDEX];
+                ret = process_individual_timer(req, res, handler_id, stream_id, method, realm_id, storage_id, timer_id,
+                                               payload);
+            }
+            else if (path_tokens.size() == RESOURCE_TYPE_INDEX + 1)
+            {
+                ret = process_timers(req, res, handler_id, stream_id, method, realm_id, storage_id, path_tokens, payload);
+            }
+        }
     }
 
     if (!ret)

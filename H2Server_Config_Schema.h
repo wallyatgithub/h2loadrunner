@@ -173,9 +173,8 @@ public:
     NO_TLS_PROTO no_tls_proto_enum;
     std::vector<Schema_Service> service;
     std::string statistics_file;
+    uint32_t statistics_interval;
     explicit H2Server_Config_Schema():
-        port(8081),
-        threads(1),
         enable_mTLS(false),
         verbose(false),
         skt_recv_buffer_size(4 * 1024 * 1024),
@@ -186,7 +185,8 @@ public:
         header_table_size(4096),
         encoder_header_table_size(4096),
         no_tls_proto("h2c"),
-        no_tls_proto_enum(HTTP2)
+        no_tls_proto_enum(HTTP2),
+        statistics_interval(1)
     {
     }
     void staticjson_init(staticjson::ObjectHandler* h)
