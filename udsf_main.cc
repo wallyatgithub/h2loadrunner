@@ -541,12 +541,12 @@ bool process_records(const nghttp2::asio_http2::server::asio_server_request& req
         max_payload_size = std::atoi(max_payload_size_string.c_str());
     }
 
-    rapidjson::Document doc;
-    doc.Parse(msg_body.c_str());
+    rapidjson::Document search_exp;
+    search_exp.Parse(msg_body.c_str());
     std::string response_body;
-    if (!doc.HasParseError())
+    if (!search_exp.HasParseError())
     {
-        auto records = storage.run_search_expression({}, "", doc);
+        auto records = storage.run_search_expression({}, "", search_exp);
         rapidjson::Document d;
         rapidjson::Pointer("/count").Set(d, records.size());
         auto count = 0;
@@ -1048,12 +1048,12 @@ bool process_timers(const nghttp2::asio_http2::server::asio_server_request& req,
     std::set<std::string> timers;
     if (!expired_filter)
     {
-        rapidjson::Document doc;
-        doc.Parse(msg_body.c_str());
+        rapidjson::Document search_exp;
+        search_exp.Parse(msg_body.c_str());
         std::string response_body;
-        if (!doc.HasParseError())
+        if (!search_exp.HasParseError())
         {
-            // TODO:  run timer search expression
+            auto timers = storage.run_search_expression({}, "", search_exp, true);
         }
     }
     else
