@@ -827,7 +827,7 @@ class Timer
 public:
     std::string timerId;
     std::string expires;
-    std::map<std::string, std::string> metaTags;
+    std::map<std::string, std::vector<std::string>> metaTags;
     std::string callbackReference;
     unsigned callbackReferenceFlag = staticjson::Flags::Optional | staticjson::Flags::IgnoreWrite;
     uint64_t deleteAfter;
@@ -2136,10 +2136,13 @@ public:
         for (auto& t: timer.metaTags)
         {
             auto& tag_name = t.first;
-            auto& tag_value = t.second;
+            auto& tag_values = t.second;
             std::shared_lock<std::shared_timed_mutex> timer_tags_db_read_lock(timer_tags_db_main_mutex);
             auto& tags_name_db = timer_tags_db.begin()->second;
-            insert_value_to_tags_db(tag_name, tag_value, timer_id, tags_name_db, true);
+            for (auto& tag_value : tag_values)
+            {
+                insert_value_to_tags_db(tag_name, tag_value, timer_id, tags_name_db, true);
+            }
         }
         auto ttl = iso8601_timestamp_to_seconds_since_epoch(timer.expires);
         track_timer_ttl(ttl, timer_id);
@@ -2152,10 +2155,13 @@ public:
         for (auto& t: timer.metaTags)
         {
             auto& tag_name = t.first;
-            auto& tag_value = t.second;
+            auto& tag_values = t.second;
             std::shared_lock<std::shared_timed_mutex> timer_tags_db_read_lock(timer_tags_db_main_mutex);
             auto& tags_name_db = timer_tags_db.begin()->second;
-            remove_value_from_tags_db(tag_name, tag_value, timer_id, tags_name_db);
+            for (auto& tag_value : tag_values)
+            {
+                remove_value_from_tags_db(tag_name, tag_value, timer_id, tags_name_db);
+            }
         }
         track_timer_ttl(iso8601_timestamp_to_seconds_since_epoch(timer.expires), timer_id, false);
         std::unique_lock<std::shared_timed_mutex> timer_id_set_write_lock(all_timer_ids_mutex);
@@ -2258,7 +2264,7 @@ public:
         auto iter = id_to_timers.find(timer_id);
         if (iter != id_to_timers.end())
         {
-            iter->second;
+            return iter->second;
         }
         return Timer();
     }

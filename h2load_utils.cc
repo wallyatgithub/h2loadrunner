@@ -975,6 +975,7 @@ std::string to_string_with_precision_3(const T a_value)
 
 size_t get_request_name_max_width(h2load::Config& config)
 {
+    const std::string all_requests = "All_Requests";
     size_t width = 0;
     for (size_t scenario_index = 0; scenario_index < config.json_config_schema.scenarios.size(); scenario_index++)
     {
@@ -985,7 +986,7 @@ size_t get_request_name_max_width(h2load::Config& config)
             width = req_name.size();
         }
     }
-    return width;
+    return std::max(width, all_requests.size());
 }
 
 void output_realtime_stats(h2load::Config& config,

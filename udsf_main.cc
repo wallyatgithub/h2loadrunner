@@ -1053,7 +1053,7 @@ bool process_timers(const nghttp2::asio_http2::server::asio_server_request& req,
         std::string response_body;
         if (!search_exp.HasParseError())
         {
-            auto timers = storage.run_search_expression({}, "", search_exp, true);
+            timers = storage.run_search_expression({}, "", search_exp, true);
         }
     }
     else
@@ -1062,17 +1062,28 @@ bool process_timers(const nghttp2::asio_http2::server::asio_server_request& req,
     }
     if (timers.size())
     {
-        udsf::TimerIdList timerIds;
-        timerIds.timerIds = std::move(std::vector<std::string>(timers.begin(), timers.end()));
-        auto response_body = staticjson::to_json_string(timerIds);
-        res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(response_body.size())}}});
-        res.end(std::move(response_body));
         if (method == METHOD_DELETE)
         {
             for (auto& t: timers)
             {
                 storage.delete_timer(t);
             }
+            res.write_head(204);
+            res.end();
+        }
+        else if (method == METHOD_GET)
+        {
+            udsf::TimerIdList timerIds;
+            timerIds.timerIds = std::move(std::vector<std::string>(timers.begin(), timers.end()));
+            auto response_body = staticjson::to_json_string(timerIds);
+            res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(response_body.size())}}});
+            res.end(std::move(response_body));
+        }
+        else
+        {
+            const std::string response = "method not allowed";
+            res.write_head(405);
+            res.end(response);
         }
     }
     else
@@ -1080,7 +1091,6 @@ bool process_timers(const nghttp2::asio_http2::server::asio_server_request& req,
         res.write_head(404);
         const std::string msg = "not found";
         res.end(msg);
-        return true;
     }
     return true;
 
