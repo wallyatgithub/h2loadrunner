@@ -1390,6 +1390,8 @@ int main(int argc, char** argv)
 
     std::atomic<bool> workers_stopped(false);
 
+    std::condition_variable stats_thread_wait_cond;
+
     auto check_clients_up = [&workers, &workers_stopped]()
     {
         auto total_time_to_wait = 5000;
@@ -1419,12 +1421,8 @@ int main(int argc, char** argv)
 
     std::stringstream dataStream;
 
-    if (config.json_config_schema.scenarios.size() > 0)
-    {
-        std::thread statThread(output_realtime_stats, std::ref(config), std::ref(workers), std::ref(workers_stopped),
-                               std::ref(dataStream));
-        statThread.detach();
-    }
+    std::thread statThread(output_realtime_stats, std::ref(config), std::ref(workers), std::ref(workers_stopped),
+                           std::ref(dataStream), std::ref(stats_thread_wait_cond));
 
     std::thread monThread(rpsUpdateFunc, std::ref(workers_stopped), std::ref(config));
     monThread.detach();
@@ -1448,6 +1446,8 @@ int main(int argc, char** argv)
 
     }
     workers_stopped = true;
+    stats_thread_wait_cond.notify_all();
+    statThread.join();
 
 #else  // NOTHREADS
     auto rate = config.rate;

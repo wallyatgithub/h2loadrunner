@@ -18,9 +18,9 @@ libev_worker::libev_worker(uint32_t id, size_t nreq_todo, size_t nclients,
   ssl_ctx_http2 = SSL_CTX_new(SSLv23_client_method());
   ssl_ctx_http3 = SSL_CTX_new(SSLv23_client_method());
   ssl_ctx = SSL_CTX_new(SSLv23_client_method());
-  setup_SSL_CTX(ssl_ctx_http1, *config, HTTP1_ALPN);
-  setup_SSL_CTX(ssl_ctx_http2, *config, HTTP2_ALPN);
-  setup_SSL_CTX(ssl_ctx_http3, *config, HTTP3_ALPN);
+  setup_SSL_CTX(ssl_ctx_http1, *config, std::set<std::string>{HTTP1_ALPN});
+  setup_SSL_CTX(ssl_ctx_http2, *config, std::set<std::string>{HTTP2_ALPN, HTTP1_ALPN});
+  setup_SSL_CTX(ssl_ctx_http3, *config, std::set<std::string>{HTTP3_ALPN});
   setup_SSL_CTX(ssl_ctx, *config);
 }
 

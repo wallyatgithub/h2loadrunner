@@ -166,7 +166,8 @@ std::vector<std::vector<h2load::SDStat>>
                                       produce_requests_latency_stats(const std::vector<std::shared_ptr<h2load::base_worker>>& workers);
 
 void output_realtime_stats(h2load::Config& config, std::vector<std::shared_ptr<h2load::base_worker>>& workers,
-                           std::atomic<bool>& workers_stopped, std::stringstream& DatStream);
+                           std::atomic<bool>& workers_stopped, std::stringstream& DatStream,
+                           std::condition_variable& stats_thread_wait_cond);
 
 template<typename T>
 std::string to_string_with_precision_3(const T a_value);

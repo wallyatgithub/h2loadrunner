@@ -46,8 +46,7 @@ libev_client::libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Co
       current_addr(nullptr),
       ares_address(nullptr),
       fd(-1),
-      probe_skt_fd(-1),
-      connectfn(&libev_client::connect)
+      probe_skt_fd(-1)
 {
 
     ev_io_init(&wev, writecb, 0, EV_WRITE);
@@ -462,7 +461,7 @@ void libev_client::start_rps_timer()
 
 void libev_client::stop_rps_timer()
 {
-    if (ev_is_active(&watcher))
+    if (ev_is_active(&rps_watcher))
     {
         ev_timer_stop(static_cast<libev_worker*>(worker)->loop, &rps_watcher);
     }
@@ -636,7 +635,7 @@ int libev_client::write_clear()
 
 void libev_client::start_request_delay_execution_timer()
 {
-    if (is_controller_client() && !ev_is_active(delayed_request_watcher))
+    if (is_controller_client() && !ev_is_active(&delayed_request_watcher))
     {
         ev_timer_start(static_cast<libev_worker*>(worker)->loop, &delayed_request_watcher);
     }

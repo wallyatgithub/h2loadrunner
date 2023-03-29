@@ -991,8 +991,13 @@ size_t get_request_name_max_width(h2load::Config& config)
 
 void output_realtime_stats(h2load::Config& config,
                            std::vector<std::shared_ptr<h2load::base_worker>>& workers,
-                           std::atomic<bool>& workers_stopped, std::stringstream& dataStream)
+                           std::atomic<bool>& workers_stopped, std::stringstream& dataStream,
+                           std::condition_variable& stats_thread_wait_cond)
 {
+    if (config.json_config_schema.scenarios.size() == 0)
+    {
+        return;
+    }
     std::vector<std::vector<size_t>> scenario_req_sent_till_now;
     std::vector<std::vector<size_t>> scenario_req_done_till_now;
     std::vector<std::vector<size_t>> scenario_req_success_till_now;
@@ -1013,6 +1018,7 @@ void output_realtime_stats(h2load::Config& config,
     }
 
     auto period_start = std::chrono::steady_clock::now();
+    std::this_thread::sleep_for(std::chrono::milliseconds(config.json_config_schema.statistics_interval * 1000));
     while (!workers_stopped)
     {
         auto scenario_req_sent_till_last_interval = scenario_req_sent_till_now;
@@ -1022,8 +1028,6 @@ void output_realtime_stats(h2load::Config& config,
         auto scenario_3xx_till_last_interval = scenario_3xx_till_now;
         auto scenario_4xx_till_last_interval = scenario_4xx_till_now;
         auto scenario_5xx_till_last_interval = scenario_5xx_till_now;
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(config.json_config_schema.statistics_interval * 1000));
 
         auto now = std::chrono::system_clock::now();
         auto now_c = std::chrono::system_clock::to_time_t(now);
@@ -1211,6 +1215,10 @@ void output_realtime_stats(h2load::Config& config,
                               total_req_sent).size() : total_req_width;
 
         dataStream.str(outputStream.str());
+
+        static thread_local std::mutex local_mutex;
+        std::unique_lock<std::mutex> lock(local_mutex);
+        stats_thread_wait_cond.wait_for(lock, std::chrono::milliseconds(config.json_config_schema.statistics_interval * 1000));
     }
 }
 
