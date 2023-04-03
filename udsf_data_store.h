@@ -8,6 +8,7 @@
 #include <cstring>
 #include <numeric>
 #include <shared_mutex>
+#include <stack>
 #include "staticjson/document.hpp"
 #include "staticjson/staticjson.hpp"
 #include "rapidjson/pointer.h"
@@ -961,9 +962,9 @@ public:
     }
 
     void insert_value_to_tags_db(const std::string& tag_name, const std::string& tag_value,
-                                             const std::string& reource_id,
-                                             Tags_Values_Db_With_Tags_Name_As_Key& tags_name_db, 
-                                             bool create_new_value_db_if_not_exist = false)
+                                 const std::string& reource_id,
+                                 Tags_Values_Db_With_Tags_Name_As_Key& tags_name_db,
+                                 bool create_new_value_db_if_not_exist = false)
     {
         std::shared_lock<std::shared_timed_mutex> tags_name_db_read_lock(*tags_name_db.name_to_value_db_map_mutex);
         auto tag_name_db_iter = tags_name_db.name_to_value_db_map.find(tag_name);
@@ -984,7 +985,7 @@ public:
     }
 
     void insert_record_tag_value(const std::string& schema_id, const std::string& tag_name, const std::string& tag_value,
-                          const std::string& record_id)
+                                 const std::string& record_id)
     {
         std::shared_lock<std::shared_timed_mutex> tags_db_main_read_guard(record_tags_db_main_mutex);
         auto tags_db_iter = record_tags_db.find(schema_id);
@@ -996,9 +997,9 @@ public:
     }
 
     void remove_value_from_tags_db(const std::string& tag_name, const std::string& tag_value,
-                                             const std::string& reource_id,
-                                             Tags_Values_Db_With_Tags_Name_As_Key& tags_name_db
-                                             )
+                                   const std::string& reource_id,
+                                   Tags_Values_Db_With_Tags_Name_As_Key& tags_name_db
+                                  )
     {
         std::shared_lock<std::shared_timed_mutex> tags_name_db_read_lock(*tags_name_db.name_to_value_db_map_mutex);
         auto tag_name_db_iter = tags_name_db.name_to_value_db_map.find(tag_name);
@@ -1023,7 +1024,7 @@ public:
     }
 
     void remove_record_tag_value(const std::string& schema_id, const std::string& tag_name, const std::string& tag_value,
-                          const std::string& record_id)
+                                 const std::string& record_id)
     {
         std::shared_lock<std::shared_timed_mutex> tags_db_main_read_lock(record_tags_db_main_mutex);
         auto tags_db_iter = record_tags_db.find(schema_id);
@@ -1168,7 +1169,7 @@ public:
     }
 
     void track_ttl(std::shared_timed_mutex& mutex, std::map<uint64_t, std::set<std::string>>& ttl_map,
-                      uint64_t ttl, const std::string& id, bool insert = true)
+                   uint64_t ttl, const std::string& id, bool insert = true)
     {
         std::unique_lock<std::shared_timed_mutex> write_lock(mutex);
         if (insert)
@@ -1188,7 +1189,7 @@ public:
     }
 
     std::set<std::string> get_expired_items(std::shared_timed_mutex& mutex,
-                                                   std::map<uint64_t, std::set<std::string>>& tracking_map)
+                                            std::map<uint64_t, std::set<std::string>>& tracking_map)
     {
         std::shared_lock<std::shared_timed_mutex> read_lock(mutex);
         std::set<std::string> s;
@@ -1602,39 +1603,174 @@ public:
         return Block();
     }
 
+    void schema_violation_handling(rapidjson::Value& value)
+    {
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        value.Accept(writer);
+        std::cerr << "schema violation: " << buffer.GetString() << std::endl;
+    }
+
+    std::set<std::string> get_record_id_list_from_array(rapidjson::Value& value)
+    {
+        std::set<std::string> s;
+        if (value.IsArray())
+        {
+            for (size_t i = 0; i < value.Size(); i++)
+            {
+                if (value[i].IsString())
+                {
+                    s.emplace(value[i].GetString());
+                }
+            }
+        }
+        else
+        {
+            schema_violation_handling(value);
+        }
+        return s;
+    }
+
+    std::set<std::string> run_search_comparison_or_record_id_list(const std::string& schema_id,
+                                                                  rapidjson::Value& value, bool timer_operation = false)
+    {
+        std::set<std::string> ret;
+        auto first_name = std::string(value.MemberBegin()->name.GetString(), value.MemberBegin()->name.GetStringLength());
+        if (first_name == OPERATION)
+        {
+            std::string op = get_string_value_from_Json_object(value, OPERATION);
+            std::string tag = get_string_value_from_Json_object(value, "tag");
+            std::string val = get_string_value_from_Json_object(value, "value");
+            if (!timer_operation)
+            {
+                ret = run_search_comparison(schema_id, op, tag, val, record_tags_db_main_mutex, record_tags_db);
+            }
+            else
+            {
+                ret = run_search_comparison(schema_id, op, tag, val, timer_tags_db_main_mutex, timer_tags_db);
+            }
+        }
+        else if (first_name == RECORD_ID_LIST)
+        {
+            auto& sub_value = value.MemberBegin()->value;
+
+            ret = get_record_id_list_from_array(sub_value);
+        }
+        return ret;
+    }
+
+    std::set<std::string> run_search_expression_non_recursive(const std::set<std::string>& curr_set,
+                                                              const std::string& schema_id,
+                                                              rapidjson::Value& initial_value, bool timer_operation = false)
+    {
+        std::set<std::string> ret;
+        std::stack<rapidjson::Value*> search_conditions;
+        std::stack<rapidjson::Value*> values;
+        values.push(&initial_value);
+        while (values.size())
+        {
+            auto v = values.top();
+            values.pop();
+            auto first_name = std::string(v->MemberBegin()->name.GetString(), v->MemberBegin()->name.GetStringLength());
+            if (first_name == CONDITION)
+            {
+                search_conditions.push(v);
+                if (v->HasMember(UNITS.c_str()))
+                {
+                    auto& units = (*v)[UNITS.c_str()];
+                    if (units.IsArray())
+                    {
+                        for (size_t i = 0; i < units.Size(); i++)
+                        {
+                            values.push(&units[i]);
+                        }
+                    }
+                }
+            }
+        }
+        std::string actual_schema_id;
+        while (search_conditions.size())
+        {
+            rapidjson::Value& value = *(values.top());
+            values.pop();
+
+            auto first_name = std::string(value.MemberBegin()->name.GetString(), value.MemberBegin()->name.GetStringLength());
+            if (first_name == CONDITION)
+            {
+                if (actual_schema_id.empty())
+                {
+                    actual_schema_id = get_string_value_from_Json_object(value, "schemaId");
+                }
+                auto condition_operator = get_string_value_from_Json_object(value, CONDITION);
+                std::vector<std::set<std::string>> operands;
+                if (value.HasMember(UNITS.c_str()))
+                {
+                    auto& units = value[UNITS.c_str()];
+                    if (units.IsArray())
+                    {
+                        std::vector<rapidjson::Value*> search_comparison_or_record_id_list;
+                        for (size_t i = 0; i < units.Size(); i++)
+                        {
+                            auto& array_value = units[i];
+                            if (array_value.IsObject())
+                            {
+                                auto first_name = std::string(array_value.MemberBegin()->name.GetString(),
+                                                              array_value.MemberBegin()->name.GetStringLength());
+                                if (first_name == CONDITION)
+                                {
+                                    std::cerr << "bottom search condition has nested condition:" << std::endl << std::flush;
+                                    schema_violation_handling(array_value);
+                                    abort();
+                                }
+                                else
+                                {
+                                    search_comparison_or_record_id_list.push_back(&array_value);
+                                }
+                            }
+                        }
+                        for (auto v : search_comparison_or_record_id_list)
+                        {
+                            operands.emplace_back(run_search_comparison_or_record_id_list(actual_schema_id, *v, timer_operation));
+
+                        }
+                        if (condition_operator == CONDITION_OP_AND)
+                        {
+                            ret = run_and_operator(operands);
+                        }
+                        else if (condition_operator == CONDITION_OP_OR)
+                        {
+                            ret = run_or_operator(operands);
+                        }
+                        else if (condition_operator == CONDITION_OP_NOT)
+                        {
+                            if (curr_set.empty())
+                            {
+                                run_not_operator(timer_operation ? get_all_timer_ids() : get_all_record_ids(actual_schema_id),
+                                                 run_or_operator(operands));
+                            }
+                            else
+                            {
+                                ret = run_not_operator(curr_set, run_or_operator(operands));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        schema_violation_handling(value);
+                    }
+                }
+
+            }
+            // TODO: replace the value with ret
+        }
+        return ret;
+    }
+
     std::set<std::string> run_search_expression(const std::set<std::string>& curr_set, const std::string& schema_id,
                                                 rapidjson::Value& value, bool timer_operation = false)
     {
         std::set<std::string> ret;
         auto actual_schema_id = schema_id;
-
-        auto schema_violation_handling = [](rapidjson::Value & value)
-        {
-            rapidjson::StringBuffer buffer;
-            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-            value.Accept(writer);
-            std::cerr << "schema violation: " << buffer.GetString() << std::endl;
-        };
-
-        auto get_record_id_list_from_array = [&schema_violation_handling](rapidjson::Value & value)
-        {
-            std::set<std::string> s;
-            if (value.IsArray())
-            {
-                for (size_t i = 0; i < value.Size(); i++)
-                {
-                    if (value[i].IsString())
-                    {
-                        s.emplace(value[i].GetString());
-                    }
-                }
-            }
-            else
-            {
-                schema_violation_handling(value);
-            }
-            return s;
-        };
 
         if (value.IsObject())
         {
@@ -1673,7 +1809,7 @@ public:
                         }
                         for (auto v : simple_values)
                         {
-                            operands.emplace_back(run_search_expression(curr_set, actual_schema_id, *v, timer_operation));
+                            operands.emplace_back(run_search_comparison_or_record_id_list(actual_schema_id, *v, timer_operation));
 
                         }
                         if (condition_operator == CONDITION_OP_AND)
@@ -1704,7 +1840,8 @@ public:
                 {
                     if (curr_set.empty())
                     {
-                        run_not_operator(timer_operation ? get_all_timer_ids() : get_all_record_ids(actual_schema_id), run_or_operator(operands));
+                        run_not_operator(timer_operation ? get_all_timer_ids() : get_all_record_ids(actual_schema_id),
+                                         run_or_operator(operands));
                     }
                     else
                     {
@@ -2000,7 +2137,8 @@ public:
 
     std::set<std::string> get_subscription_ids_about_to_expire()
     {
-        return get_expired_items(subscription_expiryNotification_to_subscription_id_mutex, subscription_expiryNotification_to_subscription_id);
+        return get_expired_items(subscription_expiryNotification_to_subscription_id_mutex,
+                                 subscription_expiryNotification_to_subscription_id);
     }
 
     std::set<std::string> get_subscription_ids_to_notify(const std::string& record_id, const std::string& block_id)
@@ -2110,7 +2248,8 @@ public:
         {
             std::unique_lock<std::shared_timed_mutex> subscription_expiryNotification_to_subscription_id_write_lock(
                 subscription_expiryNotification_to_subscription_id_mutex);
-            remove_from_map(subscription_expiryNotification_to_subscription_id, iso8601_timestamp_to_seconds_since_epoch(subscription.expiry) - subscription.expiryNotification,
+            remove_from_map(subscription_expiryNotification_to_subscription_id,
+                            iso8601_timestamp_to_seconds_since_epoch(subscription.expiry) - subscription.expiryNotification,
                             subscription_id);
         }
     }
@@ -2133,7 +2272,7 @@ public:
 
     void checkin_timer(const std::string& timer_id, const Timer& timer)
     {
-        for (auto& t: timer.metaTags)
+        for (auto& t : timer.metaTags)
         {
             auto& tag_name = t.first;
             auto& tag_values = t.second;
@@ -2152,7 +2291,7 @@ public:
 
     void checkout_timer(const std::string& timer_id, const Timer& timer)
     {
-        for (auto& t: timer.metaTags)
+        for (auto& t : timer.metaTags)
         {
             auto& tag_name = t.first;
             auto& tag_values = t.second;
@@ -2282,7 +2421,7 @@ public:
         auto end = timer_deleteAfter_to_timer_id.upper_bound(seconds_since_epoch);
         for (auto iter = timer_deleteAfter_to_timer_id.begin(); iter != end; iter++)
         {
-            for (auto& t: iter->second)
+            for (auto& t : iter->second)
             {
                 delete_timer(t);
             }
@@ -2296,7 +2435,7 @@ public:
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             auto subs_to_expire = storage.get_subscription_ids_about_to_expire();
-            for (auto& s: subs_to_expire)
+            for (auto& s : subs_to_expire)
             {
                 storage.disable_expiryNotification_of_subscription(s);
                 auto subs = storage.get_decoded_subscription(s);
@@ -2313,7 +2452,7 @@ public:
             }
 
             auto expired_subs = storage.get_expired_subscription_ids();
-            for (auto& s: expired_subs)
+            for (auto& s : expired_subs)
             {
                 bool found;
                 bool delete_success;
@@ -2322,7 +2461,7 @@ public:
             }
 
             auto expired_records = storage.get_ttl_expired_records();
-            for (auto& r: expired_records)
+            for (auto& r : expired_records)
             {
                 auto meta = storage.get_record_meta_object(r);
                 if (meta.callbackReference.size())
@@ -2358,7 +2497,7 @@ public:
             }
 
             auto timers = storage.get_expired_timers();
-            for (auto& t: timers)
+            for (auto& t : timers)
             {
                 auto timer_object = storage.get_timer_object(t);
                 if (timer_object.expires.size() && timer_object.callbackReference.size())
@@ -2367,7 +2506,8 @@ public:
                     additionalHeaders.insert(std::make_pair(CONTENT_TYPE, JSON_CONTENT));
                     auto body = staticjson::to_json_string(timer_object);
                     additionalHeaders.insert(std::make_pair(CONTENT_LENGTH, std::to_string(body.size())));
-                    send_http2_request(METHOD_POST, timer_object.callbackReference, additionalHeaders, staticjson::to_json_string(timer_object));
+                    send_http2_request(METHOD_POST, timer_object.callbackReference, additionalHeaders,
+                                       staticjson::to_json_string(timer_object));
                 }
                 if (timer_object.deleteAfter)
                 {
