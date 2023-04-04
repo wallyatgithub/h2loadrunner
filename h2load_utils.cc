@@ -2006,7 +2006,7 @@ bool variable_present(const std::string& source, size_t start_offset, size_t& va
         return false;
     }
     var_start = source.find("${", start_offset);
-    var_end = source.find("}", start_offset);
+    var_end = source.find("}", var_start);
     if ((var_start == std::string::npos) ||
         (var_end == std::string::npos) ||
         (var_end < var_start))
