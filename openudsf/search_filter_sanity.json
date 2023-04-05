@@ -234,10 +234,11 @@
         {
           "uri": {
             "typeOfAction": "input",
-            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}?get-previous=true"
+            "input": "/nudsf-dr/v1/realm/storage/records"
           },
           "clear-old-cookies": false,
           "method": "delete",
+          "payload": "{   \"cond\": \"AND\",   \"units\": [     {       \"op\": \"GTE\",       \"tag\": \"ueId\",       \"value\": \"supi-00000000\"     },     {       \"recordIdList\": [         \"record-00000000\",         \"record-00000001\",         \"record-00000002\"       ]     },     {       \"cond\": \"AND\",       \"units\": [         {           \"op\": \"LTE\",           \"tag\": \"ueId\",           \"value\": \"supi-99999999\"         },         {           \"recordIdList\": [             \"record-00000000\",             \"record-00000001\",             \"record-00000004\"           ]         },         {           \"cond\": \"NOT\",           \"units\": [             {               \"op\": \"EQ\",               \"tag\": \"ueId\",               \"value\": \"supi-12345678\"             }           ]         }       ]     }   ] }",
           "http-version": "default",
           "luaScript": "",
           "expected-status-code": 200,

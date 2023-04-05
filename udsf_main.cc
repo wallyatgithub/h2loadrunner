@@ -546,54 +546,79 @@ bool process_records(const nghttp2::asio_http2::server::asio_server_request& req
     std::string response_body;
     if (!search_exp.HasParseError())
     {
-        auto records = storage.run_search_expression({}, "", search_exp);
-        rapidjson::Document d;
-        rapidjson::Pointer("/count").Set(d, records.size());
-        auto count = 0;
-        auto payload_size = 0;
-        for (auto& r : records)
+        // TODO: count-indicator optimization
+        auto records = storage.run_search_expression_non_recursive_opt(search_exp);
+        if (method == METHOD_GET)
         {
+            rapidjson::Document d;
+            rapidjson::Pointer("/count").Set(d, records.size());
             if (!count_indicator)
             {
-                std::string location;
-                location.reserve(req.uri().scheme.size() + 3 + req.uri().host.size() + req.uri().path.size() + PATH_DELIMETER.size() +
-                                 r.size());
-                location.append(req.uri().scheme).append("://").append(req.uri().host).append(req.uri().path);
-                location.append(PATH_DELIMETER).append(r);
-                std::string jptr = "/references/";
-                jptr.append(std::to_string(count));
-                rapidjson::Pointer(jptr.c_str()).Set(d, location.c_str());
-            }
-            if (max_payload_size && payload_size < max_payload_size)
-            {
-                std::string body = storage.get_record_json_body(r, meta_only);
-                if (payload_size + body.size() < max_payload_size)
+                auto count = 0;
+                auto payload_size = 0;
+                for (auto& r : records)
                 {
-                    rapidjson::Document record_doc;
-                    record_doc.Parse(body.c_str());
-                    if (!record_doc.HasParseError())
+                    std::string location;
+                    location.reserve(req.uri().scheme.size() + 3 + req.uri().host.size() + req.uri().path.size() + PATH_DELIMETER.size() +
+                                     r.size());
+                    location.append(req.uri().scheme).append("://").append(req.uri().host).append(req.uri().path);
+                    location.append(PATH_DELIMETER).append(r);
+                    std::string jptr = "/references/";
+                    jptr.append(std::to_string(count));
+                    rapidjson::Pointer(jptr.c_str()).Set(d, location.c_str());
+
+                    if (max_payload_size_string.empty() || payload_size < max_payload_size)
                     {
-                        std::string jptr = "/matchingRecords/";
-                        jptr.append(r);
-                        rapidjson::Value value(record_doc, d.GetAllocator());
-                        rapidjson::Pointer(jptr.c_str()).Set(d, value);
-                        payload_size += body.size();
+                        std::string body = storage.get_record_json_body(r, meta_only);
+                        if (payload_size + body.size() < max_payload_size)
+                        {
+                            rapidjson::Document record_doc;
+                            record_doc.Parse(body.c_str());
+                            if (!record_doc.HasParseError())
+                            {
+                                std::string jptr = "/matchingRecords/";
+                                jptr.append(r);
+                                rapidjson::Value value(record_doc, d.GetAllocator());
+                                rapidjson::Pointer(jptr.c_str()).Set(d, value);
+                                payload_size += body.size();
+                            }
+                        }
+                    }
+
+                    count++;
+                    if (number_limit && count > number_limit)
+                    {
+                        break;
                     }
                 }
             }
-
-            count++;
-            if (number_limit && count > number_limit)
-            {
-                break;
-            }
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            d.Accept(writer);
+            response_body = std::string(buffer.GetString());
+            res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(response_body.size())}}});
+            res.end(std::move(response_body));
         }
-        rapidjson::StringBuffer buffer;
-        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-        d.Accept(writer);
-        response_body = std::string(buffer.GetString());
-        res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(response_body.size())}}});
-        res.end(std::move(response_body));
+        else if (method == METHOD_DELETE)
+        {
+            udsf::RecordIdList rlist;
+            rlist.recordIdList.reserve(records.size());
+            for (auto& r : records)
+            {
+                rlist.recordIdList.push_back(r);
+                bool record_delete_success;
+                storage.delete_record(r, record_delete_success, false);
+            }
+            auto body = staticjson::to_json_string(rlist);
+            res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(body.size())}}});
+            res.end(std::move(body));
+        }
+        else
+        {
+            const std::string response = "method not allowed";
+            res.write_head(405);
+            res.end(response);
+        }
         return true;
     }
     else
@@ -1053,7 +1078,7 @@ bool process_timers(const nghttp2::asio_http2::server::asio_server_request& req,
         std::string response_body;
         if (!search_exp.HasParseError())
         {
-            timers = storage.run_search_expression({}, "", search_exp, true);
+            timers = storage.run_search_expression_non_recursive(search_exp, true);
         }
     }
     else
