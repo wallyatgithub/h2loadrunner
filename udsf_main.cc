@@ -546,7 +546,26 @@ bool process_records(const nghttp2::asio_http2::server::asio_server_request& req
     std::string response_body;
     if (!search_exp.HasParseError())
     {
-        // TODO: count-indicator optimization
+        if (search_exp.HasMember(OPERATION.c_str()) && count_indicator && method == METHOD_GET)
+        {
+            std::string op = udsf::get_string_value_from_Json_object(search_exp, OPERATION);
+            std::string tag = udsf::get_string_value_from_Json_object(search_exp, "tag");
+            std::string val = udsf::get_string_value_from_Json_object(search_exp, "value");
+            auto schema_id = udsf::get_string_value_from_Json_object(search_exp, SCHEMA_ID);
+            size_t count;
+            auto ret = storage.run_search_comparison(schema_id, op, tag, val, storage.record_tags_db_main_mutex, storage.record_tags_db, count, false);
+
+            rapidjson::Document d;
+            rapidjson::Pointer("/count").Set(d, count);
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            d.Accept(writer);
+            response_body = std::string(buffer.GetString());
+            res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(response_body.size())}}});
+            res.end(std::move(response_body));
+            return true;
+        }
+
         auto records = storage.run_search_expression_non_recursive_opt(search_exp);
         if (method == METHOD_GET)
         {
@@ -1078,7 +1097,7 @@ bool process_timers(const nghttp2::asio_http2::server::asio_server_request& req,
         std::string response_body;
         if (!search_exp.HasParseError())
         {
-            timers = storage.run_search_expression_non_recursive(search_exp, true);
+            timers = storage.run_search_expression_non_recursive_opt(search_exp, true);
         }
     }
     else

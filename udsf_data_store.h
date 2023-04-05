@@ -1045,12 +1045,12 @@ public:
         }
     }
 
-    // TODO: count-indicator optimization
     std::set<std::string> run_search_comparison(const std::string& schema_id, const std::string& op,
                                                 const std::string& tag_name, const std::string& tag_value,
-                                                std::shared_timed_mutex& mutex, Record_Tags_Db& tags_db)
+                                                std::shared_timed_mutex& mutex, Record_Tags_Db& tags_db, size_t& count, bool count_indicator = false)
     {
         std::set<std::string> s;
+        count = 0;
         std::shared_lock<std::shared_timed_mutex> tags_db_main_read_lock(mutex);
         std::vector<Record_Tags_Db::iterator> tag_db_iterators_to_go_through;
         if (schema_id.size())
@@ -1085,6 +1085,11 @@ public:
                     auto range = tags_value_db.value_to_resource_id_map.equal_range(tag_value);
                     for (auto i = range.first; i != range.second; ++i)
                     {
+                        if (count_indicator)
+                        {
+                            count++;
+                            continue;
+                        }
                         s.insert(i->second);
                     }
                 }
@@ -1093,6 +1098,11 @@ public:
                     auto iter = tags_value_db.value_to_resource_id_map.upper_bound(tag_value);
                     while (iter != tags_value_db.value_to_resource_id_map.end())
                     {
+                        if (count_indicator)
+                        {
+                            count++;
+                            continue;
+                        }
                         s.insert(iter->second);
                         iter++;
                     }
@@ -1102,6 +1112,11 @@ public:
                     auto iter = tags_value_db.value_to_resource_id_map.lower_bound(tag_value);
                     while (iter != tags_value_db.value_to_resource_id_map.end())
                     {
+                        if (count_indicator)
+                        {
+                            count++;
+                            continue;
+                        }
                         s.insert(iter->second);
                         iter++;
                     }
@@ -1112,6 +1127,11 @@ public:
                     auto iter = tags_value_db.value_to_resource_id_map.begin();
                     while (iter != lower_bound)
                     {
+                        if (count_indicator)
+                        {
+                            count++;
+                            continue;
+                        }
                         s.insert(iter->second);
                         iter++;
                     }
@@ -1122,6 +1142,11 @@ public:
                     auto iter = tags_value_db.value_to_resource_id_map.begin();
                     while (iter != upper_bound)
                     {
+                        if (count_indicator)
+                        {
+                            count++;
+                            continue;
+                        }
                         s.insert(iter->second);
                         iter++;
                     }
@@ -1132,10 +1157,20 @@ public:
                     auto upper_bound = tags_value_db.value_to_resource_id_map.upper_bound(tag_value);
                     for (auto iter = tags_value_db.value_to_resource_id_map.begin(); iter != lower_bound; ++iter)
                     {
+                        if (count_indicator)
+                        {
+                            count++;
+                            continue;
+                        }
                         s.insert(iter->second);
                     }
                     for (auto iter = upper_bound; iter != tags_value_db.value_to_resource_id_map.end(); ++iter)
                     {
+                        if (count_indicator)
+                        {
+                            count++;
+                            continue;
+                        }
                         s.insert(iter->second);
                     }
                 }
@@ -1646,6 +1681,7 @@ public:
                                                                   rapidjson::Value& value, bool timer_operation = false)
     {
         std::set<std::string> ret;
+        size_t count;
         if (value.HasMember(OPERATION.c_str()))
         {
             std::string op = get_string_value_from_Json_object(value, OPERATION);
@@ -1653,11 +1689,11 @@ public:
             std::string val = get_string_value_from_Json_object(value, "value");
             if (!timer_operation)
             {
-                ret = run_search_comparison(schema_id, op, tag, val, record_tags_db_main_mutex, record_tags_db);
+                ret = run_search_comparison(schema_id, op, tag, val, record_tags_db_main_mutex, record_tags_db, count, false);
             }
             else
             {
-                ret = run_search_comparison(schema_id, op, tag, val, timer_tags_db_main_mutex, timer_tags_db);
+                ret = run_search_comparison(schema_id, op, tag, val, timer_tags_db_main_mutex, timer_tags_db, count, false);
             }
         }
         else if (value.HasMember(RECORD_ID_LIST.c_str()))
@@ -1774,7 +1810,7 @@ public:
         return run_search_comparison_or_record_id_list("", initial_value, timer_operation);
     }
 
-    std::set<std::string> run_search_expression_non_recursive_opt(rapidjson::Document& initial_value,
+    std::set<std::string> run_search_expression_non_recursive_opt(rapidjson::Document& doc,
                                                                   bool timer_operation = false)
     {
         struct Search_Expression_In_Stack
@@ -1790,7 +1826,7 @@ public:
         std::set<std::string> result;
         std::stack<Search_Expression_In_Stack> search_conditions;
         std::stack<Search_Expression_In_Stack> values;
-        values.push(Search_Expression_In_Stack(nullptr, &initial_value));
+        values.push(Search_Expression_In_Stack(nullptr, &doc));
         while (values.size())
         {
             auto v = values.top();
@@ -1804,7 +1840,7 @@ public:
                     continue;
                 }
                 search_conditions.push(v);
-                std::vector<size_t> units_to_remove;
+                //std::vector<size_t> units_to_remove;
                 for (size_t i = 0; i < units.Size(); i++)
                 {
                     auto schema_id = get_string_value_from_Json_object(units[i], SCHEMA_ID);
@@ -1812,17 +1848,24 @@ public:
                     {
                         values.push(Search_Expression_In_Stack(&(search_conditions.top()), &units[i]));
                     }
+                    /*
                     else
                     {
                         units_to_remove.push_back(i);
                         search_conditions.top().operands.push_back(run_search_comparison_or_record_id_list(schema_id, units[i],
                                                                                                            timer_operation));
-                    }
+                    }*/
                 }
+                /*
                 for (auto i = units_to_remove.rbegin(); i != units_to_remove.rend(); i++)
                 {
                     units.Erase(units.Begin() + *i);
                 }
+                if (units.Size() == 0)
+                {
+                    v.value->RemoveMember(UNITS.c_str());
+                }
+                */
             }
         }
 
@@ -1832,22 +1875,12 @@ public:
             auto search_cond = search_conditions.top();
             search_conditions.pop();
             auto& value = *(search_cond.value);
-
-            rapidjson::StringBuffer buffer;
-            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-            value.Accept(writer);
-            std::cerr << "current search condition: " << buffer.GetString() << std::endl << std::flush;
-            std::cerr << "pre-processed units in current search condition: " << std::endl << std::flush;
-            for (auto& s : search_cond.operands)
-            {
-                std::cerr << "unit begin: " << std::endl << std::flush;
-                for (auto& sr : s)
-                {
-                    std::cerr << sr << std::endl << std::flush;
-                }
-                std::cerr << "unit end " << std::endl << std::flush;
-            }
-
+            /*
+                        rapidjson::StringBuffer buffer;
+                        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                        doc.Accept(writer);
+                        std::cerr << "current search exp: " << buffer.GetString() << std::endl << std::flush;
+            */
             if (!value.HasMember(UNITS.c_str()) || !value[UNITS.c_str()].IsArray() || (!value.HasMember(CONDITION.c_str())))
             {
                 schema_violation_handling(value);
@@ -1898,94 +1931,56 @@ public:
                         p = p->parent;
                         cond_op = get_string_value_from_Json_object(*p->value, CONDITION);
                     }
-                    if (cond_op == CONDITION_OP_AND && p && p->operands.size())
+                    if (cond_op == CONDITION_OP_AND && p && p->value->HasMember(CONDITION.c_str()) && p->value->HasMember(UNITS.c_str()) &&
+                        (*p->value)[UNITS.c_str()].IsArray())
                     {
-                        not_op_source = p->operands[0];
+                        auto s_id = get_string_value_from_Json_object(*p->value, SCHEMA_ID);
+                        auto& units = (*p->value)[UNITS.c_str()];
+                        for (size_t i = 0; i < units.Size(); i++)
+                        {
+                            auto schema_id = get_string_value_from_Json_object(units[i], SCHEMA_ID);
+                            if (!units[i].HasMember(CONDITION.c_str()))
+                            {
+                                not_op_source = run_search_comparison_or_record_id_list(s_id, units[i],
+                                                                                        timer_operation);
+                                break;
+                            }
+                        }
                     }
+                    /*
 
-                    std::cerr << "source of NOT OP begin: " << std::endl << std::flush;
-                    for (auto& sr : not_op_source)
-                    {
-                        std::cerr << sr << std::endl << std::flush;
-                    }
-                    std::cerr << "source of NOT OP end " << std::endl << std::flush;
-
+                                        std::cerr << "source of NOT OP begin: " << std::endl << std::flush;
+                                        for (auto& sr : not_op_source)
+                                        {
+                                            std::cerr << sr << std::endl << std::flush;
+                                        }
+                                        std::cerr << "source of NOT OP end " << std::endl << std::flush;
+                    */
                     result = run_not_operator(not_op_source.size() ? not_op_source : (timer_operation ? get_all_timer_ids() :
                                                                                       get_all_record_ids(schema_id)),
                                               run_or_operator(operands));
                 }
             }
 
-            auto& allocator = initial_value.GetAllocator();
+            auto& allocator = doc.GetAllocator();
             rapidjson::Value record_list(rapidjson::kArrayType);
             record_list.Reserve(result.size(), allocator);
             for (auto& r : result)
             {
                 record_list.PushBack(rapidjson::Value(r.c_str(), allocator).Move(), allocator);
             }
-
-            {
-                rapidjson::StringBuffer buffer;
-                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-                value.Accept(writer);
-                std::cerr << "current search condition before remove all: " << buffer.GetString() << std::endl << std::flush;
-            }
-
-            if (search_cond.parent)
-            {
-                rapidjson::StringBuffer buffer;
-                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-                search_cond.parent->value->Accept(writer);
-                std::cerr << "current search condition parent before remove all: " << buffer.GetString() << std::endl << std::flush;
-            }
-
-
             value.RemoveAllMembers();
-
-            {
-                rapidjson::StringBuffer buffer;
-                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-                value.Accept(writer);
-                std::cerr << "current search condition after remove all: " << buffer.GetString() << std::endl << std::flush;
-            }
-
-
-            if (search_cond.parent)
-            {
-                rapidjson::StringBuffer buffer;
-                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-                search_cond.parent->value->Accept(writer);
-                std::cerr << "current search condition parent after remove all: " << buffer.GetString() << std::endl << std::flush;
-            }
-
-
             value.AddMember(rapidjson::Value(RECORD_ID_LIST.c_str(), allocator).Move(), record_list, allocator);
-
-            {
-                rapidjson::StringBuffer buffer;
-                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-                value.Accept(writer);
-                std::cerr << "current search condition after add record list: " << buffer.GetString() << std::endl << std::flush;
-            }
-
-            if (search_cond.parent)
-            {
-                rapidjson::StringBuffer buffer;
-                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-                search_cond.parent->value->Accept(writer);
-                std::cerr << "current search condition parent after add record list: " << buffer.GetString() << std::endl << std::flush;
-            }
-
-
         }
 
+        /*
+                rapidjson::StringBuffer buffer;
+                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                doc.Accept(writer);
+                std::cerr << "final search expression: " << buffer.GetString() << std::endl << std::flush;
+        */
 
-        rapidjson::StringBuffer buffer;
-        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-        initial_value.Accept(writer);
-        std::cerr << "final search expression: " << buffer.GetString() << std::endl << std::flush;
-
-        return run_search_comparison_or_record_id_list("", initial_value, timer_operation);
+        return run_search_comparison_or_record_id_list("", doc, timer_operation);
     }
 
     std::set<std::string> run_search_expression(const std::set<std::string>& curr_set, const std::string& schema_id,
@@ -2073,13 +2068,14 @@ public:
                 std::string op = get_string_value_from_Json_object(value, OPERATION);
                 std::string tag = get_string_value_from_Json_object(value, "tag");
                 std::string val = get_string_value_from_Json_object(value, "value");
+                size_t count;
                 if (!timer_operation)
                 {
-                    ret = run_search_comparison(schema_id, op, tag, val, record_tags_db_main_mutex, record_tags_db);
+                    ret = run_search_comparison(schema_id, op, tag, val, record_tags_db_main_mutex, record_tags_db, count, false);
                 }
                 else
                 {
-                    ret = run_search_comparison(schema_id, op, tag, val, timer_tags_db_main_mutex, timer_tags_db);
+                    ret = run_search_comparison(schema_id, op, tag, val, timer_tags_db_main_mutex, timer_tags_db, count, false);
                 }
             }
             else if (value.HasMember(RECORD_ID_LIST.c_str()))
