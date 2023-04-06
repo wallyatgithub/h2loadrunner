@@ -22,6 +22,7 @@
 #include "h2load_utils.h"
 #include "udsf_util.h"
 
+extern bool debug_mode;
 
 const std::string CONTENT_ID = "Content-Id";
 const std::string CONTENT_TYPE = "Content-Type";
@@ -148,6 +149,10 @@ std::string get_relative_path_starting_from_records(const std::string& path)
             s += PATH_DELIMETER;
         }
         s += tokens[i];
+    }
+    if (debug_mode)
+    {
+        std::cerr << __func__ << ":" << s << std::endl << std::flush;
     }
     return s;
 }
@@ -1737,12 +1742,13 @@ public:
         {
             rapidjson::Value& value = *(search_conditions.top());
             search_conditions.pop();
-            /*
-                        rapidjson::StringBuffer buffer;
-                        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-                        initial_value.Accept(writer);
-                        std::cerr << "current search expression: " << buffer.GetString() << std::endl<<std::flush;
-            */
+            if (debug_mode)
+            {
+                rapidjson::StringBuffer buffer;
+                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                initial_value.Accept(writer);
+                std::cerr << "current search expression: " << buffer.GetString() << std::endl << std::flush;
+            }
             if (!value.HasMember(UNITS.c_str()) || !value[UNITS.c_str()].IsArray() || (!value.HasMember(CONDITION.c_str())))
             {
                 schema_violation_handling(value);
@@ -1801,12 +1807,13 @@ public:
             value.AddMember(rapidjson::Value(RECORD_ID_LIST.c_str(), allocator).Move(), record_list, allocator);
         }
 
-        /*
-                rapidjson::StringBuffer buffer;
-                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-                initial_value.Accept(writer);
-                std::cerr << "final search expression: " << buffer.GetString() << std::endl<<std::flush;
-        */
+        if (debug_mode)
+        {
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            initial_value.Accept(writer);
+            std::cerr << "final search expression: " << buffer.GetString() << std::endl << std::flush;
+        }
         return run_search_comparison_or_record_id_list("", initial_value, timer_operation);
     }
 
@@ -1840,7 +1847,6 @@ public:
                     continue;
                 }
                 search_conditions.push(v);
-                //std::vector<size_t> units_to_remove;
                 for (size_t i = 0; i < units.Size(); i++)
                 {
                     auto schema_id = get_string_value_from_Json_object(units[i], SCHEMA_ID);
@@ -1848,139 +1854,78 @@ public:
                     {
                         values.push(Search_Expression_In_Stack(&(search_conditions.top()), &units[i]));
                     }
-                    /*
                     else
                     {
-                        units_to_remove.push_back(i);
-                        search_conditions.top().operands.push_back(run_search_comparison_or_record_id_list(schema_id, units[i],
-                                                                                                           timer_operation));
-                    }*/
+                        search_conditions.top().operands.emplace_back(run_search_comparison_or_record_id_list(schema_id, units[i],
+                                                                                                              timer_operation));
+                    }
                 }
-                /*
-                for (auto i = units_to_remove.rbegin(); i != units_to_remove.rend(); i++)
-                {
-                    units.Erase(units.Begin() + *i);
-                }
-                if (units.Size() == 0)
-                {
-                    v.value->RemoveMember(UNITS.c_str());
-                }
-                */
+
             }
         }
-
 
         while (search_conditions.size())
         {
             auto search_cond = search_conditions.top();
             search_conditions.pop();
             auto& value = *(search_cond.value);
-            /*
-                        rapidjson::StringBuffer buffer;
-                        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-                        doc.Accept(writer);
-                        std::cerr << "current search exp: " << buffer.GetString() << std::endl << std::flush;
-            */
-            if (!value.HasMember(UNITS.c_str()) || !value[UNITS.c_str()].IsArray() || (!value.HasMember(CONDITION.c_str())))
+            auto& operands = search_cond.operands;
+            if (debug_mode)
             {
+                std::cerr << "search condition begin: " << std::endl << std::flush;
+                std::cerr << "--- search condition: " << get_string_value_from_Json_object(value, CONDITION) << std::endl << std::flush;
+                for (auto& operand : operands)
+                {
+                    std::cerr << "--- unit begin:" << std::endl << std::flush;
+                    for (auto& s : operand)
+                    {
+                        std::cerr << "------record:" << s << std::endl << std::flush;
+                    }
+                    std::cerr << "--- unit end" << std::endl << std::flush;
+                }
+                std::cerr << "search condition end" << std::endl << std::flush;
+            }
+            auto& units = value[UNITS.c_str()];
+            if (operands.size() < units.Size())
+            {
+                std::cerr << " nested search condtion is not fully resolved" << std::endl << std::flush;
                 schema_violation_handling(value);
+                return {};
             }
-            else
+            auto schema_id = get_string_value_from_Json_object(value, SCHEMA_ID);
+            auto condition_operator = get_string_value_from_Json_object(value, CONDITION);
+            if (condition_operator == CONDITION_OP_AND)
             {
-                std::vector<rapidjson::Value*> search_comparison_or_record_id_list;
-                std::vector<std::set<std::string>> operands = std::move(search_cond.operands);
-                auto& units = value[UNITS.c_str()];
-                for (size_t i = 0; i < units.Size(); i++)
-                {
-                    auto& array_value = units[i];
-                    if (array_value.IsObject())
-                    {
-                        if (array_value.HasMember(CONDITION.c_str()))
-                        {
-                            std::cerr << "leaf search condition still has nested condition:" << std::endl << std::flush;
-                            schema_violation_handling(array_value);
-                            abort();
-                        }
-                        else
-                        {
-                            search_comparison_or_record_id_list.push_back(&array_value);
-                        }
-                    }
-                }
-                auto schema_id = get_string_value_from_Json_object(value, SCHEMA_ID);
-                for (auto v : search_comparison_or_record_id_list)
-                {
-                    operands.emplace_back(run_search_comparison_or_record_id_list(schema_id, *v, timer_operation));
-                }
-                auto condition_operator = get_string_value_from_Json_object(value, CONDITION);
-                if (condition_operator == CONDITION_OP_AND)
-                {
-                    result = run_and_operator(operands);
-                }
-                else if (condition_operator == CONDITION_OP_OR)
-                {
-                    result = run_or_operator(operands);
-                }
-                else if (condition_operator == CONDITION_OP_NOT)
-                {
-                    auto p = &search_cond;
-                    auto cond_op = condition_operator;
-                    std::set<std::string> not_op_source;
-                    while (cond_op != CONDITION_OP_AND && p->parent)
-                    {
-                        p = p->parent;
-                        cond_op = get_string_value_from_Json_object(*p->value, CONDITION);
-                    }
-                    if (cond_op == CONDITION_OP_AND && p && p->value->HasMember(CONDITION.c_str()) && p->value->HasMember(UNITS.c_str()) &&
-                        (*p->value)[UNITS.c_str()].IsArray())
-                    {
-                        auto s_id = get_string_value_from_Json_object(*p->value, SCHEMA_ID);
-                        auto& units = (*p->value)[UNITS.c_str()];
-                        for (size_t i = 0; i < units.Size(); i++)
-                        {
-                            auto schema_id = get_string_value_from_Json_object(units[i], SCHEMA_ID);
-                            if (!units[i].HasMember(CONDITION.c_str()))
-                            {
-                                not_op_source = run_search_comparison_or_record_id_list(s_id, units[i],
-                                                                                        timer_operation);
-                                break;
-                            }
-                        }
-                    }
-                    /*
-
-                                        std::cerr << "source of NOT OP begin: " << std::endl << std::flush;
-                                        for (auto& sr : not_op_source)
-                                        {
-                                            std::cerr << sr << std::endl << std::flush;
-                                        }
-                                        std::cerr << "source of NOT OP end " << std::endl << std::flush;
-                    */
-                    result = run_not_operator(not_op_source.size() ? not_op_source : (timer_operation ? get_all_timer_ids() :
-                                                                                      get_all_record_ids(schema_id)),
-                                              run_or_operator(operands));
-                }
+                result = run_and_operator(operands);
             }
-
-            auto& allocator = doc.GetAllocator();
-            rapidjson::Value record_list(rapidjson::kArrayType);
-            record_list.Reserve(result.size(), allocator);
-            for (auto& r : result)
+            else if (condition_operator == CONDITION_OP_OR)
             {
-                record_list.PushBack(rapidjson::Value(r.c_str(), allocator).Move(), allocator);
+                result = run_or_operator(operands);
             }
-            value.RemoveAllMembers();
-            value.AddMember(rapidjson::Value(RECORD_ID_LIST.c_str(), allocator).Move(), record_list, allocator);
+            else if (condition_operator == CONDITION_OP_NOT)
+            {
+                auto p = &search_cond;
+                auto cond_op = condition_operator;
+                std::set<std::string> not_op_source;
+                while (cond_op != CONDITION_OP_AND && p->parent)
+                {
+                    p = p->parent;
+                    cond_op = get_string_value_from_Json_object(*p->value, CONDITION);
+                }
+                if (cond_op == CONDITION_OP_AND && p && p->operands.size())
+                {
+                    not_op_source = p->operands[0];
+                }
+                result = run_not_operator(not_op_source.size() ? not_op_source : (timer_operation ? get_all_timer_ids() :
+                                                                                  get_all_record_ids(schema_id)),
+                                          run_or_operator(operands));
+            }
+            if (search_cond.parent)
+            {
+                search_cond.parent->operands.emplace_back(std::move(result));
+            }
         }
-
-        /*
-                rapidjson::StringBuffer buffer;
-                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-                doc.Accept(writer);
-                std::cerr << "final search expression: " << buffer.GetString() << std::endl << std::flush;
-        */
-
-        return run_search_comparison_or_record_id_list("", doc, timer_operation);
+        return result;
     }
 
     std::set<std::string> run_search_expression(const std::set<std::string>& curr_set, const std::string& schema_id,

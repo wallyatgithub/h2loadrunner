@@ -208,7 +208,7 @@ public:
         h->add_property("connection-window-bits", &this->connection_window_bits, staticjson::Flags::Optional);
         h->add_property("no-tls-proto", &this->no_tls_proto, staticjson::Flags::Optional);
         h->add_property("statistics-file", &this->statistics_file, staticjson::Flags::Optional);
-        h->add_property("Service", &this->service);
+        h->add_property("Service", &this->service, staticjson::Flags::Optional);
     }
     void config_post_process()
     {

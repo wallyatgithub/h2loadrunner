@@ -75,6 +75,25 @@ bool serve_mux::handle(std::string pattern, request_cb cb) {
 }
 
 request_cb serve_mux::handler(asio_server_request &req) const {
+  if (debug_mode)
+  {
+    std::cerr<<"======incoming http request message begin======"<<std::endl<<std::flush;
+    auto& method = req.method();
+    auto& payload = req.unmutable_payload();
+    auto& path = req.uri().path;
+    auto& raw_query = req.uri().raw_query;
+    auto& headers = req.header();
+    std::cerr<<"method:"<<method<<std::endl<<std::flush;
+    std::cerr<<"path:"<<path<<std::endl<<std::flush;
+    std::cerr<<"query:"<<raw_query<<std::endl<<std::flush;
+    std::cerr<<"headers:"<<std::endl<<std::flush;
+    for (auto& h: headers)
+    {
+      std::cerr<<h.first<<": "<<h.second.value<<std::endl<<std::flush;
+    }
+    std::cerr<<"payload:"<<std::endl<<payload<<std::endl<<std::flush;
+    std::cerr<<"======incoming http request message end======"<<std::endl<<std::endl<<std::flush;
+  }
   auto &path = req.uri().path;
   if (req.method() != "CONNECT") {
     auto clean_path = ::nghttp2::http2::path_join(StringRef{}, StringRef{},

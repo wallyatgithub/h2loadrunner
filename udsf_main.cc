@@ -9,6 +9,8 @@
 #include "util.h"
 #include "H2Server_Response.h"
 
+extern bool debug_mode;
+
 std::map<std::string, std::string> get_queries(const nghttp2::asio_http2::server::asio_server_request& req)
 {
     auto& raw_query = req.uri().raw_query;
@@ -1244,7 +1246,7 @@ void udsf_entry(const H2Server_Config_Schema& config_schema)
 
         std::string addr = config_schema.address;
         std::string port = std::to_string(config_schema.port);
-        std::cout << "addr: " << addr << ", port: " << port << std::endl;
+        std::cerr << "addr: " << addr << ", port: " << port << std::endl;
 
         boost::system::error_code ec;
         if (config_schema.cert_file.size() && config_schema.private_key_file.size())
@@ -1298,11 +1300,36 @@ void udsf_entry(const H2Server_Config_Schema& config_schema)
 
 int main(int argc, char** argv)
 {
-    H2Server_Config_Schema config;
-    config.address = "0.0.0.0";
-    config.port = 8081;
-    config.threads = 8;
-    udsf_entry(config);
+    H2Server_Config_Schema config_schema;
+
+    if (argc < 2)
+    {
+        config_schema.address = "0.0.0.0";
+        config_schema.port = 8081;
+        config_schema.threads = std::thread::hardware_concurrency();
+    }
+    else
+    {
+        std::string config_file_name = argv[1];
+        std::ifstream buffer(config_file_name);
+        std::string jsonStr((std::istreambuf_iterator<char>(buffer)), std::istreambuf_iterator<char>());
+
+        staticjson::ParseStatus result;
+        if (!staticjson::from_json_string(jsonStr.c_str(), &config_schema, &result))
+        {
+            std::cout << "error reading config file:" << result.description() << std::endl;
+            exit(1);
+        }
+
+        if (config_schema.verbose)
+        {
+            std::cerr << "Configuration dump:" << std::endl << staticjson::to_pretty_json_string(config_schema)
+                      << std::endl;
+            debug_mode = true;
+        }
+    }
+
+    udsf_entry(config_schema);
 
     return 0;
 }

@@ -1,6 +1,7 @@
 #include <udsf_util.h>
 #include <h2load_utils.h>
 
+extern bool debug_mode;
 
 namespace udsf
 {
@@ -10,6 +11,10 @@ h2load::asio_worker* get_worker()
     auto create_worker = []()
     {
         auto conf = std::make_shared<h2load::Config>();
+        if (debug_mode)
+        {
+            conf->verbose = true;
+        }
         Request request;
         Scenario scenario;
         scenario.requests.push_back(request);
