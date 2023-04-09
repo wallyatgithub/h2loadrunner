@@ -10,6 +10,8 @@
 #include "H2Server_Response.h"
 
 extern bool debug_mode;
+bool cache_mode = false;
+
 
 std::map<std::string, std::string> get_queries(const nghttp2::asio_http2::server::asio_server_request& req)
 {

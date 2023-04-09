@@ -1940,6 +1940,10 @@ void base_client::on_stream_close(int64_t stream_id, bool success, bool final)
         {
             prepare_next_request(*finished_request);
         }
+        if (finished_request->stream_close_callback)
+        {
+            finished_request->stream_close_callback(finished_request->resp_headers, finished_request->resp_payload);
+        }
         process_stream_user_callback(stream_id);
     }
 
@@ -1983,7 +1987,7 @@ void base_client::on_header_frame_begin(int64_t stream_id, uint8_t flags)
         auto& request_data = *it->second.request_response;
         std::map<std::string, std::string, ci_less> dummy;
         request_data.resp_headers.push_back(dummy);
-        if (request_data.resp_headers.size() > 1 && (flags & NGHTTP2_FLAG_END_STREAM)) // TODO: add payload check?
+        if (request_data.resp_headers.size() > 1 && (flags & NGHTTP2_FLAG_END_STREAM))
         {
             request_data.resp_trailer_present = true;
         }

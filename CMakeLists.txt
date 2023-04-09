@@ -279,6 +279,7 @@ set (H2LOAD_SRC_MAIN
 set (UDSF_SOURCES
   udsf_util.cc
   multipart_parser.c
+  udsf_cache.cc
   udsf_main.cc
   ${H2LOAD_SOURCES}
 )

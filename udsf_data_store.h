@@ -23,6 +23,7 @@
 #include "udsf_util.h"
 
 extern bool debug_mode;
+extern bool cache_mode;
 
 const std::string CONTENT_ID = "Content-Id";
 const std::string CONTENT_TYPE = "Content-Type";
@@ -1008,6 +1009,16 @@ public:
         {
             auto& tags_name_db = tags_db_iter->second;
             insert_value_to_tags_db(tag_name, tag_value, record_id, tags_name_db, false);
+        }
+        else
+        {
+            if (cache_mode)
+            {
+                tags_db_main_read_guard.unlock();
+                std::unique_lock<std::shared_timed_mutex> tags_db_main_write_guard(record_tags_db_main_mutex);
+                auto& tags_name_db = record_tags_db[schema_id];
+                insert_value_to_tags_db(tag_name, tag_value, record_id, tags_name_db, true);
+            }
         }
     }
 

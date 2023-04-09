@@ -106,6 +106,7 @@ struct Scenario_Data_Per_User
     }
 
 };
+using Stream_Close_CallBack = std::function<void(const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, const std::string& resp_payload)>;
 
 struct Request_Response_Data
 {
@@ -128,6 +129,7 @@ struct Request_Response_Data
     size_t scenario_index;
     std::vector<std::string> string_collection;
     std::function<void(int64_t, h2load::base_client*)> request_sent_callback;
+    Stream_Close_CallBack stream_close_callback;
     uint32_t stream_timeout_in_ms;
     std::shared_ptr<Scenario_Data_Per_User> scenario_data_per_user;
 

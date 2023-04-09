@@ -33,9 +33,13 @@ h2load::asio_worker* get_worker()
     return worker.get();
 }
 
+void dummy_callback(const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, const std::string& resp_payload)
+{
+}
+
 bool send_http2_request(const std::string& method, const std::string& uri,
                         const std::map<std::string, std::string, ci_less>& headers,
-                        const std::string& message_body)
+                        const std::string& message_body, h2load::Stream_Close_CallBack callback)
 {
     static std::map<std::string, std::string, ci_less> dummyHeaders;
     http_parser_url u {};
@@ -48,7 +52,7 @@ bool send_http2_request(const std::string& method, const std::string& uri,
 
     auto worker = get_worker();
 
-    auto run_inside_worker = [method, uri, headers, message_body, worker]()
+    auto run_inside_worker = [method, uri, headers, message_body, worker, callback]()
     {
         http_parser_url u {};
         if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0 ||
@@ -107,6 +111,7 @@ bool send_http2_request(const std::string& method, const std::string& uri,
         request_to_send->schema = &(request_to_send->string_collection.back());
         request_to_send->req_headers_of_individual = headers;
         request_to_send->req_headers_from_config = &dummyHeaders;
+        request_to_send->stream_close_callback = callback;
         dest_client->requests_to_submit.emplace_back(std::move(request_to_send));
 
         if (h2load::CLIENT_IDLE == dest_client->state)
