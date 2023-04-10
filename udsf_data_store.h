@@ -2064,10 +2064,27 @@ public:
 
     int create_subscription(const std::string& subscription_id, NotificationSubscription subscription)
     {
+        bool clear_monitoredResourceUris = false;
         for (size_t i = 0; i < subscription.subFilter.monitoredResourceUris.size(); i++)
         {
             subscription.subFilter.monitoredResourceUris[i] = get_path(subscription.subFilter.monitoredResourceUris[i]);
             // TODO: If the monitoredResourceUris is present, only "UPDATED" and "DELETED" are allowed values
+        }
+        if (subscription.subFilter.monitoredResourceUris.empty())
+        {
+            auto all_records_uri = udsf_base_uri;
+            auto size = udsf_base_uri.size() +
+                        PATH_DELIMETER.size() +
+                        realm_id.size() +
+                        PATH_DELIMETER.size() +
+                        storage_id.size() +
+                        PATH_DELIMETER.size() +
+                        RECORDS.size();
+            all_records_uri.reserve(size);
+            all_records_uri.append(PATH_DELIMETER).append(realm_id).append(PATH_DELIMETER).append(storage_id).append(PATH_DELIMETER).append(
+                RECORDS);
+            subscription.subFilter.monitoredResourceUris.emplace_back(std::move(all_records_uri));
+            clear_monitoredResourceUris = true;
         }
         for (size_t i = 0; i < subscription.subFilter.operations.size(); i++)
         {
@@ -2120,6 +2137,10 @@ public:
             std::unique_lock<std::shared_timed_mutex> monitored_resource_uri_to_subscription_id_write_lock(
                 monitored_resource_uri_to_subscription_id_mutex[row][col]);
             monitored_resource_uri_to_subscription_id[row][col][monUri].insert(subscription_id);
+        }
+        if (clear_monitoredResourceUris)
+        {
+            subscription.subFilter.monitoredResourceUris.clear();
         }
         subscription_id_to_subscription[row][col][subscription_id] = std::move(subscription);
         return OPERATION_SUCCESSFUL;
