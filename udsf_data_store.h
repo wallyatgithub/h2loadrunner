@@ -749,7 +749,7 @@ class Tags_Value_Db_Of_One_Tag_Name
 {
 public:
     std::unique_ptr<std::shared_timed_mutex> value_to_resource_id_map_mutex;
-    std::multimap<std::string, std::string> value_to_resource_id_map;
+    std::map<std::string, std::set<std::string>> value_to_resource_id_map;
     explicit Tags_Value_Db_Of_One_Tag_Name():
         value_to_resource_id_map_mutex(std::make_unique<std::shared_timed_mutex>())
     {
@@ -978,7 +978,7 @@ public:
     }
 
     void insert_value_to_tags_db(const std::string& tag_name, const std::string& tag_value,
-                                 const std::string& reource_id,
+                                 const std::string& resource_id,
                                  Tags_Values_Db_With_Tags_Name_As_Key& tags_name_db,
                                  bool create_new_value_db_if_not_exist = false)
     {
@@ -988,7 +988,7 @@ public:
         {
             auto& tags_value_db = tag_name_db_iter->second;
             std::unique_lock<std::shared_timed_mutex> tags_value_db_write_lock(*(tags_value_db.value_to_resource_id_map_mutex));
-            tags_value_db.value_to_resource_id_map.emplace(tag_value, reource_id);
+            tags_value_db.value_to_resource_id_map[tag_value].insert(resource_id);
         }
         else if (create_new_value_db_if_not_exist)
         {
@@ -996,7 +996,7 @@ public:
             std::unique_lock<std::shared_timed_mutex> tags_name_db_write_lock(*tags_name_db.name_to_value_db_map_mutex);
             auto& tags_value_db = tags_name_db.name_to_value_db_map[tag_name];
             std::unique_lock<std::shared_timed_mutex> tags_value_db_write_lock(*(tags_value_db.value_to_resource_id_map_mutex));
-            tags_value_db.value_to_resource_id_map.emplace(tag_value, reource_id);
+            tags_value_db.value_to_resource_id_map[tag_value].insert(resource_id);
         }
     }
 
@@ -1023,7 +1023,7 @@ public:
     }
 
     void remove_value_from_tags_db(const std::string& tag_name, const std::string& tag_value,
-                                   const std::string& reource_id,
+                                   const std::string& resource_id,
                                    Tags_Values_Db_With_Tags_Name_As_Key& tags_name_db
                                   )
     {
@@ -1033,18 +1033,10 @@ public:
         {
             auto& tags_value_db = tag_name_db_iter->second;
             std::unique_lock<std::shared_timed_mutex> tags_value_db_write_lock(*(tags_value_db.value_to_resource_id_map_mutex));
-            auto range = tags_value_db.value_to_resource_id_map.equal_range(tag_value);
-            std::vector<decltype(range.first)> iters_to_erase;
-            for (auto i = range.first; i != range.second; ++i)
+            auto iter = tags_value_db.value_to_resource_id_map.find(tag_value);
+            if (iter != tags_value_db.value_to_resource_id_map.end())
             {
-                if (i->second == reource_id)
-                {
-                    iters_to_erase.emplace_back(i);
-                }
-            }
-            for (auto i : iters_to_erase)
-            {
-                tags_value_db.value_to_resource_id_map.erase(i);
+                iter->second.erase(resource_id);
             }
         }
     }
@@ -1067,6 +1059,16 @@ public:
     {
         std::set<std::string> s;
         count = 0;
+        if (op == "NEQ")
+        {
+            size_t gt_count = 0;
+            s = run_search_comparison(schema_id, "GT", tag_name, tag_value, mutex, tags_db, gt_count, count_indicator);
+            size_t lt_count = 0;
+            auto s_lt = run_search_comparison(schema_id, "LT", tag_name, tag_value, mutex, tags_db, lt_count, count_indicator);
+            s.insert(s_lt.begin(), s_lt.end());
+            count = gt_count + lt_count;
+            return s;
+        }
         std::shared_lock<std::shared_timed_mutex> tags_db_main_read_lock(mutex);
         std::vector<Record_Tags_Db::iterator> tag_db_iterators_to_go_through;
         if (schema_id.size())
@@ -1095,100 +1097,54 @@ public:
             {
                 auto& tags_value_db = tag_name_db_iter->second;
                 std::shared_lock<std::shared_timed_mutex> tags_value_db_read_lock(*(tags_value_db.value_to_resource_id_map_mutex));
-
+                auto iter_start = tags_value_db.value_to_resource_id_map.begin();
+                auto iter_end = iter_start;
                 if (op == "EQ")
                 {
-                    auto range = tags_value_db.value_to_resource_id_map.equal_range(tag_value);
-                    for (auto i = range.first; i != range.second; ++i)
+                    iter_start = tags_value_db.value_to_resource_id_map.find(tag_value);
+                    iter_end = iter_start;
+                    if (iter_start != tags_value_db.value_to_resource_id_map.end())
                     {
-                        if (count_indicator)
-                        {
-                            count++;
-                            continue;
-                        }
-                        s.insert(i->second);
+                        iter_end++;
                     }
                 }
                 else if (op == "GT")
                 {
-                    auto iter = tags_value_db.value_to_resource_id_map.upper_bound(tag_value);
-                    while (iter != tags_value_db.value_to_resource_id_map.end())
-                    {
-                        if (count_indicator)
-                        {
-                            count++;
-                            continue;
-                        }
-                        s.insert(iter->second);
-                        iter++;
-                    }
+                    iter_start = tags_value_db.value_to_resource_id_map.upper_bound(tag_value);
+                    iter_end = tags_value_db.value_to_resource_id_map.end();
                 }
                 else if (op == "GTE")
                 {
-                    auto iter = tags_value_db.value_to_resource_id_map.lower_bound(tag_value);
-                    while (iter != tags_value_db.value_to_resource_id_map.end())
-                    {
-                        if (count_indicator)
-                        {
-                            count++;
-                            continue;
-                        }
-                        s.insert(iter->second);
-                        iter++;
-                    }
+                    iter_start = tags_value_db.value_to_resource_id_map.lower_bound(tag_value);
+                    iter_end = tags_value_db.value_to_resource_id_map.end();
                 }
                 else if (op == "LT")
                 {
-                    auto lower_bound = tags_value_db.value_to_resource_id_map.lower_bound(tag_value);
-                    auto iter = tags_value_db.value_to_resource_id_map.begin();
-                    while (iter != lower_bound)
-                    {
-                        if (count_indicator)
-                        {
-                            count++;
-                            continue;
-                        }
-                        s.insert(iter->second);
-                        iter++;
-                    }
+                    iter_start = tags_value_db.value_to_resource_id_map.begin();
+                    iter_end = tags_value_db.value_to_resource_id_map.lower_bound(tag_value);
                 }
                 else if (op == "LTE")
                 {
-                    auto upper_bound = tags_value_db.value_to_resource_id_map.upper_bound(tag_value);
-                    auto iter = tags_value_db.value_to_resource_id_map.begin();
-                    while (iter != upper_bound)
-                    {
-                        if (count_indicator)
-                        {
-                            count++;
-                            continue;
-                        }
-                        s.insert(iter->second);
-                        iter++;
-                    }
+                    iter_start = tags_value_db.value_to_resource_id_map.begin();
+                    iter_end = tags_value_db.value_to_resource_id_map.upper_bound(tag_value);
                 }
-                else if (op == "NEQ")
+                else
                 {
-                    auto lower_bound = tags_value_db.value_to_resource_id_map.lower_bound(tag_value);
-                    auto upper_bound = tags_value_db.value_to_resource_id_map.upper_bound(tag_value);
-                    for (auto iter = tags_value_db.value_to_resource_id_map.begin(); iter != lower_bound; ++iter)
+                    std::cerr<<"invalid operation: "<<op<<std::endl<<std::flush;
+                }
+
+                auto iter = iter_start;
+                while (iter != iter_end)
+                {
+                    if (count_indicator)
                     {
-                        if (count_indicator)
-                        {
-                            count++;
-                            continue;
-                        }
-                        s.insert(iter->second);
+                        count += iter->second.size();
                     }
-                    for (auto iter = upper_bound; iter != tags_value_db.value_to_resource_id_map.end(); ++iter)
+                    else
                     {
-                        if (count_indicator)
-                        {
-                            count++;
-                            continue;
-                        }
-                        s.insert(iter->second);
+                        s.insert(iter->second.begin(), iter->second.end());
                     }
+                    iter++;
                 }
             }
         }
