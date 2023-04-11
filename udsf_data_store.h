@@ -1038,6 +1038,10 @@ public:
             {
                 iter->second.erase(resource_id);
             }
+            if (iter->second.empty())
+            {
+                tags_value_db.value_to_resource_id_map.erase(iter);
+            }
         }
     }
 

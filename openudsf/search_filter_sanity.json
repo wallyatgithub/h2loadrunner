@@ -9,7 +9,7 @@
   "threads": 1,
   "clients": 1,
   "duration": 0,
-  "total-requests": 13,
+  "total-requests": 14,
   "warm-up-time": 0,
   "max-concurrent-streams": 2048,
   "request-per-second": 1,
@@ -274,7 +274,7 @@
           },
           "clear-old-cookies": false,
           "method": "delete",
-          "payload": "{   \"cond\": \"AND\",   \"units\": [     {       \"op\": \"GTE\",       \"tag\": \"ueId\",       \"value\": \"supi-00000000\"     },     {       \"recordIdList\": [         \"record-00000000\",         \"record-00000001\",         \"record-00000002\"       ]     },     {       \"cond\": \"AND\",       \"units\": [         {           \"op\": \"LTE\",           \"tag\": \"ueId\",           \"value\": \"supi-99999999\"         },         {           \"recordIdList\": [             \"record-00000000\",             \"record-00000001\",             \"record-00000004\"           ]         },         {           \"cond\": \"NOT\",           \"units\": [             {               \"op\": \"EQ\",               \"tag\": \"ueId\",               \"value\": \"supi-12345678\"             }           ]         }       ]     }   ] }",
+          "payload": "{   \"cond\": \"AND\",   \"units\": [     {       \"op\": \"GTE\",       \"tag\": \"ueId\",       \"value\": \"supi-00000000\"     },     {       \"recordIdList\": [         \"record-00000000\",         \"record-00000001\",         \"record-00000002\"       ]     },     {       \"cond\": \"AND\",       \"units\": [         {           \"op\": \"LTE\",           \"tag\": \"ueId\",           \"value\": \"supi-99999999\"         },         {           \"recordIdList\": [             \"record-00000000\",             \"record-00000001\",             \"record-00000004\"           ]         },         {           \"cond\": \"NOT\",           \"units\": [             {               \"op\": \"EQ\",               \"tag\": \"ueId\",               \"value\": \"supi-12345678\"             }           ]         },         {           \"cond\": \"NOT\",           \"units\": [             {               \"op\": \"NEQ\",               \"tag\": \"ueId\",               \"value\": \"supi-00000000\"             }           ]         }       ]     }   ] }",
           "http-version": "default",
           "luaScript": "",
           "expected-status-code": 200,
@@ -282,6 +282,31 @@
           "response-match": {
             "headers": [],
             "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records?count-indicator=true&max-payload-size=8192&limit-range=20"
+          },
+          "clear-old-cookies": false,
+          "method": "get",
+          "payload": "{   \"cond\": \"AND\",   \"units\": [     {       \"op\": \"GTE\",       \"tag\": \"ueId\",       \"value\": \"supi-00000000\"     },     {       \"recordIdList\": [         \"record-00000000\",         \"record-00000001\",         \"record-00000002\"       ]     },     {       \"cond\": \"AND\",       \"units\": [         {           \"op\": \"LTE\",           \"tag\": \"ueId\",           \"value\": \"supi-99999999\"         },         {           \"recordIdList\": [             \"record-00000000\",             \"record-00000001\",             \"record-00000004\"           ]         },         {           \"cond\": \"NOT\",           \"units\": [             {               \"op\": \"EQ\",               \"tag\": \"ueId\",               \"value\": \"supi-12345678\"             }           ]         },         {           \"cond\": \"NOT\",           \"units\": [             {               \"op\": \"NEQ\",               \"tag\": \"ueId\",               \"value\": \"supi-00000000\"             }           ]         }       ]     }   ] }",
+          "http-version": "default",
+          "luaScript": "",
+          "expected-status-code": 200,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": [
+              {
+                "JsonPointer": "/count",
+                "matchType": "EqualsTo",
+                "input": "0"
+              }
+            ]
           },
           "value-pickers": [],
           "delay-before-executing-next": 0
