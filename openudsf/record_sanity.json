@@ -141,7 +141,7 @@
           "http-version": "default",
           "payload": "[  {   \"op\": \"add\",   \"path\": \"/tags/aux-recordId\",   \"value\": [    \"rec-${supi}\"   ]  } ]",
           "additonalHeaders": [
-            "application/json-patch+json"
+            "Content-Type:application/json-patch+json"
           ],
           "luaScript": "",
           "expected-status-code": 204,

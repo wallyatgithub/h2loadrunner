@@ -61,6 +61,8 @@ const std::string RETRIEVE_RECORDS = "retrieve-records";
 const std::string COUNT_INDICATOR = "count-indicator";
 const std::string CLIENT_ID = "client-id";
 const std::string SCHEMA_ID = "schemaId";
+const std::string FILTER = "filter";
+
 
 const int OPERATION_SUCCESSFUL = 0;
 const int DECODE_MULTIPART_FAILURE = -1;
@@ -257,6 +259,9 @@ inline std::set<std::string> run_not_operator(const std::set<std::string>& sourc
 inline uint64_t iso8601_timestamp_to_seconds_since_epoch(const std::string& iso8601_timestamp)
 {
     const std::string sample_tz_offset = "+08:00";
+    const std::string sample_timestamp_with_tz = "2046-03-31T14:10:00+08:00";
+    const std::string sample_timestamp_without_tz = "2046-03-31T14:10:00";
+    const std::string sample_timestamp_z = "2046-03-31T14:10:00Z";
 
     if (iso8601_timestamp.empty())
     {
@@ -298,25 +303,33 @@ inline uint64_t iso8601_timestamp_to_seconds_since_epoch(const std::string& iso8
         std::chrono::system_clock::from_time_t(t);
     auto duration = tp.time_since_epoch();
 
-    std::string incoming_tz;
-    if (iso8601_timestamp[iso8601_timestamp.size() - 1] == 'z' || iso8601_timestamp[iso8601_timestamp.size() - 1] == 'Z')
+    if (iso8601_timestamp.size() > sample_timestamp_without_tz.size())
     {
-        incoming_tz = "+00:00";
-    }
-    else
-    {
-        incoming_tz = iso8601_timestamp.substr(iso8601_timestamp.size() - sample_tz_offset.size());
-    }
-    int incoming_tz_hours, incoming_tz_minutes;
-    std::sscanf(incoming_tz.substr(1).c_str(), "%d:%d", &incoming_tz_hours, &incoming_tz_minutes);
-    auto incoming_tz_offset = (std::chrono::hours(incoming_tz_hours) + std::chrono::minutes(incoming_tz_minutes));
-    if (incoming_tz[0] == '-')
-    {
-        incoming_tz_offset = -incoming_tz_offset;
+        std::string incoming_tz;
+        if (iso8601_timestamp.size() == sample_timestamp_z.size() &&
+            (iso8601_timestamp[iso8601_timestamp.size() - 1] == 'z' || iso8601_timestamp[iso8601_timestamp.size() - 1] == 'Z'))
+        {
+            incoming_tz = "+00:00";
+        }
+        else if (iso8601_timestamp.size() == sample_timestamp_with_tz.size())
+        {
+            incoming_tz = iso8601_timestamp.substr(iso8601_timestamp.size() - sample_tz_offset.size());
+        }
+
+        if (incoming_tz.size() == sample_tz_offset.size())
+        {
+            int incoming_tz_hours, incoming_tz_minutes;
+            std::sscanf(incoming_tz.substr(1).c_str(), "%d:%d", &incoming_tz_hours, &incoming_tz_minutes);
+            auto incoming_tz_offset = (std::chrono::hours(incoming_tz_hours) + std::chrono::minutes(incoming_tz_minutes));
+            if (incoming_tz[0] == '-')
+            {
+                incoming_tz_offset = -incoming_tz_offset;
+            }
+            auto tz_difference = local_tz_offset - incoming_tz_offset;
+            duration = duration + tz_difference;
+        }
     }
 
-    auto tz_difference = local_tz_offset - incoming_tz_offset;
-    duration = duration + tz_difference;
     return std::chrono::duration_cast<std::chrono::seconds>(duration).count();
 }
 
@@ -838,7 +851,7 @@ public:
     std::map<std::string, std::vector<std::string>> metaTags;
     std::string callbackReference;
     unsigned callbackReferenceFlag = staticjson::Flags::Optional | staticjson::Flags::IgnoreWrite;
-    uint64_t deleteAfter;
+    uint64_t deleteAfter = 0;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("timerId", &this->timerId, staticjson::Flags::Optional);
@@ -2028,31 +2041,38 @@ public:
         for (size_t i = 0; i < subscription.subFilter.monitoredResourceUris.size(); i++)
         {
             subscription.subFilter.monitoredResourceUris[i] = get_path(subscription.subFilter.monitoredResourceUris[i]);
-            // TODO: If the monitoredResourceUris is present, only "UPDATED" and "DELETED" are allowed values
         }
-        if (subscription.subFilter.monitoredResourceUris.empty())
-        {
-            auto all_records_uri = udsf_base_uri;
-            auto size = udsf_base_uri.size() +
-                        PATH_DELIMETER.size() +
-                        realm_id.size() +
-                        PATH_DELIMETER.size() +
-                        storage_id.size() +
-                        PATH_DELIMETER.size() +
-                        RECORDS.size();
-            all_records_uri.reserve(size);
-            all_records_uri.append(PATH_DELIMETER).append(realm_id).append(PATH_DELIMETER).append(storage_id).append(PATH_DELIMETER).append(
-                RECORDS);
-            subscription.subFilter.monitoredResourceUris.emplace_back(std::move(all_records_uri));
-            clear_monitoredResourceUris = true;
-        }
+
         for (size_t i = 0; i < subscription.subFilter.operations.size(); i++)
         {
             if (ALLOWED_OPERATIONS.count(subscription.subFilter.operations[i]) == 0)
             {
                 return INVALID_OPERATIONS_IN_SUBSCRIPTION;
             }
-            // TODO: If the monitoredResourceUris is present, only "UPDATED" and "DELETED" are allowed values
+        }
+        if (subscription.subFilter.monitoredResourceUris.size())
+        {
+            auto iter = std::find(subscription.subFilter.operations.begin(), subscription.subFilter.operations.end(), RECORD_OPERATION_CREATED);
+            if (iter != subscription.subFilter.operations.end())
+            {
+                subscription.subFilter.operations.erase(iter);
+            }
+        }
+
+        if (subscription.subFilter.operations.empty())
+        {
+            subscription.subFilter.operations.emplace_back(RECORD_OPERATION_UPDATED);
+            subscription.subFilter.operations.emplace_back(RECORD_OPERATION_DELETED);
+            if (subscription.subFilter.monitoredResourceUris.empty())
+            {
+               subscription.subFilter.operations.emplace_back(RECORD_OPERATION_CREATED); 
+            }
+        }
+
+        if (subscription.subFilter.monitoredResourceUris.empty())
+        {
+            subscription.subFilter.monitoredResourceUris.emplace_back(""); // subscribe change of the whole storage
+            clear_monitoredResourceUris = true;
         }
 
         auto expiry = iso8601_timestamp_to_seconds_since_epoch(subscription.expiry);
@@ -2295,22 +2315,6 @@ public:
 
     std::set<std::string> get_subscription_ids_to_notify(const std::string& record_id, const std::string& block_id)
     {
-        auto uri = udsf_base_uri;
-        auto size = udsf_base_uri.size() +
-                    PATH_DELIMETER.size() +
-                    realm_id.size() +
-                    PATH_DELIMETER.size() +
-                    storage_id.size() +
-                    PATH_DELIMETER.size() +
-                    RECORDS.size() +
-                    PATH_DELIMETER.size() +
-                    record_id.size() +
-                    PATH_DELIMETER.size() +
-                    block_id.size();
-        uri.reserve(size);
-        uri.append(PATH_DELIMETER).append(realm_id).append(PATH_DELIMETER).append(storage_id).append(PATH_DELIMETER).append(
-            RECORDS);
-
         auto subscription_ids_to_notify = [this](const std::string & path)
         {
             std::set<std::string> s;
@@ -2327,28 +2331,35 @@ public:
         };
 
         std::set<std::string> ret;
-        auto v = subscription_ids_to_notify(uri);
+        auto v = subscription_ids_to_notify(""); // subscribed change of the whole storage
         ret.insert(v.begin(), v.end());
 
-        if (record_id.size())
+        auto uri = udsf_base_uri;
+        auto size = udsf_base_uri.size() +
+                    PATH_DELIMETER.size() +
+                    realm_id.size() +
+                    PATH_DELIMETER.size() +
+                    storage_id.size() +
+                    PATH_DELIMETER.size() +
+                    RECORDS.size() +
+                    PATH_DELIMETER.size() +
+                    record_id.size();
+        uri.reserve(size);
+        uri.append(PATH_DELIMETER).append(realm_id).append(PATH_DELIMETER).append(storage_id).append(PATH_DELIMETER).append(
+            RECORDS);
+        uri.append(PATH_DELIMETER).append(record_id);
+        v = subscription_ids_to_notify(uri);
+        for (auto& s : v)
         {
-            uri.append(PATH_DELIMETER).append(record_id);
-            if (block_id.size())
-            {
-                uri.append(PATH_DELIMETER).append(block_id);
-            }
-            auto v = subscription_ids_to_notify(uri);
-            for (auto& s : v)
-            {
-                ret.insert(s);
-            }
+            ret.insert(s);
         }
+
         return ret;
     }
 
     void send_notify(const std::string& record_id, const std::string& block_id, const std::string& operation)
     {
-        std::string recordNotificationBody;
+        NotificationDescription notificationDescription;
         std::map<std::string, std::string, ci_less> additionalHeaders;
 
         auto v = get_subscription_ids_to_notify(record_id, block_id);
@@ -2358,10 +2369,11 @@ public:
             if (std::find(subscription.subFilter.operations.begin(), subscription.subFilter.operations.end(),
                           operation) != subscription.subFilter.operations.end())
             {
-                if (recordNotificationBody.empty())
+                std::string recordNotificationBody;
+                if (notificationDescription.recordRef.empty())
                 {
-                    NotificationDescription notificationDescription;
                     notificationDescription.operationType = operation;
+                    notificationDescription.subscriptionId = s;
                     notificationDescription.recordRef.reserve(udsf_base_uri.size() +
                                                               PATH_DELIMETER.size() +
                                                               realm_id.size() +
@@ -2380,18 +2392,20 @@ public:
                     notificationDescription.recordRef += RECORDS;
                     notificationDescription.recordRef += PATH_DELIMETER;
                     notificationDescription.recordRef += record_id;
-                    auto description = staticjson::to_json_string(notificationDescription);
-                    recordNotificationBody = get_record_multipart_body(record_id, true, description);
                 }
+                auto description = staticjson::to_json_string(notificationDescription);
+                recordNotificationBody = get_record_multipart_body(record_id, true, description);
                 if (recordNotificationBody.size())
                 {
-                    additionalHeaders.insert(std::make_pair(CONTENT_TYPE, MULTIPART_CONTENT_TYPE));
+                    if (additionalHeaders.empty())
+                    {
+                        additionalHeaders.insert(std::make_pair(CONTENT_TYPE, MULTIPART_CONTENT_TYPE));
+                    }
                     send_http2_request(METHOD_POST, subscription.callbackReference, additionalHeaders, recordNotificationBody);
                 }
             }
         }
     }
-
 
     void disable_expiryNotification_of_subscription(const std::string& subscription_id)
     {
@@ -2571,13 +2585,14 @@ public:
         auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
                                    (std::chrono::system_clock::now().time_since_epoch()).count();
         auto end = timer_deleteAfter_to_timer_id.upper_bound(seconds_since_epoch);
-        for (auto iter = timer_deleteAfter_to_timer_id.begin(); iter != end; iter++)
+        auto iter = timer_deleteAfter_to_timer_id.begin();
+        while(iter != end)
         {
             for (auto& t : iter->second)
             {
                 delete_timer(t);
             }
-            timer_deleteAfter_to_timer_id.erase(iter);
+            iter = timer_deleteAfter_to_timer_id.erase(iter);
         }
     }
 
@@ -2663,7 +2678,10 @@ public:
                 }
                 if (timer_object.deleteAfter)
                 {
-                    storage.track_timer_deleteAfter(timer_object.deleteAfter, t, true);
+                    storage.track_timer_ttl(iso8601_timestamp_to_seconds_since_epoch(timer_object.expires), t, false);
+                    auto seconds_since_epoch = std::chrono::duration_cast<std::chrono::seconds>
+                                               (std::chrono::system_clock::now().time_since_epoch()).count();
+                    storage.track_timer_deleteAfter(timer_object.deleteAfter + seconds_since_epoch, t, true);
                 }
                 else
                 {

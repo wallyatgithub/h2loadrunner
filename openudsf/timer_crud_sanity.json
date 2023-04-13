@@ -9,7 +9,7 @@
   "threads": 1,
   "clients": 1,
   "duration": 0,
-  "total-requests": 10,
+  "total-requests": 12,
   "warm-up-time": 0,
   "max-concurrent-streams": 2048,
   "request-per-second": 1,
@@ -76,9 +76,29 @@
             "input": "/nudsf-dr/v1/realm/storage/timers/timer-${supi}"
           },
           "clear-old-cookies": false,
+          "method": "GET",
+          "http-version": "default",
+          "payload": "",
+          "additonalHeaders": [],
+          "luaScript": "",
+          "expected-status-code": 404,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/timers/timer-${supi}"
+          },
+          "clear-old-cookies": false,
           "method": "put",
           "http-version": "default",
-          "payload": "{   \"expires\": \"2023-03-31T14:10:00+08:00\",   \"metaTags\": {     \"ueId\": [       \"supi-${supi}\"     ],     \"recordId\": [       \"rec-${supi}\"     ]   } }",
+          "payload": "{   \"expires\": \"2046-04-30T14:10:00+08:00\",   \"metaTags\": {     \"ueId\": [       \"supi-${supi}\"     ],     \"recordId\": [       \"rec-${supi}\"     ]   } }",
           "additonalHeaders": [],
           "luaScript": "",
           "expected-status-code": 201,
@@ -118,7 +138,7 @@
           "clear-old-cookies": false,
           "method": "patch",
           "http-version": "default",
-          "payload": "[  {    \"op\": \"replace\",    \"path\": \"/expires\",    \"value\": \"2023-04-30T14:10:00+08:00\"  }]",
+          "payload": "[  {    \"op\": \"replace\",    \"path\": \"/expires\",    \"value\": \"2046-04-29T14:10:00+08:00\"  }]",
           "additonalHeaders": [],
           "luaScript": "",
           "expected-status-code": 0,
@@ -193,11 +213,10 @@
         {
           "uri": {
             "typeOfAction": "input",
-            "input": "/nudsf-dr/v1/realm/storage/timers"
+            "input": "/nudsf-dr/v1/realm/storage/timers?filter%3D%7B%20%20%20%22cond%22%3A%20%22AND%22%2C%20%20%20%22units%22%3A%20%5B%20%20%20%20%20%7B%20%20%20%20%20%20%20%22op%22%3A%20%22GTE%22%2C%20%20%20%20%20%20%20%22tag%22%3A%20%22ueId%22%2C%20%20%20%20%20%20%20%22value%22%3A%20%22supi-00000000%22%20%20%20%20%20%7D%2C%20%20%20%20%20%7B%20%20%20%20%20%20%20%22recordIdList%22%3A%20%5B%20%20%20%20%20%20%20%20%20%22timer-00000000%22%2C%20%20%20%20%20%20%20%20%20%22timer-00000001%22%2C%20%20%20%20%20%20%20%20%20%22timer-00000002%22%20%20%20%20%20%20%20%5D%20%20%20%20%20%7D%2C%20%20%20%20%20%7B%20%20%20%20%20%20%20%22cond%22%3A%20%22AND%22%2C%20%20%20%20%20%20%20%22units%22%3A%20%5B%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%22op%22%3A%20%22LTE%22%2C%20%20%20%20%20%20%20%20%20%20%20%22tag%22%3A%20%22ueId%22%2C%20%20%20%20%20%20%20%20%20%20%20%22value%22%3A%20%22supi-99999999%22%20%20%20%20%20%20%20%20%20%7D%2C%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%22recordIdList%22%3A%20%5B%20%20%20%20%20%20%20%20%20%20%20%20%20%22timer-00000000%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%22timer-00000001%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%22timer-00000004%22%20%20%20%20%20%20%20%20%20%20%20%5D%20%20%20%20%20%20%20%20%20%7D%2C%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%22cond%22%3A%20%22NOT%22%2C%20%20%20%20%20%20%20%20%20%20%20%22units%22%3A%20%5B%20%20%20%20%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%22op%22%3A%20%22EQ%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%22tag%22%3A%20%22ueId%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%22value%22%3A%20%22supi-12345678%22%20%20%20%20%20%20%20%20%20%20%20%20%20%7D%20%20%20%20%20%20%20%20%20%20%20%5D%20%20%20%20%20%20%20%20%20%7D%20%20%20%20%20%20%20%5D%20%20%20%20%20%7D%20%20%20%5D%20%7D%0A"
           },
           "clear-old-cookies": false,
           "method": "get",
-          "payload": "{   \"cond\": \"AND\",   \"units\": [     {       \"op\": \"GTE\",       \"tag\": \"ueId\",       \"value\": \"supi-00000000\"     },     {       \"recordIdList\": [         \"timer-00000000\",         \"timer-00000001\",         \"timer-00000002\"       ]     },     {       \"cond\": \"AND\",       \"units\": [         {           \"op\": \"LTE\",           \"tag\": \"ueId\",           \"value\": \"supi-99999999\"         },         {           \"recordIdList\": [             \"timer-00000000\",             \"timer-00000001\",             \"timer-00000004\"           ]         },         {           \"cond\": \"NOT\",           \"units\": [             {               \"op\": \"EQ\",               \"tag\": \"ueId\",               \"value\": \"supi-12345678\"             }           ]         }       ]     }   ] }",
           "http-version": "default",
           "luaScript": "",
           "expected-status-code": 404,
@@ -217,7 +236,7 @@
           "clear-old-cookies": false,
           "method": "put",
           "http-version": "default",
-          "payload": "{   \"expires\": \"2023-03-31T14:10:00+08:00\",   \"metaTags\": {     \"ueId\": [       \"supi-${supi}\"     ],     \"recordId\": [       \"rec-${supi}\"     ]   } }",
+          "payload": "{   \"expires\": \"2046-03-31T14:10:00+08:00\",   \"metaTags\": {     \"ueId\": [       \"supi-${supi}\"     ],     \"recordId\": [       \"rec-${supi}\"     ]   } }",
           "additonalHeaders": [],
           "luaScript": "",
           "expected-status-code": 201,
@@ -232,14 +251,37 @@
         {
           "uri": {
             "typeOfAction": "input",
-            "input": "/nudsf-dr/v1/realm/storage/timers"
+            "input": "/nudsf-dr/v1/realm/storage/timers?filter%3D%7B%20%20%20%22cond%22%3A%20%22AND%22%2C%20%20%20%22units%22%3A%20%5B%20%20%20%20%20%7B%20%20%20%20%20%20%20%22op%22%3A%20%22GTE%22%2C%20%20%20%20%20%20%20%22tag%22%3A%20%22ueId%22%2C%20%20%20%20%20%20%20%22value%22%3A%20%22supi-00000000%22%20%20%20%20%20%7D%2C%20%20%20%20%20%7B%20%20%20%20%20%20%20%22recordIdList%22%3A%20%5B%20%20%20%20%20%20%20%20%20%22timer-00000000%22%2C%20%20%20%20%20%20%20%20%20%22timer-00000001%22%2C%20%20%20%20%20%20%20%20%20%22timer-00000002%22%20%20%20%20%20%20%20%5D%20%20%20%20%20%7D%2C%20%20%20%20%20%7B%20%20%20%20%20%20%20%22cond%22%3A%20%22AND%22%2C%20%20%20%20%20%20%20%22units%22%3A%20%5B%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%22op%22%3A%20%22LTE%22%2C%20%20%20%20%20%20%20%20%20%20%20%22tag%22%3A%20%22ueId%22%2C%20%20%20%20%20%20%20%20%20%20%20%22value%22%3A%20%22supi-99999999%22%20%20%20%20%20%20%20%20%20%7D%2C%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%22recordIdList%22%3A%20%5B%20%20%20%20%20%20%20%20%20%20%20%20%20%22timer-00000000%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%22timer-00000001%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%22timer-00000004%22%20%20%20%20%20%20%20%20%20%20%20%5D%20%20%20%20%20%20%20%20%20%7D%2C%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%22cond%22%3A%20%22NOT%22%2C%20%20%20%20%20%20%20%20%20%20%20%22units%22%3A%20%5B%20%20%20%20%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%22op%22%3A%20%22EQ%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%22tag%22%3A%20%22ueId%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%22value%22%3A%20%22supi-12345678%22%20%20%20%20%20%20%20%20%20%20%20%20%20%7D%20%20%20%20%20%20%20%20%20%20%20%5D%20%20%20%20%20%20%20%20%20%7D%20%20%20%20%20%20%20%5D%20%20%20%20%20%7D%20%20%20%5D%20%7D%0A"
           },
           "clear-old-cookies": false,
           "method": "get",
-          "payload": "{   \"cond\": \"AND\",   \"units\": [     {       \"op\": \"GTE\",       \"tag\": \"ueId\",       \"value\": \"supi-00000000\"     },     {       \"recordIdList\": [         \"timer-00000000\",         \"timer-00000001\",         \"timer-00000002\"       ]     },     {       \"cond\": \"AND\",       \"units\": [         {           \"op\": \"LTE\",           \"tag\": \"ueId\",           \"value\": \"supi-99999999\"         },         {           \"recordIdList\": [             \"timer-00000000\",             \"timer-00000001\",             \"timer-00000004\"           ]         },         {           \"cond\": \"NOT\",           \"units\": [             {               \"op\": \"EQ\",               \"tag\": \"ueId\",               \"value\": \"supi-12345678\"             }           ]         }       ]     }   ] }",
           "http-version": "default",
           "luaScript": "",
           "expected-status-code": 200,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": [
+              {
+                "JsonPointer": "/timerIds/0",
+                "matchType": "Contains",
+                "input": "timer-"
+              }
+            ]
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/timers?filter%3D%7B%20%20%20%22cond%22%3A%20%22AND%22%2C%20%20%20%22units%22%3A%20%5B%20%20%20%20%20%7B%20%20%20%20%20%20%20%22op%22%3A%20%22GTE%22%2C%20%20%20%20%20%20%20%22tag%22%3A%20%22ueId%22%2C%20%20%20%20%20%20%20%22value%22%3A%20%22supi-00000000%22%20%20%20%20%20%7D%2C%20%20%20%20%20%7B%20%20%20%20%20%20%20%22recordIdList%22%3A%20%5B%20%20%20%20%20%20%20%20%20%22timer-00000000%22%2C%20%20%20%20%20%20%20%20%20%22timer-00000001%22%2C%20%20%20%20%20%20%20%20%20%22timer-00000002%22%20%20%20%20%20%20%20%5D%20%20%20%20%20%7D%2C%20%20%20%20%20%7B%20%20%20%20%20%20%20%22cond%22%3A%20%22AND%22%2C%20%20%20%20%20%20%20%22units%22%3A%20%5B%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%22op%22%3A%20%22LTE%22%2C%20%20%20%20%20%20%20%20%20%20%20%22tag%22%3A%20%22ueId%22%2C%20%20%20%20%20%20%20%20%20%20%20%22value%22%3A%20%22supi-99999999%22%20%20%20%20%20%20%20%20%20%7D%2C%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%22recordIdList%22%3A%20%5B%20%20%20%20%20%20%20%20%20%20%20%20%20%22timer-00000000%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%22timer-00000001%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%22timer-00000004%22%20%20%20%20%20%20%20%20%20%20%20%5D%20%20%20%20%20%20%20%20%20%7D%2C%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%22cond%22%3A%20%22NOT%22%2C%20%20%20%20%20%20%20%20%20%20%20%22units%22%3A%20%5B%20%20%20%20%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%22op%22%3A%20%22EQ%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%22tag%22%3A%20%22ueId%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%22value%22%3A%20%22supi-12345678%22%20%20%20%20%20%20%20%20%20%20%20%20%20%7D%20%20%20%20%20%20%20%20%20%20%20%5D%20%20%20%20%20%20%20%20%20%7D%20%20%20%20%20%20%20%5D%20%20%20%20%20%7D%20%20%20%5D%20%7D%0A"
+          },
+          "clear-old-cookies": false,
+          "method": "delete",
+          "http-version": "default",
+          "luaScript": "",
+          "expected-status-code": 204,
           "page-id": 0,
           "response-match": {
             "headers": [],
@@ -251,14 +293,14 @@
         {
           "uri": {
             "typeOfAction": "input",
-            "input": "/nudsf-dr/v1/realm/storage/timers"
+            "input": "/nudsf-dr/v1/realm/storage/timers/timer-${supi}"
           },
           "clear-old-cookies": false,
-          "method": "delete",
-          "payload": "{   \"cond\": \"AND\",   \"units\": [     {       \"op\": \"GTE\",       \"tag\": \"ueId\",       \"value\": \"supi-00000000\"     },     {       \"recordIdList\": [         \"timer-00000000\",         \"timer-00000001\",         \"timer-00000002\"       ]     },     {       \"cond\": \"AND\",       \"units\": [         {           \"op\": \"LTE\",           \"tag\": \"ueId\",           \"value\": \"supi-99999999\"         },         {           \"recordIdList\": [             \"timer-00000000\",             \"timer-00000001\",             \"timer-00000004\"           ]         },         {           \"cond\": \"NOT\",           \"units\": [             {               \"op\": \"EQ\",               \"tag\": \"ueId\",               \"value\": \"supi-12345678\"             }           ]         }       ]     }   ] }",
+          "method": "put",
           "http-version": "default",
-          "luaScript": "",
-          "expected-status-code": 204,
+          "additonalHeaders": [],
+          "luaScript": "function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send) local nowTime = os.time() local expTime = nowTime + 5 local nowData = os.date(\"%Y-%m-%dT%H:%M:%S\",expTime) request_payload = {'{\"deleteAfter\":10, \"callbackReference\":  \"http://127.0.0.1:8080\", \"metaTags\": {     \"ueId\": [       \"supi-000000\"     ],     \"recordId\": [       \"rec-000000\"     ]   },  \"expires\": \"', 'stub', '\"}'} request_payload[2] = nowData return request_headers_to_send, table.concat(request_payload) end",
+          "expected-status-code": 201,
           "page-id": 0,
           "response-match": {
             "headers": [],

@@ -526,7 +526,7 @@ bool process_records(const nghttp2::asio_http2::server::asio_server_request& req
     auto& realm = udsf::get_realm(realm_id);
     auto& storage = realm.get_storage(storage_id);
     auto queries = get_queries(req);
-
+    auto filter = queries[FILTER];
     auto number_limit_string = queries[LIMIT_RANGE];
     auto max_payload_size_string = queries[MAX_PAYLOAD_SIZE];
     auto retrieve_records_string = queries[RETRIEVE_RECORDS];
@@ -546,7 +546,7 @@ bool process_records(const nghttp2::asio_http2::server::asio_server_request& req
     }
 
     rapidjson::Document search_exp;
-    search_exp.Parse(msg_body.c_str());
+    search_exp.Parse(filter.c_str());
     std::string response_body;
     if (!search_exp.HasParseError())
     {
@@ -1092,12 +1092,13 @@ bool process_timers(const nghttp2::asio_http2::server::asio_server_request& req,
     auto& realm = udsf::get_realm(realm_id);
     auto& storage = realm.get_storage(storage_id);
     auto queries = get_queries(req);
+    auto filter = queries[FILTER];
     bool expired_filter = (queries.find("expired-filter") != queries.end());
     std::set<std::string> timers;
     if (!expired_filter)
     {
         rapidjson::Document search_exp;
-        search_exp.Parse(msg_body.c_str());
+        search_exp.Parse(filter.c_str());
         std::string response_body;
         if (!search_exp.HasParseError())
         {
