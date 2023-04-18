@@ -11,8 +11,10 @@ cp ../openudsf/* ./ >/dev/null 2>&1
 
 openudsf_scripts="schema_sanity.json record_sanity.json	block_sanity.json search_filter_sanity.json	subscribe_sanity.json timer_crud_sanity.json"
 
+echo "starting maock to receive the notifications of data change and timer expiry"
 ./maock notif.json &
 
+echo "starting in-memory udsf"
 ./openudsf &
 
 sleep 5
