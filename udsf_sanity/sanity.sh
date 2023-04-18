@@ -2,12 +2,14 @@
 
 function cleanup()
 {
-    pkill -f openudsf
-    pkill -f maock
-    pkill -f h2loadrunner
+    pkill -f openudsf >/dev/null 2>&1
+    pkill -f maock >/dev/null 2>&1
+    pkill -f h2loadrunner >/dev/null 2>&1
 }
 
-cp ../openudsf/* ./ >/dev/null 2>&1
+cp ../maock ./ >/dev/null 2>&1
+cp ../h2loadrunner ./ >/dev/null 2>&1
+cp ../openudsf ./ >/dev/null 2>&1
 
 openudsf_scripts="schema_sanity.json record_sanity.json	block_sanity.json search_filter_sanity.json	subscribe_sanity.json timer_crud_sanity.json"
 
@@ -34,8 +36,8 @@ done
 
 sleep 15 # to wait for timer to expire and send notif to maock
 
-pkill -f openudsf
-pkill -f maock
+pkill -f openudsf >/dev/null 2>&1
+pkill -f maock >/dev/null 2>&1
 
 grep "200OK-to-Timer-Notif" maock.output | grep "1" >/dev/null 2>&1
 if [ $? -ne 0 ];then
