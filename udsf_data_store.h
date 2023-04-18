@@ -1074,6 +1074,14 @@ public:
                                                 const std::string& tag_name, const std::string& tag_value,
                                                 std::shared_timed_mutex& mutex, Record_Tags_Db& tags_db, size_t& count, bool count_indicator = false)
     {
+        if (debug_mode)
+        {
+            std::cerr<<__func__<<":"<<std::endl<<std::flush;
+            std::cerr<<"schema_id: "<<schema_id<<std::endl<<std::flush;
+            std::cerr<<"op: "<<op<<std::endl<<std::flush;
+            std::cerr<<"tag_name: "<<tag_name<<std::endl<<std::flush;
+            std::cerr<<"tag_value: "<<tag_value<<std::endl<<std::flush;
+        }
         std::set<std::string> s;
         count = 0;
         if (op == "NEQ")
@@ -1088,6 +1096,14 @@ public:
         }
         std::shared_lock<std::shared_timed_mutex> tags_db_main_read_lock(mutex);
         std::vector<Record_Tags_Db::iterator> tag_db_iterators_to_go_through;
+        if (debug_mode)
+        {
+            for (auto& tags_db_iter: tags_db)
+            {
+                std::cerr<<"schema_id in db: "<<tags_db_iter.first<<std::endl<<std::flush;
+            }
+        }
+
         if (schema_id.size())
         {
             auto db_iter = tags_db.find(schema_id);
@@ -1109,11 +1125,36 @@ public:
         {
             auto& tags_name_db = tags_db_iter->second;
             std::shared_lock<std::shared_timed_mutex> tags_name_db_read_lock(*tags_name_db.name_to_value_db_map_mutex);
+
+            if (debug_mode)
+            {
+                for (auto& name_iter: tags_name_db.name_to_value_db_map)
+                {
+                    std::cerr<<"tag name in db: "<<name_iter.first<<std::endl<<std::flush;
+                }
+            }
+
             auto tag_name_db_iter = tags_name_db.name_to_value_db_map.find(tag_name);
             if (tag_name_db_iter != tags_name_db.name_to_value_db_map.end())
             {
                 auto& tags_value_db = tag_name_db_iter->second;
                 std::shared_lock<std::shared_timed_mutex> tags_value_db_read_lock(*(tags_value_db.value_to_resource_id_map_mutex));
+                if (debug_mode)
+                {
+                    std::cerr<<"value db content: "<<schema_id<<std::endl<<std::flush;
+                    auto iter = tags_value_db.value_to_resource_id_map.begin();
+                    while (iter != tags_value_db.value_to_resource_id_map.end())
+                    {
+                        std::cerr<<"tag_value: "<<iter->first<<std::endl<<std::flush;
+
+                        for (auto& s: iter->second)
+                        {
+                            std::cerr<<"record/timer Id: "<<s<<std::endl<<std::flush;
+                        }
+                        iter++;
+                    }
+                }
+
                 auto iter_start = tags_value_db.value_to_resource_id_map.begin();
                 auto iter_end = iter_start;
                 if (op == "EQ")
@@ -1153,6 +1194,14 @@ public:
                 auto iter = iter_start;
                 while (iter != iter_end)
                 {
+                    if (debug_mode)
+                    {
+                        std::cerr<<"db value: "<<iter->first<<std::endl<<std::flush;
+                        for (auto& s: iter->second)
+                        {
+                            std::cerr<<"record/timer Id with the above db value: "<<s<<std::endl<<std::flush;
+                        }
+                    }
                     if (count_indicator)
                     {
                         count += iter->second.size();
@@ -1804,6 +1853,13 @@ public:
     std::set<std::string> run_search_expression_non_recursive_opt(rapidjson::Document& doc,
                                                                   bool timer_operation = false)
     {
+        if (debug_mode)
+        {
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            doc.Accept(writer);
+            std::cerr << "search expression: " << buffer.GetString() << std::endl << std::flush;
+        }
         struct Search_Expression_In_Stack
         {
             Search_Expression_In_Stack* parent;

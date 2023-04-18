@@ -557,7 +557,7 @@ bool process_records(const nghttp2::asio_http2::server::asio_server_request& req
             std::string val = udsf::get_string_value_from_Json_object(search_exp, "value");
             auto schema_id = udsf::get_string_value_from_Json_object(search_exp, SCHEMA_ID);
             size_t count;
-            auto ret = storage.run_search_comparison(schema_id, op, tag, val, storage.record_tags_db_main_mutex, storage.record_tags_db, count, false);
+            auto ret = storage.run_search_comparison(schema_id, op, tag, val, storage.record_tags_db_main_mutex, storage.record_tags_db, count, true);
 
             rapidjson::Document d;
             rapidjson::Pointer("/count").Set(d, count);
@@ -648,6 +648,11 @@ bool process_records(const nghttp2::asio_http2::server::asio_server_request& req
     {
         res.write_head(400);
         const std::string msg = "bad request: SearchExpression filter decode failure";
+
+        if (debug_mode)
+        {
+            std::cerr<<"bad search filter: "<<filter<<std::endl<<std::flush;
+        }
         res.end(msg);
         return true;
     }
