@@ -39,5 +39,9 @@ RUN apk add nghttp2-static nghttp2-dev openssl-libs-static openssl-dev libcrypto
     cp h2loadrunner-main/build/h2loadrunner /usr/bin/ && \
     mkdir -p /usr/share/h2loadrunner/ && \
     cp h2loadrunner-main/config_schema.json /usr/share/h2loadrunner/ && \
+    cd h2loadrunner-main/build && \
+    tar cvfz h2loadrunner.linux.x64.tar.gz h2loadrunner imudsf maock ../udsf_sanity/* && \
+    mv h2loadrunner.linux.x64.tar.gz ../../ && \
+    cd ../../ && \
     rm -rf h2loadrunner-main main.zip && \
     apk del nghttp2-static nghttp2-dev openssl-libs-static openssl-dev libcrypto1.1 libev-dev libxml2-dev c-ares-dev cmake boost-static python3-dev boost-dev luajit-dev gcc g++ unzip wget libexecinfo-dev libexecinfo-static make autoconf automake libtool

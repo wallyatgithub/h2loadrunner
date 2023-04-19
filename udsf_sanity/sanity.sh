@@ -2,26 +2,26 @@
 
 function cleanup()
 {
-    pkill -f openudsf >/dev/null 2>&1
+    pkill -f imudsf >/dev/null 2>&1
     pkill -f maock >/dev/null 2>&1
     pkill -f h2loadrunner >/dev/null 2>&1
 }
 
 cp ../maock ./ >/dev/null 2>&1
 cp ../h2loadrunner ./ >/dev/null 2>&1
-cp ../openudsf ./ >/dev/null 2>&1
+cp ../imudsf ./ >/dev/null 2>&1
 
-openudsf_scripts="schema_sanity.json record_sanity.json	block_sanity.json search_filter_sanity.json	subscribe_sanity.json timer_crud_sanity.json"
+imudsf_scripts="schema_sanity.json record_sanity.json	block_sanity.json search_filter_sanity.json	subscribe_sanity.json timer_crud_sanity.json"
 
 echo "starting maock to receive the notifications of data change and timer expiry"
 ./maock notif.json &
 
 echo "starting in-memory udsf"
-./openudsf &
+./imudsf &
 
 sleep 5
 
-for each in $openudsf_scripts
+for each in $imudsf_scripts
 do
   echo "running "$each
   ./h2loadrunner --config-file=$each > output 2>&1
@@ -36,7 +36,7 @@ done
 
 sleep 15 # to wait for timer to expire and send notif to maock
 
-pkill -f openudsf >/dev/null 2>&1
+pkill -f imudsf >/dev/null 2>&1
 pkill -f maock >/dev/null 2>&1
 
 grep "200OK-to-Timer-Notif" maock.output | grep "1" >/dev/null 2>&1

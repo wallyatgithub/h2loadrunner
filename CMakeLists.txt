@@ -292,7 +292,7 @@ add_executable(h2loadrunner
   $<TARGET_OBJECTS:staticjson>
 )
 
-add_executable(openudsf ${UDSF_SOURCES}
+add_executable(imudsf ${UDSF_SOURCES}
   $<TARGET_OBJECTS:llhttp>
   $<TARGET_OBJECTS:url-parser>
   $<TARGET_OBJECTS:staticjson>
@@ -300,7 +300,7 @@ add_executable(openudsf ${UDSF_SOURCES}
 
 if(DEFINED USE_LIBEV)
     target_link_libraries(h2loadrunner cares_static)
-    target_link_libraries(openudsf cares_static)
+    target_link_libraries(imudsf cares_static)
 endif()
 
 install(TARGETS h2loadrunner
