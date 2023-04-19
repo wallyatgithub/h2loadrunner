@@ -10,7 +10,7 @@
 #include "H2Server_Response.h"
 
 extern bool debug_mode;
-bool cache_mode = false;
+bool schema_loose_check = true;
 
 
 std::map<std::string, std::string> get_queries(const nghttp2::asio_http2::server::asio_server_request& req)
@@ -545,9 +545,27 @@ bool process_records(const nghttp2::asio_http2::server::asio_server_request& req
         max_payload_size = std::atoi(max_payload_size_string.c_str());
     }
 
+    auto return_count = [&res](size_t count)
+    {
+        rapidjson::Document d;
+        rapidjson::Pointer("/count").Set(d, count);
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        d.Accept(writer);
+        auto response_body = std::string(buffer.GetString());
+        res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(response_body.size())}}});
+        res.end(std::move(response_body));
+        return true;
+    };
+
+    if (count_indicator && method == METHOD_GET && filter.empty())
+    {
+        auto count = storage.get_all_record_count();
+        return return_count(count);
+    }
+
     rapidjson::Document search_exp;
     search_exp.Parse(filter.c_str());
-    std::string response_body;
     if (!search_exp.HasParseError())
     {
         if (search_exp.HasMember(OPERATION.c_str()) && count_indicator && method == METHOD_GET)
@@ -558,16 +576,7 @@ bool process_records(const nghttp2::asio_http2::server::asio_server_request& req
             auto schema_id = udsf::get_string_value_from_Json_object(search_exp, SCHEMA_ID);
             size_t count;
             auto ret = storage.run_search_comparison(schema_id, op, tag, val, storage.record_tags_db_main_mutex, storage.record_tags_db, count, true);
-
-            rapidjson::Document d;
-            rapidjson::Pointer("/count").Set(d, count);
-            rapidjson::StringBuffer buffer;
-            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-            d.Accept(writer);
-            response_body = std::string(buffer.GetString());
-            res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(response_body.size())}}});
-            res.end(std::move(response_body));
-            return true;
+            return return_count(count);
         }
 
         auto records = storage.run_search_expression_non_recursive_opt(search_exp);
@@ -618,7 +627,7 @@ bool process_records(const nghttp2::asio_http2::server::asio_server_request& req
             rapidjson::StringBuffer buffer;
             rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
             d.Accept(writer);
-            response_body = std::string(buffer.GetString());
+            auto response_body = std::string(buffer.GetString());
             res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(response_body.size())}}});
             res.end(std::move(response_body));
         }

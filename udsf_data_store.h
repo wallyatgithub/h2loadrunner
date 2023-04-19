@@ -23,7 +23,7 @@
 #include "udsf_util.h"
 
 extern bool debug_mode;
-extern bool cache_mode;
+extern bool schema_loose_check;
 
 const std::string CONTENT_ID = "Content-Id";
 const std::string CONTENT_TYPE = "Content-Type";
@@ -763,6 +763,7 @@ class Tags_Value_Db_Of_One_Tag_Name
 public:
     std::unique_ptr<std::shared_timed_mutex> value_to_resource_id_map_mutex;
     std::map<std::string, std::set<std::string>> value_to_resource_id_map;
+    size_t count;
     explicit Tags_Value_Db_Of_One_Tag_Name():
         value_to_resource_id_map_mutex(std::make_unique<std::shared_timed_mutex>())
     {
@@ -880,6 +881,17 @@ public:
         h->add_property("recordIdList", &this->recordIdList);
     }
 };
+
+class Record_Ids_Of_One_Schema
+{
+public:
+    std::unique_ptr<std::shared_timed_mutex> record_ids_mutex;
+    std::set<std::string> record_ids;
+    explicit Record_Ids_Of_One_Schema():
+        record_ids_mutex(std::make_unique<std::shared_timed_mutex>())
+    {
+    }
+};
 class Storage
 {
 public:
@@ -887,7 +899,7 @@ public:
     std::string storage_id;
     std::unordered_map<std::string, Record> records[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
     std::unordered_map<std::string, MetaSchema> schemas[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
-    std::map<std::string, std::pair<std::unique_ptr<std::shared_timed_mutex>, std::set<std::string>>>
+    std::map<std::string, Record_Ids_Of_One_Schema>
     schema_id_to_record_ids[ONE_DIMENSION_SIZE];
     std::shared_timed_mutex schema_id_to_record_ids_mutex[ONE_DIMENSION_SIZE];
     std::shared_timed_mutex records_mutexes[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
@@ -930,12 +942,14 @@ public:
         auto& s = schemas[0][0][""];
         schemas_write_lock.unlock();
 
+        std::unique_lock<std::shared_timed_mutex> record_tags_db_write_lock(record_tags_db_main_mutex);
+        auto& r_tagsDb = record_tags_db[""];
+
         std::unique_lock<std::shared_timed_mutex> record_ids_write_lock(schema_id_to_record_ids_mutex[0]);
         auto& r = schema_id_to_record_ids[0][""];
-        r.first = std::make_unique<std::shared_timed_mutex>();
 
         std::unique_lock<std::shared_timed_mutex> timer_tags_db_write_lock(timer_tags_db_main_mutex);
-        auto& tagsDb = timer_tags_db[""];
+        auto& t_tagsDb = timer_tags_db[""];
     }
     void install_tags_from_schema(const MetaSchema& schema)
     {
@@ -947,6 +961,28 @@ public:
         std::string schema_id = schema.schemaId;
         std::unique_lock<std::shared_timed_mutex> tags_db_main_write_lock(record_tags_db_main_mutex);
         record_tags_db.emplace(std::move(schema_id), std::move(tags_name_db));
+    }
+
+    void print_record_tags_db(Record_Tags_Db& db)
+    {
+        std::cerr<<"realm id: "<<realm_id<<std::endl<<std::flush;
+        std::cerr<<"storage id: "<<storage_id<<std::endl<<std::flush;
+        for (auto& i: db)
+        {
+            std::cerr<<"--schema name: "<<i.first<<std::endl<<std::flush;
+            for (auto& tag_name_to_values: i.second.name_to_value_db_map)
+            {
+                std::cerr<<"----tag name: "<<tag_name_to_values.first<<std::endl<<std::flush;
+                for (auto& v: tag_name_to_values.second.value_to_resource_id_map)
+                {
+                    std::cerr<<"------tag value: "<<v.first<<std::endl<<std::flush;
+                    for (auto& r: v.second)
+                    {
+                        std::cerr<<"--------record id: "<<r<<std::endl<<std::flush;
+                    }
+                }
+            }
+        }
     }
 
     std::set<std::string> get_all_record_ids(const std::string& schema_id)
@@ -978,8 +1014,8 @@ public:
         }
         for (auto iter : iters_to_go_through)
         {
-            std::shared_lock<std::shared_timed_mutex> record_ids_read_lock(*iter->second.first);
-            ret.insert(iter->second.second.begin(), iter->second.second.end());
+            std::shared_lock<std::shared_timed_mutex> record_ids_read_lock(*iter->second.record_ids_mutex);
+            ret.insert(iter->second.record_ids.begin(), iter->second.record_ids.end());
         }
         return ret;
     }
@@ -1001,7 +1037,10 @@ public:
         {
             auto& tags_value_db = tag_name_db_iter->second;
             std::unique_lock<std::shared_timed_mutex> tags_value_db_write_lock(*(tags_value_db.value_to_resource_id_map_mutex));
+            auto count_before = tags_value_db.value_to_resource_id_map[tag_value].size();
             tags_value_db.value_to_resource_id_map[tag_value].insert(resource_id);
+            auto count_after = tags_value_db.value_to_resource_id_map[tag_value].size();
+            tags_value_db.count += (count_after - count_before);
         }
         else if (create_new_value_db_if_not_exist)
         {
@@ -1010,22 +1049,31 @@ public:
             auto& tags_value_db = tags_name_db.name_to_value_db_map[tag_name];
             std::unique_lock<std::shared_timed_mutex> tags_value_db_write_lock(*(tags_value_db.value_to_resource_id_map_mutex));
             tags_value_db.value_to_resource_id_map[tag_value].insert(resource_id);
+            tags_value_db.count++;
         }
     }
 
     void insert_record_tag_value(const std::string& schema_id, const std::string& tag_name, const std::string& tag_value,
                                  const std::string& record_id)
     {
+        if (debug_mode)
+        {
+            std::cerr<<__func__<<std::endl<<::std::flush;
+            std::cerr<<"schema_id: "<<schema_id<<std::endl<<::std::flush;
+            std::cerr<<"tag_name: "<<tag_name<<std::endl<<::std::flush;
+            std::cerr<<"tag_value: "<<tag_value<<std::endl<<::std::flush;
+            std::cerr<<"record_id: "<<record_id<<std::endl<<::std::flush;
+        }
         std::shared_lock<std::shared_timed_mutex> tags_db_main_read_guard(record_tags_db_main_mutex);
         auto tags_db_iter = record_tags_db.find(schema_id);
         if (tags_db_iter != record_tags_db.end())
         {
             auto& tags_name_db = tags_db_iter->second;
-            insert_value_to_tags_db(tag_name, tag_value, record_id, tags_name_db, false);
+            insert_value_to_tags_db(tag_name, tag_value, record_id, tags_name_db, schema_loose_check);
         }
         else
         {
-            if (cache_mode)
+            if (schema_loose_check)
             {
                 tags_db_main_read_guard.unlock();
                 std::unique_lock<std::shared_timed_mutex> tags_db_main_write_guard(record_tags_db_main_mutex);
@@ -1049,7 +1097,13 @@ public:
             auto iter = tags_value_db.value_to_resource_id_map.find(tag_value);
             if (iter != tags_value_db.value_to_resource_id_map.end())
             {
+                auto count_before = iter->second.size();
                 iter->second.erase(resource_id);
+                auto count_after = iter->second.size();
+                if (count_before > count_after)
+                {
+                    tags_value_db.count -= (count_before - count_after);
+                }
             }
             if (iter->second.empty())
             {
@@ -1081,6 +1135,7 @@ public:
             std::cerr<<"op: "<<op<<std::endl<<std::flush;
             std::cerr<<"tag_name: "<<tag_name<<std::endl<<std::flush;
             std::cerr<<"tag_value: "<<tag_value<<std::endl<<std::flush;
+            print_record_tags_db(record_tags_db);
         }
         std::set<std::string> s;
         count = 0;
@@ -1153,6 +1208,11 @@ public:
                         }
                         iter++;
                     }
+                }
+                if (count_indicator && tag_value.empty() && ((op == "GT")||(op == "GTE")))
+                {
+                    count += tag_name_db_iter->second.count;
+                    continue;
                 }
 
                 auto iter_start = tags_value_db.value_to_resource_id_map.begin();
@@ -1230,7 +1290,31 @@ public:
         {
             ret = Record::validate_meta_with_schema(meta, schema_object);
         }
+        else
+        {
+            // record with schema id, but this schema is not installed yet
+            if (!schema_loose_check)
+            {
+                // reject the record if not loose check (means strict check)
+                ret = false;
+            }
+        }
         return ret;
+    }
+
+    size_t get_all_record_count()
+    {
+        size_t count = 0;
+        for (size_t index = 0; index < ONE_DIMENSION_SIZE; index++)
+        {
+            std::shared_lock<std::shared_timed_mutex> record_ids_read_lock(schema_id_to_record_ids_mutex[index]);
+            for (auto& s: schema_id_to_record_ids[index])
+            {
+                std::shared_lock<std::shared_timed_mutex> per_schema_record_ids_read_lock(*s.second.record_ids_mutex);
+                count += s.second.record_ids.size();
+            }
+        }
+        return count;
     }
 
     void track_record_id(const std::string& schema_id, const std::string& record_id, bool insert = true)
@@ -1238,17 +1322,28 @@ public:
         auto u8 = get_u8_sum(schema_id);
         std::shared_lock<std::shared_timed_mutex> record_ids_read_lock(schema_id_to_record_ids_mutex[u8]);
         auto iter = schema_id_to_record_ids[u8].find(schema_id);
-        if (iter != schema_id_to_record_ids[u8].end())
+        auto track_it = [insert, &record_id](decltype(schema_id_to_record_ids[u8].begin()->second)& schema_id_to_record_id)
         {
-            std::unique_lock<std::shared_timed_mutex> per_schema_record_ids_write_lock(*iter->second.first);
+            std::unique_lock<std::shared_timed_mutex> per_schema_record_ids_write_lock(*schema_id_to_record_id.record_ids_mutex);
             if (insert)
             {
-                iter->second.second.insert(record_id);
+                schema_id_to_record_id.record_ids.insert(record_id);
             }
             else
             {
-                iter->second.second.erase(record_id);
+                schema_id_to_record_id.record_ids.erase(record_id);
             }
+        };
+        if (iter != schema_id_to_record_ids[u8].end())
+        {
+            track_it(iter->second);
+        }
+        else
+        {
+            record_ids_read_lock.unlock();
+            std::unique_lock<std::shared_timed_mutex> record_ids_write_lock(schema_id_to_record_ids_mutex[u8]);
+            auto& schema_id_to_record_id = schema_id_to_record_ids[u8][schema_id];
+            track_it(schema_id_to_record_id);
         }
     }
 
@@ -1430,6 +1525,10 @@ public:
                 insert_record_tag_value(new_meta.schemaId, tag_name, tag_value, record_id);
             }
         }
+        if (debug_mode)
+        {
+            print_record_tags_db(record_tags_db);
+        }
         track_record_id(new_meta.schemaId, record_id);
         if (new_meta.ttl.size())
         {
@@ -1582,7 +1681,6 @@ public:
                 record_ids_read_lock.unlock();
                 std::unique_lock<std::shared_timed_mutex> record_ids_write_lock(schema_id_to_record_ids_mutex[u8]);
                 auto& r = schema_id_to_record_ids[u8][schema_id];
-                r.first = std::make_unique<std::shared_timed_mutex>();
             }
             return true;
         }
