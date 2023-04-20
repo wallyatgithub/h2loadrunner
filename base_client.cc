@@ -2865,31 +2865,34 @@ int base_client::submit_request()
         }
     };
 
-    auto count_total_request = [this]()
+    auto count_client_in_registry = [this]()
     {
-        size_t ret;
-        for (auto& s: config->json_config_schema.scenarios)
+        size_t ret = 0;
+        for (auto& s: get_controller_client()->client_registry)
         {
-            for (auto& r: s.requests)
-            {
-                ret++;
-            }
+            ret += s.second.size();
         }
         return ret;
     };
-    static auto total_request = count_total_request();
 
-    size_t retry_count = 0;
-    while (!(is_test_finished()) && (retry_count < total_request))
+    auto retCode = submit_one_request();
+    if (0 == retCode)
     {
-        auto retCode = submit_one_request();
-        if (0 == retCode)
-        {
-            return retCode;
-        }
-        ++retry_count;
+        return retCode;
     }
-
+    else
+    {
+        auto total_attempt_allowed = count_client_in_registry();
+        size_t attempt = 1;
+        while ((!is_test_finished()) && (attempt < total_attempt_allowed))
+        {
+            retCode = submit_one_request();
+            if (0 == retCode)
+            {
+                return retCode;
+            }
+        }
+    }
     return -1;
 }
 
