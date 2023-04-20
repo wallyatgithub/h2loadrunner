@@ -2865,7 +2865,7 @@ int base_client::submit_request()
         }
     };
 
-    static auto count_total_request = [this]()
+    auto count_total_request = [this]()
     {
         size_t ret;
         for (auto& s: config->json_config_schema.scenarios)
@@ -2877,10 +2877,10 @@ int base_client::submit_request()
         }
         return ret;
     };
-    thread_local static auto total_request = count_total_request();
+    static auto total_request = count_total_request();
 
-    uint8_t retry_count = 0;
-    while (retry_count < total_request)
+    size_t retry_count = 0;
+    while (!(is_test_finished()) && (retry_count < total_request))
     {
         auto retCode = submit_one_request();
         if (0 == retCode)
