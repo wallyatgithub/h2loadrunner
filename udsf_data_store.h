@@ -897,13 +897,15 @@ class Storage
 public:
     std::string realm_id;
     std::string storage_id;
-    std::unordered_map<std::string, Record> records[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
-    std::unordered_map<std::string, MetaSchema> schemas[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
+    std::unordered_map<std::string, Record> records[ONE_DIMENSION_SIZE * ONE_DIMENSION_SIZE];
+    std::shared_timed_mutex records_mutexes[ONE_DIMENSION_SIZE * ONE_DIMENSION_SIZE];
+
+    std::unordered_map<std::string, MetaSchema> schemas[ONE_DIMENSION_SIZE * ONE_DIMENSION_SIZE];
+    std::shared_timed_mutex schemas_mutexes[ONE_DIMENSION_SIZE * ONE_DIMENSION_SIZE];
+
     std::map<std::string, Record_Ids_Of_One_Schema>
     schema_id_to_record_ids[ONE_DIMENSION_SIZE];
     std::shared_timed_mutex schema_id_to_record_ids_mutex[ONE_DIMENSION_SIZE];
-    std::shared_timed_mutex records_mutexes[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
-    std::shared_timed_mutex schemas_mutexes[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
 
     Record_Tags_Db record_tags_db;
     std::shared_timed_mutex record_tags_db_main_mutex;
@@ -912,18 +914,18 @@ public:
     std::shared_timed_mutex record_ttl_mutex;
 
     std::unordered_map<std::string, NotificationSubscription>
-    subscription_id_to_subscription[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
-    std::shared_timed_mutex subscription_id_to_subscription_mutex[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
+    subscription_id_to_subscription[ONE_DIMENSION_SIZE * ONE_DIMENSION_SIZE];
+    std::shared_timed_mutex subscription_id_to_subscription_mutex[ONE_DIMENSION_SIZE * ONE_DIMENSION_SIZE];
     std::unordered_map<std::string, std::set<std::string>>
-                                                        monitored_resource_uri_to_subscription_id[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
-    std::shared_timed_mutex monitored_resource_uri_to_subscription_id_mutex[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
+                                                        monitored_resource_uri_to_subscription_id[ONE_DIMENSION_SIZE * ONE_DIMENSION_SIZE];
+    std::shared_timed_mutex monitored_resource_uri_to_subscription_id_mutex[ONE_DIMENSION_SIZE * ONE_DIMENSION_SIZE];
     std::map<uint64_t, std::set<std::string>> subscription_expiry_to_subscription_id;
     std::shared_timed_mutex subscription_expiry_to_subscription_id_mutex;
     std::map<uint64_t, std::set<std::string>> subscription_expiryNotification_to_subscription_id;
     std::shared_timed_mutex subscription_expiryNotification_to_subscription_id_mutex;
 
-    std::unordered_map<std::string, Timer> timers[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
-    std::shared_timed_mutex timers_mutexes[ONE_DIMENSION_SIZE][ONE_DIMENSION_SIZE];
+    std::unordered_map<std::string, Timer> timers[ONE_DIMENSION_SIZE * ONE_DIMENSION_SIZE];
+    std::shared_timed_mutex timers_mutexes[ONE_DIMENSION_SIZE * ONE_DIMENSION_SIZE];
 
     Record_Tags_Db timer_tags_db;
     std::shared_timed_mutex timer_tags_db_main_mutex;
@@ -938,8 +940,8 @@ public:
 
     void init_default_schema_with_empty_schema_id()
     {
-        std::unique_lock<std::shared_timed_mutex> schemas_write_lock(schemas_mutexes[0][0]);
-        auto& s = schemas[0][0][""];
+        std::unique_lock<std::shared_timed_mutex> schemas_write_lock(schemas_mutexes[0]);
+        auto& s = schemas[0][""];
         schemas_write_lock.unlock();
 
         std::unique_lock<std::shared_timed_mutex> record_tags_db_write_lock(record_tags_db_main_mutex);
@@ -965,20 +967,20 @@ public:
 
     void print_record_tags_db(Record_Tags_Db& db)
     {
-        std::cerr<<"realm id: "<<realm_id<<std::endl<<std::flush;
-        std::cerr<<"storage id: "<<storage_id<<std::endl<<std::flush;
-        for (auto& i: db)
+        std::cerr << "realm id: " << realm_id << std::endl << std::flush;
+        std::cerr << "storage id: " << storage_id << std::endl << std::flush;
+        for (auto& i : db)
         {
-            std::cerr<<"--schema name: "<<i.first<<std::endl<<std::flush;
-            for (auto& tag_name_to_values: i.second.name_to_value_db_map)
+            std::cerr << "--schema name: " << i.first << std::endl << std::flush;
+            for (auto& tag_name_to_values : i.second.name_to_value_db_map)
             {
-                std::cerr<<"----tag name: "<<tag_name_to_values.first<<std::endl<<std::flush;
-                for (auto& v: tag_name_to_values.second.value_to_resource_id_map)
+                std::cerr << "----tag name: " << tag_name_to_values.first << std::endl << std::flush;
+                for (auto& v : tag_name_to_values.second.value_to_resource_id_map)
                 {
-                    std::cerr<<"------tag value: "<<v.first<<std::endl<<std::flush;
-                    for (auto& r: v.second)
+                    std::cerr << "------tag value: " << v.first << std::endl << std::flush;
+                    for (auto& r : v.second)
                     {
-                        std::cerr<<"--------record id: "<<r<<std::endl<<std::flush;
+                        std::cerr << "--------record id: " << r << std::endl << std::flush;
                     }
                 }
             }
@@ -1058,11 +1060,11 @@ public:
     {
         if (debug_mode)
         {
-            std::cerr<<__func__<<std::endl<<::std::flush;
-            std::cerr<<"schema_id: "<<schema_id<<std::endl<<::std::flush;
-            std::cerr<<"tag_name: "<<tag_name<<std::endl<<::std::flush;
-            std::cerr<<"tag_value: "<<tag_value<<std::endl<<::std::flush;
-            std::cerr<<"record_id: "<<record_id<<std::endl<<::std::flush;
+            std::cerr << __func__ << std::endl <<::std::flush;
+            std::cerr << "schema_id: " << schema_id << std::endl <<::std::flush;
+            std::cerr << "tag_name: " << tag_name << std::endl <<::std::flush;
+            std::cerr << "tag_value: " << tag_value << std::endl <<::std::flush;
+            std::cerr << "record_id: " << record_id << std::endl <<::std::flush;
         }
         std::shared_lock<std::shared_timed_mutex> tags_db_main_read_guard(record_tags_db_main_mutex);
         auto tags_db_iter = record_tags_db.find(schema_id);
@@ -1130,11 +1132,11 @@ public:
     {
         if (debug_mode)
         {
-            std::cerr<<__func__<<":"<<std::endl<<std::flush;
-            std::cerr<<"schema_id: "<<schema_id<<std::endl<<std::flush;
-            std::cerr<<"op: "<<op<<std::endl<<std::flush;
-            std::cerr<<"tag_name: "<<tag_name<<std::endl<<std::flush;
-            std::cerr<<"tag_value: "<<tag_value<<std::endl<<std::flush;
+            std::cerr << __func__ << ":" << std::endl << std::flush;
+            std::cerr << "schema_id: " << schema_id << std::endl << std::flush;
+            std::cerr << "op: " << op << std::endl << std::flush;
+            std::cerr << "tag_name: " << tag_name << std::endl << std::flush;
+            std::cerr << "tag_value: " << tag_value << std::endl << std::flush;
             print_record_tags_db(record_tags_db);
         }
         std::set<std::string> s;
@@ -1153,9 +1155,9 @@ public:
         std::vector<Record_Tags_Db::iterator> tag_db_iterators_to_go_through;
         if (debug_mode)
         {
-            for (auto& tags_db_iter: tags_db)
+            for (auto& tags_db_iter : tags_db)
             {
-                std::cerr<<"schema_id in db: "<<tags_db_iter.first<<std::endl<<std::flush;
+                std::cerr << "schema_id in db: " << tags_db_iter.first << std::endl << std::flush;
             }
         }
 
@@ -1183,9 +1185,9 @@ public:
 
             if (debug_mode)
             {
-                for (auto& name_iter: tags_name_db.name_to_value_db_map)
+                for (auto& name_iter : tags_name_db.name_to_value_db_map)
                 {
-                    std::cerr<<"tag name in db: "<<name_iter.first<<std::endl<<std::flush;
+                    std::cerr << "tag name in db: " << name_iter.first << std::endl << std::flush;
                 }
             }
 
@@ -1196,20 +1198,20 @@ public:
                 std::shared_lock<std::shared_timed_mutex> tags_value_db_read_lock(*(tags_value_db.value_to_resource_id_map_mutex));
                 if (debug_mode)
                 {
-                    std::cerr<<"value db content: "<<schema_id<<std::endl<<std::flush;
+                    std::cerr << "value db content: " << schema_id << std::endl << std::flush;
                     auto iter = tags_value_db.value_to_resource_id_map.begin();
                     while (iter != tags_value_db.value_to_resource_id_map.end())
                     {
-                        std::cerr<<"tag_value: "<<iter->first<<std::endl<<std::flush;
+                        std::cerr << "tag_value: " << iter->first << std::endl << std::flush;
 
-                        for (auto& s: iter->second)
+                        for (auto& s : iter->second)
                         {
-                            std::cerr<<"record/timer Id: "<<s<<std::endl<<std::flush;
+                            std::cerr << "record/timer Id: " << s << std::endl << std::flush;
                         }
                         iter++;
                     }
                 }
-                if (count_indicator && tag_value.empty() && ((op == "GT")||(op == "GTE")))
+                if (count_indicator && tag_value.empty() && ((op == "GT") || (op == "GTE")))
                 {
                     count += tag_name_db_iter->second.count;
                     continue;
@@ -1248,7 +1250,7 @@ public:
                 }
                 else
                 {
-                    std::cerr<<"invalid operation: "<<op<<std::endl<<std::flush;
+                    std::cerr << "invalid operation: " << op << std::endl << std::flush;
                 }
 
                 auto iter = iter_start;
@@ -1256,10 +1258,10 @@ public:
                 {
                     if (debug_mode)
                     {
-                        std::cerr<<"db value: "<<iter->first<<std::endl<<std::flush;
-                        for (auto& s: iter->second)
+                        std::cerr << "db value: " << iter->first << std::endl << std::flush;
+                        for (auto& s : iter->second)
                         {
-                            std::cerr<<"record/timer Id with the above db value: "<<s<<std::endl<<std::flush;
+                            std::cerr << "record/timer Id with the above db value: " << s << std::endl << std::flush;
                         }
                     }
                     if (count_indicator)
@@ -1308,7 +1310,7 @@ public:
         for (size_t index = 0; index < ONE_DIMENSION_SIZE; index++)
         {
             std::shared_lock<std::shared_timed_mutex> record_ids_read_lock(schema_id_to_record_ids_mutex[index]);
-            for (auto& s: schema_id_to_record_ids[index])
+            for (auto& s : schema_id_to_record_ids[index])
             {
                 std::shared_lock<std::shared_timed_mutex> per_schema_record_ids_read_lock(*s.second.record_ids_mutex);
                 count += s.second.record_ids.size();
@@ -1453,15 +1455,13 @@ public:
                 record.create_or_update_block(content_id, content_type, parts[i].second, parts[i].first, dummy);
             }
             uint16_t sum = get_u16_sum(record_id);
-            uint8_t row = sum >> 8;
-            uint8_t col = sum & 0xFF;
-            std::unique_lock<std::shared_timed_mutex> record_map_write_guard(records_mutexes[row][col]);
+            std::unique_lock<std::shared_timed_mutex> record_map_write_guard(records_mutexes[sum]);
             Record* target = nullptr;
-            auto iter = records[row][col].find(record_id);
-            if (iter == records[row][col].end())
+            auto iter = records[sum].find(record_id);
+            if (iter == records[sum].end())
             {
-                records[row][col].emplace(std::make_pair(record_id, record_id));
-                target = &records[row][col].find(record_id)->second;
+                records[sum].emplace(std::make_pair(record_id, record_id));
+                target = &records[sum].find(record_id)->second;
                 update = false;
             }
             else
@@ -1539,14 +1539,12 @@ public:
     bool delete_record_directly(const std::string& record_id)
     {
         uint16_t sum = get_u16_sum(record_id);
-        uint8_t row = sum >> 8;
-        uint8_t col = sum & 0xFF;
-        std::unique_lock<std::shared_timed_mutex> write_lock(records_mutexes[row][col]);
-        auto iter = records[row][col].find(record_id);
-        if (iter != records[row][col].end())
+        std::unique_lock<std::shared_timed_mutex> write_lock(records_mutexes[sum]);
+        auto iter = records[sum].find(record_id);
+        if (iter != records[sum].end())
         {
             auto record = std::move(iter->second);
-            records[row][col].erase(iter);
+            records[sum].erase(iter);
             checkout_record(record_id, record.meta);
             return true;
         }
@@ -1557,12 +1555,10 @@ public:
                                           const std::string& notificationDescription = "")
     {
         uint16_t sum = get_u16_sum(record_id);
-        uint8_t row = sum >> 8;
-        uint8_t col = sum & 0xFF;
-        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[sum]);
         std::string ret;
-        auto iter = records[row][col].find(record_id);
-        if (iter != records[row][col].end())
+        auto iter = records[sum].find(record_id);
+        if (iter != records[sum].end())
         {
             ret = iter->second.produce_multipart_body(include_meta, notificationDescription);
         }
@@ -1572,12 +1568,10 @@ public:
     std::string get_record_json_body(const std::string& record_id, bool meta_only)
     {
         uint16_t sum = get_u16_sum(record_id);
-        uint8_t row = sum >> 8;
-        uint8_t col = sum & 0xFF;
-        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[sum]);
         std::string ret;
-        auto iter = records[row][col].find(record_id);
-        if (iter != records[row][col].end())
+        auto iter = records[sum].find(record_id);
+        if (iter != records[sum].end())
         {
             ret = iter->second.produce_json_body(meta_only);
         }
@@ -1587,12 +1581,10 @@ public:
     std::string get_record_meta(const std::string& record_id)
     {
         uint16_t sum = get_u16_sum(record_id);
-        uint8_t row = sum >> 8;
-        uint8_t col = sum & 0xFF;
-        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[sum]);
         std::string ret;
-        auto iter = records[row][col].find(record_id);
-        if (iter != records[row][col].end())
+        auto iter = records[sum].find(record_id);
+        if (iter != records[sum].end())
         {
             ret = iter->second.get_meta();
         }
@@ -1602,11 +1594,9 @@ public:
     RecordMeta get_record_meta_object(const std::string& record_id)
     {
         uint16_t sum = get_u16_sum(record_id);
-        uint8_t row = sum >> 8;
-        uint8_t col = sum & 0xFF;
-        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
-        auto iter = records[row][col].find(record_id);
-        if (iter != records[row][col].end())
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[sum]);
+        auto iter = records[sum].find(record_id);
+        if (iter != records[sum].end())
         {
             return iter->second.get_meta_object();
         }
@@ -1617,11 +1607,9 @@ public:
     {
         std::string ret;
         uint16_t sum = get_u16_sum(schema_id);
-        uint8_t row = sum >> 8;
-        uint8_t col = sum & 0xFF;
-        std::shared_lock<std::shared_timed_mutex> guard(schemas_mutexes[row][col]);
-        auto iter = schemas[row][col].find(schema_id);
-        if (iter != schemas[row][col].end())
+        std::shared_lock<std::shared_timed_mutex> guard(schemas_mutexes[sum]);
+        auto iter = schemas[sum].find(schema_id);
+        if (iter != schemas[sum].end())
         {
             ret = staticjson::to_json_string(iter->second);
             found = true;
@@ -1638,11 +1626,9 @@ public:
         static MetaSchema dummyMetaSchama;
         success = false;
         uint16_t sum = get_u16_sum(schema_id);
-        uint8_t row = sum >> 8;
-        uint8_t col = sum & 0xFF;
-        std::shared_lock<std::shared_timed_mutex> guard(schemas_mutexes[row][col]);
-        auto iter = schemas[row][col].find(schema_id);
-        if (iter != schemas[row][col].end())
+        std::shared_lock<std::shared_timed_mutex> guard(schemas_mutexes[sum]);
+        auto iter = schemas[sum].find(schema_id);
+        if (iter != schemas[sum].end())
         {
             success = true;
             return iter->second;
@@ -1653,15 +1639,13 @@ public:
     bool create_or_update_schema(const std::string& schema_id, const std::string& schema, bool& update)
     {
         uint16_t sum = get_u16_sum(schema_id);
-        uint8_t row = sum >> 8;
-        uint8_t col = sum & 0xFF;
         staticjson::ParseStatus result;
         MetaSchema metaSchema;
         if (staticjson::from_json_string(schema.c_str(), &metaSchema, &result))
         {
             install_tags_from_schema(metaSchema);
-            std::unique_lock<std::shared_timed_mutex> schemas_mutexes_write_lock(schemas_mutexes[row][col]);
-            auto& target = schemas[row][col][schema_id];
+            std::unique_lock<std::shared_timed_mutex> schemas_mutexes_write_lock(schemas_mutexes[sum]);
+            auto& target = schemas[sum][schema_id];
             if (target.schemaId.empty())
             {
                 update = false;
@@ -1671,7 +1655,7 @@ public:
                 update = true;
             }
             metaSchema.schemaId == schema_id;
-            schemas[row][col][schema_id] = std::move(metaSchema);
+            schemas[sum][schema_id] = std::move(metaSchema);
             schemas_mutexes_write_lock.unlock();
 
             auto u8 = get_u8_sum(schema_id);
@@ -1691,14 +1675,12 @@ public:
     {
         bool ret = false;
         uint16_t sum = get_u16_sum(schema_id);
-        uint8_t row = sum >> 8;
-        uint8_t col = sum & 0xFF;
-        std::unique_lock<std::shared_timed_mutex> guard(schemas_mutexes[row][col]);
-        auto iter = schemas[row][col].find(schema_id);
-        if (iter != schemas[row][col].end())
+        std::unique_lock<std::shared_timed_mutex> guard(schemas_mutexes[sum]);
+        auto iter = schemas[sum].find(schema_id);
+        if (iter != schemas[sum].end())
         {
             ret = true;
-            schemas[row][col].erase(iter);
+            schemas[sum].erase(iter);
         }
         delete_tags_from_schema(schema_id);
         return ret;
@@ -1707,12 +1689,10 @@ public:
     bool update_record_meta(const std::string& record_id, const std::string& meta_patch, bool& record_found)
     {
         uint16_t sum = get_u16_sum(record_id);
-        uint8_t row = sum >> 8;
-        uint8_t col = sum & 0xFF;
         record_found = false;
-        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
-        auto iter = records[row][col].find(record_id);
-        if (iter != records[row][col].end())
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[sum]);
+        auto iter = records[sum].find(record_id);
+        if (iter != records[sum].end())
         {
             record_found = true;
             auto schema_id = iter->second.meta.schemaId;
@@ -1737,11 +1717,9 @@ public:
                                 const std::map<std::string, std::string, ci_less>& headers, bool& update)
     {
         uint16_t sum = get_u16_sum(record_id);
-        uint8_t row = sum >> 8;
-        uint8_t col = sum & 0xFF;
-        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
-        auto iter = records[row][col].find(record_id);
-        if (iter != records[row][col].end())
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[sum]);
+        auto iter = records[sum].find(record_id);
+        if (iter != records[sum].end())
         {
             auto ret = iter->second.create_or_update_block(id, type, blockData, headers, update);
             guard.unlock();
@@ -1755,11 +1733,9 @@ public:
     {
         bool delete_successful = true;
         uint16_t sum = get_u16_sum(record_id);
-        uint8_t row = sum >> 8;
-        uint8_t col = sum & 0xFF;
-        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
-        auto iter = records[row][col].find(record_id);
-        if (iter != records[row][col].end())
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[sum]);
+        auto iter = records[sum].find(record_id);
+        if (iter != records[sum].end())
         {
             delete_successful = iter->second.delete_block(blockId);
             guard.unlock();
@@ -1774,11 +1750,9 @@ public:
     Block get_block(const std::string& record_id, const std::string& blockId)
     {
         uint16_t sum = get_u16_sum(record_id);
-        uint8_t row = sum >> 8;
-        uint8_t col = sum & 0xFF;
-        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[row][col]);
-        auto iter = records[row][col].find(record_id);
-        if (iter != records[row][col].end())
+        std::shared_lock<std::shared_timed_mutex> guard(records_mutexes[sum]);
+        auto iter = records[sum].find(record_id);
+        if (iter != records[sum].end())
         {
             return iter->second.get_block_object(blockId);
         }
@@ -2206,7 +2180,8 @@ public:
         }
         if (subscription.subFilter.monitoredResourceUris.size())
         {
-            auto iter = std::find(subscription.subFilter.operations.begin(), subscription.subFilter.operations.end(), RECORD_OPERATION_CREATED);
+            auto iter = std::find(subscription.subFilter.operations.begin(), subscription.subFilter.operations.end(),
+                                  RECORD_OPERATION_CREATED);
             if (iter != subscription.subFilter.operations.end())
             {
                 subscription.subFilter.operations.erase(iter);
@@ -2219,7 +2194,7 @@ public:
             subscription.subFilter.operations.emplace_back(RECORD_OPERATION_DELETED);
             if (subscription.subFilter.monitoredResourceUris.empty())
             {
-               subscription.subFilter.operations.emplace_back(RECORD_OPERATION_CREATED); 
+                subscription.subFilter.operations.emplace_back(RECORD_OPERATION_CREATED);
             }
         }
 
@@ -2246,10 +2221,8 @@ public:
             subscription.expiryNotification = 0;
         }
         uint16_t sum = get_u16_sum(subscription_id);
-        auto row = sum >> 8;
-        auto col = sum & 0xFF;
         std::unique_lock<std::shared_timed_mutex> subscription_id_to_subscriptions_write_lock(
-            subscription_id_to_subscription_mutex[row][col]);
+            subscription_id_to_subscription_mutex[sum]);
 
         std::unique_lock<std::shared_timed_mutex> subscription_expiry_to_subscription_id_write_lock(
             subscription_expiry_to_subscription_id_mutex);
@@ -2266,17 +2239,15 @@ public:
         for (auto& monUri : subscription.subFilter.monitoredResourceUris)
         {
             uint16_t sum = get_u16_sum(monUri);
-            auto row = sum >> 8;
-            auto col = sum & 0xFF;
             std::unique_lock<std::shared_timed_mutex> monitored_resource_uri_to_subscription_id_write_lock(
-                monitored_resource_uri_to_subscription_id_mutex[row][col]);
-            monitored_resource_uri_to_subscription_id[row][col][monUri].insert(subscription_id);
+                monitored_resource_uri_to_subscription_id_mutex[sum]);
+            monitored_resource_uri_to_subscription_id[sum][monUri].insert(subscription_id);
         }
         if (clear_monitoredResourceUris)
         {
             subscription.subFilter.monitoredResourceUris.clear();
         }
-        subscription_id_to_subscription[row][col][subscription_id] = std::move(subscription);
+        subscription_id_to_subscription[sum][subscription_id] = std::move(subscription);
         return OPERATION_SUCCESSFUL;
     }
 
@@ -2301,11 +2272,9 @@ public:
         delete_success = false;
         std::string ret;
         uint16_t sum = get_u16_sum(subscription_id);
-        auto row = sum >> 8;
-        auto col = sum & 0xFF;
         std::unique_lock<std::shared_timed_mutex> subscription_id_to_subscription_write_lock(
-            subscription_id_to_subscription_mutex[row][col]);
-        auto& id_to_s = subscription_id_to_subscription[row][col];
+            subscription_id_to_subscription_mutex[sum]);
+        auto& id_to_s = subscription_id_to_subscription[sum];
         auto iter = id_to_s.find(subscription_id);
         if (iter != id_to_s.end())
         {
@@ -2333,11 +2302,9 @@ public:
             for (auto& monUri : subscription.subFilter.monitoredResourceUris)
             {
                 uint16_t sum = get_u16_sum(monUri);
-                auto row = sum >> 8;
-                auto col = sum & 0xFF;
                 std::unique_lock<std::shared_timed_mutex> monitored_resource_uri_to_subscription_id_write_lock(
-                    monitored_resource_uri_to_subscription_id_mutex[row][col]);
-                remove_from_map(monitored_resource_uri_to_subscription_id[row][col], monUri, subscription_id);
+                    monitored_resource_uri_to_subscription_id_mutex[sum]);
+                remove_from_map(monitored_resource_uri_to_subscription_id[sum], monUri, subscription_id);
             }
             if (get_previous)
             {
@@ -2352,11 +2319,9 @@ public:
     std::string get_subscription(const std::string& subscription_id)
     {
         uint16_t sum = get_u16_sum(subscription_id);
-        auto row = sum >> 8;
-        auto col = sum & 0xFF;
         std::shared_lock<std::shared_timed_mutex> subscription_id_to_subscription_read_lock(
-            subscription_id_to_subscription_mutex[row][col]);
-        auto& id_to_s = subscription_id_to_subscription[row][col];
+            subscription_id_to_subscription_mutex[sum]);
+        auto& id_to_s = subscription_id_to_subscription[sum];
         auto iter = id_to_s.find(subscription_id);
         if (iter != id_to_s.end())
         {
@@ -2372,21 +2337,18 @@ public:
     std::vector<NotificationSubscription> get_subscriptions(size_t count)
     {
         std::vector<NotificationSubscription> ret;
-        for (size_t row = 0; row < ONE_DIMENSION_SIZE; row++)
+        for (size_t sum = 0; sum < ONE_DIMENSION_SIZE * ONE_DIMENSION_SIZE; sum++)
         {
-            for (size_t col = 0; col < ONE_DIMENSION_SIZE; col++)
+            std::shared_lock<std::shared_timed_mutex> subscription_id_to_subscription_read_lock(
+                subscription_id_to_subscription_mutex[sum]);
+            for (auto& s : subscription_id_to_subscription[sum])
             {
-                std::shared_lock<std::shared_timed_mutex> subscription_id_to_subscription_read_lock(
-                    subscription_id_to_subscription_mutex[row][col]);
-                for (auto& s : subscription_id_to_subscription[row][col])
+                if ((!count) || (ret.size() < count))
                 {
-                    if ((!count) || (ret.size() < count))
+                    ret.push_back(s.second);
+                    if (ret.back().expiryNotification >= 0)
                     {
-                        ret.push_back(s.second);
-                        if (ret.back().expiryNotification >= 0)
-                        {
-                            ret.back().expiryNotificationFlag &= ~staticjson::Flags::IgnoreWrite;
-                        }
+                        ret.back().expiryNotificationFlag &= ~staticjson::Flags::IgnoreWrite;
                     }
                 }
             }
@@ -2397,11 +2359,9 @@ public:
     auto get_decoded_subscription(const std::string& subscription_id)
     {
         uint16_t sum = get_u16_sum(subscription_id);
-        auto row = sum >> 8;
-        auto col = sum & 0xFF;
         std::shared_lock<std::shared_timed_mutex> subscription_id_to_subscription_read_lock(
-            subscription_id_to_subscription_mutex[row][col]);
-        auto& id_to_s = subscription_id_to_subscription[row][col];
+            subscription_id_to_subscription_mutex[sum]);
+        auto& id_to_s = subscription_id_to_subscription[sum];
         auto iter = id_to_s.find(subscription_id);
         if (iter != id_to_s.end())
         {
@@ -2473,11 +2433,9 @@ public:
         {
             std::set<std::string> s;
             uint16_t sum = get_u16_sum(path);
-            auto row = sum >> 8;
-            auto col = sum & 0xFF;
-            std::shared_lock<std::shared_timed_mutex> read_lock(monitored_resource_uri_to_subscription_id_mutex[row][col]);
-            auto iter = monitored_resource_uri_to_subscription_id[row][col].find(path);
-            if (iter != monitored_resource_uri_to_subscription_id[row][col].end())
+            std::shared_lock<std::shared_timed_mutex> read_lock(monitored_resource_uri_to_subscription_id_mutex[sum]);
+            auto iter = monitored_resource_uri_to_subscription_id[sum].find(path);
+            if (iter != monitored_resource_uri_to_subscription_id[sum].end())
             {
                 return iter->second;
             }
@@ -2630,11 +2588,9 @@ public:
     Timer delete_timer(const std::string& timer_id)
     {
         uint16_t sum = get_u16_sum(timer_id);
-        auto row = sum >> 8;
-        auto col = sum & 0xFF;
         std::shared_lock<std::shared_timed_mutex> timers_mutexes_read_lock(
-            timers_mutexes[row][col]);
-        auto& id_to_timers = timers[row][col];
+            timers_mutexes[sum]);
+        auto& id_to_timers = timers[sum];
         auto iter = id_to_timers.find(timer_id);
         if (iter == id_to_timers.end())
         {
@@ -2661,11 +2617,9 @@ public:
             }
 
             uint16_t sum = get_u16_sum(timer_id);
-            auto row = sum >> 8;
-            auto col = sum & 0xFF;
             std::unique_lock<std::shared_timed_mutex> timers_mutexes_write_lock(
-                timers_mutexes[row][col]);
-            auto& id_to_timers = timers[row][col];
+                timers_mutexes[sum]);
+            auto& id_to_timers = timers[sum];
             Timer& timer_object = id_to_timers[timer_id];
             update = false;
             if (timer_object.expires.size())
@@ -2715,11 +2669,9 @@ public:
     Timer get_timer_object(const std::string& timer_id)
     {
         uint16_t sum = get_u16_sum(timer_id);
-        auto row = sum >> 8;
-        auto col = sum & 0xFF;
         std::shared_lock<std::shared_timed_mutex> timers_mutexes_read_lock(
-            timers_mutexes[row][col]);
-        auto& id_to_timers = timers[row][col];
+            timers_mutexes[sum]);
+        auto& id_to_timers = timers[sum];
         auto iter = id_to_timers.find(timer_id);
         if (iter != id_to_timers.end())
         {
@@ -2740,7 +2692,7 @@ public:
                                    (std::chrono::system_clock::now().time_since_epoch()).count();
         auto end = timer_deleteAfter_to_timer_id.upper_bound(seconds_since_epoch);
         auto iter = timer_deleteAfter_to_timer_id.begin();
-        while(iter != end)
+        while (iter != end)
         {
             for (auto& t : iter->second)
             {
