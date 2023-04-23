@@ -12,6 +12,10 @@
 extern bool debug_mode;
 bool schema_loose_check = true;
 
+extern thread_local size_t current_thread_id;
+extern size_t number_of_worker_thread;
+
+std::atomic<size_t> thread_id_counter;
 
 std::map<std::string, std::string> get_queries(const nghttp2::asio_http2::server::asio_server_request& req)
 {
@@ -1251,6 +1255,13 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
 
 void udsf_entry(const H2Server_Config_Schema& config_schema)
 {
+    auto init_thread_id = []()
+    {
+        current_thread_id = thread_id_counter++;
+        return current_thread_id;
+    };
+    static thread_local auto dummy = init_thread_id();
+
     try
     {
         std::size_t num_threads = config_schema.threads;
@@ -1317,6 +1328,7 @@ void udsf_entry(const H2Server_Config_Schema& config_schema)
 
 int main(int argc, char** argv)
 {
+    thread_id_counter = 0;
     H2Server_Config_Schema config_schema;
 
     if (argc < 2)
@@ -1346,6 +1358,7 @@ int main(int argc, char** argv)
         }
     }
 
+    number_of_worker_thread = config_schema.threads;
     udsf_entry(config_schema);
 
     return 0;
