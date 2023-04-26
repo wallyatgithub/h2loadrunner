@@ -12,12 +12,20 @@
 extern bool debug_mode;
 bool schema_loose_check = true;
 
-extern thread_local size_t current_thread_id;
+thread_local size_t current_thread_id;
 extern size_t number_of_worker_thread;
 
 std::atomic<size_t> thread_id_counter;
 
 std::vector<boost::asio::io_service* > io_services;
+
+template <class Request, class Result>
+class Distributed_Request
+{
+public:
+    Request request;
+    std::vector<Result> results;
+};
 
 class Search_Result
 {
@@ -26,7 +34,8 @@ public:
     size_t matched_record_count = 0;
     bool search_done = false;
 };
-class Filter_Based_Search
+
+class Search_Request
 {
 public:
     std::string method;
@@ -35,10 +44,10 @@ public:
     size_t max_payload_size = 0;
     bool meta_only = false;
     rapidjson::Document search_exp;
-    std::vector<Search_Result> search_results;
 };
 
-thread_local std::map<std::pair<size_t, size_t>, Filter_Based_Search> filter_based_search;
+thread_local std::map<std::pair<size_t, size_t>, Distributed_Request<Search_Request, Search_Result>>
+                                                                                                  filter_based_search;
 
 std::map<std::string, std::string> get_queries(const nghttp2::asio_http2::server::asio_server_request& req)
 {
@@ -559,14 +568,20 @@ void merge_search_result_and_send_search_response(udsf::Storage& storage, size_t
     auto run_in_originating_thread = [&storage, worker_thread_index, handler_id, stream_id, count,
                                                 records = std::move(records)]() mutable
     {
+        if (debug_mode)
+        {
+            std::cerr << "worker_thread_index: " << worker_thread_index << " finished search, now running inside originating thread"
+                      << std::endl << std::flush;
+        }
         auto iter = filter_based_search.find(std::pair<size_t, size_t>(handler_id, stream_id));
         if (iter != filter_based_search.end())
         {
-            iter->second.search_results[worker_thread_index].matched_record_count = count;
-            std::swap(iter->second.search_results[worker_thread_index].matched_records, records);
+            iter->second.results[worker_thread_index].matched_record_count = count;
+            std::swap(iter->second.results[worker_thread_index].matched_records, records);
+            iter->second.results[worker_thread_index].search_done = true;
 
             bool search_done_on_all_workers = true;
-            for (auto& search_result : iter->second.search_results)
+            for (auto& search_result : iter->second.results)
             {
                 if (!search_result.search_done)
                 {
@@ -576,7 +591,7 @@ void merge_search_result_and_send_search_response(udsf::Storage& storage, size_t
             }
             if (search_done_on_all_workers)
             {
-                Filter_Based_Search filter_base_search = std::move(iter->second);
+                auto filter_base_search = std::move(iter->second);
                 filter_based_search.erase(iter);
 
                 auto handler = nghttp2::asio_http2::server::base_handler::find_handler(handler_id);
@@ -592,7 +607,7 @@ void merge_search_result_and_send_search_response(udsf::Storage& storage, size_t
                 auto& res = orig_stream->response();
                 auto& req = orig_stream->request();
                 size_t result_count = 0;
-                for (auto& search_result : filter_base_search.search_results)
+                for (auto& search_result : filter_base_search.results)
                 {
                     if (search_result.matched_record_count)
                     {
@@ -604,17 +619,17 @@ void merge_search_result_and_send_search_response(udsf::Storage& storage, size_t
                     }
                 }
 
-                if (filter_base_search.count_indicator && filter_base_search.method == METHOD_GET)
+                if (filter_base_search.request.count_indicator && filter_base_search.request.method == METHOD_GET)
                 {
                     return return_count(res, result_count);
                 }
-                else if (filter_base_search.method == METHOD_GET)
+                else if (filter_base_search.request.method == METHOD_GET)
                 {
                     rapidjson::Document d;
                     rapidjson::Pointer("/count").Set(d, result_count);
                     auto count = 0;
                     auto payload_size = 0;
-                    for (auto& search_result : filter_base_search.search_results)
+                    for (auto& search_result : filter_base_search.results)
                     {
                         for (auto& r : search_result.matched_records)
                         {
@@ -627,10 +642,10 @@ void merge_search_result_and_send_search_response(udsf::Storage& storage, size_t
                             jptr.append(std::to_string(count));
                             rapidjson::Pointer(jptr.c_str()).Set(d, location.c_str());
 
-                            if (!filter_base_search.max_payload_size || payload_size < filter_base_search.max_payload_size)
+                            if (!filter_base_search.request.max_payload_size || payload_size < filter_base_search.request.max_payload_size)
                             {
-                                std::string body = storage.get_record_json_body(r, filter_base_search.meta_only);
-                                if (payload_size + body.size() < filter_base_search.max_payload_size)
+                                std::string body = storage.get_record_json_body(r, filter_base_search.request.meta_only);
+                                if (payload_size + body.size() < filter_base_search.request.max_payload_size)
                                 {
                                     rapidjson::Document record_doc;
                                     record_doc.Parse(body.c_str());
@@ -646,7 +661,7 @@ void merge_search_result_and_send_search_response(udsf::Storage& storage, size_t
                             }
 
                             count++;
-                            if (filter_base_search.number_limit && count > filter_base_search.number_limit)
+                            if (filter_base_search.request.number_limit && count > filter_base_search.request.number_limit)
                             {
                                 break;
                             }
@@ -659,11 +674,11 @@ void merge_search_result_and_send_search_response(udsf::Storage& storage, size_t
                     res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(response_body.size())}}});
                     res.end(std::move(response_body));
                 }
-                else if (filter_base_search.method == METHOD_DELETE)
+                else if (filter_base_search.request.method == METHOD_DELETE)
                 {
                     udsf::RecordIdList rlist;
                     rlist.recordIdList.reserve(result_count);
-                    for (auto& search_result : filter_base_search.search_results)
+                    for (auto& search_result : filter_base_search.results)
                     {
                         for (auto& r : search_result.matched_records)
                         {
@@ -682,16 +697,24 @@ void merge_search_result_and_send_search_response(udsf::Storage& storage, size_t
     io_services[originating_thread_id]->post(run_in_originating_thread);
 }
 
-bool run_search_filter_in_parallel(const nghttp2::asio_http2::server::asio_server_request& req,
-                                   nghttp2::asio_http2::server::asio_server_response& res,
-                                   uint64_t handler_id, int32_t stream_id,
-                                   const std::string& method,
-                                   const std::string& realm_id, const std::string& storage_id,
-                                   const std::vector<std::string>& path_tokens,
-                                   const std::string& msg_body)
+bool process_records_in_parallel(const nghttp2::asio_http2::server::asio_server_request& req,
+                                 nghttp2::asio_http2::server::asio_server_response& res,
+                                 uint64_t handler_id, int32_t stream_id,
+                                 const std::string& method,
+                                 const std::string& realm_id, const std::string& storage_id,
+                                 const std::vector<std::string>& path_tokens,
+                                 const std::string& msg_body)
 {
     const static std::string ONLY_META = "ONLY_META";
     const static std::string META_AND_BLOCKS = "META_AND_BLOCKS";
+
+    if (method != METHOD_GET && method != METHOD_DELETE)
+    {
+        const std::string response = "method not allowed";
+        res.write_head(405);
+        res.end(response);
+        return true;
+    }
 
     auto& realm = udsf::get_realm(realm_id);
     auto& storage = realm.get_storage(storage_id);
@@ -716,58 +739,79 @@ bool run_search_filter_in_parallel(const nghttp2::asio_http2::server::asio_serve
     }
 
     auto& search = filter_based_search[std::pair<size_t, size_t>(handler_id, stream_id)];
-    search.search_results.resize(number_of_worker_thread);
-    search.count_indicator = count_indicator;
-    search.max_payload_size = max_payload_size;
-    search.number_limit = number_limit;
-    search.method = method;
-    search.meta_only = meta_only;
+    search.results.resize(number_of_worker_thread);
+    search.request.count_indicator = count_indicator;
+    search.request.max_payload_size = max_payload_size;
+    search.request.number_limit = number_limit;
+    search.request.method = method;
+    search.request.meta_only = meta_only;
     if (filter.size())
     {
-        search.search_exp.Parse(filter.c_str());
-        if (search.search_exp.HasParseError())
+        search.request.search_exp.Parse(filter.c_str());
+        if (search.request.search_exp.HasParseError())
         {
-            const std::string response = "method not allowed";
-            res.write_head(405);
-            res.end(response);
+            res.write_head(400);
+            const std::string msg = "bad request: SearchExpression filter decode failure";
+
+            if (debug_mode)
+            {
+                std::cerr << "bad search filter: " << filter << std::endl << std::flush;
+            }
+            res.end(msg);
             return true;
         }
     }
     auto orig_thread_id = current_thread_id;
-    auto run_search_in_worker_thread = [handler_id, stream_id, &search, &storage, orig_thread_id]()
+
+    for (size_t target_thread_id = 0; target_thread_id < number_of_worker_thread; target_thread_id++)
     {
-        if (search.count_indicator && search.method == METHOD_GET && search.search_exp.IsNull())
+        auto run_search_in_worker_thread = [handler_id, stream_id, &search, &storage, orig_thread_id, target_thread_id]()
         {
-            auto count = storage._get_all_record_count();
-            std::set<std::string> dummy;
-            return merge_search_result_and_send_search_response(storage, current_thread_id, orig_thread_id, dummy, count,
-                                                                handler_id, stream_id);
-        }
+            if (search.request.count_indicator && search.request.method == METHOD_GET && search.request.search_exp.IsNull())
+            {
+                auto count = storage._get_all_record_count(target_thread_id);
+                std::set<std::string> dummy;
+                return merge_search_result_and_send_search_response(storage, target_thread_id, orig_thread_id, dummy, count,
+                                                                    handler_id, stream_id);
+            }
 
-        if (search.search_exp.HasMember(OPERATION.c_str()) && search.count_indicator && search.method == METHOD_GET)
+            if (search.request.search_exp.HasMember(OPERATION.c_str()) && search.request.count_indicator
+                && search.request.method == METHOD_GET)
+            {
+                std::string op = udsf::get_string_value_from_Json_object(search.request.search_exp, OPERATION);
+                std::string tag = udsf::get_string_value_from_Json_object(search.request.search_exp, "tag");
+                std::string val = udsf::get_string_value_from_Json_object(search.request.search_exp, "value");
+                auto schema_id = udsf::get_string_value_from_Json_object(search.request.search_exp, SCHEMA_ID);
+                size_t count;
+                std::set<std::string> dummy;
+                auto ret = storage.run_search_comparison(schema_id, op, tag, val, storage._record_tags_db_main_mutex[target_thread_id],
+                                                         storage._record_tags_db[target_thread_id], count, true);
+                return merge_search_result_and_send_search_response(storage, target_thread_id, orig_thread_id, dummy, count,
+                                                                    handler_id, stream_id);
+            }
+
+            auto records = storage._run_search_expression_non_recursive_opt(search.request.search_exp, target_thread_id);
+            return merge_search_result_and_send_search_response(storage, target_thread_id, orig_thread_id, records, records.size(),
+                                                                handler_id, stream_id);
+        };
+        if (io_services[target_thread_id])
         {
-            std::string op = udsf::get_string_value_from_Json_object(search.search_exp, OPERATION);
-            std::string tag = udsf::get_string_value_from_Json_object(search.search_exp, "tag");
-            std::string val = udsf::get_string_value_from_Json_object(search.search_exp, "value");
-            auto schema_id = udsf::get_string_value_from_Json_object(search.search_exp, SCHEMA_ID);
-            size_t count;
-            std::set<std::string> dummy;
-            auto ret = storage.run_search_comparison(schema_id, op, tag, val, storage._record_tags_db_main_mutex[current_thread_id],
-                                                     storage._record_tags_db[current_thread_id], count, true);
-            return merge_search_result_and_send_search_response(storage, current_thread_id, orig_thread_id, dummy, count,
-                                                                handler_id, stream_id);
+            if (debug_mode)
+            {
+                std::cerr << "post search request to io service: " << io_services[target_thread_id] << std::endl << std::flush;
+            }
+            io_services[target_thread_id]->post(run_search_in_worker_thread);
         }
-
-        auto records = storage._run_search_expression_non_recursive_opt(search.search_exp);
-        return merge_search_result_and_send_search_response(storage, current_thread_id, orig_thread_id, records, records.size(),
-                                                            handler_id, stream_id);
-    };
-
-    for (size_t i = 0; i < number_of_worker_thread; i++)
-    {
-        io_services[i]->post(run_search_in_worker_thread);
+        else
+        {
+            if (debug_mode)
+            {
+                std::cerr << "run search directly on behalf of thread id: " << target_thread_id << std::endl << std::flush;
+            }
+            run_search_in_worker_thread();
+        }
     }
-    return false;
+    return true;
 }
 
 bool process_records(const nghttp2::asio_http2::server::asio_server_request& req,
@@ -1138,7 +1182,7 @@ bool process_meta_schema(const nghttp2::asio_http2::server::asio_server_request&
             previous = storage.get_schema(schema_id, found);
         }
         bool update = false;
-        auto ret = storage.create_or_update_schema(schema_id, msg_body, update);
+        auto ret = storage._create_or_update_schema(schema_id, msg_body, update);
         if (ret)
         {
             if (update)
@@ -1426,7 +1470,13 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
     bool ret = false;
     auto get_server_io_service = [handler_id]()
     {
-        return nghttp2::asio_http2::server::base_handler::find_io_service(handler_id);
+        io_services[current_thread_id]  = nghttp2::asio_http2::server::base_handler::find_io_service(handler_id);
+        if (debug_mode)
+        {
+            std::cerr << "current_thread_id:" << current_thread_id << ", io_service: " << io_services[current_thread_id] <<
+                      std::endl;
+        }
+        return io_services[current_thread_id];
     };
     static thread_local auto io_service = get_server_io_service();
     static thread_local boost::asio::deadline_timer tick_timer(*io_service);
@@ -1462,7 +1512,7 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
             }
             else
             {
-                ret = process_records(req, res, handler_id, stream_id, method, realm_id, storage_id, path_tokens, payload);
+                ret = process_records_in_parallel(req, res, handler_id, stream_id, method, realm_id, storage_id, path_tokens, payload);
             }
         }
         else if (resource == RESOURCE_META_SCHEMAS)
