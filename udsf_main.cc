@@ -12,12 +12,9 @@
 extern bool debug_mode;
 bool schema_loose_check = true;
 
-thread_local size_t current_thread_id;
+extern thread_local size_t g_current_thread_id;
 extern size_t number_of_worker_thread;
-
-std::atomic<size_t> thread_id_counter;
-
-std::vector<boost::asio::io_service* > io_services;
+extern std::vector<boost::asio::io_service* > g_io_services;
 
 template <class Request, class Result>
 class Distributed_Request
@@ -694,7 +691,7 @@ void merge_search_result_and_send_search_response(udsf::Storage& storage, size_t
             }
         }
     };
-    io_services[originating_thread_id]->post(run_in_originating_thread);
+    g_io_services[originating_thread_id]->post(run_in_originating_thread);
 }
 
 bool process_records_in_parallel(const nghttp2::asio_http2::server::asio_server_request& req,
@@ -761,7 +758,7 @@ bool process_records_in_parallel(const nghttp2::asio_http2::server::asio_server_
             return true;
         }
     }
-    auto orig_thread_id = current_thread_id;
+    auto orig_thread_id = g_current_thread_id;
 
     for (size_t target_thread_id = 0; target_thread_id < number_of_worker_thread; target_thread_id++)
     {
@@ -794,22 +791,11 @@ bool process_records_in_parallel(const nghttp2::asio_http2::server::asio_server_
             return merge_search_result_and_send_search_response(storage, target_thread_id, orig_thread_id, records, records.size(),
                                                                 handler_id, stream_id);
         };
-        if (io_services[target_thread_id])
+        if (debug_mode)
         {
-            if (debug_mode)
-            {
-                std::cerr << "post search request to io service: " << io_services[target_thread_id] << std::endl << std::flush;
-            }
-            io_services[target_thread_id]->post(run_search_in_worker_thread);
+            std::cerr << "post search request to io service: " << g_io_services[target_thread_id] << std::endl << std::flush;
         }
-        else
-        {
-            if (debug_mode)
-            {
-                std::cerr << "run search directly on behalf of thread id: " << target_thread_id << std::endl << std::flush;
-            }
-            run_search_in_worker_thread();
-        }
+        g_io_services[target_thread_id]->post(run_search_in_worker_thread);
     }
     return true;
 }
@@ -1468,24 +1454,7 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
                                    uint64_t handler_id, int32_t stream_id)
 {
     bool ret = false;
-    auto get_server_io_service = [handler_id]()
-    {
-        io_services[current_thread_id]  = nghttp2::asio_http2::server::base_handler::find_io_service(handler_id);
-        if (debug_mode)
-        {
-            std::cerr << "current_thread_id:" << current_thread_id << ", io_service: " << io_services[current_thread_id] <<
-                      std::endl;
-        }
-        return io_services[current_thread_id];
-    };
-
-    auto init_thread_id = []()
-    {
-        current_thread_id = thread_id_counter++;
-        return current_thread_id;
-    };
-    static thread_local auto dummy_id = init_thread_id();
-    static thread_local auto io_service = get_server_io_service();
+    static thread_local auto io_service = g_io_services[g_current_thread_id];
     static thread_local boost::asio::deadline_timer tick_timer(*io_service);
     static thread_local std::multimap<std::chrono::steady_clock::time_point, std::pair<uint64_t, int32_t>> active_requests;
     static thread_local auto dummy = start_tick_timer(tick_timer, active_requests);
@@ -1633,7 +1602,6 @@ void udsf_entry(const H2Server_Config_Schema& config_schema)
 
 int main(int argc, char** argv)
 {
-    thread_id_counter = 0;
     H2Server_Config_Schema config_schema;
 
     if (argc < 2)
@@ -1664,8 +1632,8 @@ int main(int argc, char** argv)
     }
 
     number_of_worker_thread = config_schema.threads;
-    io_services.resize(number_of_worker_thread);
-    for (auto& ios : io_services)
+    g_io_services.resize(number_of_worker_thread);
+    for (auto& ios : g_io_services)
     {
         ios = nullptr;
     }

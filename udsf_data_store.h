@@ -24,7 +24,7 @@
 
 extern bool debug_mode;
 extern bool schema_loose_check;
-extern std::vector<boost::asio::io_service* > io_services;
+extern std::vector<boost::asio::io_service* > g_io_services;
 
 size_t number_of_worker_thread = 1;
 
@@ -1685,14 +1685,7 @@ public:
                 track_record_ttl(iso8601_timestamp_to_seconds_since_epoch(old_meta.ttl), record_id, false);
             }
         };
-        if (io_services[thread_id])
-        {
-            io_services[thread_id]->post(run_in_dest_worker);
-        }
-        else
-        {
-            run_in_dest_worker();
-        }
+        g_io_services[thread_id]->post(run_in_dest_worker);
     }
 
     void checkout_record(const std::string& record_id, const RecordMeta& old_meta)
@@ -1742,14 +1735,7 @@ public:
                 track_record_ttl(iso8601_timestamp_to_seconds_since_epoch(new_meta.ttl), record_id);
             }
         };
-        if (io_services[thread_id])
-        {
-            io_services[thread_id]->post(run_in_dest_worker);
-        }
-        else
-        {
-            run_in_dest_worker();
-        }
+        g_io_services[thread_id]->post(run_in_dest_worker);
     }
 
     void checkin_record(const std::string& record_id, const RecordMeta& new_meta)
