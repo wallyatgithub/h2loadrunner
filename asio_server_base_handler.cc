@@ -21,7 +21,7 @@ namespace asio_http2
 namespace server
 {
 
-thread_local std::atomic<uint64_t> base_handler::handler_unique_id(0);
+thread_local uint64_t base_handler::handler_unique_id(0);
 thread_local std::map<uint64_t, base_handler*> base_handler::alive_handlers;
 thread_local std::map<uint64_t, boost::asio::io_service*> base_handler::handler_io_service;
 

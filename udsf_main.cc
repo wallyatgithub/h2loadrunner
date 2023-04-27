@@ -46,8 +46,8 @@ public:
     rapidjson::Document search_exp;
 };
 
-thread_local std::map<std::pair<size_t, size_t>, Distributed_Request<Search_Request, Search_Result>>
-                                                                                                  filter_based_search;
+thread_local std::map<std::pair<size_t, int32_t>, Distributed_Request<Search_Request, Search_Result>>
+                                                                                                   filter_based_search;
 
 std::map<std::string, std::string> get_queries(const nghttp2::asio_http2::server::asio_server_request& req)
 {
@@ -573,7 +573,7 @@ void merge_search_result_and_send_search_response(udsf::Storage& storage, size_t
             std::cerr << "worker_thread_index: " << worker_thread_index << " finished search, now running inside originating thread"
                       << std::endl << std::flush;
         }
-        auto iter = filter_based_search.find(std::pair<size_t, size_t>(handler_id, stream_id));
+        auto iter = filter_based_search.find(std::pair<size_t, int32_t>(handler_id, stream_id));
         if (iter != filter_based_search.end())
         {
             iter->second.results[worker_thread_index].matched_record_count = count;
@@ -738,7 +738,7 @@ bool process_records_in_parallel(const nghttp2::asio_http2::server::asio_server_
         max_payload_size = std::atoi(max_payload_size_string.c_str());
     }
 
-    auto& search = filter_based_search[std::pair<size_t, size_t>(handler_id, stream_id)];
+    auto& search = filter_based_search[std::pair<size_t, int32_t>(handler_id, stream_id)];
     search.results.resize(number_of_worker_thread);
     search.request.count_indicator = count_indicator;
     search.request.max_payload_size = max_payload_size;
@@ -1478,6 +1478,13 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
         }
         return io_services[current_thread_id];
     };
+
+    auto init_thread_id = []()
+    {
+        current_thread_id = thread_id_counter++;
+        return current_thread_id;
+    };
+    static thread_local auto dummy_id = init_thread_id();
     static thread_local auto io_service = get_server_io_service();
     static thread_local boost::asio::deadline_timer tick_timer(*io_service);
     static thread_local std::multimap<std::chrono::steady_clock::time_point, std::pair<uint64_t, int32_t>> active_requests;
@@ -1560,13 +1567,6 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
 
 void udsf_entry(const H2Server_Config_Schema& config_schema)
 {
-    auto init_thread_id = []()
-    {
-        current_thread_id = thread_id_counter++;
-        return current_thread_id;
-    };
-    static thread_local auto dummy = init_thread_id();
-
     try
     {
         std::size_t num_threads = config_schema.threads;

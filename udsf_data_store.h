@@ -766,7 +766,7 @@ class Tags_Value_Db_Of_One_Tag_Name
 public:
     std::unique_ptr<std::shared_timed_mutex> value_to_resource_id_map_mutex;
     std::map<std::string, std::set<std::string>> value_to_resource_id_map;
-    size_t count;
+    size_t count = 0;
     explicit Tags_Value_Db_Of_One_Tag_Name():
         value_to_resource_id_map_mutex(std::make_unique<std::shared_timed_mutex>())
     {
@@ -1719,7 +1719,7 @@ public:
         auto thread_id = (u8 % number_of_worker_thread);
         if (debug_mode)
         {
-            std::cerr << "index of: " <<record_id <<" is managed by thread id: "<<thread_id<< std::endl;
+            std::cerr << "index of: " << record_id << " is managed by thread id: " << thread_id << std::endl;
         }
         auto run_in_dest_worker = [this, thread_id, record_id, new_meta]()
         {
