@@ -1384,6 +1384,162 @@ bool process_individual_timer(const nghttp2::asio_http2::server::asio_server_req
     }
 }
 
+void send_response_to_time_request(const nghttp2::asio_http2::server::asio_server_request& req,
+                    nghttp2::asio_http2::server::asio_server_response& res,
+                    std::set<std::string>& timers,
+                    const std::string& method,
+                    udsf::Storage& storage)
+{
+    if (timers.size())
+    {
+        if (method == METHOD_DELETE)
+        {
+            for (auto& t : timers)
+            {
+                storage.delete_timer(t);
+            }
+            res.write_head(204);
+            res.end();
+        }
+        else if (method == METHOD_GET)
+        {
+            udsf::TimerIdList timerIds;
+            timerIds.timerIds = std::move(std::vector<std::string>(timers.begin(), timers.end()));
+            auto response_body = staticjson::to_json_string(timerIds);
+            res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(response_body.size())}}});
+            res.end(std::move(response_body));
+        }
+    }
+    else
+    {
+        res.write_head(404);
+        const std::string msg = "not found";
+        res.end(msg);
+    }
+}
+
+void merge_timer_search_request_and_send_response(udsf::Storage& storage, size_t worker_thread_index,
+                                                  size_t originating_thread_id,
+                                                  std::set<std::string>& timers, size_t count,
+                                                  uint64_t handler_id, int32_t stream_id)
+{
+    auto run_in_originating_thread = [&storage, worker_thread_index, handler_id, stream_id, count,
+                                                timers = std::move(timers)]() mutable
+    {
+        if (debug_mode)
+        {
+            std::cerr << "worker_thread_index: " << worker_thread_index << " finished search, now running inside originating thread"
+                      << std::endl << std::flush;
+        }
+        auto iter = filter_based_search.find(std::pair<size_t, int32_t>(handler_id, stream_id));
+        if (iter != filter_based_search.end())
+        {
+            std::swap(iter->second.results[worker_thread_index].matched_records, timers);
+            iter->second.results[worker_thread_index].search_done = true;
+
+            bool search_done_on_all_workers = true;
+            for (auto& search_result : iter->second.results)
+            {
+                if (!search_result.search_done)
+                {
+                    search_done_on_all_workers = false;
+                    break;
+                }
+            }
+            if (search_done_on_all_workers)
+            {
+                auto filter_base_search = std::move(iter->second);
+                filter_based_search.erase(iter);
+
+                auto handler = nghttp2::asio_http2::server::base_handler::find_handler(handler_id);
+                if (!handler)
+                {
+                    return;
+                }
+                auto orig_stream = handler->find_stream(stream_id);
+                if (!orig_stream)
+                {
+                    return;
+                }
+                auto& res = orig_stream->response();
+                auto& req = orig_stream->request();
+                std::set<std::string> timers;
+                for (size_t worker_thread_index = 0; worker_thread_index < filter_base_search.results.size(); worker_thread_index++)
+                {
+                    auto& timers_of_one_worker = filter_base_search.results[worker_thread_index].matched_records;
+                    timers.insert(timers_of_one_worker.begin(), timers_of_one_worker.end()); // TODO: performance optimization
+                }
+                send_response_to_time_request(req, res, timers, filter_base_search.request.method, storage);
+            }
+        }
+    };
+    g_io_services[originating_thread_id]->post(run_in_originating_thread);
+}
+
+bool process_timers_in_parallel(const nghttp2::asio_http2::server::asio_server_request& req,
+                    nghttp2::asio_http2::server::asio_server_response& res,
+                    uint64_t handler_id, int32_t stream_id,
+                    const std::string& method,
+                    const std::string& realm_id, const std::string& storage_id,
+                    const std::vector<std::string>& path_tokens,
+                    const std::string& msg_body)
+{
+    auto& realm = udsf::get_realm(realm_id);
+    auto& storage = realm.get_storage(storage_id);
+    auto queries = get_queries(req);
+    auto filter = queries[FILTER];
+    bool expired_filter = (queries.find("expired-filter") != queries.end());
+    std::set<std::string> timers;
+
+    if (method != METHOD_DELETE && method != METHOD_GET)
+    {
+        const std::string response = "method not allowed";
+        res.write_head(405);
+        res.end(response);
+    }
+
+    if (!expired_filter)
+    {
+        auto& search = filter_based_search[std::pair<size_t, int32_t>(handler_id, stream_id)];
+        search.results.resize(number_of_worker_thread);
+        search.request.method = method;
+        rapidjson::Document search_exp;
+        search.request.search_exp.Parse(filter.c_str());
+        if (search_exp.HasParseError())
+        {
+            const std::string response = "bad search filter";
+            res.write_head(400);
+            res.end(response);
+            return true;
+        }
+        auto orig_thread_id = g_current_thread_id;
+
+        for (size_t target_thread_id = 0; target_thread_id < number_of_worker_thread; target_thread_id++)
+        {
+            auto run_search_in_worker_thread = [handler_id, stream_id, &search, &storage, orig_thread_id, target_thread_id]()
+            {
+
+                auto timers = storage._run_search_expression_non_recursive_opt(search.request.search_exp, target_thread_id, true);
+                return merge_timer_search_request_and_send_response(storage, target_thread_id, orig_thread_id, timers, timers.size(),
+                                                                    handler_id, stream_id);
+            };
+            if (debug_mode)
+            {
+                std::cerr << "post timer search request to io service: " << g_io_services[target_thread_id] << std::endl << std::flush;
+            }
+            g_io_services[target_thread_id]->post(run_search_in_worker_thread);
+        }
+    }
+    else
+    {
+        timers = storage.get_expired_timers();
+        send_response_to_time_request(req, res, timers, method, storage);
+    }
+
+    return true;
+
+}
+
 bool process_timers(const nghttp2::asio_http2::server::asio_server_request& req,
                     nghttp2::asio_http2::server::asio_server_response& res,
                     uint64_t handler_id, int32_t stream_id,
@@ -1523,7 +1679,7 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
             }
             else if (path_tokens.size() == RESOURCE_TYPE_INDEX + 1)
             {
-                ret = process_timers(req, res, handler_id, stream_id, method, realm_id, storage_id, path_tokens, payload);
+                ret = process_timers_in_parallel(req, res, handler_id, stream_id, method, realm_id, storage_id, path_tokens, payload);
             }
         }
     }
