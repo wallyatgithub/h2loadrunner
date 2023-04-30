@@ -15,6 +15,7 @@ bool schema_loose_check = true;
 extern thread_local size_t g_current_thread_id;
 extern size_t number_of_worker_thread;
 extern std::vector<boost::asio::io_service* > g_io_services;
+extern std::vector<boost::asio::io_service::strand> g_strands;
 
 template <class Request, class Result>
 class Distributed_Request
@@ -766,7 +767,7 @@ bool process_records_in_parallel(const nghttp2::asio_http2::server::asio_server_
         {
             if (search.request.count_indicator && search.request.method == METHOD_GET && search.request.search_exp.IsNull())
             {
-                auto count = storage._get_all_record_count(target_thread_id);
+                auto count = storage.get_all_record_count(target_thread_id);
                 std::set<std::string> dummy;
                 return merge_search_result_and_send_search_response(storage, target_thread_id, orig_thread_id, dummy, count,
                                                                     handler_id, stream_id);
@@ -781,13 +782,13 @@ bool process_records_in_parallel(const nghttp2::asio_http2::server::asio_server_
                 auto schema_id = udsf::get_string_value_from_Json_object(search.request.search_exp, SCHEMA_ID);
                 size_t count;
                 std::set<std::string> dummy;
-                auto ret = storage.run_search_comparison(schema_id, op, tag, val, storage._record_tags_db_main_mutex[target_thread_id],
-                                                         storage._record_tags_db[target_thread_id], count, true);
+                auto ret = storage.run_search_comparison(schema_id, op, tag, val, storage.record_tags_db_main_mutex[target_thread_id],
+                                                         storage.record_tags_db[target_thread_id], count, true);
                 return merge_search_result_and_send_search_response(storage, target_thread_id, orig_thread_id, dummy, count,
                                                                     handler_id, stream_id);
             }
 
-            auto records = storage._run_search_expression_non_recursive_opt(search.request.search_exp, target_thread_id);
+            auto records = storage.run_search_expression_non_recursive_opt(search.request.search_exp, target_thread_id);
             return merge_search_result_and_send_search_response(storage, target_thread_id, orig_thread_id, records, records.size(),
                                                                 handler_id, stream_id);
         };
@@ -800,162 +801,6 @@ bool process_records_in_parallel(const nghttp2::asio_http2::server::asio_server_
     return true;
 }
 
-bool process_records(const nghttp2::asio_http2::server::asio_server_request& req,
-                     nghttp2::asio_http2::server::asio_server_response& res,
-                     uint64_t handler_id, int32_t stream_id,
-                     const std::string& method,
-                     const std::string& realm_id, const std::string& storage_id,
-                     const std::vector<std::string>& path_tokens,
-                     const std::string& msg_body)
-{
-    const static std::string ONLY_META = "ONLY_META";
-    const static std::string META_AND_BLOCKS = "META_AND_BLOCKS";
-
-    auto& realm = udsf::get_realm(realm_id);
-    auto& storage = realm.get_storage(storage_id);
-    auto queries = get_queries(req);
-    auto filter = queries[FILTER];
-    auto number_limit_string = queries[LIMIT_RANGE];
-    auto max_payload_size_string = queries[MAX_PAYLOAD_SIZE];
-    auto retrieve_records_string = queries[RETRIEVE_RECORDS];
-
-    bool meta_only = (retrieve_records_string == ONLY_META);
-    bool count_indicator = (queries[COUNT_INDICATOR] == "true");
-    size_t number_limit = 0;
-    if (number_limit_string.size())
-    {
-        number_limit = std::atoi(number_limit_string.c_str());
-    }
-
-    size_t max_payload_size = 0;
-    if (max_payload_size_string.size())
-    {
-        max_payload_size = std::atoi(max_payload_size_string.c_str());
-    }
-
-    auto return_count = [&res](size_t count)
-    {
-        rapidjson::Document d;
-        rapidjson::Pointer("/count").Set(d, count);
-        rapidjson::StringBuffer buffer;
-        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-        d.Accept(writer);
-        auto response_body = std::string(buffer.GetString());
-        res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(response_body.size())}}});
-        res.end(std::move(response_body));
-        return true;
-    };
-
-    if (count_indicator && method == METHOD_GET && filter.empty())
-    {
-        auto count = storage.get_all_record_count();
-        return return_count(count);
-    }
-
-    rapidjson::Document search_exp;
-    search_exp.Parse(filter.c_str());
-    if (!search_exp.HasParseError())
-    {
-        if (search_exp.HasMember(OPERATION.c_str()) && count_indicator && method == METHOD_GET)
-        {
-            std::string op = udsf::get_string_value_from_Json_object(search_exp, OPERATION);
-            std::string tag = udsf::get_string_value_from_Json_object(search_exp, "tag");
-            std::string val = udsf::get_string_value_from_Json_object(search_exp, "value");
-            auto schema_id = udsf::get_string_value_from_Json_object(search_exp, SCHEMA_ID);
-            size_t count;
-            auto ret = storage.run_search_comparison(schema_id, op, tag, val, storage.record_tags_db_main_mutex,
-                                                     storage.record_tags_db, count, true);
-            return return_count(count);
-        }
-
-        auto records = storage.run_search_expression_non_recursive_opt(search_exp);
-        if (method == METHOD_GET)
-        {
-            rapidjson::Document d;
-            rapidjson::Pointer("/count").Set(d, records.size());
-            if (!count_indicator)
-            {
-                auto count = 0;
-                auto payload_size = 0;
-                for (auto& r : records)
-                {
-                    std::string location;
-                    location.reserve(req.uri().scheme.size() + 3 + req.uri().host.size() + req.uri().path.size() + PATH_DELIMETER.size() +
-                                     r.size());
-                    location.append(req.uri().scheme).append("://").append(req.uri().host).append(req.uri().path);
-                    location.append(PATH_DELIMETER).append(r);
-                    std::string jptr = "/references/";
-                    jptr.append(std::to_string(count));
-                    rapidjson::Pointer(jptr.c_str()).Set(d, location.c_str());
-
-                    if (max_payload_size_string.empty() || payload_size < max_payload_size)
-                    {
-                        std::string body = storage.get_record_json_body(r, meta_only);
-                        if (payload_size + body.size() < max_payload_size)
-                        {
-                            rapidjson::Document record_doc;
-                            record_doc.Parse(body.c_str());
-                            if (!record_doc.HasParseError())
-                            {
-                                std::string jptr = "/matchingRecords/";
-                                jptr.append(r);
-                                rapidjson::Value value(record_doc, d.GetAllocator());
-                                rapidjson::Pointer(jptr.c_str()).Set(d, value);
-                                payload_size += body.size();
-                            }
-                        }
-                    }
-
-                    count++;
-                    if (number_limit && count > number_limit)
-                    {
-                        break;
-                    }
-                }
-            }
-            rapidjson::StringBuffer buffer;
-            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-            d.Accept(writer);
-            auto response_body = std::string(buffer.GetString());
-            res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(response_body.size())}}});
-            res.end(std::move(response_body));
-        }
-        else if (method == METHOD_DELETE)
-        {
-            udsf::RecordIdList rlist;
-            rlist.recordIdList.reserve(records.size());
-            for (auto& r : records)
-            {
-                rlist.recordIdList.push_back(r);
-                bool record_delete_success;
-                storage.delete_record(r, record_delete_success, false);
-            }
-            auto body = staticjson::to_json_string(rlist);
-            res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(body.size())}}});
-            res.end(std::move(body));
-        }
-        else
-        {
-            const std::string response = "method not allowed";
-            res.write_head(405);
-            res.end(response);
-        }
-        return true;
-    }
-    else
-    {
-        res.write_head(400);
-        const std::string msg = "bad request: SearchExpression filter decode failure";
-
-        if (debug_mode)
-        {
-            std::cerr << "bad search filter: " << filter << std::endl << std::flush;
-        }
-        res.end(msg);
-        return true;
-    }
-}
-
 void send_error_response(nghttp2::asio_http2::server::asio_server_response& res)
 {
     uint32_t status_code = 501;
@@ -963,7 +808,6 @@ void send_error_response(nghttp2::asio_http2::server::asio_server_response& res)
     res.write_head(status_code);
     res.end(std::move(resp_payload));
 }
-
 
 bool process_get_subscriptions(const nghttp2::asio_http2::server::asio_server_request& req,
                                nghttp2::asio_http2::server::asio_server_response& res,
@@ -1168,7 +1012,7 @@ bool process_meta_schema(const nghttp2::asio_http2::server::asio_server_request&
             previous = storage.get_schema(schema_id, found);
         }
         bool update = false;
-        auto ret = storage._create_or_update_schema(schema_id, msg_body, update);
+        auto ret = storage.create_or_update_schema(schema_id, msg_body, update);
         if (ret)
         {
             if (update)
@@ -1519,7 +1363,7 @@ bool process_timers_in_parallel(const nghttp2::asio_http2::server::asio_server_r
             auto run_search_in_worker_thread = [handler_id, stream_id, &search, &storage, orig_thread_id, target_thread_id]()
             {
 
-                auto timers = storage._run_search_expression_non_recursive_opt(search.request.search_exp, target_thread_id, true);
+                auto timers = storage.run_search_expression_non_recursive_opt(search.request.search_exp, target_thread_id, true);
                 return merge_timer_search_request_and_send_response(storage, target_thread_id, orig_thread_id, timers, timers.size(),
                                                                     handler_id, stream_id);
             };
@@ -1539,71 +1383,6 @@ bool process_timers_in_parallel(const nghttp2::asio_http2::server::asio_server_r
     return true;
 
 }
-
-bool process_timers(const nghttp2::asio_http2::server::asio_server_request& req,
-                    nghttp2::asio_http2::server::asio_server_response& res,
-                    uint64_t handler_id, int32_t stream_id,
-                    const std::string& method,
-                    const std::string& realm_id, const std::string& storage_id,
-                    const std::vector<std::string>& path_tokens,
-                    const std::string& msg_body)
-{
-    auto& realm = udsf::get_realm(realm_id);
-    auto& storage = realm.get_storage(storage_id);
-    auto queries = get_queries(req);
-    auto filter = queries[FILTER];
-    bool expired_filter = (queries.find("expired-filter") != queries.end());
-    std::set<std::string> timers;
-    if (!expired_filter)
-    {
-        rapidjson::Document search_exp;
-        search_exp.Parse(filter.c_str());
-        std::string response_body;
-        if (!search_exp.HasParseError())
-        {
-            timers = storage.run_search_expression_non_recursive_opt(search_exp, true);
-        }
-    }
-    else
-    {
-        timers = storage.get_expired_timers();
-    }
-    if (timers.size())
-    {
-        if (method == METHOD_DELETE)
-        {
-            for (auto& t : timers)
-            {
-                storage.delete_timer(t);
-            }
-            res.write_head(204);
-            res.end();
-        }
-        else if (method == METHOD_GET)
-        {
-            udsf::TimerIdList timerIds;
-            timerIds.timerIds = std::move(std::vector<std::string>(timers.begin(), timers.end()));
-            auto response_body = staticjson::to_json_string(timerIds);
-            res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(response_body.size())}}});
-            res.end(std::move(response_body));
-        }
-        else
-        {
-            const std::string response = "method not allowed";
-            res.write_head(405);
-            res.end(response);
-        }
-    }
-    else
-    {
-        res.write_head(404);
-        const std::string msg = "not found";
-        res.end(msg);
-    }
-    return true;
-
-}
-
 
 void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_server_request& req,
                                    nghttp2::asio_http2::server::asio_server_response& res,
@@ -1787,12 +1566,6 @@ int main(int argc, char** argv)
         }
     }
 
-    number_of_worker_thread = config_schema.threads;
-    g_io_services.resize(number_of_worker_thread);
-    for (auto& ios : g_io_services)
-    {
-        ios = nullptr;
-    }
     udsf_entry(config_schema);
 
     return 0;
