@@ -1,0 +1,280 @@
+{
+  "schema": "http",
+  "host": "127.0.0.1",
+  "port": 8081,
+  "load-share-hosts": [],
+  "open-new-connection-based-on-authority-header": false,
+  "connection-retry": true,
+  "switch-back-after-connection-retry": false,
+  "threads": 4,
+  "clients": 20,
+  "duration": 0,
+  "total-requests": 0,
+  "warm-up-time": 0,
+  "max-concurrent-streams": 2048,
+  "request-per-second": 500,
+  "request-per-second-feed-file": "",
+  "rate": 0,
+  "rate-period": 1,
+  "stream-timeout": 5000,
+  "ciphers": "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256",
+  "tls13-ciphers": "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256",
+  "caCert": "",
+  "cert": "",
+  "privateKey": "",
+  "certVerificationMode": 0,
+  "max-tls-version": "TLSv1.3",
+  "tls-keylog-file": "",
+  "no-tls-proto": "h2c",
+  "connection-active-timeout": 0,
+  "connection-inactivity-timeout": 0,
+  "interval-between-ping-frames": 0,
+  "npn-list": "h2,h2-16,h2-14,http/1.1,h3,h3-29",
+  "header-table-size": 4096,
+  "encoder-header-table-size": 4096,
+  "log-file": "",
+  "qlog-file-base": "",
+  "failed-request-log-file": "",
+  "statistics-interval": 1,
+  "statistics-file": "",
+  "builtin-server-listening-port": 8888,
+  "window-bits": 30,
+  "connection-window-bits": 30,
+  "socket-receive-buffer-size": 4194304,
+  "socket-send-buffer-size": 4194304,
+  "max-frame-size": 16384,
+  "groups": "X25519:P-256:P-384:P-521",
+  "no-udp-gso": false,
+  "ktls": false,
+  "max-udp-payload-size": 0,
+  "quic-congestion-control-algorithm": "RENO",
+  "builtin-cookie-support": true,
+  "Scenarios": [
+    {
+      "name": "record",
+      "weight": 100,
+      "interval-to-wait-before-start": 0,
+      "user-id-variable-in-path-and-data": "",
+      "user-id-list-file": "",
+      "user-id-range-start": 0,
+      "user-id-range-end": 0,
+      "user-id-range-slicing": true,
+      "user-variables-input-file": "",
+      "range-based-variables": [
+        {
+          "variable-name": "supi",
+          "variable-range-start": 0,
+          "variable-range-end": 10000000
+        }
+      ],
+      "two-dimensional-variables": [],
+      "HAR-file": "",
+      "Requests": [
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}"
+          },
+          "clear-old-cookies": false,
+          "method": "put",
+          "http-version": "default",
+          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n",
+          "additonalHeaders": [
+            "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
+          ],
+          "luaScript": "",
+          "expected-status-code": 0,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}?get-previous=true"
+          },
+          "clear-old-cookies": false,
+          "method": "put",
+          "http-version": "default",
+          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n",
+          "additonalHeaders": [
+            "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
+          ],
+          "luaScript": "",
+          "expected-status-code": 200,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}"
+          },
+          "clear-old-cookies": false,
+          "method": "get",
+          "http-version": "default",
+          "luaScript": "",
+          "expected-status-code": 200,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}?get-previous=true"
+          },
+          "clear-old-cookies": false,
+          "method": "delete",
+          "http-version": "default",
+          "luaScript": "",
+          "expected-status-code": 200,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}?get-previous=true"
+          },
+          "clear-old-cookies": false,
+          "method": "delete",
+          "http-version": "default",
+          "luaScript": "",
+          "expected-status-code": 404,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}"
+          },
+          "clear-old-cookies": false,
+          "method": "get",
+          "http-version": "default",
+          "luaScript": "",
+          "expected-status-code": 404,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}"
+          },
+          "clear-old-cookies": false,
+          "method": "put",
+          "http-version": "default",
+          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n",
+          "additonalHeaders": [
+            "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
+          ],
+          "luaScript": "",
+          "expected-status-code": 201,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}"
+          },
+          "clear-old-cookies": false,
+          "method": "put",
+          "http-version": "default",
+          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n",
+          "additonalHeaders": [
+            "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
+          ],
+          "luaScript": "",
+          "expected-status-code": 204,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records/record-${supi}"
+          },
+          "clear-old-cookies": false,
+          "method": "get",
+          "http-version": "default",
+          "luaScript": "",
+          "expected-status-code": 200,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nudsf-dr/v1/realm/storage/records?count-indicator=true&filter=%20%20%20%20%7B%0A%20%20%20%20%20%20%22op%22%3A%20%22GTE%22%2C%0A%20%20%20%20%20%20%22tag%22%3A%20%22ueId%22%2C%0A%20%20%20%20%20%20%22value%22%3A%20%22%22%0A%20%20%20%20%7D",
+            "_input": "/nudsf-dr/v1/realm/storage/records?count-indicator=false&retrieve-records=META_AND_BLOCKS&max-payload-size=8192&limit-range=20&filter=%7B%20%20%20%22cond%22%3A%20%22AND%22%2C%20%20%20%22units%22%3A%20%5B%20%20%20%20%20%7B%20%20%20%20%20%20%20%22op%22%3A%20%22GTE%22%2C%20%20%20%20%20%20%20%22tag%22%3A%20%22ueId%22%2C%20%20%20%20%20%20%20%22value%22%3A%20%22supi-${supi}%22%20%20%20%20%20%7D%2C%20%20%20%20%20%7B%20%20%20%20%20%20%20%22recordIdList%22%3A%20%5B%20%20%20%20%20%20%20%20%20%22record-${supi}%22%2C%20%20%20%20%20%20%20%20%20%22record-00000001%22%2C%20%20%20%20%20%20%20%20%20%22record-00000002%22%20%20%20%20%20%20%20%5D%20%20%20%20%20%7D%2C%20%20%20%20%20%7B%20%20%20%20%20%20%20%22cond%22%3A%20%22AND%22%2C%20%20%20%20%20%20%20%22units%22%3A%20%5B%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%22op%22%3A%20%22LTE%22%2C%20%20%20%20%20%20%20%20%20%20%20%22tag%22%3A%20%22ueId%22%2C%20%20%20%20%20%20%20%20%20%20%20%22value%22%3A%20%22supi-99999999%22%20%20%20%20%20%20%20%20%20%7D%2C%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%22recordIdList%22%3A%20%5B%20%20%20%20%20%20%20%20%20%20%20%20%20%22record-${supi}%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%22record-00000001%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%22record-00000004%22%20%20%20%20%20%20%20%20%20%20%20%5D%20%20%20%20%20%20%20%20%20%7D%2C%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%22cond%22%3A%20%22NOT%22%2C%20%20%20%20%20%20%20%20%20%20%20%22units%22%3A%20%5B%20%20%20%20%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%22op%22%3A%20%22EQ%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%22tag%22%3A%20%22ueId%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%22value%22%3A%20%22supi-12345678%22%20%20%20%20%20%20%20%20%20%20%20%20%20%7D%20%20%20%20%20%20%20%20%20%20%20%5D%20%20%20%20%20%20%20%20%20%7D%2C%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%22cond%22%3A%20%22NOT%22%2C%20%20%20%20%20%20%20%20%20%20%20%22units%22%3A%20%5B%20%20%20%20%20%20%20%20%20%20%20%20%20%7B%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%22op%22%3A%20%22NEQ%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%22tag%22%3A%20%22ueId%22%2C%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%22value%22%3A%20%22supi-${supi}%22%20%20%20%20%20%20%20%20%20%20%20%20%20%7D%20%20%20%20%20%20%20%20%20%20%20%5D%20%20%20%20%20%20%20%20%20%7D%20%20%20%20%20%20%20%5D%20%20%20%20%20%7D%20%20%20%5D%20%7D"
+          },
+          "clear-old-cookies": false,
+          "method": "get",
+          "payload": "",
+          "http-version": "default",
+          "luaScript": "",
+          "expected-status-code": 200,
+          "page-id": 0,
+          "response-match": {
+            "headers": [],
+            "payload": [
+              {
+                "JsonPointer": "/count",
+                "matchType": "RegexMatch",
+                "input": "[1-9][0-9]*"
+              }
+            ]
+          },
+          "value-pickers": [],
+          "delay-before-executing-next": 0
+        }
+      ]
+    }
+  ]
+}

@@ -3,8 +3,8 @@
 
 *Read this in other languages: [简体中文](README.zh-cn.md).*
 
-# h2loadrunner is an HTTP and HTTP2 benchmarking / load testing / performance testing tool
-  h2loadrunner is a benchmarking tool supporting both HTTP 1.x and HTTP2.
+# h2loadrunner is an HTTP1.1, HTTP2 and HTTP3 benchmarking / load testing / performance testing tool
+  h2loadrunner is a benchmarking tool supporting both HTTP 1.x, HTTP2, and HTTP3 over QUIC.
 
   h2loadrunner was initially created from h2load utility of the nghttp2 project.
   
@@ -49,6 +49,8 @@
   13. Connection failover and failback.
   
   14. Native support of Linux and Windows platforms, with very high performance on both platform, thanks to Boost ASIO, for best leveraging the power of Linux epoll and Windows IOCP respectively.
+
+  15. HAR file support. h2loadrunner can directly load and run an HTTP Archive file.
 
 # How to have a quick try
 
@@ -313,3 +315,56 @@
 
 [Read more](Luasio.md "Read more")
 
+# HTTP3 support
+
+  HTTP3 over QUIC is now supported.
+  
+  It is bit complex to get this built.
+  
+  First, git clone or download h2loadrunner source code, and store it in a directory, say: /home/github/h2loadrunner
+  
+  Next, follow these steps to compile openssl with quic, ngtcp2, and nghttp3:
+  
+  Build custom OpenSSL:
+  
+    cd /home/github/h2loadrunner
+    $ git clone --depth 1 -b OpenSSL_1_1_1q+quic https://github.com/quictls/openssl
+    $ cd openssl
+    $ ./config --prefix=$PWD/build --openssldir=/etc/ssl
+    $ make -j$(nproc)
+    $ make install_sw
+    $ cd ..
+
+  Build nghttp3:
+
+    $ git clone --depth 1 -b v0.7.1 https://github.com/ngtcp2/nghttp3
+    $ cd nghttp3
+    $ autoreconf -i
+    $ ./configure --prefix=$PWD/build --enable-lib-only
+    $ make -j$(nproc)
+    $ make install
+    $ cd ..
+    
+  Build ngtcp2:
+
+    $ git clone --depth 1 -b v0.9.0 https://github.com/ngtcp2/ngtcp2
+    $ cd ngtcp2
+    $ autoreconf -i
+    $ ./configure --prefix=$PWD/build --enable-lib-only PKG_CONFIG_PATH="$PWD/../openssl/build/lib/pkgconfig"
+    $ make -j$(nproc)
+    $ make install
+    $ cd ..
+    
+  Build h2loadrunner with http3 enabled:
+  
+    $ mkdir build
+    $ cd build
+    $ cmake -DENABLE_HTTP3=ON ../
+    $ cmake --build ./
+
+# HAR support
+
+  HAR file can be exported from browsers like chrome or firefox. H2loadrunner can directly load and run an HAR file like this:
+  
+    ./h2loadrunner --run-har=192.168.1.121.har -t 1 -c 100 --rps=10 -D 60 -m 1 --skip-host=www.google.com --skip-host=cse.google.com --skip-host=fonts.gstatic.com --skip-host=www.apache.org
+  

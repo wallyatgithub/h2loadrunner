@@ -16,7 +16,7 @@ namespace h2load
 
 
 base_worker::base_worker(uint32_t id, size_t req_todo, size_t nclients,
-                                   size_t rate, size_t max_samples, Config* config)
+                         size_t rate, size_t max_samples, Config* config)
     : stats(req_todo, nclients),
       config(config),
       id(id),
@@ -28,7 +28,8 @@ base_worker::base_worker(uint32_t id, size_t req_todo, size_t nclients,
       nreqs_rem(req_todo % nclients),
       rate(rate),
       max_samples(max_samples),
-      next_client_id(0)
+      next_client_id(0),
+      randgen(util::make_mt19937())
 {
     if (!config->is_rate_mode() && !config->is_timing_based_mode())
     {
@@ -76,49 +77,68 @@ base_worker::base_worker(uint32_t id, size_t req_todo, size_t nclients,
 
 base_worker::~base_worker()
 {
+    //printBacktrace();
 }
 
 void base_worker::stop_all_clients()
 {
-/*
-    for (auto client : clients)
-    {
-        if (client && client->session)
+    /*
+        for (auto client : clients_in_timing_mode)
         {
-            client->setup_graceful_shutdown();
-            client->terminate_session();
-            client->terminate_sub_clients();
+            if (client && client->session)
+            {
+                client->setup_graceful_shutdown();
+                client->terminate_session();
+                client->terminate_sub_clients();
+            }
+        }
+    */
+    // client_pool has all the connected clients, including sub client
+    std::set<base_client*> clients_to_terminate;
+    for (auto& client_map : client_pool)
+    {
+        for (auto& clients_set : client_map.second)
+        {
+            for (auto& client : clients_set.second)
+            {
+                clients_to_terminate.insert(client);
+            }
         }
     }
-*/
-    // client_pool has all the connected clients, including sub client
-    for (auto& clients_set: client_pool)
+    for (auto& client: clients_to_terminate)
     {
-        for (auto& client: clients_set.second)
-        {
-            client->setup_graceful_shutdown();
-            client->terminate_session();
-        }
+        client->setup_graceful_shutdown();
+        client->terminate_session();
     }
 }
 
 void base_worker::free_client(base_client* deleted_client)
 {
-    if (!this)
+    if (!this || managed_clients.count(deleted_client) == 0)
     {
         return;
     }
-    for (size_t index = 0; index < clients.size(); index++)
+    for (size_t index = 0; index < clients_in_timing_mode.size(); index++)
     {
-        if (clients[index] == deleted_client)
+        if (clients_in_timing_mode[index] == deleted_client)
         {
-            clients[index]->req_todo = clients[index]->req_done;
-            stats.req_todo += clients[index]->req_todo;
-            clients[index] = NULL;
+            clients_in_timing_mode[index]->req_todo = clients_in_timing_mode[index]->req_done;
+            stats.req_todo += clients_in_timing_mode[index]->req_todo;
+            clients_in_timing_mode[index] = NULL;
             break;
         }
     }
     check_out_client(deleted_client);
+}
+
+std::shared_ptr<base_client> base_worker::get_shared_ptr_of_client(base_client* client)
+{
+    static thread_local std::shared_ptr<base_client> ptr(nullptr);
+    if (client)
+    {
+        return client->shared_from_this();
+    }
+    return ptr;
 }
 
 void base_worker::run()
@@ -135,7 +155,7 @@ void base_worker::run()
             }
 
             auto client = create_new_client(req_todo);
-            if (client->do_connect() != 0)
+            if (client->connect() != 0)
             {
                 std::cerr << "client could not connect to host" << std::endl;
                 client->fail();
@@ -174,17 +194,13 @@ void base_worker::rate_period_timeout_handler()
 
         ++nconns_made;
 
-        if (client->do_connect() != 0)
+        if (client->connect() != 0)
         {
             std::cerr << "client could not connect to host" << std::endl;
             client->fail();
         }
         else
         {
-            if (config->is_timing_based_mode())
-            {
-                clients.push_back(client.get());
-            }
             check_in_client(client);
         }
         report_rate_progress();
@@ -193,7 +209,7 @@ void base_worker::rate_period_timeout_handler()
     {
         stop_rate_mode_period_timer();
         // To check whether all created clients are pushed correctly
-        if (config->is_timing_based_mode() && nclients != clients.size())
+        if (config->is_timing_based_mode() && nclients != clients_in_timing_mode.size())
         {
             std::cerr << "client not started successfully, exit" << id << std::endl;
             exit(EXIT_FAILURE);
@@ -217,6 +233,7 @@ void base_worker::duration_timeout_handler()
         stop_all_clients();
         stop_rate_mode_period_timer();
         std::cerr << "Stopped all clients for thread #" << id << std::endl;
+        //stop_event_loop();
     }
 }
 
@@ -229,12 +246,12 @@ void base_worker::warmup_timeout_handler()
     assert(stats.req_started == 0);
     assert(stats.req_done == 0);
 
-    for (auto client : clients)
+    for (auto client : clients_in_timing_mode)
     {
         if (client)
         {
             assert(client->req_todo == 0);
-            assert(client->req_left == 1);
+            assert(client->get_number_of_request_left() == 1);
             assert(client->req_inflight == 0);
             assert(client->req_started == 0);
             assert(client->req_done == 0);
@@ -306,6 +323,10 @@ void base_worker::report_rate_progress()
 void base_worker::check_in_client(std::shared_ptr<base_client> client)
 {
     managed_clients[client.get()] = client;
+    if (config->is_timing_based_mode())
+    {
+        clients_in_timing_mode.push_back(client.get());
+    }
 }
 
 void base_worker::check_out_client(base_client* client)
@@ -313,7 +334,7 @@ void base_worker::check_out_client(base_client* client)
     managed_clients.erase(client);
 }
 
-std::map<std::string, std::set<base_client*>>& base_worker::get_client_pool()
+std::map<PROTO_TYPE, std::map<std::string, std::set<base_client*>>>& base_worker::get_client_pool()
 {
     return client_pool;
 }
@@ -322,6 +343,12 @@ std::map<size_t, base_client*>& base_worker::get_client_ids()
 {
     return client_ids;
 }
+
+size_t base_worker::get_number_of_active_clients()
+{
+    return managed_clients.size();
+}
+
 
 }
 

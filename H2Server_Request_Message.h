@@ -26,7 +26,7 @@ public:
         json_payload_string = &(req.unmutable_payload());
         raw_payload = json_payload_string;
         std::string path_header_name = ":path";
-        std::string header_val = req.uri().path;
+        std::string header_val = req.uri().raw_path;
         if (req.uri().raw_query.size())
         {
             header_val.append("?").append(req.uri().raw_query);

@@ -1,0 +1,79 @@
+{
+  "address": "0.0.0.0",
+  "port": 8080,
+  "threads": 1,
+  "private-key-file": "",
+  "cert-file": "",
+  "caCert-file": "",
+  "mTLS": false,
+  "max-concurrent-streams": 2048,
+  "header-table-size": 4096,
+  "encoder-header-table-size": 4096,
+  "window-bits": 30,
+  "connection-window-bits": 30,
+  "socket-receive-buffer-size": 4194304,
+  "socket-send-buffer-size": 4194304,
+  "no-tls-proto": "h2c",
+  "verbose": false,
+  "statistics-file": "maock.output",
+  "Service": [
+    {
+      "Request": {
+        "name": "Record-notification",
+        "headers": [
+          {
+            "header-name": ":path",
+            "matchType": "StartsWith",
+            "input": "/record-notification"
+          }
+        ],
+        "payload": []
+      },
+      "Responses": [
+        {
+          "name": "204-To-Record-Notif",
+          "weight": 100,
+          "throttle-ratio": 0,
+          "status-code": 204,
+          "payload": {
+            "msg-payload": "",
+            "placeholder": "",
+            "arguments": []
+          },
+          "additonalHeaders": [],
+          "luaScript": "",
+          "lua-offload": false
+        }
+      ]
+    },
+    {
+      "Request": {
+        "name": "Timer-notification",
+        "headers": [
+          {
+            "header-name": ":path",
+            "matchType": "StartsWith",
+            "input": "/timer-notification"
+          }
+        ],
+        "payload": []
+      },
+      "Responses": [
+        {
+          "name": "200OK-to-Timer-Notif",
+          "weight": 100,
+          "throttle-ratio": 0,
+          "status-code": 200,
+          "payload": {
+            "msg-payload": "OK",
+            "placeholder": "",
+            "arguments": []
+          },
+          "additonalHeaders": [],
+          "luaScript": "",
+          "lua-offload": false
+        }
+      ]
+    }
+  ]
+}

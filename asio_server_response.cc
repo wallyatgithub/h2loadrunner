@@ -58,11 +58,30 @@ void asio_server_response::write_head(unsigned int status_code, header_map h) {
   if (pushed_ && !push_promise_sent_) {
     return;
   }
-
+  if (debug_mode)
+  {
+    std::cerr<<"======outgoing http response message begin======"<<std::endl<<std::flush;
+    std::cerr<<"status code: "<<status_code<<std::endl<<std::flush;
+    std::cerr<<"headers: "<<std::endl<<std::flush;
+    for (auto& header: h)
+    {
+        std::cerr<<header.first<<": "<<header.second.value<<std::endl<<std::flush;
+    }
+  }
   start_response();
 }
 
 void asio_server_response::end(std::string data) {
+  if (debug_mode)
+  {
+    if (data.size())
+    {
+      std::cerr<<"http response body:"<<std::endl<<std::flush;
+      std::cerr<<data<<std::endl<<std::flush;
+    }
+    std::cerr<<"======outgoing http response message end======"<<std::endl<<std::endl<<std::flush;
+  }
+
   payload_size_ = data.size();
   end(string_generator(std::move(data)));
 }
