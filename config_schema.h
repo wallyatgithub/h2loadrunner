@@ -11,7 +11,7 @@
 #include "rapidjson/schema.h"
 #include "rapidjson/prettywriter.h"
 
-#include "h2load.h"
+#include "common_types.h"
 #include "H2Server_Request.h"
 
 static const char* validate_response = "validate_response";
@@ -35,6 +35,19 @@ const std::string path_header_name = ":path";
 const std::string scheme_header_name = ":scheme";
 const std::string authority_header_name = ":authority";
 const std::string method_header_name = ":method";
+const std::string schema_http = "http";
+const std::string schema_https = "https";
+const std::string http1_proto = "http/1.1";
+const std::string http2_proto = "h2";
+const std::string http2_cleartext_proto = "h2c";
+const std::string http3_proto = "h3";
+const std::string HTTP1_ALPN = "\x8http/1.1";
+const std::string HTTP2_ALPN = "\x2h2";
+const std::string HTTP3_ALPN = "\x2h3";
+const std::string http1_1_version = "http/1.1";
+const std::string http2_0_version = "http/2.0";
+const std::string http3_0_version = "http/3.0";
+const int64_t LEAST_VALID_PAGE_ID = 1;
 
 enum URI_ACTION
 {
@@ -53,6 +66,44 @@ enum VALUE_SOURCE_TYPE
     SOURCE_TYPE_REQ_POINTER,
     SOURCE_TYPE_RES_HEADER,
     SOURCE_TYPE_RES_POINTER
+};
+
+enum PROTO_TYPE
+{
+    PROTO_INVALID = 0,
+    PROTO_HTTP1,
+    PROTO_HTTP2,
+    PROTO_HTTP3,
+    PROTO_UNSPECIFIED
+};
+
+const std::map<std::string, PROTO_TYPE, ci_less> http_proto_map =
+{
+    {http1_proto,           PROTO_HTTP1},
+    {http2_proto,           PROTO_HTTP2},
+    {http2_cleartext_proto, PROTO_HTTP2},
+    {http3_proto,           PROTO_HTTP3},
+};
+
+const static std::map<std::string, PROTO_TYPE, ci_less> http_version_to_proto_map =
+{
+    {http1_1_version, PROTO_HTTP1},
+    {http2_0_version, PROTO_HTTP2},
+    {http3_0_version, PROTO_HTTP3},
+    {"default", PROTO_UNSPECIFIED}
+};
+
+enum class URI_SCHEMA
+{
+    SCHEMA_INVALID = 0,
+    SCHEMA_HTTP,
+    SCHEMA_HTTPS
+};
+
+const std::map<std::string, URI_SCHEMA, ci_less> http_schema_map =
+{
+    {schema_http, URI_SCHEMA::SCHEMA_HTTP},
+    {schema_https, URI_SCHEMA::SCHEMA_HTTPS},
 };
 
 const std::map<std::string, VALUE_SOURCE_TYPE> value_pickup_action_map =
@@ -176,6 +227,8 @@ public:
     bool validate_response_function_present;
     std::string schema;
     std::string authority;
+    std::string http_version;
+    PROTO_TYPE proto_type; // filled by post_process_json_config_schema
     //    std::string path; // filled by post_process_json_config_schema
     Uri uri;
     std::string method;
@@ -193,12 +246,15 @@ public:
     uint32_t delay_before_executing_next;
     std::vector<Response_Value_Regex_Picker> response_value_regex_pickers;
     std::vector<Regex_Picker> actual_regex_value_pickers; // filled by post_process_json_config_schema
+    int64_t page_id = 0;
 
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("luaScript", &this->luaScript, staticjson::Flags::Optional);
         h->add_property("uri", &this->uri);
+        h->add_property("page-id", &this->page_id, staticjson::Flags::Optional);
         h->add_property("method", &this->method);
+        h->add_property("http-version", &this->http_version, staticjson::Flags::Optional);
         h->add_property("payload", &this->payload, staticjson::Flags::Optional);
         h->add_property("additonalHeaders", &this->additonalHeaders, staticjson::Flags::Optional);
         h->add_property("clear-old-cookies", &this->clear_old_cookies, staticjson::Flags::Optional);
@@ -214,6 +270,7 @@ public:
         delay_before_executing_next = 0;
         make_request_function_present = false;
         validate_response_function_present = false;
+        proto_type = PROTO_UNSPECIFIED;
     }
 };
 
@@ -234,10 +291,8 @@ public:
             exit(1);
         }
     };
-    explicit Range_Based_Variable()
+    explicit Range_Based_Variable():variable_range_start(0), variable_range_end(0)
     {
-        variable_range_start = 0;
-        variable_range_end = 0;
     }
     void staticjson_init(staticjson::ObjectHandler* h)
     {
@@ -417,21 +472,21 @@ class Scenario
 {
 public:
     std::string name;
-    uint32_t weight;
+    uint32_t weight = 0;
     std::string variable_name_in_path_and_data;
     std::string user_id_list_file;
     std::vector<Range_Based_Variable> range_based_variables;
     std::vector<Two_Dimensioning_Variable> two_dim_variables;
-    uint32_t interval_to_wait_before_start;
-    uint64_t variable_range_start;
-    uint64_t variable_range_end;
-    bool variable_range_slicing;
+    uint32_t interval_to_wait_before_start = 0;
+    uint64_t variable_range_start = 0;
+    uint64_t variable_range_end = 0;
+    bool variable_range_slicing = false;
     std::vector<Request> requests;
-    bool run_requests_in_parallel;
     std::string user_variables_input_file;
     Variable_Manager variable_manager; // content populated by post_process_json_config_schema
     // TODO:  refactor the next line
-    size_t number_of_variables_from_value_pickers;  // set by post_process_json_config_schema
+    size_t number_of_variables_from_value_pickers = 0;  // set by post_process_json_config_schema
+    std::string har_file_name;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("name", &this->name);
@@ -443,10 +498,10 @@ public:
         h->add_property("user-id-range-end", &this->variable_range_end, staticjson::Flags::Optional);
         h->add_property("user-id-range-slicing", &this->variable_range_slicing, staticjson::Flags::Optional);
         h->add_property("interval-to-wait-before-start", &this->interval_to_wait_before_start, staticjson::Flags::Optional);
-        h->add_property("run-requests-in-parallel", &this->run_requests_in_parallel, staticjson::Flags::Optional);
         h->add_property("user-variables-input-file", &this->user_variables_input_file, staticjson::Flags::Optional);
         h->add_property("range-based-variables", &this->range_based_variables, staticjson::Flags::Optional);
         h->add_property("two-dimensional-variables", &this->two_dim_variables, staticjson::Flags::Optional);
+        h->add_property("HAR-file", &this->har_file_name, staticjson::Flags::Optional);
         h->add_property("Requests", &this->requests);
     }
     explicit Scenario():
@@ -455,8 +510,7 @@ public:
         variable_range_end(0),
         variable_range_slicing(false),
         weight(100),
-        interval_to_wait_before_start(0),
-        run_requests_in_parallel(false)
+        interval_to_wait_before_start(0)
     {
     }
 };
@@ -519,6 +573,16 @@ public:
     uint64_t skt_recv_buffer_size;
     uint64_t skt_send_buffer_size;
     uint64_t config_update_sequence_number;
+    uint64_t max_frame_size;
+    std::string tls13_ciphers;
+    std::string groups;
+    bool no_udp_gso;
+    uint64_t max_udp_payload_size;
+    bool ktls;
+    std::string qlog_file_base;
+    std::string tls_keylog_file;
+    std::string quic_congestion_control_algorithm;
+    bool builtin_cookie_support = true;
 
     explicit Config_Schema():
         schema("http"),
@@ -526,7 +590,7 @@ public:
         port(80),
         threads(1),
         clients(1),
-        max_concurrent_streams(1),
+        max_concurrent_streams(1024),
         window_bits(30),
         connection_window_bits(30),
         ciphers("ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256"),
@@ -541,7 +605,7 @@ public:
         header_table_size(4096),
         encoder_header_table_size(4096),
         log_file(""),
-        statistics_interval(5),
+        statistics_interval(1),
         request_per_second(0),
         nreqs(0),
         stream_timeout_in_ms(5000),
@@ -553,7 +617,13 @@ public:
         builtin_server_port(8888),
         skt_recv_buffer_size(4194304),
         skt_send_buffer_size(4194304),
-        config_update_sequence_number(0)
+        config_update_sequence_number(0),
+        max_frame_size(16384),
+        tls13_ciphers("TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256"),
+        groups("X25519:P-256:P-384:P-521"),
+        no_udp_gso(false),
+        max_udp_payload_size(0),
+        ktls(false)
     {
     }
 
@@ -602,6 +672,17 @@ public:
         h->add_property("statistics-file", &this->statistics_file, staticjson::Flags::Optional);
         h->add_property("socket-receive-buffer-size", &this->skt_recv_buffer_size, staticjson::Flags::Optional);
         h->add_property("socket-send-buffer-size", &this->skt_send_buffer_size, staticjson::Flags::Optional);
+        h->add_property("max-frame-size", &this->max_frame_size, staticjson::Flags::Optional);
+        h->add_property("tls13_ciphers", &this->tls13_ciphers, staticjson::Flags::Optional);
+        h->add_property("groups", &this->groups, staticjson::Flags::Optional);
+        h->add_property("no-udp-gso", &this->no_udp_gso, staticjson::Flags::Optional);
+        h->add_property("max-udp-payload-size", &this->max_udp_payload_size, staticjson::Flags::Optional);
+        h->add_property("ktls", &this->ktls, staticjson::Flags::Optional);
+        h->add_property("qlog-file-base", &this->qlog_file_base, staticjson::Flags::Optional);
+        h->add_property("tls-keylog-file", &this->tls_keylog_file, staticjson::Flags::Optional);
+        h->add_property("quic-congestion-control-algorithm", &this->quic_congestion_control_algorithm,
+                        staticjson::Flags::Optional);
+        h->add_property("builtin-cookie-support", &this->builtin_cookie_support, staticjson::Flags::Optional);
     }
 };
 

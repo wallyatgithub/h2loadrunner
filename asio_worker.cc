@@ -31,11 +31,55 @@ boost::asio::io_service& asio_worker::get_io_context()
     return io_context;
 }
 
-std::shared_ptr<base_client> asio_worker::create_new_client(size_t req_todo)
+std::shared_ptr<base_client> asio_worker::create_new_client(size_t req_todo, PROTO_TYPE proto_type, const std::string& schema, const std::string& authority)
 {
-    return std::make_shared<asio_client_connection>(io_context, next_client_id++, this, req_todo, (config), ssl_ctx);
+    auto ctx = &ssl_ctx;
+    switch (proto_type)
+    {
+        case PROTO_HTTP1:
+            ctx = &ssl_ctx_http1;
+            break;
+        case PROTO_HTTP2:
+            ctx = &ssl_ctx_http2;
+            break;
+        case PROTO_HTTP3:
+            ctx = &ssl_ctx_http3;
+            break;
+        case PROTO_UNSPECIFIED:
+            ctx = &ssl_ctx;
+            break;
+
+        default:
+            std::cerr<<"invalid protol"<<std::endl;
+            abort();
+    }
+    return std::make_shared<asio_client_connection>(io_context, next_client_id++, this, req_todo, config, *ctx, nullptr, schema, authority);
 }
 
+std::shared_ptr<base_client> asio_worker::create_new_sub_client(base_client* parent_client, size_t req_todo, const std::string& schema, const std::string& authority, PROTO_TYPE proto_type)
+{
+    auto ctx = &ssl_ctx;
+    switch (proto_type)
+    {
+        case PROTO_HTTP1:
+            ctx = &ssl_ctx_http1;
+            break;
+        case PROTO_HTTP2:
+            ctx = &ssl_ctx_http2;
+            break;
+        case PROTO_HTTP3:
+            ctx = &ssl_ctx_http3;
+            break;
+        case PROTO_UNSPECIFIED:
+            ctx = &ssl_ctx;
+            break;
+
+        default:
+            std::cerr<<"invalid proto"<<std::endl;
+            abort();
+    }
+    return std::make_shared<asio_client_connection>(io_context, parent_client->id, this, req_todo, config, *ctx, parent_client, schema, authority, proto_type);
+}
 
 asio_worker::asio_worker(uint32_t id, size_t nreq_todo, size_t nclients,
                          size_t rate, size_t max_samples, Config* config):
@@ -45,9 +89,17 @@ asio_worker::asio_worker(uint32_t id, size_t nreq_todo, size_t nclients,
     duration_timer(io_context),
     tick_timer(io_context),
     ssl_ctx(boost::asio::ssl::context::sslv23),
+    ssl_ctx_http1(boost::asio::ssl::context::sslv23),
+    ssl_ctx_http2(boost::asio::ssl::context::sslv23),
+    ssl_ctx_http3(boost::asio::ssl::context::sslv23),
     async_resolver(io_context)
 {
     setup_SSL_CTX(ssl_ctx.native_handle(), *config);
+    setup_SSL_CTX(ssl_ctx_http1.native_handle(), *config, std::set<std::string>{HTTP1_ALPN});
+    setup_SSL_CTX(ssl_ctx_http2.native_handle(), *config, std::set<std::string>{HTTP2_ALPN, HTTP1_ALPN});
+    setup_SSL_CTX(ssl_ctx_http3.native_handle(), *config, std::set<std::string>{HTTP3_ALPN});
+    // DEBUG
+    start_tick_timer();
 }
 
 asio_worker::~asio_worker()
@@ -123,7 +175,6 @@ void asio_worker::handle_tick_timer_timeout(const boost::system::error_code & ec
         return;
     }
     process_user_timers();
-    start_tick_timer();
 }
 
 void asio_worker::handle_rate_mode_period_timer_timeout(const boost::system::error_code& ec)
@@ -242,6 +293,57 @@ void asio_worker::resolve_hostname(const std::string& hostname, const std::funct
         cb_function(resolved_addresses);
     };
     async_resolver.async_resolve(hostname, "", resolve_handler);
+}
+
+void asio_worker::stop_event_loop()
+{
+    io_context.stop();
+}
+
+void asio_worker::update_resolver_cache(const std::pair<std::string, std::string>& query, const asio_worker::result_type& addresses, std::map<query_type, result_with_ttl_type>& cache)
+{
+    std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
+    auto ttl = std::chrono::seconds(60);
+    auto expiry_timepoint = curr_time_point + ttl;
+    cache[query] = std::make_pair(addresses, expiry_timepoint);
+}
+
+const asio_worker::result_type& asio_worker::get_from_resolver_cache(const std::pair<std::string, std::string>& query, std::map<query_type, result_with_ttl_type>& cache)
+{
+    static std::pair<std::vector<std::string>, std::vector<std::string>> empty_result{std::vector<std::string>(0), std::vector<std::string>(0)};
+    auto iter = cache.find(query);
+    if (iter != cache.end())
+    {
+        if (iter->second.second > std::chrono::steady_clock::now())
+        {
+            return iter->second.first;
+        }
+        else
+        {
+            cache.erase(iter);
+        }
+    }
+    return empty_result;
+}
+
+void asio_worker::update_tcp_resolver_cache(const std::pair<std::string, std::string>& query, const asio_worker::result_type& addresses)
+{
+    return update_resolver_cache(query, addresses, tcp_resolver_cache);
+}
+
+const asio_worker::result_type& asio_worker::get_from_tcp_resolver_cache(const std::pair<std::string, std::string>& query)
+{
+    return get_from_resolver_cache(query, tcp_resolver_cache);
+}
+
+void asio_worker::update_udp_resolver_cache(const std::pair<std::string, std::string>& query, const asio_worker::result_type& addresses)
+{
+    return update_resolver_cache(query, addresses, udp_resolver_cache);
+}
+
+const asio_worker::result_type& asio_worker::get_from_udp_resolver_cache(const std::pair<std::string, std::string>& query)
+{
+    return get_from_resolver_cache(query, udp_resolver_cache);
 }
 
 }

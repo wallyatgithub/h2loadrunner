@@ -27,15 +27,19 @@ struct Config
     std::string ifile;
     std::string ciphers;
     // length of upload data
-    int64_t data_length;
+    int64_t data_length; // TODO: remove it
+    std::string tls13_ciphers;
+    // supported groups (or curves).
+    std::string groups;
     addrinfo* addrs;
     size_t nreqs;
     size_t nclients;
     size_t nthreads;
     // The maximum number of concurrent streams per session.
-    ssize_t max_concurrent_streams;
+    size_t max_concurrent_streams;
     size_t window_bits;
     size_t connection_window_bits;
+    size_t max_frame_size;
     // rate at which connections should be made
     size_t rate;
     double rate_period;
@@ -50,6 +54,8 @@ struct Config
     enum { PROTO_HTTP2, PROTO_HTTP1_1 } no_tls_proto;
     uint32_t header_table_size;
     uint32_t encoder_header_table_size;
+    // base file name of qlog output files
+    std::string qlog_file_base;
     uint16_t port;
     uint16_t default_port;
     uint16_t connect_to_port;
@@ -73,6 +79,14 @@ struct Config
     Config_Schema json_config_schema;
     std::vector<std::string> reqlines;
     std::string payload_data;
+    // Disables GSO for UDP connections.
+    bool no_udp_gso = false;
+    // The maximum UDP datagram payload size to send.
+    size_t max_udp_payload_size = 0;
+    // Enable ktls.
+    bool ktls = false;
+    uint32_t cc_algo;
+    bool disable_connection_trace = false;
 
     Config();
     ~Config();
@@ -81,6 +95,7 @@ struct Config
     bool is_timing_based_mode() const;
     bool has_base_uri() const;
     bool rps_enabled() const;
+    bool is_quic() const;
 };
 
 }

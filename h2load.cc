@@ -24,6 +24,9 @@
  */
 #include <fstream>
 #include <streambuf>
+#include <cstdlib>
+#include <iostream>
+#include <ctime>
 
 #include "h2load.h"
 
@@ -47,6 +50,7 @@
 #endif // HAVE_NETDB_H
 #ifndef _WINDOWS
 #include <sys/un.h>
+#include <sys/resource.h>
 #endif
 #include <cstdio>
 #include <cassert>
@@ -91,13 +95,25 @@ extern "C" {
 #include "libev_client.h"
 #endif
 #include "base_worker.h"
-#include "h2load_stats.h"
 #include "staticjson/document.hpp"
 #include "staticjson/staticjson.hpp"
 #include "rapidjson/schema.h"
 #include "rapidjson/prettywriter.h"
 #include "config_schema.h"
 #include "h2load_lua.h"
+
+#ifdef ENABLE_HTTP3
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#    include <ngtcp2/ngtcp2_crypto_openssl.h>
+#  endif // HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+#    include <ngtcp2/ngtcp2_crypto_boringssl.h>
+#  endif // HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+#endif   // ENABLE_HTTP3
+
+#ifdef ENABLE_HTTP3
+#  include "h2load_http3_session.h"
+#endif // ENABLE_HTTP3
 
 
 #ifndef O_BINARY
@@ -117,27 +133,6 @@ constexpr size_t MAX_SAMPLES = 100000;
 constexpr size_t MAX_SAMPLES_PER_THREAD = 10000;
 
 } // namespace
-
-Stats::Stats(size_t req_todo, size_t nclients)
-    : req_todo(req_todo),
-      req_started(0),
-      req_done(0),
-      req_success(0),
-      req_status_success(0),
-      req_failed(0),
-      req_error(0),
-      req_timedout(0),
-      bytes_total(0),
-      bytes_head(0),
-      bytes_head_decomp(0),
-      bytes_body(0),
-      status()
-{}
-
-Stream::Stream(size_t scenario_id, size_t request_id, bool stats_eligible)
-    : req_stat(scenario_id, request_id),
-      status_success(-1),
-      statistics_eligible(stats_eligible) {}
 
 namespace
 {
@@ -216,7 +211,12 @@ Options:
               Max concurrent streams  to issue  per session.  Not used
               for http/1.1
               Default: 1
-  -w, --window-bits=<N>
+  -f, --max-frame-size=<SIZE>
+              Maximum frame size that the local endpoint is willing to
+              receive.
+              Default: )"
+        << util::utos_unit(config.max_frame_size) << R"(
+   -w, --window-bits=<N>
               Sets the stream level initial window size to (2**<N>)-1.
               Default: )"
         << config.window_bits << R"(
@@ -232,6 +232,11 @@ Options:
               described in OpenSSL ciphers(1).
               Default: )"
         << config.ciphers << R"(
+  --tls13-ciphers=<SUITE>
+              Set allowed cipher list for  TLSv1.3.  The format of the
+              string is described in OpenSSL ciphers(1).
+              Default: )"
+        << config.tls13_ciphers << R"(
   -p, --no-tls-proto=<PROTOID>
               Specify ALPN identifier of the  protocol to be used when
               accessing http URI without SSL/TLS.
@@ -344,6 +349,12 @@ Options:
               response  time when  using  one worker  thread, but  may
               appear slightly  out of order with  multiple threads due
               to buffering.  Status code is -1 for failed streams.
+  --qlog-file-base=<PATH>
+              Enable qlog output and specify base file name for qlogs.
+              Qlog is emitted  for each connection.  For  a given base
+              name   "base",    each   output   file    name   becomes
+              "base.M.N.sqlog" where M is worker ID and N is client ID
+              (e.g. "base.0.3.sqlog").  Only effective in QUIC runs.
   --connect-to=<HOST>[:<PORT>]
               Host and port to connect  instead of using the authority
               in <URI>.
@@ -355,14 +366,32 @@ Options:
   --rps-input-file=<PATH>
               A file specifying rps number.  It is useful when dynamic
               change of rps is needed.
-  --config-file=<PATH>
+  --config-file=<PATH-To-Json-Config-File>
               A JSON file specifying the configurations needed.
+  --transform-har=<PATH-To-HAR-File>
+              Transform an HAR file to h2loadrunner Json  config file.
+  --run-har=<PATH-To-HAR-File>
+              Load an HAR file, transform to  h2loadrunner Json  based
+              config file, and then run with this config file.
+  --skip-host=hostname_or_ip[:port]
+              specify the hostname or ip address to skip when  running
+              load, usually from an HAR file.
   --script=<PATH>
               A Lua script file to load and run. Configuration related
               to host, Scenarioes in above config-file will be ignored
               And the actual connection and request will be controlled
               by the script.
               Multiple scripts are acceptable w/ multiple --script arg
+  --groups=<GROUPS>
+              Specify the supported groups.
+              Default: )"
+        << config.groups << R"(
+  --no-udp-gso
+              Disable UDP GSO.
+  --max-udp-payload-size=<SIZE>
+              Specify the maximum outgoing UDP datagram payload size.
+  --ktls      Enable ktls.
+
   -v, --verbose
               Output debug information.
   --version   Display version information and exit.
@@ -385,6 +414,8 @@ Options:
 int main(int argc, char** argv)
 {
     tls::libssl_init();
+    std::srand(std::time(0));
+    std::vector<std::string> skipped_hosts;
 
 #ifdef USE_LIBEV
     auto status = ares_library_init(ARES_LIB_INIT_ALL);
@@ -403,6 +434,7 @@ int main(int argc, char** argv)
     std::string datafile;
     std::vector<std::string> script_files;
     bool nreqs_set_manually = false;
+    std::string qlog_base;
     while (1)
     {
         static int flag = 0;
@@ -437,10 +469,19 @@ int main(int argc, char** argv)
             {"log-file", required_argument, &flag, 10},
             {"connect-to", required_argument, &flag, 11},
             {"rps", required_argument, &flag, 12},
+            {"groups", required_argument, &flag, 13},
+            {"tls13-ciphers", required_argument, &flag, 14},
+            {"no-udp-gso", no_argument, &flag, 15},
+            {"qlog-file-base", required_argument, &flag, 16},
+            {"max-udp-payload-size", required_argument, &flag, 17},
+            {"ktls", no_argument, &flag, 18},
             {"stream-timeout-interval-ms", required_argument, &flag, 23},
             {"rps-input-file", required_argument, &flag, 24},
             {"config-file", required_argument, &flag, 25},
             {"script", required_argument, &flag, 26},
+            {"transform-har", required_argument, &flag, 27},
+            {"run-har", required_argument, &flag, 28},
+            {"skip-host", required_argument, &flag, 29},
             {nullptr, 0, nullptr, 0}
         };
         int option_index = 0;
@@ -498,6 +539,28 @@ int main(int argc, char** argv)
                               << std::endl;
                     exit(EXIT_FAILURE);
                 }
+                break;
+            }
+            case 'f':
+            {
+                auto n = util::parse_uint_with_unit(optarg);
+                if (n == -1)
+                {
+                    std::cerr << "--max-frame-size: bad option value: " << optarg
+                              << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                if (static_cast<uint64_t>(n) < 16_k)
+                {
+                    std::cerr << "--max-frame-size: minimum 16384" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                if (static_cast<uint64_t>(n) > 16_m - 1)
+                {
+                    std::cerr << "--max-frame-size: maximum 16777215" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                config.max_frame_size = n;
                 break;
             }
             case 'H':
@@ -729,6 +792,55 @@ int main(int argc, char** argv)
                         config.rps = v;
                         break;
                     }
+                    case 13:
+                    {
+                        // --groups
+                        config.groups = optarg;
+                        break;
+                    }
+                    case 14:
+                    {
+                        // --tls13-ciphers
+                        config.tls13_ciphers = optarg;
+                        break;
+                    }
+                    case 15:
+                    {
+                        // --no-udp-gso
+                        config.no_udp_gso = true;
+                        break;
+                    }
+                    case 16:
+                    {
+                        // --qlog-file-base
+                        qlog_base = optarg;
+                        break;
+                    }
+                    case 17:
+                    {
+                        // --max-udp-payload-size
+                        auto n = util::parse_uint_with_unit(optarg);
+                        if (n == -1)
+                        {
+                            std::cerr << "--max-udp-payload-size: bad option value: " << optarg
+                                      << std::endl;
+                            exit(EXIT_FAILURE);
+                        }
+                        if (static_cast<uint64_t>(n) > 64_k)
+                        {
+                            std::cerr << "--max-udp-payload-size: must not exceed 65536"
+                                      << std::endl;
+                            exit(EXIT_FAILURE);
+                        }
+                        config.max_udp_payload_size = n;
+                        break;
+                    }
+                    case 18:
+                    {
+                        // --ktls
+                        config.ktls = true;
+                        break;
+                    }
                     case 23:
                     {
                         config.stream_timeout_in_ms = (uint16_t)strtoul(optarg, nullptr, 10);
@@ -760,6 +872,42 @@ int main(int argc, char** argv)
                     {
                         std::string script_file = optarg;
                         script_files.push_back(script_file);
+                    }
+                    break;
+                    case 27:
+                    {
+                        std::string har_file_name = optarg;
+                        std::ifstream buffer(har_file_name);
+                        std::string har_conent((std::istreambuf_iterator<char>(buffer)),
+                                               std::istreambuf_iterator<char>());
+                        h2load::Config config_from_har;
+                        convert_har_to_h2loadrunner_config(har_conent, config_from_har, std::vector<std::string>{});
+                        post_process_json_config_schema(config);
+                        std::cerr << staticjson::to_pretty_json_string(config_from_har.json_config_schema)
+                                  << std::endl;
+                        exit(0);
+
+                    }
+                    case 28:
+                    {
+                        std::string har_file_name = optarg;
+                        std::ifstream buffer(har_file_name);
+                        std::string har_conent((std::istreambuf_iterator<char>(buffer)),
+                                               std::istreambuf_iterator<char>());
+                        convert_har_to_h2loadrunner_config(har_conent, config, skipped_hosts);
+                        std::cerr << "HAR transformed to h2loadrunner config:" << std::endl << staticjson::to_pretty_json_string(
+                                      config.json_config_schema)
+                                  << std::endl;
+
+                        post_process_json_config_schema(config);
+                        populate_config_from_json(config);
+
+                    }
+                    break;
+                    case 29:
+                    {
+                        std::string skipped_host = optarg;
+                        skipped_hosts.push_back(skipped_host);
                     }
                     break;
                 }
@@ -991,10 +1139,35 @@ int main(int argc, char** argv)
         }
     }
 
+    if (!qlog_base.empty())
+    {
+        /*
+        if (!config.is_quic())
+        {
+            std::cerr
+                    << "Warning: --qlog-file-base: only effective in quic, ignoring."
+                    << std::endl;
+        }
+        else
+        */
+        {
+#ifdef ENABLE_HTTP3
+            config.qlog_file_base = qlog_base;
+#endif // ENABLE_HTTP3
+        }
+    }
+
 #ifndef _WINDOWS
     struct sigaction act {};
     act.sa_handler = SIG_IGN;
     sigaction(SIGPIPE, &act, nullptr);
+    struct rlimit old_lim, new_lim;
+    if (getrlimit(RLIMIT_NOFILE, &old_lim) == 0)
+    {
+        new_lim.rlim_max = old_lim.rlim_max;
+        new_lim.rlim_cur = old_lim.rlim_max;
+        setrlimit(RLIMIT_NOFILE, &new_lim);
+    }
 #endif
 
     auto ssl_ctx = SSL_CTX_new(SSLv23_client_method());
@@ -1007,7 +1180,7 @@ int main(int argc, char** argv)
 
     setup_SSL_CTX(ssl_ctx, config);
 
-    std::string user_agent = "h2load nghttp2/" NGHTTP2_VERSION;
+    std::string user_agent = "h2loadrunner";
     Headers shared_nva;
     shared_nva.emplace_back(scheme_header, config.scheme);
     if (config.port != config.default_port)
@@ -1122,15 +1295,6 @@ int main(int argc, char** argv)
         config.nva.push_back(std::move(nva));
     }
 
-
-    // Don't DOS our server!
-    if (config.host == "nghttp2.org")
-    {
-        std::cerr << "Using h2load against public server " << config.host
-                  << " should be prohibited." << std::endl;
-        exit(EXIT_FAILURE);
-    }
-
     insert_customized_headers_to_Json_scenarios(config);
 
     if (config.verbose)
@@ -1224,17 +1388,41 @@ int main(int argc, char** argv)
         cv.notify_all();
     }
 
-    auto start = std::chrono::steady_clock::now();
     std::atomic<bool> workers_stopped(false);
+
+    std::condition_variable stats_thread_wait_cond;
+
+    auto check_clients_up = [&workers, &workers_stopped]()
+    {
+        auto total_time_to_wait = 5000;
+        auto time_to_wait_for_each_iteration = 100;
+        for (auto i = 0; i < total_time_to_wait / time_to_wait_for_each_iteration; i++)
+        {
+            if (workers_stopped)
+            {
+                return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(time_to_wait_for_each_iteration));
+        }
+        size_t number_of_active_clients = 0;
+        for (auto& worker : workers)
+        {
+            number_of_active_clients += worker->get_number_of_active_clients();
+        }
+        if (number_of_active_clients == 0)
+        {
+            std::cerr << "no connections are established, quit" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    };
+    auto dummy = std::async(std::launch::async, check_clients_up);
+
+    auto start = std::chrono::steady_clock::now();
 
     std::stringstream dataStream;
 
-    if (config.json_config_schema.scenarios.size() > 0)
-    {
-        std::thread statThread(output_realtime_stats, std::ref(config), std::ref(workers), std::ref(workers_stopped),
-                               std::ref(dataStream));
-        statThread.detach();
-    }
+    std::thread statThread(output_realtime_stats, std::ref(config), std::ref(workers), std::ref(workers_stopped),
+                           std::ref(dataStream), std::ref(stats_thread_wait_cond));
 
     std::thread monThread(rpsUpdateFunc, std::ref(workers_stopped), std::ref(config));
     monThread.detach();
@@ -1258,6 +1446,8 @@ int main(int argc, char** argv)
 
     }
     workers_stopped = true;
+    stats_thread_wait_cond.notify_all();
+    statThread.join();
 
 #else  // NOTHREADS
     auto rate = config.rate;
@@ -1281,7 +1471,6 @@ int main(int argc, char** argv)
     for (const auto& w : workers)
     {
         const auto& s = w->stats;
-
         stats.req_todo += s.req_todo;
         stats.req_started += s.req_started;
         stats.req_done += s.req_done;
@@ -1294,6 +1483,8 @@ int main(int argc, char** argv)
         stats.bytes_head += s.bytes_head;
         stats.bytes_head_decomp += s.bytes_head_decomp;
         stats.bytes_body += s.bytes_body;
+        stats.udp_dgram_recv += s.udp_dgram_recv;
+        stats.udp_dgram_sent += s.udp_dgram_sent;
 
         for (size_t i = 0; i < stats.status.size(); ++i)
         {
@@ -1363,34 +1554,44 @@ traffic: )" << util::utos_funit(stats.bytes_total)
               << util::utos_funit(stats.bytes_head) << "B (" << stats.bytes_head
               << ") headers (space savings " << header_space_savings * 100
               << "%), " << util::utos_funit(stats.bytes_body) << "B ("
-              << stats.bytes_body << R"() data
-min         max         mean         sd        +/- sd
+              << stats.bytes_body << R"() data)" << std::endl;
+
+#ifdef ENABLE_HTTP3
+    //if (config.is_quic())
+    {
+        std::cerr << "UDP datagram: " << stats.udp_dgram_sent << " sent, "
+                  << stats.udp_dgram_recv << " received" << std::endl;
+    }
+#endif // ENABLE_HTTP3
+
+    std::cerr
+            << R"() data << min         max         mean         sd        +/- sd
 time for request: )"
-              << std::setw(10) << util::format_duration(ts.request.min) << "  "
-              << std::setw(10) << util::format_duration(ts.request.max) << "  "
-              << std::setw(10) << util::format_duration(ts.request.mean) << "  "
-              << std::setw(10) << util::format_duration(ts.request.sd)
-              << std::setw(9) << util::dtos(ts.request.within_sd) << "%"
-              << "\ntime for connect: " << std::setw(10)
-              << util::format_duration(ts.connect.min) << "  " << std::setw(10)
-              << util::format_duration(ts.connect.max) << "  " << std::setw(10)
-              << util::format_duration(ts.connect.mean) << "  " << std::setw(10)
-              << util::format_duration(ts.connect.sd) << std::setw(9)
-              << util::dtos(ts.connect.within_sd) << "%"
-              << "\ntime to 1st byte: " << std::setw(10)
-              << util::format_duration(ts.ttfb.min) << "  " << std::setw(10)
-              << util::format_duration(ts.ttfb.max) << "  " << std::setw(10)
-              << util::format_duration(ts.ttfb.mean) << "  " << std::setw(10)
-              << util::format_duration(ts.ttfb.sd) << std::setw(9)
-              << util::dtos(ts.ttfb.within_sd) << "%"
-              // this is misleading, comment it
-              /*
-              << "\nreq/s           : " << std::setw(10) << ts.rps.min << "  "
-              << std::setw(10) << ts.rps.max << "  " << std::setw(10)
-              << ts.rps.mean << "  " << std::setw(10) << ts.rps.sd << std::setw(9)
-              << util::dtos(ts.rps.within_sd) << "%"
-              */
-              << std::endl;
+            << std::setw(10) << util::format_duration(ts.request.min) << "  "
+            << std::setw(10) << util::format_duration(ts.request.max) << "  "
+            << std::setw(10) << util::format_duration(ts.request.mean) << "  "
+            << std::setw(10) << util::format_duration(ts.request.sd)
+            << std::setw(9) << util::dtos(ts.request.within_sd) << "%"
+            << "\ntime for connect: " << std::setw(10)
+            << util::format_duration(ts.connect.min) << "  " << std::setw(10)
+            << util::format_duration(ts.connect.max) << "  " << std::setw(10)
+            << util::format_duration(ts.connect.mean) << "  " << std::setw(10)
+            << util::format_duration(ts.connect.sd) << std::setw(9)
+            << util::dtos(ts.connect.within_sd) << "%"
+            << "\ntime to 1st byte: " << std::setw(10)
+            << util::format_duration(ts.ttfb.min) << "  " << std::setw(10)
+            << util::format_duration(ts.ttfb.max) << "  " << std::setw(10)
+            << util::format_duration(ts.ttfb.mean) << "  " << std::setw(10)
+            << util::format_duration(ts.ttfb.sd) << std::setw(9)
+            << util::dtos(ts.ttfb.within_sd) << "%"
+            // this is misleading, comment it
+            /*
+            << "\nreq/s           : " << std::setw(10) << ts.rps.min << "  "
+            << std::setw(10) << ts.rps.max << "  " << std::setw(10)
+            << ts.rps.mean << "  " << std::setw(10) << ts.rps.sd << std::setw(9)
+            << util::dtos(ts.rps.within_sd) << "%"
+            */
+            << std::endl;
 
     print_extended_stats_summary(stats, config, workers);
 
