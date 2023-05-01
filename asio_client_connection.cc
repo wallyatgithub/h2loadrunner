@@ -383,6 +383,7 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
     {
         exit(1);
     }
+
     boost::system::error_code ec;
     auto remote_ip_address = boost::asio::ip::make_address(host, ec);
     if (ec)
