@@ -2886,6 +2886,7 @@ int base_client::submit_request()
         size_t attempt = 1;
         while ((!is_test_finished()) && (attempt < total_attempt_allowed))
         {
+            attempt++;
             retCode = submit_one_request();
             if (0 == retCode)
             {
