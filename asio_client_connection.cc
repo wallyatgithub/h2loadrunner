@@ -316,6 +316,7 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
     {
         exit(1);
     }
+    output_data_length = 0;
 
     if (schema == "https")
     {
