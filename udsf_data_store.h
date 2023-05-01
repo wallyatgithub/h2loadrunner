@@ -1106,10 +1106,10 @@ public:
                 {
                     tags_value_db.count -= (count_before - count_after);
                 }
-            }
-            if (iter->second.empty())
-            {
-                tags_value_db.value_to_resource_id_map.erase(iter);
+                if (iter->second.empty())
+                {
+                    tags_value_db.value_to_resource_id_map.erase(iter);
+                }
             }
         }
     }
