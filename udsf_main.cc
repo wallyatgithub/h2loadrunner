@@ -1393,7 +1393,7 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
     static thread_local boost::asio::deadline_timer tick_timer(*io_service);
     static thread_local std::multimap<std::chrono::steady_clock::time_point, std::pair<uint64_t, int32_t>> active_requests;
     static thread_local auto dummy = start_tick_timer(tick_timer, active_requests);
-    const std::chrono::milliseconds REQUEST_TTL(5000);
+    const std::chrono::milliseconds REQUEST_TTL(15000);
     active_requests.insert(std::make_pair(std::chrono::steady_clock::now() + REQUEST_TTL, std::make_pair(handler_id,
                                                                                                          stream_id)));
     auto method = req.method();

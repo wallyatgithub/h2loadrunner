@@ -61,17 +61,19 @@ io_service_pool::io_service_pool(std::size_t pool_size) : next_io_service_(0) {
 
 void io_service_pool::run(bool asynchronous) {
   // Create a pool of threads to run all of the io_services.
-  g_io_services.resize(io_services_.size() - 1);
-  number_of_worker_thread = g_io_services.size();
+  number_of_worker_thread = io_services_.size() - 1;
   for (std::size_t i = 0; i < io_services_.size(); ++i) {
     auto ios = io_services_[i];
+    if (i > 0)
+    {
+        g_io_services.push_back(ios.get());
+        g_strands.emplace_back(*ios);
+    }
     futures_.push_back(std::async(std::launch::async, [ios, i]()
                                   {
                                       if (i > 0)
                                       {
                                           g_current_thread_id = i - 1;
-                                          g_io_services[i - 1] = ios.get();
-                                          g_strands.emplace_back(*g_io_services[i - 1]);
                                       }
                                       return ios->run();
                                   }));

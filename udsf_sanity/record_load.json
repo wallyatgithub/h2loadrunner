@@ -65,6 +65,11 @@
           "variable-name": "supi",
           "variable-range-start": 0,
           "variable-range-end": 10000000
+        },
+        {
+          "variable-name": "nssai",
+          "variable-range-start": 0,
+          "variable-range-end": 200
         }
       ],
       "two-dimensional-variables": [],
@@ -78,7 +83,7 @@
           "clear-old-cookies": false,
           "method": "put",
           "http-version": "default",
-          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n",
+          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"], \"nssai\" : [\"nssai-${nssai}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n",
           "additonalHeaders": [
             "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
           ],
@@ -100,7 +105,7 @@
           "clear-old-cookies": false,
           "method": "put",
           "http-version": "default",
-          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n",
+          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"], \"nssai\" : [\"nssai-${nssai}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n",
           "additonalHeaders": [
             "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
           ],
@@ -194,7 +199,7 @@
           "clear-old-cookies": false,
           "method": "put",
           "http-version": "default",
-          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n",
+          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"], \"nssai\" : [\"nssai-${nssai}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n",
           "additonalHeaders": [
             "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
           ],
@@ -216,7 +221,7 @@
           "clear-old-cookies": false,
           "method": "put",
           "http-version": "default",
-          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n",
+          "payload": "-----MULTIPART_BOUNDARY---\r\nContent-Disposition: json-data; name=meta\r\nContent-id: meta\r\nContent-Type: application/json\r\n\r\n{\"schemaId\": \"schema_1\",\"ttl\":\"2046-02-18T19:07:00+06:00\",\"tags\":{\"ueId\" : [\"supi-${supi}\"], \"recordId\" : [\"rec-${supi}\"], \"nssai\" : [\"nssai-${nssai}\"] }}\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=first_part\r\nContent-id: block1\r\nContent-Type: text\r\n\r\nThis is the first part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY---\r\nContent-Disposition: form-data; name=second_part\r\nContent-id: block2\r\nContent-Type: text\r\n\r\nThis is the second part of the HTTP body for ${supi}.\r\n-----MULTIPART_BOUNDARY-----\r\n",
           "additonalHeaders": [
             "Content-Type: multipart/mixed; boundary=---MULTIPART_BOUNDARY---"
           ],
