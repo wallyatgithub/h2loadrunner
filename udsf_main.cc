@@ -786,9 +786,9 @@ bool process_records_in_parallel(const nghttp2::asio_http2::server::asio_server_
                 return merge_search_result_and_send_search_response(storage, target_thread_id, orig_thread_id, dummy, count,
                                                                     handler_id, stream_id);
             }
-
-            auto records = storage.run_search_expression_non_recursive_opt(search.request.search_exp, target_thread_id);
-            return merge_search_result_and_send_search_response(storage, target_thread_id, orig_thread_id, records, records.size(),
+            size_t count = 0;
+            auto records = storage.run_search_expression_non_recursive_opt(search.request.search_exp, target_thread_id, count, search.request.count_indicator);
+            return merge_search_result_and_send_search_response(storage, target_thread_id, orig_thread_id, records, count,
                                                                 handler_id, stream_id);
         };
         if (debug_mode)
@@ -1361,8 +1361,8 @@ bool process_timers_in_parallel(const nghttp2::asio_http2::server::asio_server_r
         {
             auto run_search_in_worker_thread = [handler_id, stream_id, &search, &storage, orig_thread_id, target_thread_id]()
             {
-
-                auto timers = storage.run_search_expression_non_recursive_opt(search.request.search_exp, target_thread_id, true);
+                size_t count = 0;
+                auto timers = storage.run_search_expression_non_recursive_opt(search.request.search_exp, target_thread_id, count, false, true);
                 return merge_timer_search_request_and_send_response(storage, target_thread_id, orig_thread_id, timers, timers.size(),
                                                                     handler_id, stream_id);
             };

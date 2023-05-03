@@ -2015,8 +2015,9 @@ public:
     }
 
     std::vector<std::string> run_search_expression_non_recursive_opt(rapidjson::Document& doc,
-                                                                   size_t thread_id, bool timer_operation = false)
+                                                                   size_t thread_id, size_t& count, bool count_indicator, bool timer_operation = false)
     {
+        count = 0;
         if (debug_mode)
         {
             rapidjson::StringBuffer buffer;
@@ -2129,15 +2130,19 @@ public:
                 search_cond.parent->operands.emplace_back(std::move(result));
             }
         }
+        count = result.size();
         std::vector<std::string> ret;
-        ret.reserve(result.size());
-        for (auto& i: result)
+        if (!count_indicator)
         {
-            auto& mapping = timer_operation ? timer_int_id_to_string_id[thread_id] : record_int_id_to_string_id[thread_id];
-            auto iter = mapping.find(i);
-            if (iter != mapping.end())
+            ret.reserve(result.size());
+            for (auto& i: result)
             {
-                ret.push_back(iter->second);
+                auto& mapping = timer_operation ? timer_int_id_to_string_id[thread_id] : record_int_id_to_string_id[thread_id];
+                auto iter = mapping.find(i);
+                if (iter != mapping.end())
+                {
+                    ret.push_back(iter->second);
+                }
             }
         }
         return ret;
