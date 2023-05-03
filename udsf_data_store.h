@@ -940,14 +940,14 @@ public:
     std::vector<std::shared_timed_mutex> timer_tags_db_main_mutex;
 
     explicit Storage()
-        : schema_id_to_record_ids{number_of_worker_thread},
-          schema_id_to_record_ids_mutex{number_of_worker_thread},
-          record_tags_db{number_of_worker_thread},
-          record_tags_db_main_mutex{number_of_worker_thread},
-          all_timer_ids{number_of_worker_thread},
-          all_timer_ids_mutex{number_of_worker_thread},
-          timer_tags_db{number_of_worker_thread},
-          timer_tags_db_main_mutex{number_of_worker_thread}
+        : schema_id_to_record_ids(number_of_worker_thread),
+          schema_id_to_record_ids_mutex(number_of_worker_thread),
+          record_tags_db(number_of_worker_thread),
+          record_tags_db_main_mutex(number_of_worker_thread),
+          all_timer_ids(number_of_worker_thread),
+          all_timer_ids_mutex(number_of_worker_thread),
+          timer_tags_db(number_of_worker_thread),
+          timer_tags_db_main_mutex(number_of_worker_thread)
 
     {
     }
