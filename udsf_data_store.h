@@ -21,6 +21,7 @@
 #include "common_types.h"
 #include "h2load_utils.h"
 #include "udsf_util.h"
+#include <boost/multiprecision/cpp_int.hpp>
 
 extern bool debug_mode;
 extern bool schema_loose_check;
@@ -121,6 +122,40 @@ const std::string FALSE = "FALSE";
 
 constexpr uint16_t ONE_DIMENSION_SIZE = 0x100;
 
+#ifdef _MSC_VER
+using Record_Internal_Id = boost::multiprecision::int128_t;
+#else
+using Record_Internal_Id = __int128;
+
+// code from https://stackoverflow.com/users/649665/james-kanze
+std::ostream&
+operator<<( std::ostream& dest, __int128_t value )
+{
+    std::ostream::sentry s( dest );
+    if ( s ) {
+        __uint128_t tmp = value < 0 ? -value : value;
+        char buffer[ 128 ];
+        char* d = std::end( buffer );
+        do
+        {
+            -- d;
+            *d = "0123456789"[ tmp % 10 ];
+            tmp /= 10;
+        } while ( tmp != 0 );
+        if ( value < 0 ) {
+            -- d;
+            *d = '-';
+        }
+        int len = std::end( buffer ) - d;
+        if ( dest.rdbuf()->sputn( d, len ) != len ) {
+            dest.setstate( std::ios_base::badbit );
+        }
+    }
+    return dest;
+}
+
+#endif
+
 namespace udsf
 {
 
@@ -199,9 +234,9 @@ inline std::string get_string_value_from_Json_object(rapidjson::Value& object, c
     return "";
 }
 
-inline std::set<std::string> run_and_operator(const std::vector<std::set<std::string>>& operands)
+inline std::set<Record_Internal_Id> run_and_operator(const std::vector<std::set<Record_Internal_Id>>& operands)
 {
-    std::set<std::string> ret;
+    std::set<Record_Internal_Id> ret;
     size_t shortest_vector_index = 0;
     for (size_t i = 0; i < operands.size(); i ++)
     {
@@ -233,9 +268,9 @@ inline std::set<std::string> run_and_operator(const std::vector<std::set<std::st
     return ret;
 }
 
-inline std::set<std::string> run_or_operator(const std::vector<std::set<std::string>>& operands)
+inline std::set<Record_Internal_Id> run_or_operator(const std::vector<std::set<Record_Internal_Id>>& operands)
 {
-    std::set<std::string> ret;
+    std::set<Record_Internal_Id> ret;
     for (auto& v : operands)
     {
         for (auto& s : v)
@@ -246,10 +281,10 @@ inline std::set<std::string> run_or_operator(const std::vector<std::set<std::str
     return ret;
 }
 
-inline std::set<std::string> run_not_operator(const std::set<std::string>& source,
-                                              const std::set<std::string>& operands)
+inline std::set<Record_Internal_Id> run_not_operator(const std::set<Record_Internal_Id>& source,
+                                              const std::set<Record_Internal_Id>& operands)
 {
-    std::set<std::string> ret;
+    std::set<Record_Internal_Id> ret;
     for (auto& s : source)
     {
         if (operands.count(s) == 0)
@@ -766,7 +801,7 @@ class Tags_Value_Db_Of_One_Tag_Name
 {
 public:
     std::unique_ptr<std::shared_timed_mutex> value_to_resource_id_map_mutex;
-    std::map<std::string, std::set<std::string>> value_to_resource_id_map;
+    std::map<std::string, std::set<Record_Internal_Id>> value_to_resource_id_map;
     size_t count = 0;
     explicit Tags_Value_Db_Of_One_Tag_Name():
         value_to_resource_id_map_mutex(std::make_unique<std::shared_timed_mutex>())
@@ -890,7 +925,7 @@ class Record_Ids_Of_One_Schema
 {
 public:
     std::unique_ptr<std::shared_timed_mutex> record_ids_mutex;
-    std::set<std::string> record_ids;
+    std::set<Record_Internal_Id> record_ids;
     explicit Record_Ids_Of_One_Schema():
         record_ids_mutex(std::make_unique<std::shared_timed_mutex>())
     {
@@ -934,10 +969,17 @@ public:
     std::vector<Record_Tags_Db> record_tags_db;
     std::vector<std::shared_timed_mutex> record_tags_db_main_mutex;
 
-    std::vector<std::set<std::string>> all_timer_ids;
+    std::vector<std::set<Record_Internal_Id>> all_timer_ids;
     std::vector<std::shared_timed_mutex> all_timer_ids_mutex;
     std::vector<Record_Tags_Db> timer_tags_db;
     std::vector<std::shared_timed_mutex> timer_tags_db_main_mutex;
+
+    std::vector<std::map<Record_Internal_Id, std::string>> record_int_id_to_string_id;
+    std::vector<std::unordered_map<std::string, Record_Internal_Id>> record_string_id_to_int_id;
+    std::vector<Record_Internal_Id> record_int_id_counter;
+    std::vector<std::map<Record_Internal_Id, std::string>> timer_int_id_to_string_id;
+    std::vector<std::unordered_map<std::string, Record_Internal_Id>> timer_string_id_to_int_id;
+    std::vector<Record_Internal_Id> timer_int_id_counter;
 
     explicit Storage()
         : schema_id_to_record_ids{number_of_worker_thread},
@@ -947,8 +989,13 @@ public:
           all_timer_ids{number_of_worker_thread},
           all_timer_ids_mutex{number_of_worker_thread},
           timer_tags_db{number_of_worker_thread},
-          timer_tags_db_main_mutex{number_of_worker_thread}
-
+          timer_tags_db_main_mutex{number_of_worker_thread},
+          record_int_id_counter{number_of_worker_thread, 0},
+          record_int_id_to_string_id{number_of_worker_thread},
+          record_string_id_to_int_id{number_of_worker_thread},
+          timer_int_id_counter{number_of_worker_thread, 0},
+          timer_int_id_to_string_id{number_of_worker_thread},
+          timer_string_id_to_int_id{number_of_worker_thread}
     {
     }
 
@@ -1018,11 +1065,21 @@ public:
                 }
             }
         }
+        for (auto& m: record_int_id_to_string_id[g_current_thread_id])
+        {
+            std::cerr << "record internal id: " << m.first << std::endl << std::flush;
+            std::cerr << "record string id: " << m.second << std::endl << std::flush;
+        }
+        for (auto& m: timer_int_id_to_string_id[g_current_thread_id])
+        {
+            std::cerr << "timer internal id: " << m.first << std::endl << std::flush;
+            std::cerr << "timer string id: " << m.second << std::endl << std::flush;
+        }
     }
 
-    std::set<std::string> get_all_record_ids(size_t thread_id, const std::string& schema_id)
+    std::set<Record_Internal_Id> get_all_record_ids(size_t thread_id, const std::string& schema_id)
     {
-        std::set<std::string> ret;
+        std::set<Record_Internal_Id> ret;
         if (schema_id.size())
         {
             auto iter = schema_id_to_record_ids[thread_id].find(schema_id);
@@ -1063,7 +1120,7 @@ public:
     }
 
     void insert_value_to_tags_db(const std::string& tag_name, const std::string& tag_value,
-                                 const std::string& resource_id,
+                                 Record_Internal_Id resource_id,
                                  Tags_Values_Db_With_Tags_Name_As_Key& tags_name_db,
                                  bool create_new_value_db_if_not_exist = false)
     {
@@ -1085,7 +1142,7 @@ public:
     }
 
     void insert_record_tag_value(const std::string& schema_id, const std::string& tag_name, const std::string& tag_value,
-                                  const std::string& record_id, size_t thread_id)
+                                  Record_Internal_Id record_id, size_t thread_id)
     {
         if (debug_mode)
         {
@@ -1112,7 +1169,7 @@ public:
     }
 
     void remove_value_from_tags_db(const std::string& tag_name, const std::string& tag_value,
-                                   const std::string& resource_id,
+                                   Record_Internal_Id resource_id,
                                    Tags_Values_Db_With_Tags_Name_As_Key& tags_name_db
                                   )
     {
@@ -1139,7 +1196,7 @@ public:
     }
 
     void remove_record_tag_value(const std::string& schema_id, const std::string& tag_name, const std::string& tag_value,
-                                  const std::string& record_id, size_t thread_id)
+                                  Record_Internal_Id record_id, size_t thread_id)
     {
         auto tags_db_iter = record_tags_db[thread_id].find(schema_id);
         if (tags_db_iter != record_tags_db[thread_id].end())
@@ -1149,7 +1206,7 @@ public:
         }
     }
 
-    std::set<std::string> run_search_comparison(const std::string& schema_id, const std::string& op,
+    std::set<Record_Internal_Id> run_search_comparison(const std::string& schema_id, const std::string& op,
                                                 const std::string& tag_name, const std::string& tag_value,
                                                 std::shared_timed_mutex& mutex, Record_Tags_Db& tags_db, size_t& count, bool count_indicator = false)
     {
@@ -1165,7 +1222,7 @@ public:
                 print_record_tags_db(record_tags_db[i]);
             }
         }
-        std::set<std::string> s;
+        std::set<Record_Internal_Id> s;
         count = 0;
         if (op == "NEQ")
         {
@@ -1336,7 +1393,7 @@ public:
         return count;
     }
 
-    void track_record_id(const std::string& schema_id, const std::string& record_id, size_t thread_id, bool insert = true)
+    void track_record_id(const std::string& schema_id, Record_Internal_Id record_id, size_t thread_id, bool insert = true)
     {
         auto iter = schema_id_to_record_ids[thread_id].find(schema_id);
         auto track_it = [insert, &record_id](decltype(schema_id_to_record_ids[thread_id].begin()->second)&
@@ -1483,8 +1540,8 @@ public:
                 checkout_record(record_id, iter->second.meta);
                 update = true;
             }
-            checkin_record(record_id, record.meta);
             *target = std::move(record);
+            checkin_record(record_id, target->meta);
             record_map_write_guard.unlock();
             send_notify(record_id, "", update ? RECORD_OPERATION_UPDATED : RECORD_OPERATION_CREATED);
             return 0;
@@ -1518,8 +1575,14 @@ public:
 
         auto run_in_dest_worker = [this, thread_id, record_id, old_meta]()
         {
+            auto record_int_id = remove_record_id_mapping(record_id);
+            if (record_int_id == 0)
+            {
+                return;
+            }
             if (debug_mode)
             {
+                std::cerr << __func__<<": record internal id: "<<record_int_id<< std::endl;
                 std::cerr << __func__<<": record tags db before delete, thread id: "<<thread_id<< std::endl;
                 print_record_tags_db(record_tags_db[thread_id]);
             }
@@ -1529,7 +1592,7 @@ public:
                 auto& tag_values = tag.second;
                 for (auto& tag_value : tag_values)
                 {
-                    remove_record_tag_value(old_meta.schemaId, tag_name, tag_value, record_id, thread_id);
+                    remove_record_tag_value(old_meta.schemaId, tag_name, tag_value, record_int_id, thread_id);
                 }
             }
             if (debug_mode)
@@ -1537,7 +1600,7 @@ public:
                 std::cerr << __func__<<": record tags db before delete, thread id: "<<thread_id<< std::endl;
                 print_record_tags_db(record_tags_db[thread_id]);
             }
-            track_record_id(old_meta.schemaId, record_id, thread_id, false);
+            track_record_id(old_meta.schemaId, record_int_id, thread_id, false);
             if (old_meta.ttl.size())
             {
                 track_record_ttl(iso8601_timestamp_to_seconds_since_epoch(old_meta.ttl), record_id, false);
@@ -1563,6 +1626,8 @@ public:
         }
         auto run_in_dest_worker = [this, thread_id, record_id, new_meta]()
         {
+            auto record_int_id = record_int_id_counter[thread_id]++;
+            update_record_id_mapping(record_id, record_int_id);
             if (debug_mode)
             {
                 std::cerr << __func__<<": record tags db before insert, thread id: "<<thread_id<< std::endl;
@@ -1574,7 +1639,7 @@ public:
                 auto& tag_values = tag.second;
                 for (auto& tag_value : tag_values)
                 {
-                    insert_record_tag_value(new_meta.schemaId, tag_name, tag_value, record_id, thread_id);
+                    insert_record_tag_value(new_meta.schemaId, tag_name, tag_value, record_int_id, thread_id);
                 }
             }
             if (debug_mode)
@@ -1582,7 +1647,7 @@ public:
                 std::cerr << __func__<<": record tags db after insert, thread id: "<<thread_id<< std::endl;
                 print_record_tags_db(record_tags_db[thread_id]);
             }
-            track_record_id(new_meta.schemaId, record_id, thread_id);
+            track_record_id(new_meta.schemaId, record_int_id, thread_id);
             if (new_meta.ttl.size())
             {
                 track_record_ttl(iso8601_timestamp_to_seconds_since_epoch(new_meta.ttl), record_id);
@@ -1608,7 +1673,6 @@ public:
             auto record = std::move(iter->second);
             records[sum].erase(iter);
             checkout_record(record_id, record.meta);
-            // checkout_record(record_id, iter->second.meta);
             return true;
         }
         return false;
@@ -1785,6 +1849,57 @@ public:
         return false;
     }
 
+    void update_id_mapping(std::vector<std::unordered_map<std::string, Record_Internal_Id>>& ext_to_int_mappings,
+                                   std::vector<std::map<Record_Internal_Id, std::string>>& int_to_ext_mappings, 
+                                   const std::string& ext_id, Record_Internal_Id int_id)
+    {
+        ext_to_int_mappings[g_current_thread_id][ext_id] = int_id;
+        int_to_ext_mappings[g_current_thread_id][int_id] = ext_id;
+    }
+
+    void update_record_id_mapping(const std::string& record_id, Record_Internal_Id int_id)
+    {
+        return update_id_mapping(record_string_id_to_int_id, record_int_id_to_string_id, record_id, int_id);
+    }
+
+    Record_Internal_Id remove_id_mapping(std::vector<std::unordered_map<std::string, Record_Internal_Id>>& ext_to_int_mappings,
+                                                 std::vector<std::map<Record_Internal_Id, std::string>>& int_to_ext_mappings, 
+                                                 const std::string& ext_id)
+    {
+        Record_Internal_Id int_id = 0;
+        auto& mapping = ext_to_int_mappings[g_current_thread_id];
+        auto iter = mapping.find(ext_id);
+        if (iter != mapping.end())
+        {
+            int_id = iter->second;
+            mapping.erase(iter);
+        }
+        int_to_ext_mappings[g_current_thread_id].erase(int_id);
+        return int_id;
+    }
+
+    Record_Internal_Id remove_record_id_mapping(const std::string& record_id)
+    {
+        return remove_id_mapping(record_string_id_to_int_id, record_int_id_to_string_id, record_id);
+    }
+
+
+    Record_Internal_Id get_internal_id(std::vector<std::unordered_map<std::string, Record_Internal_Id>>& mappings, const std::string& ext_id)
+    {
+        auto& mapping = mappings[g_current_thread_id];
+        auto iter = mapping.find(ext_id);
+        if (iter != mapping.end())
+        {
+            return iter->second;
+        }
+        return 0;
+    }
+
+    Record_Internal_Id get_record_internal_id(const std::string& record_id)
+    {
+        return get_internal_id(record_string_id_to_int_id, record_id);
+    }
+
     bool create_or_update_block(const std::string& record_id, const std::string& id, const std::string& type,
                                 const std::string& blockData,
                                 const std::map<std::string, std::string, ci_less>& headers, bool& update)
@@ -1840,7 +1955,7 @@ public:
         std::cerr << "schema violation: " << buffer.GetString() << std::endl;
     }
 
-    std::set<std::string> get_record_id_list_from_array(rapidjson::Value& value)
+    std::set<Record_Internal_Id> get_record_id_list_from_array(rapidjson::Value& value, bool timer_op)
     {
         std::set<std::string> s;
         if (value.IsArray())
@@ -1857,13 +1972,22 @@ public:
         {
             schema_violation_handling(value);
         }
-        return s;
+        std::set<Record_Internal_Id> ret;
+        for (auto& id: s)
+        {
+            Record_Internal_Id int_id = timer_op ? get_timer_internal_id(id) : get_record_internal_id(id);
+            if (int_id != 0)
+            {
+                ret.insert(int_id);
+            }
+        }
+        return ret;
     }
 
-    std::set<std::string> run_search_comparison_or_record_id_list(const std::string& schema_id,
+    std::set<Record_Internal_Id> run_search_comparison_or_record_id_list(const std::string& schema_id,
                                                                    rapidjson::Value& value, size_t thread_id, bool timer_operation = false)
     {
-        std::set<std::string> ret;
+        std::set<Record_Internal_Id> ret;
         size_t count;
         if (value.HasMember(OPERATION.c_str()))
         {
@@ -1884,12 +2008,12 @@ public:
         {
             auto& sub_value = value[RECORD_ID_LIST.c_str()];
 
-            ret = get_record_id_list_from_array(sub_value);
+            ret = get_record_id_list_from_array(sub_value, timer_operation);
         }
         return ret;
     }
 
-    std::set<std::string> run_search_expression_non_recursive_opt(rapidjson::Document& doc,
+    std::vector<std::string> run_search_expression_non_recursive_opt(rapidjson::Document& doc,
                                                                    size_t thread_id, bool timer_operation = false)
     {
         if (debug_mode)
@@ -1903,13 +2027,13 @@ public:
         {
             Search_Expression_In_Stack* parent;
             rapidjson::Value* value;
-            std::vector<std::set<std::string>> operands;
+            std::vector<std::set<Record_Internal_Id>> operands;
             Search_Expression_In_Stack(Search_Expression_In_Stack* p, rapidjson::Value* s)
                 : parent(p), value(s)
             {
             }
         };
-        std::set<std::string> result;
+        std::set<Record_Internal_Id> result;
         std::stack<Search_Expression_In_Stack> search_conditions;
         std::stack<Search_Expression_In_Stack> values;
         values.push(Search_Expression_In_Stack(nullptr, &doc));
@@ -1985,7 +2109,7 @@ public:
             {
                 auto p = &search_cond;
                 auto cond_op = condition_operator;
-                std::set<std::string> not_op_source;
+                std::set<Record_Internal_Id> not_op_source;
                 while (cond_op != CONDITION_OP_AND && p->parent)
                 {
                     p = p->parent;
@@ -2004,7 +2128,18 @@ public:
                 search_cond.parent->operands.emplace_back(std::move(result));
             }
         }
-        return result;
+        std::vector<std::string> ret;
+        ret.reserve(result.size());
+        for (auto& i: result)
+        {
+            auto& mapping = timer_operation ? timer_int_id_to_string_id[thread_id] : record_int_id_to_string_id[thread_id];
+            auto iter = mapping.find(i);
+            if (iter != mapping.end())
+            {
+                ret.push_back(iter->second);
+            }
+        }
+        return ret;
     }
 
     int create_subscription(const std::string& subscription_id, NotificationSubscription subscription)
@@ -2376,7 +2511,7 @@ public:
         }
     }
 
-    std::set<std::string> get_all_timer_ids(size_t thread_id)
+    std::set<Record_Internal_Id> get_all_timer_ids(size_t thread_id)
     {
         //std::shared_lock<std::shared_timed_mutex> timer_id_set_read_lock(all_timer_ids_mutex);
         return all_timer_ids[thread_id];
@@ -2398,6 +2533,8 @@ public:
         auto thread_id = (u8 % number_of_worker_thread);
         auto run_in_worker = [timer_id, timer, thread_id, this]()
         {
+            auto timer_int_id = timer_int_id_counter[thread_id]++;
+            update_timer_id_mapping(timer_id, timer_int_id);
             for (auto& t : timer.metaTags)
             {
                 auto& tag_name = t.first;
@@ -2409,12 +2546,12 @@ public:
                 auto& tags_name_db = timer_tags_db[thread_id].begin()->second;
                 for (auto& tag_value : tag_values)
                 {
-                    insert_value_to_tags_db(tag_name, tag_value, timer_id, tags_name_db, true);
+                    insert_value_to_tags_db(tag_name, tag_value, timer_int_id, tags_name_db, true);
                 }
             }
             auto ttl = iso8601_timestamp_to_seconds_since_epoch(timer.expires);
             track_timer_ttl(ttl, timer_id);
-            all_timer_ids[thread_id].insert(timer_id);
+            all_timer_ids[thread_id].insert(timer_int_id);
         };
         g_strands[thread_id].post(run_in_worker);
     }
@@ -2425,6 +2562,11 @@ public:
         auto thread_id = (u8 % number_of_worker_thread);
         auto run_in_worker = [timer_id, timer, thread_id, this]()
         {
+            auto timer_int_id = remove_timer_id_mapping(timer_id);
+            if (timer_int_id == 0)
+            {
+                return;
+            }
             for (auto& t : timer.metaTags)
             {
                 auto& tag_name = t.first;
@@ -2432,11 +2574,11 @@ public:
                 auto& tags_name_db = timer_tags_db[thread_id].begin()->second;
                 for (auto& tag_value : tag_values)
                 {
-                    remove_value_from_tags_db(tag_name, tag_value, timer_id, tags_name_db);
+                    remove_value_from_tags_db(tag_name, tag_value, timer_int_id, tags_name_db);
                 }
             }
             track_timer_ttl(iso8601_timestamp_to_seconds_since_epoch(timer.expires), timer_id, false);
-            all_timer_ids[thread_id].erase(timer_id);
+            all_timer_ids[thread_id].erase(timer_int_id);
         };
         g_strands[thread_id].post(run_in_worker);
     }
@@ -2444,7 +2586,7 @@ public:
     Timer delete_timer(const std::string& timer_id)
     {
         uint16_t sum = get_u16_sum(timer_id);
-        std::shared_lock<std::shared_timed_mutex> timers_mutexes_read_lock(
+        std::unique_lock<std::shared_timed_mutex> timers_mutexes_write_lock(
             timers_mutexes[sum]);
         auto& id_to_timers = timers[sum];
         auto iter = id_to_timers.find(timer_id);
@@ -2487,18 +2629,30 @@ public:
             {
                 checkout_timer(timer_id, timer_object);
             }
-
-            checkin_timer(timer_id, timer);
-
-            timer_object = timer;
+            timer_object = std::move(timer);
             timer_object.timerId = timer_id;
-
+            checkin_timer(timer_id, timer_object);
         }
         else
         {
             return DECODE_FAILURE;
         }
         return OPERATION_SUCCESSFUL;
+    }
+
+    void update_timer_id_mapping(const std::string& timer_id, Record_Internal_Id int_id)
+    {
+        return update_id_mapping(timer_string_id_to_int_id, timer_int_id_to_string_id, timer_id, int_id);
+    }
+
+    Record_Internal_Id remove_timer_id_mapping(const std::string& timer_id)
+    {
+        return remove_id_mapping(timer_string_id_to_int_id, timer_int_id_to_string_id, timer_id);
+    }
+
+    Record_Internal_Id get_timer_internal_id(const std::string& timer_id)
+    {
+        return get_internal_id(timer_string_id_to_int_id, timer_id);
     }
 
     int patch_timer(const std::string& timer_id, const std::string& patch_data)

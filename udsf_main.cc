@@ -28,7 +28,7 @@ public:
 class Search_Result
 {
 public:
-    std::set<std::string> matched_records;
+    std::vector<std::string> matched_records;
     size_t matched_record_count = 0;
     bool search_done = false;
 };
@@ -46,7 +46,6 @@ public:
 
 thread_local std::map<std::pair<size_t, int32_t>, Distributed_Request<Search_Request, Search_Result>>
                                                                                                    filter_based_search;
-
 std::map<std::string, std::string> get_queries(const nghttp2::asio_http2::server::asio_server_request& req)
 {
     auto& raw_query = req.uri().raw_query;
@@ -560,7 +559,7 @@ void return_count(nghttp2::asio_http2::server::asio_server_response& res, size_t
 
 void merge_search_result_and_send_search_response(udsf::Storage& storage, size_t worker_thread_index,
                                                   size_t originating_thread_id,
-                                                  std::set<std::string>& records, size_t count,
+                                                  std::vector<std::string>& records, size_t count,
                                                   uint64_t handler_id, int32_t stream_id)
 {
     auto run_in_originating_thread = [&storage, worker_thread_index, handler_id, stream_id, count,
@@ -768,7 +767,7 @@ bool process_records_in_parallel(const nghttp2::asio_http2::server::asio_server_
             if (search.request.count_indicator && search.request.method == METHOD_GET && search.request.search_exp.IsNull())
             {
                 auto count = storage.get_all_record_count(target_thread_id);
-                std::set<std::string> dummy;
+                std::vector<std::string> dummy;
                 return merge_search_result_and_send_search_response(storage, target_thread_id, orig_thread_id, dummy, count,
                                                                     handler_id, stream_id);
             }
@@ -781,7 +780,7 @@ bool process_records_in_parallel(const nghttp2::asio_http2::server::asio_server_
                 std::string val = udsf::get_string_value_from_Json_object(search.request.search_exp, "value");
                 auto schema_id = udsf::get_string_value_from_Json_object(search.request.search_exp, SCHEMA_ID);
                 size_t count;
-                std::set<std::string> dummy;
+                std::vector<std::string> dummy;
                 auto ret = storage.run_search_comparison(schema_id, op, tag, val, storage.record_tags_db_main_mutex[target_thread_id],
                                                          storage.record_tags_db[target_thread_id], count, true);
                 return merge_search_result_and_send_search_response(storage, target_thread_id, orig_thread_id, dummy, count,
@@ -1264,7 +1263,7 @@ void send_response_to_time_request(const nghttp2::asio_http2::server::asio_serve
 
 void merge_timer_search_request_and_send_response(udsf::Storage& storage, size_t worker_thread_index,
                                                   size_t originating_thread_id,
-                                                  std::set<std::string>& timers, size_t count,
+                                                  std::vector<std::string>& timers, size_t count,
                                                   uint64_t handler_id, int32_t stream_id)
 {
     auto run_in_originating_thread = [&storage, worker_thread_index, handler_id, stream_id, count,
