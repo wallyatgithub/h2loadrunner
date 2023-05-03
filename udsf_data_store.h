@@ -982,20 +982,20 @@ public:
     std::vector<Record_Internal_Id> timer_int_id_counter;
 
     explicit Storage()
-        : schema_id_to_record_ids{number_of_worker_thread},
-          schema_id_to_record_ids_mutex{number_of_worker_thread},
-          record_tags_db{number_of_worker_thread},
-          record_tags_db_main_mutex{number_of_worker_thread},
-          all_timer_ids{number_of_worker_thread},
-          all_timer_ids_mutex{number_of_worker_thread},
-          timer_tags_db{number_of_worker_thread},
-          timer_tags_db_main_mutex{number_of_worker_thread},
+        : schema_id_to_record_ids(number_of_worker_thread),
+          schema_id_to_record_ids_mutex(number_of_worker_thread),
+          record_tags_db(number_of_worker_thread),
+          record_tags_db_main_mutex(number_of_worker_thread),
+          all_timer_ids(number_of_worker_thread),
+          all_timer_ids_mutex(number_of_worker_thread),
+          timer_tags_db(number_of_worker_thread),
+          timer_tags_db_main_mutex(number_of_worker_thread),
           record_int_id_counter(number_of_worker_thread, 0),
-          record_int_id_to_string_id{number_of_worker_thread},
-          record_string_id_to_int_id{number_of_worker_thread},
+          record_int_id_to_string_id(number_of_worker_thread),
+          record_string_id_to_int_id(number_of_worker_thread),
           timer_int_id_counter(number_of_worker_thread, 0),
-          timer_int_id_to_string_id{number_of_worker_thread},
-          timer_string_id_to_int_id{number_of_worker_thread}
+          timer_int_id_to_string_id(number_of_worker_thread),
+          timer_string_id_to_int_id(number_of_worker_thread)
     {
     }
 
