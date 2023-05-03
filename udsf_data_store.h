@@ -125,7 +125,7 @@ constexpr uint16_t ONE_DIMENSION_SIZE = 0x100;
 #ifdef _MSC_VER
 using Record_Internal_Id = boost::multiprecision::int128_t;
 #else
-using Record_Internal_Id = __int128;
+using Record_Internal_Id = __int128_t;
 
 // code from https://stackoverflow.com/users/649665/james-kanze
 std::ostream&
@@ -990,10 +990,10 @@ public:
           all_timer_ids_mutex{number_of_worker_thread},
           timer_tags_db{number_of_worker_thread},
           timer_tags_db_main_mutex{number_of_worker_thread},
-          record_int_id_counter{number_of_worker_thread, 0},
+          record_int_id_counter(number_of_worker_thread, 0),
           record_int_id_to_string_id{number_of_worker_thread},
           record_string_id_to_int_id{number_of_worker_thread},
-          timer_int_id_counter{number_of_worker_thread, 0},
+          timer_int_id_counter(number_of_worker_thread, 0),
           timer_int_id_to_string_id{number_of_worker_thread},
           timer_string_id_to_int_id{number_of_worker_thread}
     {
@@ -1626,7 +1626,8 @@ public:
         }
         auto run_in_dest_worker = [this, thread_id, record_id, new_meta]()
         {
-            auto record_int_id = record_int_id_counter[thread_id]++;
+            auto& count = record_int_id_counter[thread_id];
+            Record_Internal_Id record_int_id = count++;
             update_record_id_mapping(record_id, record_int_id);
             if (debug_mode)
             {
@@ -2533,7 +2534,8 @@ public:
         auto thread_id = (u8 % number_of_worker_thread);
         auto run_in_worker = [timer_id, timer, thread_id, this]()
         {
-            auto timer_int_id = timer_int_id_counter[thread_id]++;
+            auto& count = timer_int_id_counter[thread_id];
+            Record_Internal_Id timer_int_id = count++;
             update_timer_id_mapping(timer_id, timer_int_id);
             for (auto& t : timer.metaTags)
             {
