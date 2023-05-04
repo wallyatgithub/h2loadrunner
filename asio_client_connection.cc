@@ -993,7 +993,6 @@ bool asio_client_connection::handle_write_complete(bool is_quic, const boost::sy
 
     restart_timeout_timer();
 
-
 #ifdef ENABLE_HTTP3
     if (is_quic)
     {
