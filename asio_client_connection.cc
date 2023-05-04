@@ -317,6 +317,10 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
         exit(1);
     }
     output_data_length = 0;
+    is_write_in_progress = false;
+    write_signaled = false;
+    output_buffer_index = 0;
+    is_client_stopped = false;
 
     if (schema == "https")
     {
