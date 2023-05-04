@@ -74,7 +74,7 @@ int _send_response(lua_State* L, bool updatePayload);
 
 
 int _send_http_request(lua_State* L, Request_Preprocessor request_preprocessor,
-                       std::function<void(int32_t, h2load::base_client*)> request_sent_callback);
+                       std::function<void(int64_t, h2load::base_client*)> request_sent_callback);
 
 void load_and_run_lua_script(const std::vector<std::string>& lua_scripts, h2load::Config& config);
 
@@ -108,7 +108,7 @@ struct Lua_State_Data
 
 struct Host_Resolution_Data
 {
-    std::vector<lua_State*> lua_sates_await_result;
+    std::vector<lua_State*> lua_states_await_result;
     std::vector<std::string> ip_addresses;
     std::chrono::steady_clock::time_point expire_time_point;
 };
@@ -201,5 +201,12 @@ void format_length_prefixed_message(std::string& payload);
  */
 uint64_t leave_c_function(lua_State* L);
 
+void update_proto(std::map<std::string, std::string, ci_less>& headers, std::string& payload,
+                  std::string& orig_dst,
+                  std::string& proto);
+
+void update_orig_dst_and_proto(std::map<std::string, std::string, ci_less>& headers, std::string& payload,
+                               std::string& orig_dst,
+                               std::string& proto);
 
 #endif

@@ -40,6 +40,7 @@
 #include <boost/asio/ssl.hpp>
 #include "nghttp2_config.h"
 #include <nghttp2/nghttp2.h>
+#include "common_types.h"
 
 namespace nghttp2 {
 
@@ -56,7 +57,7 @@ struct header_value {
 };
 
 // header fields.  The header field name must be lower-cased.
-using header_map = std::multimap<std::string, header_value>;
+using header_map = std::multimap<std::string, header_value, ci_less>;
 
 const boost::system::error_category &nghttp2_category() noexcept;
 

@@ -20,7 +20,6 @@ extern "C" {
 #include "h2load_Config.h"
 #include "libev_worker.h"
 #include "h2load_session.h"
-#include "h2load_stats.h"
 #include "h2load_Cookie.h"
 #include "h2load_utils.h"
 #include "base_client.h"
@@ -34,20 +33,20 @@ class libev_client: public base_client
 public:
     enum { ERR_CONNECT_FAIL = -100 };
 
-    libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Config* conf,
-           libev_client* parent = nullptr, const std::string& dest_schema = "",
-           const std::string& dest_authority = "");
+    libev_client(uint32_t id, libev_worker* wrker, size_t req_todo, Config* conf, SSL_CTX* ssl_ctx,
+                 base_client* parent = nullptr, const std::string& dest_schema = "",
+                 const std::string& dest_authority = "", PROTO_TYPE proto = PROTO_UNSPECIFIED);
     virtual ~libev_client();
     virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length);
     virtual void signal_write() ;
     virtual bool any_pending_data_to_write();
     virtual void start_conn_active_watcher();
     virtual std::shared_ptr<base_client> create_dest_client(const std::string& dst_sch,
-                                                                 const std::string& dest_authority);
-    virtual int connect_to_host(const std::string& schema, const std::string& authority);
+                                                            const std::string& dest_authority,
+                                                            PROTO_TYPE proto = PROTO_UNSPECIFIED);
+    virtual int connect_to_host(const std::string& dest_schema, const std::string& dest_authority);
     virtual void disconnect();
     virtual void clear_default_addr_info();
-    virtual void setup_connect_with_async_fqdn_lookup();
     virtual void feed_timing_script_request_timeout_timer();
     virtual void graceful_restart_connection();
     virtual void restart_timeout_timer();
@@ -66,14 +65,16 @@ public:
     virtual void stop_warmup_timer();
     virtual void start_conn_inactivity_watcher();
     virtual void stop_conn_inactivity_timer();
-    virtual int make_async_connection();
-    virtual int do_connect();
     virtual void start_delayed_reconnect_timer();
     virtual void probe_and_connect_to(const std::string& schema, const std::string& authority);
     virtual void setup_graceful_shutdown();
+    virtual bool is_write_signaled();
+    virtual void stop_delayed_execution_timer();
 
     int do_read();
     int do_write();
+
+    int connect_async();
 
     // low-level I/O callback functions called by do_read/do_write
     int connected();
@@ -94,18 +95,35 @@ public:
     bool probe_address(ares_addrinfo* ares_address);
 
     int write_clear_with_callback();
-    void restore_connectfn();
     int connect_with_async_fqdn_lookup();
     void init_ares();
 
     template<class T>
     int make_socket(T* addr);
 
+#ifdef ENABLE_HTTP3
+    int read_quic();
+    int write_quic();
+    int write_udp(const sockaddr* addr, socklen_t addrlen, const uint8_t* data,
+                  size_t datalen, size_t gso_size);
+    void quic_restart_pkt_timer();
+
+    void setup_quic_pkt_timer();
+    void quic_close_connection();
+    void on_send_blocked(const ngtcp2_addr& remote_addr, const uint8_t* data,
+                         size_t datalen, size_t gso_size);
+    int send_blocked_packet();
+
+    ev_timer pkt_timer;
+
+    int quic_pkt_timeout();
+
+#endif
+
     DefaultMemchunks wb;
     ev_io wev;
     ev_io rev;
     std::function<int(libev_client&)> readfn, writefn;
-    std::function<int(libev_client&)> connectfn;
     ev_timer request_timeout_watcher;
     addrinfo* next_addr;
     // Address for the current address.  When try_new_connection() is
@@ -115,6 +133,7 @@ public:
     addrinfo* current_addr;
     ares_addrinfo* ares_address;
     int fd;
+    Address local_addr;
     ev_timer conn_active_watcher;
     ev_timer conn_inactivity_watcher;
     // rps_watcher is a timer to invoke callback periodically to
