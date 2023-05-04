@@ -6,7 +6,9 @@
 #include "template.h"
 #include "h2load_utils.h"
 #include "h2load_Config.h"
-
+#ifdef ENABLE_HTTP3
+#include <nghttp3/nghttp3.h>
+#endif
 
 namespace h2load
 {
@@ -30,12 +32,16 @@ bool Config::rps_enabled() const
 
 Config::Config()
     : ciphers(tls::DEFAULT_CIPHER_LIST),
+      tls13_ciphers("TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_"
+                    "CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256"),
+      groups("X25519:P-256:P-384:P-521"),
       data_length(0),
       addrs(nullptr),
       nreqs(1),
       nclients(1),
       nthreads(1),
       max_concurrent_streams(1),
+      max_frame_size(16_k),
       window_bits(30),
       connection_window_bits(30),
       rate(0),
@@ -57,16 +63,11 @@ Config::Config()
       unix_addr {},
 #endif
       rps(0.),
-      //      req_variable_start(0),
-      //      req_variable_end(0),
-      //      req_variable_name(""),
-      //      crud_resource_header_name(""),
-      //      crud_create_method(""),
-      //      crud_update_method(""),
-      //      crud_delete_method(""),
-      //      crud_create_data_file_name(""),
-      //      crud_update_data_file_name(""),
-      stream_timeout_in_ms(5000) {}
+      stream_timeout_in_ms(5000),
+      no_udp_gso(false),
+      max_udp_payload_size(0),
+      ktls(false)
+      {}
 
 Config::~Config()
 {
@@ -83,6 +84,16 @@ Config::~Config()
             freeaddrinfo(addrs);
         }
     }
+}
+bool Config::is_quic() const
+{
+#ifdef ENABLE_HTTP3
+    return !npn_list.empty() &&
+           (npn_list[0] == NGHTTP3_ALPN_H3 || npn_list[0] == "\x5h3-29");
+#else  // !ENABLE_HTTP3
+    return false;
+#endif // !ENABLE_HTTP3
+
 }
 
 }

@@ -71,7 +71,7 @@ int store_value(lua_State* L)
         lua_settop(L, 0);
     }
     uint16_t sum = get_u16_sum(key);
-    uint8_t row = sum >> 16;
+    uint8_t row = sum >> 8;
     uint8_t col = sum & 0xFF;
     std::lock_guard<std::mutex> guard(global_data_mutexes[row][col]);
     auto& global_data = global_datas[row][col];
@@ -96,7 +96,7 @@ int get_value(lua_State* L)
         lua_settop(L, 0);
     }
     uint16_t sum = get_u16_sum(key);
-    uint8_t row = sum >> 16;
+    uint8_t row = sum >> 8;
     uint8_t col = sum & 0xFF;
     std::lock_guard<std::mutex> guard(global_data_mutexes[row][col]);
     auto& global_data = global_datas[row][col];
@@ -130,7 +130,7 @@ int delete_value(lua_State* L)
     }
 
     uint16_t sum = get_u16_sum(key);
-    uint8_t row = sum >> 16;
+    uint8_t row = sum >> 8;
     uint8_t col = sum & 0xFF;
     std::lock_guard<std::mutex> guard(global_data_mutexes[row][col]);
     auto& global_data = global_datas[row][col];

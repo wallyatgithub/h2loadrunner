@@ -28,7 +28,6 @@
 #include "h2load_session.h"
 #include "base_client.h"
 #include "h2load_Config.h"
-#include "h2load_stats.h"
 
  
 namespace h2load
@@ -45,12 +44,11 @@ public:
     virtual int on_write();
     virtual void terminate();
     virtual size_t max_concurrent_streams();
-    virtual void submit_rst_stream(int32_t stream_id);
+    virtual void reset_stream(int64_t stream_id);
     virtual void submit_ping();
 
     Config* config;
     Stats& stats;
-    std::map<int32_t, Request_Data>& request_map;
 
 
 private:
