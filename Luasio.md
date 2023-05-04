@@ -86,7 +86,11 @@ Once the response from nUDR is received, Luasio will resume the exact coroutine 
 
 Data types of common variables used next:
 
-- request_header/response_header: a map with string as the key, and string as the value
+- request_header/response_header: a map with string as the key which is the header name, and string as the header value;
+
+  Pseudo-Header fields defined in rfc7540 section 8.1.2.1 are used to convey the target URI, and the method of the request.
+  
+  Specifically, to specify the host part of the URI, ":authority", instead of "host", shall be used in request_header
 
 - request_payload/response_payload: a string
 

@@ -3,8 +3,8 @@
 
 *Read this in other languages: [English](README.md).*
 
-# h2loadrunner 是一个用于HTTP 1.x / HTTP2的性能测试工具
-  h2loadrunner既支持HTTP 1.x，也支持HTTP2。
+# h2loadrunner 是一个用于HTTP 1.x / HTTP2 / HTTP3 的性能测试工具
+  h2loadrunner既支持HTTP 1.x，也支持HTTP2，也支持HTTP3 over QUIC。
 
   h2loadrunner最初基于nghttp2项目的h2load工具构建。
   
@@ -45,6 +45,8 @@
   13. 连接的failover和failback
 
   14. h2loadrunner原生支持Linux的Windows，在不同平台下，h2loadrunner均表现出强大的性能，这得益于Boost ASIO优秀的设计，可以充分利用Linux的epoll和Windows的IOCP的能力
+  
+  15. h2loadrunner支持直接加载并运行HAR文件
 
 # 如何快速尝试一下
 
@@ -97,5 +99,14 @@
   https://github.com/wallyatgithub/h2loadrunner#http-1x-support
   
   
+# Luasio: A cross-platform high-performance web platform
 
+  https://github.com/wallyatgithub/h2loadrunner#luasio-a-cross-platform-high-performance-web-platform
 
+# HTTP3 的支持
+
+  https://github.com/wallyatgithub/h2loadrunner#http3-support
+  
+# HAR 的支持
+
+  https://github.com/wallyatgithub/h2loadrunner#har-support

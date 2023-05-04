@@ -12,6 +12,10 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <boost/algorithm/string.hpp>
+#include <locale>
+#include <iomanip>
+#include <cstdio>
+#include <ctime>
 
 #ifdef USE_LIBEV
 extern "C" {
@@ -32,12 +36,21 @@ extern "C" {
 #include "util.h"
 #include "config_schema.h"
 #include "tls.h"
+#include "har_schema.h"
 
 #include <nghttp2/asio_httpx_server.h>
 
 #include "h2load_utils.h"
 #include "base_client.h"
 #include "asio_worker.h"
+#ifdef ENABLE_HTTP3
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#    include <ngtcp2/ngtcp2_crypto_openssl.h>
+#  endif // HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+#    include <ngtcp2/ngtcp2_crypto_boringssl.h>
+#  endif // HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+#endif   // ENABLE_HTTP3
 
 
 using namespace h2load;
@@ -84,14 +97,14 @@ std::shared_ptr<h2load::base_worker> create_worker(uint32_t id, SSL_CTX* ssl_ctx
 #else
     if (config.is_rate_mode())
     {
-        return std::make_shared<libev_worker>(id, ssl_ctx, nreqs, nclients, rate,
+        return std::make_shared<libev_worker>(id, nreqs, nclients, rate,
                                               max_samples, &config);
     }
     else
     {
         // Here rate is same as client because the rate_timeout callback
         // will be called only once
-        return std::make_shared<libev_worker>(id, ssl_ctx, nreqs, nclients, nclients,
+        return std::make_shared<libev_worker>(id, nreqs, nclients, nclients,
                                               max_samples, &config);
     }
 #endif
@@ -181,7 +194,7 @@ void writecb(struct ev_loop* loop, ev_io* w, int revents)
     if (rv == libev_client::ERR_CONNECT_FAIL)
     {
         client->disconnect();
-        if (client->reconnect_to_alt_addr())
+        if (client->reconnect_to_other_or_same_addr())
         {
             return;
         }
@@ -199,7 +212,7 @@ void writecb(struct ev_loop* loop, ev_io* w, int revents)
     if (rv != 0)
     {
         client->fail();
-        if (client->reconnect_to_alt_addr())
+        if (client->reconnect_to_other_or_same_addr())
         {
             return;
         }
@@ -213,11 +226,13 @@ void readcb(struct ev_loop* loop, ev_io* w, int revents)
     client->restart_timeout_timer();
     if (client->do_read() != 0)
     {
+        client->disconnect();
         if (client->try_again_or_fail() == 0)
         {
             return;
         }
-        if (client->reconnect_to_alt_addr())
+        client->process_abandoned_streams();
+        if (client->reconnect_to_other_or_same_addr())
         {
             return;
         }
@@ -320,7 +335,7 @@ void ares_addrinfo_query_callback(void* arg, int status, int timeouts, struct ar
         client->next_addr = nullptr;
         client->current_addr = nullptr;
         client->ares_address = res;
-        client->connect();
+        client->connect_async();
         ares_freeaddrinfo(client->ares_address);
         client->ares_address = nullptr;
     }
@@ -405,11 +420,25 @@ void ares_socket_state_cb(void* data, int s, int read, int write)
     }
 }
 
+#ifdef ENABLE_HTTP3
+void quic_pkt_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents)
+{
+    auto c = static_cast<libev_client*>(w->data);
+    if (c->quic_pkt_timeout() != 0)
+    {
+        c->fail();
+        c->worker->free_client(c);
+        return;
+    }
+}
+
+#endif
+
 #endif
 
 bool recorded(const std::chrono::steady_clock::time_point& t)
 {
-    return std::chrono::steady_clock::duration::zero() != t.time_since_epoch();
+    return std::chrono::steady_clock::time_point() != t;
 }
 
 std::string get_reqline(const char* uri, const http_parser_url& u)
@@ -705,9 +734,14 @@ process_time_stats(const std::vector<std::shared_ptr<h2load::base_worker>>& work
            };
 }
 
-bool is_null_destination(h2load::Config& config)
+bool request_template_unavailable(h2load::Config& config)
 {
     return (!config.base_uri_unix && config.connect_to_host.empty() && config.host.empty());
+    bool host_empty = (config.base_uri_unix && config.connect_to_host.empty() && config.host.empty());
+    bool empty_scenario = (config.json_config_schema.scenarios.size() == 1 &&
+                           config.json_config_schema.scenarios[0].requests.size() == 1 &&
+                           config.json_config_schema.scenarios[0].requests[0].uri.input.empty());
+    return (host_empty && empty_scenario);
 }
 
 void resolve_host(h2load::Config& config)
@@ -770,6 +804,23 @@ int client_select_next_proto_cb(SSL* ssl, unsigned char** out,
     // NOACK.  So there is no way to fallback.
     return SSL_TLSEXT_ERR_NOACK;
 }
+
+int client_select_next_proto_cb_http3(SSL* ssl, unsigned char** out,
+                                      unsigned char* outlen, const unsigned char* in,
+                                      unsigned int inlen, void* arg)
+{
+    std::vector<std::string> http3_npn_list = {HTTP3_ALPN};
+    if (util::select_protocol(const_cast<const unsigned char**>(out), outlen, in,
+                              inlen, http3_npn_list))
+    {
+        return SSL_TLSEXT_ERR_OK;
+    }
+
+    // OpenSSL will terminate handshake with fatal alert if we return
+    // NOACK.  So there is no way to fallback.
+    return SSL_TLSEXT_ERR_NOACK;
+}
+
 #endif // !OPENSSL_NO_NEXTPROTONEG
 
 void populate_config_from_json(h2load::Config& config)
@@ -805,6 +856,13 @@ void populate_config_from_json(h2load::Config& config)
     config.window_bits = config.json_config_schema.window_bits;
     config.connection_window_bits = config.json_config_schema.connection_window_bits;
     config.warm_up_time = config.json_config_schema.warm_up_time;
+    config.max_frame_size = config.json_config_schema.max_frame_size;
+    config.tls13_ciphers = config.json_config_schema.tls13_ciphers;
+    config.groups = config.json_config_schema.groups;
+    config.no_udp_gso = config.json_config_schema.no_udp_gso;
+    config.max_udp_payload_size = config.json_config_schema.max_udp_payload_size;
+    config.ktls = config.json_config_schema.ktls;
+    config.qlog_file_base = config.json_config_schema.qlog_file_base;
 }
 
 void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
@@ -823,6 +881,14 @@ void insert_customized_headers_to_Json_scenarios(h2load::Config& config)
                     request.additonalHeaders.emplace_back(header.name + ":" + header.value);
                 }
             }
+        }
+    }
+
+    for (auto& scenario : config.json_config_schema.scenarios)
+    {
+        for (auto& request : scenario.requests)
+        {
+            remove_reserved_http_headers(request.headers_in_map);
         }
     }
 }
@@ -909,6 +975,7 @@ std::string to_string_with_precision_3(const T a_value)
 
 size_t get_request_name_max_width(h2load::Config& config)
 {
+    const std::string all_requests = "All_Requests";
     size_t width = 0;
     for (size_t scenario_index = 0; scenario_index < config.json_config_schema.scenarios.size(); scenario_index++)
     {
@@ -919,13 +986,18 @@ size_t get_request_name_max_width(h2load::Config& config)
             width = req_name.size();
         }
     }
-    return width;
+    return std::max(width, all_requests.size());
 }
 
 void output_realtime_stats(h2load::Config& config,
                            std::vector<std::shared_ptr<h2load::base_worker>>& workers,
-                           std::atomic<bool>& workers_stopped, std::stringstream& dataStream)
+                           std::atomic<bool>& workers_stopped, std::stringstream& dataStream,
+                           std::condition_variable& stats_thread_wait_cond)
 {
+    if (config.json_config_schema.scenarios.size() == 0)
+    {
+        return;
+    }
     std::vector<std::vector<size_t>> scenario_req_sent_till_now;
     std::vector<std::vector<size_t>> scenario_req_done_till_now;
     std::vector<std::vector<size_t>> scenario_req_success_till_now;
@@ -946,6 +1018,7 @@ void output_realtime_stats(h2load::Config& config,
     }
 
     auto period_start = std::chrono::steady_clock::now();
+    std::this_thread::sleep_for(std::chrono::milliseconds(config.json_config_schema.statistics_interval * 1000));
     while (!workers_stopped)
     {
         auto scenario_req_sent_till_last_interval = scenario_req_sent_till_now;
@@ -955,8 +1028,6 @@ void output_realtime_stats(h2load::Config& config,
         auto scenario_3xx_till_last_interval = scenario_3xx_till_now;
         auto scenario_4xx_till_last_interval = scenario_4xx_till_now;
         auto scenario_5xx_till_last_interval = scenario_5xx_till_now;
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(config.json_config_schema.statistics_interval * 1000));
 
         auto now = std::chrono::system_clock::now();
         auto now_c = std::chrono::system_clock::to_time_t(now);
@@ -1144,6 +1215,10 @@ void output_realtime_stats(h2load::Config& config,
                               total_req_sent).size() : total_req_width;
 
         dataStream.str(outputStream.str());
+
+        static thread_local std::mutex local_mutex;
+        std::unique_lock<std::mutex> lock(local_mutex);
+        stats_thread_wait_cond.wait_for(lock, std::chrono::milliseconds(config.json_config_schema.statistics_interval * 1000));
     }
 }
 
@@ -1306,7 +1381,6 @@ void transform_old_style_variable(h2load::Config& config)
             for (auto& request : scenario.requests)
             {
                 transform_variable(request.uri.input, scenario.variable_name_in_path_and_data);
-                load_file_content(request.payload);
                 transform_variable(request.payload, scenario.variable_name_in_path_and_data);
             }
             if (scenario.user_id_list_file.size())
@@ -1359,6 +1433,13 @@ void split_string_and_var(const std::string& source, String_With_Variables_In_Be
 
 void process_variables(h2load::Config& config)
 {
+    for (auto& scenario : config.json_config_schema.scenarios)
+    {
+        for (auto& request : scenario.requests)
+        {
+            load_file_content(request.payload);
+        }
+    }
     transform_old_style_variable(config);
 
     for (auto& scenario : config.json_config_schema.scenarios)
@@ -1505,8 +1586,16 @@ void process_variables(h2load::Config& config)
                     request.headers_with_variable.emplace_back(std::make_pair(name_result, value_result));
                     continue;
                 }
+                util::inp_strlower(header_name);
+                if (reserved_headers.count(header_name))
+                {
+                    std::cerr << "WARNING: header " << header_name << " is not allowed in additonalHeaders, ignored" << std::endl;
+                    continue;
+                }
                 request.headers_in_map[header_name] = header_value;
             }
+            // not necessary as check above is down, just consistent with lua interface like _send_http_request
+            remove_reserved_http_headers(request.headers_in_map);
         }
     }
 }
@@ -1536,9 +1625,63 @@ void post_process_json_config_schema(h2load::Config& config)
 
     for (auto& scenario : config.json_config_schema.scenarios)
     {
+        if (scenario.har_file_name.size())
+        {
+            std::ifstream har_stream(scenario.har_file_name);
+            if (!har_stream)
+            {
+                std::cerr << "cannot read HAR file: " << scenario.har_file_name << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            std::string har_content((std::istreambuf_iterator<char>(har_stream)),
+                                    std::istreambuf_iterator<char>());
+            if (!convert_har_to_h2loadrunner_scenario(har_content, scenario, std::vector<std::string>{}))
+            {
+                std::cerr << "cannot parsing HAR file: " << scenario.har_file_name << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            continue;
+        }
+
+        int64_t next_available_valid_page_id = 1;
         for (auto i = 0; i < scenario.requests.size(); i++)
         {
             auto& request = scenario.requests[i];
+            if (request.page_id >= LEAST_VALID_PAGE_ID && request.page_id >= next_available_valid_page_id)
+            {
+                next_available_valid_page_id = request.page_id + 1;
+            }
+        }
+        for (auto i = 0; i < scenario.requests.size(); i++)
+        {
+            auto& request = scenario.requests[i];
+            if (request.page_id < LEAST_VALID_PAGE_ID)
+            {
+                request.page_id = next_available_valid_page_id++;
+            }
+        }
+
+        std::multimap<int64_t, Request> requests_ordered_with_page_id;
+        for (auto i = 0; i < scenario.requests.size(); i++)
+        {
+            auto& request = scenario.requests[i];
+            requests_ordered_with_page_id.emplace(std::make_pair(request.page_id, request));
+        }
+        scenario.requests.clear();
+        for (auto iter = requests_ordered_with_page_id.begin(); iter != requests_ordered_with_page_id.end(); iter++)
+        {
+            scenario.requests.push_back(iter->second);
+        }
+
+        for (auto i = 0; i < scenario.requests.size(); i++)
+        {
+            auto& request = scenario.requests[i];
+
+            auto iter = http_version_to_proto_map.find(request.http_version);
+            if (iter != http_version_to_proto_map.end())
+            {
+                request.proto_type = iter->second;
+            }
 
             for (auto& schema_header_match : request.response_match.header_match)
             {
@@ -1564,7 +1707,8 @@ void post_process_json_config_schema(h2load::Config& config)
                 }
                 else
                 {
-                    std::cerr << scenario.name<<"_"<<i<<": lua script provided, but function " << make_request <<" is either malformed, or not present"<<std::endl;
+                    std::cerr << scenario.name << "_" << i << ": lua script provided, but function " << make_request <<
+                              " is either malformed, or not present" << std::endl;
                 }
                 lua_settop(L, 0);
                 lua_getglobal(L, validate_response);
@@ -1574,7 +1718,8 @@ void post_process_json_config_schema(h2load::Config& config)
                 }
                 else
                 {
-                    std::cerr << scenario.name<<"_"<<i<<": lua script provided, but function " << validate_response <<" is either malformed, or not present"<<std::endl;
+                    std::cerr << scenario.name << "_" << i << ": lua script provided, but function " << validate_response <<
+                              " is either malformed, or not present" << std::endl;
                 }
                 lua_settop(L, 0);
                 lua_close(L);
@@ -1584,6 +1729,8 @@ void post_process_json_config_schema(h2load::Config& config)
     load_file_content(config.json_config_schema.ca_cert);
     load_file_content(config.json_config_schema.client_cert);
     load_file_content(config.json_config_schema.private_key);
+    static std::map<std::string, uint32_t> cc_algo = {{"RENO", 0}, {"CUBIC", 1}, {"BBR", 2}, {"BBR2", 3}};
+    config.cc_algo = cc_algo[config.json_config_schema.quic_congestion_control_algorithm];
 }
 
 std::vector<std::vector<std::string>> read_csv_file(const std::string& csv_file_name)
@@ -1858,15 +2005,30 @@ void set_cert_verification_mode(SSL_CTX* ctx, uint32_t certificate_verification_
     SSL_CTX_set_verify(ctx, mode, NULL);
 }
 
-void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
+void SSL_CTX_keylog_cb_func_cb(const SSL* ssl, const char* line)
+{
+    void* p = SSL_get_ex_data(ssl, SSL_EXT_DATA_INDEX_KEYLOG_FILE);
+    if (p)
+    {
+        std::ofstream log_file((char*)p, std::ios_base::app);
+        log_file << line << std::endl;
+    }
+}
+
+void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config, const std::set<std::string>& apln_proto)
 {
     auto ssl_opts = (SSL_OP_ALL & ~SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS) |
                     SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION |
-                    SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION;
+                    SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION | SSL_OP_NO_TICKET |
+                    SSL_OP_NO_RENEGOTIATION;
 
     SSL_CTX_set_options(ssl_ctx, ssl_opts);
     SSL_CTX_set_mode(ssl_ctx, SSL_MODE_AUTO_RETRY);
     SSL_CTX_set_mode(ssl_ctx, SSL_MODE_RELEASE_BUFFERS);
+    if (config.json_config_schema.tls_keylog_file.size())
+    {
+        SSL_CTX_set_keylog_callback(ssl_ctx, SSL_CTX_keylog_cb_func_cb);
+    }
 
     if (config.json_config_schema.client_cert.size() && config.json_config_schema.private_key.size())
     {
@@ -1887,9 +2049,30 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
         max_tls_version = TLS1_2_VERSION;
     }
 
-    if (nghttp2::tls::ssl_ctx_set_proto_versions(
-            ssl_ctx, nghttp2::tls::NGHTTP2_TLS_MIN_VERSION,
-            max_tls_version) != 0)
+    if (config.is_quic() || apln_proto.count(HTTP3_ALPN))
+    {
+#ifdef ENABLE_HTTP3
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+        if (ngtcp2_crypto_openssl_configure_client_context(ssl_ctx) != 0)
+        {
+            std::cerr << "ngtcp2_crypto_openssl_configure_client_context failed"
+                      << std::endl;
+            exit(EXIT_FAILURE);
+        }
+#  endif // HAVE_LIBNGTCP2_CRYPTO_OPENSSL
+#  ifdef HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+        if (ngtcp2_crypto_boringssl_configure_client_context(ssl_ctx) != 0)
+        {
+            std::cerr << "ngtcp2_crypto_boringssl_configure_client_context failed"
+                      << std::endl;
+            exit(EXIT_FAILURE);
+        }
+#  endif // HAVE_LIBNGTCP2_CRYPTO_BORINGSSL
+#endif   // ENABLE_HTTP3
+    }
+    else if (nghttp2::tls::ssl_ctx_set_proto_versions(
+                 ssl_ctx, nghttp2::tls::NGHTTP2_TLS_MIN_VERSION,
+                 max_tls_version) != 0)
     {
         std::cerr << "Could not set TLS versions" << std::endl;
         exit(EXIT_FAILURE);
@@ -1903,16 +2086,59 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, Config& config)
         exit(EXIT_FAILURE);
     }
 
+#if OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL)
+    if (SSL_CTX_set_ciphersuites(ssl_ctx, config.tls13_ciphers.c_str()) == 0)
+    {
+        std::cerr << "SSL_CTX_set_ciphersuites with " << config.tls13_ciphers
+                  << " failed: " << ERR_error_string(ERR_get_error(), nullptr)
+                  << std::endl;
+        exit(EXIT_FAILURE);
+    }
+#endif // OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL)
+
+#if OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL)
+    if (SSL_CTX_set1_groups_list(ssl_ctx, config.groups.c_str()) != 1)
+    {
+        std::cerr << "SSL_CTX_set1_groups_list failed" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+#else  // !(OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL))
+    if (SSL_CTX_set1_curves_list(ssl_ctx, config.groups.c_str()) != 1)
+    {
+        std::cerr << "SSL_CTX_set1_curves_list failed" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+#endif // !(OPENSSL_1_1_1_API && !defined(OPENSSL_IS_BORINGSSL))
+
 #ifndef OPENSSL_NO_NEXTPROTONEG
-    SSL_CTX_set_next_proto_select_cb(ssl_ctx, client_select_next_proto_cb,
-                                     &config);
+    if (apln_proto.count(HTTP3_ALPN))
+    {
+        SSL_CTX_set_next_proto_select_cb(ssl_ctx, client_select_next_proto_cb_http3,
+                                         nullptr);
+    }
+    else
+    {
+        SSL_CTX_set_next_proto_select_cb(ssl_ctx, client_select_next_proto_cb,
+                                         &config);
+    }
 #endif // !OPENSSL_NO_NEXTPROTONEG
 
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L
     std::vector<unsigned char> proto_list;
-    for (const auto& proto : config.npn_list)
+
+    if (apln_proto.empty())
     {
-        std::copy_n(proto.c_str(), proto.size(), std::back_inserter(proto_list));
+        for (const auto& proto : config.npn_list)
+        {
+            std::copy_n(proto.c_str(), proto.size(), std::back_inserter(proto_list));
+        }
+    }
+    else
+    {
+        for (const auto& proto : apln_proto)
+        {
+            std::copy_n(proto.c_str(), proto.size(), std::back_inserter(proto_list));
+        }
     }
 
     SSL_CTX_set_alpn_protos(ssl_ctx, proto_list.data(), proto_list.size());
@@ -2008,8 +2234,7 @@ bool variable_present(const std::string& source, size_t start_offset, size_t& va
     var_start = source.find("${", start_offset);
     var_end = source.find("}", var_start);
     if ((var_start == std::string::npos) ||
-        (var_end == std::string::npos) ||
-        (var_end < var_start))
+        (var_end == std::string::npos))
     {
         return false;
     }
@@ -2036,5 +2261,296 @@ void split_string(const std::string& source, String_With_Variables_In_Between& r
     }
     result.string_segments.push_back(source.substr(offset, std::string::npos));
 
+}
+
+uint64_t current_timestamp_nanoseconds()
+{
+    return std::chrono::duration_cast<std::chrono::nanoseconds>
+           (std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+uint64_t convert_iso8601_to_ms_since_epoch_ignore_tz(const std::string& iso8601)
+{
+    uint32_t y, M, d, h, m;
+    float s;
+    sscanf(iso8601.c_str(), "%d-%d-%dT%d:%d:%f", &y, &M, &d, &h, &m, &s);
+    std::tm time = { 0 };
+    time.tm_year = y - 1900;
+    time.tm_mon = M - 1;
+    time.tm_mday = d;
+    time.tm_hour = h;
+    time.tm_min = m;
+    time.tm_sec = (int)s;
+    std::time_t t = std::mktime(&time);
+    int64_t ret = ((static_cast<int32_t>(t)) * 1000) + (s * 1000 - time.tm_sec * 1000);
+
+    return ret;
+}
+
+void parse_uri_and_populate_fields(const std::string& uri, std::string& schema, std::string& authority,
+                                   std::string& path)
+{
+    http_parser_url u {};
+    if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) == 0)
+    {
+        path = get_reqline(uri.c_str(), u);
+        if (util::has_uri_field(u, UF_SCHEMA) && util::has_uri_field(u, UF_HOST))
+        {
+            schema = util::get_uri_field(uri.c_str(), u, UF_SCHEMA).str();
+            util::inp_strlower(schema);
+            authority = util::get_uri_field(uri.c_str(), u, UF_HOST).str();
+            util::inp_strlower(authority);
+            if (util::has_uri_field(u, UF_PORT))
+            {
+                authority.append(":").append(util::utos(u.port));
+            }
+        }
+    }
+}
+bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenario& scenario, const std::vector<std::string>& skipped_host)
+{
+    HAR_File har_file;
+    staticjson::ParseStatus result;
+    if (!staticjson::from_json_string(har_file_content.c_str(), &har_file, &result))
+    {
+        std::cerr << "error parsing har content:" << result.description() << std::endl;
+        return false;
+    }
+
+    std::set<std::string> page_ids;
+    std::multimap<std::string, std::string> pages_ordered_with_timestamp;
+    for (auto index = 0; index < har_file.log.pages.size(); index++)
+    {
+        pages_ordered_with_timestamp.emplace(har_file.log.pages[index].startedDateTime, har_file.log.pages[index].id);
+        page_ids.insert(har_file.log.pages[index].id);
+    }
+
+    std::map<std::string, std::multimap<std::string, size_t>> entries_of_pages;
+    for (auto index = 0; index < har_file.log.entries.size(); index++)
+    {
+        entries_of_pages[har_file.log.entries[index].pageref].emplace(har_file.log.entries[index].startedDateTime, index);
+    }
+
+    for (auto entry_iter = entries_of_pages.begin(); entry_iter != entries_of_pages.end(); entry_iter++)
+    {
+        if (page_ids.count(entry_iter->first) == 0)
+        {
+            std::cerr << "pageref: " << entry_iter->first << " does not have a matching page with id = " << entry_iter->first <<
+                      std::endl;
+            return false;
+        }
+    }
+
+    size_t page_id = 1;
+    for (auto page_order_iter = pages_ordered_with_timestamp.begin(); page_order_iter != pages_ordered_with_timestamp.end();
+         page_order_iter++)
+    {
+        auto entries_of_pages_iter = entries_of_pages.find(page_order_iter->second);
+        if (entries_of_pages_iter == entries_of_pages.end())
+        {
+            continue;
+        }
+        for (auto iter = entries_of_pages_iter->second.begin(); iter != entries_of_pages_iter->second.end(); iter++)
+        {
+            HAR_Request& req_in_har = har_file.log.entries[iter->second].request;
+            HAR_Response& resp_in_har = har_file.log.entries[iter->second].response;
+            std::string schema;
+            std::string authority;
+            std::string path;
+            parse_uri_and_populate_fields(req_in_har.url, schema, authority, path);
+            bool host_blocked = false;
+            for (auto& s: skipped_host)
+            {
+                if (authority.find(s) == 0)
+                {
+                    host_blocked = true;
+                    break;
+                }
+            }
+            if (host_blocked)
+            {
+                continue;
+            }
+            scenario.requests.emplace_back();
+            Request& req_in_config = scenario.requests.back();
+            req_in_config.schema = schema;
+            req_in_config.authority = authority;
+            req_in_config.page_id = page_id;
+            req_in_config.method = req_in_har.method;
+            req_in_config.uri.typeOfAction = "input";
+            req_in_config.uri.input = req_in_har.url;
+            if (req_in_config.uri.input.find('?', 0) == std::string::npos && req_in_har.queryString.size())
+            {
+                req_in_config.uri.input.append("?");
+                bool first_param = true;
+                for (auto& q : req_in_har.queryString)
+                {
+                    if (first_param)
+                    {
+                        first_param = false;
+                    }
+                    else
+                    {
+                        req_in_config.uri.input.append("&");
+                    }
+                    req_in_config.uri.input.append(nghttp2::util::percent_encode(q.name)).append("=").append(nghttp2::util::percent_encode(
+                                                                                                                 q.value));
+                }
+            }
+
+            // httpVersion
+            req_in_config.http_version = req_in_har.httpVersion;
+
+            // headers
+            for (auto& header : req_in_har.headers)
+            {
+                if (reserved_headers.count(header.name))
+                {
+                    std::cerr << "WARNING: header " << header.name << " is redundant and thus ignored" << std::endl;
+                    continue;
+                }
+                req_in_config.additonalHeaders.emplace_back(header.name);
+                req_in_config.additonalHeaders.back().append(":").append(header.value);
+            }
+
+            // payload
+            if (req_in_har.postData.text.size())
+            {
+                // directly from postData.text
+                req_in_config.payload = req_in_har.postData.text;
+            }
+            else
+            {
+                if (req_in_har.postData.params.size())
+                {
+                    bool urlencoded_www_form = true;
+                    std::for_each(req_in_har.postData.params.begin(), req_in_har.postData.params.end(),
+                                  [&urlencoded_www_form](const HAR_PostData_Param & postData_param)
+                    {
+                        if (postData_param.fileName.size())
+                        {
+                            urlencoded_www_form = false;
+                        }
+                    });
+                    // application/x-www-form-urlencoded
+                    if (urlencoded_www_form)
+                    {
+                        bool first_param = true;
+                        for (auto& param : req_in_har.postData.params)
+                        {
+                            if (first_param)
+                            {
+                                first_param = false;
+                            }
+                            else
+                            {
+                                req_in_config.payload.append("&");
+                            }
+                            req_in_config.payload.append(nghttp2::util::percent_encode(param.name)).append("=").append(
+                                nghttp2::util::percent_encode(param.value));
+                        }
+                    }
+                    else
+                    {
+                        // TODO: multipart/form-data
+                    }
+                }
+            }
+            req_in_config.expected_status_code = resp_in_har.status;
+        }
+        page_id++;
+    }
+
+    return true;
+}
+
+bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::Config& config_out, const std::vector<std::string>& skipped_host)
+{
+    config_out.json_config_schema.scenarios.emplace_back();
+    config_out.json_config_schema.scenarios.back().name = "HAR_"+std::to_string(config_out.json_config_schema.scenarios.size());
+    config_out.json_config_schema.tls_keylog_file = "har";
+
+    if (convert_har_to_h2loadrunner_scenario(har_file_content, config_out.json_config_schema.scenarios.back(), skipped_host) &&
+        config_out.json_config_schema.scenarios.back().requests.size())
+    {
+        config_out.json_config_schema.builtin_cookie_support = false;
+        config_out.json_config_schema.connection_retry_on_disconnect = false;
+        config_out.json_config_schema.open_new_connection_based_on_authority_header = true;
+        config_out.json_config_schema.schema = config_out.json_config_schema.scenarios.back().requests[0].schema;
+        std::string& authority = config_out.json_config_schema.scenarios.back().requests[0].authority;
+        http_parser_url u {};
+        auto ret = http_parser_parse_url(authority.c_str(), authority.size(), true, &u);
+        if (util::has_uri_field(u, UF_HOST))
+        {
+            config_out.json_config_schema.host = util::get_uri_field(authority.c_str(), u, UF_HOST).str();
+            if (util::has_uri_field(u, UF_PORT))
+            {
+                config_out.json_config_schema.port = u.port;
+            }
+            else
+            {
+                if (config_out.json_config_schema.schema == schema_https)
+                {
+                    config_out.json_config_schema.port = 443;
+                }
+                else
+                {
+                    config_out.json_config_schema.port = 80;
+                }
+            }
+        }
+
+        auto& http_version = config_out.json_config_schema.scenarios.back().requests[0].http_version;
+        auto proto_type = PROTO_UNSPECIFIED;
+        auto proto_iter = http_version_to_proto_map.find(http_version);
+        if (proto_iter != http_version_to_proto_map.end())
+        {
+            proto_type = proto_iter->second;
+        }
+        switch (proto_type)
+        {
+            case PROTO_HTTP1:
+                config_out.json_config_schema.npn_list = http1_proto;
+                config_out.json_config_schema.no_tls_proto = http1_proto;
+                break;
+            case PROTO_HTTP2:
+                config_out.json_config_schema.npn_list = http2_proto;
+                config_out.json_config_schema.no_tls_proto = http2_cleartext_proto;
+                break;
+            case PROTO_HTTP3:
+                config_out.json_config_schema.npn_list = http3_proto;
+                config_out.json_config_schema.no_tls_proto.clear();
+                break;
+            default:
+                break;
+        }
+
+        config_out.json_config_schema.threads = 1;
+        config_out.json_config_schema.clients = 1;
+        config_out.json_config_schema.nreqs = config_out.json_config_schema.scenarios.back().requests.size();
+        for (auto& req: config_out.json_config_schema.scenarios.back().requests)
+        {
+            if (req.http_version == http1_1_version)
+            {
+                config_out.json_config_schema.max_concurrent_streams = 1;
+                break;
+            }
+        }
+        config_out.disable_connection_trace = true;
+        return true;
+    }
+    else
+    {
+        config_out.json_config_schema.scenarios.pop_back();
+        return false;
+    }
+}
+
+void remove_reserved_http_headers(std::map<std::string, std::string, ci_less>& header_map)
+{
+    for (auto& h : reserved_headers)
+    {
+        header_map.erase(h);
+    }
 }
 
