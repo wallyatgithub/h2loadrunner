@@ -11,12 +11,12 @@ extern "C" {
 #include "lauxlib.h"
 }
 #include <openssl/ssl.h>
+#include <boost/noncopyable.hpp>
 
 #include "http2.h"
 
 
 #include "config_schema.h"
-#include "h2load_stats.h"
 //#include "base_worker.h"
 #include "h2load_session.h"
 #include "h2load.h"
@@ -40,7 +40,7 @@ public:
 class Stream_Callback_Data
 {
 public:
-    int32_t stream_id = 0;
+    int64_t stream_id = 0;
     std::function<void(void)> response_callback;
     std::string resp_payload;
     std::vector<std::map<std::string, std::string, ci_less>> resp_headers;
@@ -51,25 +51,26 @@ public:
 using time_point_in_seconds_double =
     std::chrono::time_point<std::chrono::steady_clock, std::chrono::duration< double >>;
 
-class base_client
+class base_client: public std::enable_shared_from_this<base_client>,
+                        private boost::noncopyable
 {
 public:
     base_client(uint32_t id, base_worker* wrker, size_t req_todo, Config* conf,
-                base_client* parent = nullptr, const std::string& dest_schema = "",
-                const std::string& dest_authority = "");
-    virtual ~base_client() {}
+                SSL_CTX* ssl_ctx, base_client* parent = nullptr, const std::string& dest_schema = "",
+                const std::string& dest_authority = "", PROTO_TYPE proto = PROTO_UNSPECIFIED);
+    virtual ~base_client();
     virtual size_t push_data_to_output_buffer(const uint8_t* data, size_t length) = 0;
     virtual void signal_write() = 0;
     virtual bool any_pending_data_to_write() = 0;
     virtual std::shared_ptr<base_client> create_dest_client(const std::string& dst_sch,
-                                                            const std::string& dest_authority) = 0;
+                                                            const std::string& dest_authority,
+                                                            PROTO_TYPE proto = PROTO_UNSPECIFIED) = 0;
 
 
     virtual void start_conn_active_watcher() = 0;
     virtual int connect_to_host(const std::string& schema, const std::string& authority) = 0;
     virtual void disconnect() = 0;
     virtual void clear_default_addr_info() = 0;
-    virtual void setup_connect_with_async_fqdn_lookup() = 0;
     virtual void feed_timing_script_request_timeout_timer() = 0;
     virtual void graceful_restart_connection() = 0;
     virtual void restart_timeout_timer() = 0;
@@ -87,20 +88,21 @@ public:
     virtual void stop_warmup_timer() = 0;
     virtual void start_conn_inactivity_watcher() = 0;
     virtual void stop_conn_inactivity_timer() = 0;
-    virtual int make_async_connection() = 0;
-    virtual int do_connect() = 0;
     virtual void start_delayed_reconnect_timer() = 0;
     virtual void probe_and_connect_to(const std::string& schema, const std::string& authority) = 0;
     virtual void setup_graceful_shutdown() = 0;
+    virtual bool is_write_signaled() = 0;
+    virtual void stop_delayed_execution_timer() = 0;
 
+    bool not_connected();
     int connect();
     void cleanup_due_to_disconnect();
     void final_cleanup();
     void init_req_left();
     void reconnect_to_used_host();
     void on_prefered_host_up();
-    bool reconnect_to_alt_addr();
-    void try_new_connection();
+    bool reconnect_to_other_or_same_addr();
+    void set_open_new_conn_needed();
     void connection_timeout_handler();
     void timing_script_timeout_handler();
     void on_rps_timer();
@@ -115,37 +117,36 @@ public:
     // Otherwise, this function returns -1, and this object should be
     // deleted.
     int try_again_or_fail();
-    void process_request_failure(int errCode = -1);
+    void process_submit_request_failure(int errCode = -1);
 
     void process_timedout_streams();
     void process_abandoned_streams();
+    void process_requests_to_submit_upon_error(bool fail_all = false);
     void timeout();
     void terminate_session();
-    void on_header(int32_t stream_id, const uint8_t* name, size_t namelen,
+    void on_header(int64_t stream_id, const uint8_t* name, size_t namelen,
                    const uint8_t* value, size_t valuelen);
     void record_ttfb();
-    void on_data_chunk(int32_t stream_id, const uint8_t* data, size_t len);
-    void on_stream_close(int32_t stream_id, bool success, bool final = false);
-    RequestStat* get_req_stat(int32_t stream_id);
+    void on_data_chunk(int64_t stream_id, const uint8_t* data, size_t len);
+    void on_stream_close(int64_t stream_id, bool success, bool final = false);
+    RequestStat* get_req_stat(int64_t stream_id);
     void record_request_time(RequestStat* req_stat);
-    std::map<int32_t, Request_Data>& requests_waiting_for_response();
+    const std::unique_ptr<Request_Response_Data>& get_request_response_data(int64_t stream_id);
     size_t& get_current_req_index();
-    void on_request_start(int32_t stream_id);
-    Request_Data get_request_to_submit();
-    void on_status_code(int32_t stream_id, uint16_t status);
+    void on_request_start(int64_t stream_id, std::unique_ptr<Request_Response_Data>& rr_data = dummy_rr_data, bool do_not_stat = false);
+    std::unique_ptr<Request_Response_Data> get_request_to_submit();
+    void on_status_code(int64_t stream_id, uint16_t status);
     bool is_final();
     void set_final(bool val);
-    size_t get_req_left();
-
     Config* get_config();
     Stats& get_stats();
 
     uint64_t get_total_pending_streams();
     base_client* get_controller_client();
-    base_client* find_or_create_dest_client(Request_Data& request_to_send);
+    base_client* find_or_create_dest_client(Request_Response_Data& request_to_send);
     bool is_controller_client();
     int submit_request();
-    Request_Data prepare_first_request();
+    void prepare_first_request();
 
     void reset_timeout_requests();
 
@@ -155,12 +156,12 @@ public:
     void record_client_start_time();
     void record_client_end_time();
 
-    bool prepare_next_request(Request_Data& data);
-    void update_content_length(Request_Data& data);
-    bool update_request_with_lua(lua_State* L, const Request_Data& finished_request, Request_Data& request_to_send);
-    void produce_request_cookie_header(Request_Data& req_to_be_sent);
-    void parse_and_save_cookies(Request_Data& finished_request);
-    void populate_request_from_config_template(Request_Data& new_request,
+    const std::unique_ptr<Request_Response_Data>& prepare_next_request(Request_Response_Data& data, bool check_next_req = true);
+    void update_content_length(Request_Response_Data& data);
+    bool update_request_with_lua(lua_State* L, const Request_Response_Data& finished_request, Request_Response_Data& request_to_send);
+    void produce_request_cookie_header(Request_Response_Data& req_to_be_sent);
+    void parse_and_save_cookies(Request_Response_Data& finished_request);
+    void populate_request_from_config_template(Request_Response_Data& new_request,
                                                size_t scenario_index,
                                                size_t request_index);
 
@@ -175,12 +176,12 @@ public:
     void slice_var_ids();
     void init_lua_states();
     void init_connection_targert();
-    void log_failed_request(const h2load::Config& config, const h2load::Request_Data& failed_req, int32_t stream_id);
-    bool validate_response_with_lua(lua_State* L, const Request_Data& finished_request);
-    void record_stream_close_time(int32_t stream_id);
-    void brief_log_to_file(int32_t stream_id, bool success);
-    void enqueue_request(Request_Data& finished_request, Request_Data&& new_request);
-    void inc_status_counter_and_validate_response(int32_t stream_id);
+    void log_failed_request(const h2load::Config& config, const h2load::Request_Response_Data& failed_req, int64_t stream_id);
+    bool validate_response_with_lua(lua_State* L, const Request_Response_Data& finished_request);
+    void record_stream_close_time(int64_t stream_id);
+    void brief_log_to_file(int64_t stream_id, bool success);
+    const std::unique_ptr<Request_Response_Data>& enqueue_request(const Request_Response_Data& finished_request, std::unique_ptr<Request_Response_Data>& new_request);
+    void inc_status_counter_and_validate_response(int64_t stream_id);
     bool should_reconnect_on_disconnect();
     int select_protocol_and_allocate_session();
     void report_tls_info();
@@ -188,24 +189,67 @@ public:
                                           std::string& port);
     void call_connected_callbacks(bool success);
     void install_connected_callback(std::function<void(bool, h2load::base_client*)> callback);
-    void queue_stream_for_user_callback(int32_t stream_id);
-    void process_stream_user_callback(int32_t stream_id);
-    void on_header_frame_begin(int32_t stream_id, uint8_t flags);
-    void pass_response_to_lua(int32_t stream_id, lua_State* L);
+    void queue_stream_for_user_callback(int64_t stream_id);
+    void process_stream_user_callback(int64_t stream_id);
+    void on_header_frame_begin(int64_t stream_id, uint8_t flags);
+    void pass_response_to_lua(int64_t stream_id, lua_State* L);
     uint64_t get_client_unique_id();
     void set_prefered_authority(const std::string& authority);
-    void run_post_response_action(Request_Data& finished_request);
-    void run_pre_request_action(Request_Data& new_request);
+    void run_post_response_action(Request_Response_Data& finished_request);
+    void run_pre_request_action(Request_Response_Data& new_request);
     std::string assemble_string(const String_With_Variables_In_Between& source, size_t scenario_index, size_t req_index,
                                 Scenario_Data_Per_User& scenario_data_per_user);
-    bool parse_uri_and_poupate_request(const std::string& uri, Request_Data& new_request);
-    void sanitize_request(Request_Data& new_request);
+    bool parse_uri_and_poupate_request(const std::string& uri, Request_Response_Data& new_request);
+    void sanitize_request(Request_Response_Data& new_request);
+    size_t get_number_of_request_left();
+    void dec_number_of_request_left();
 
+    void execute_request_sent_callback(Request_Response_Data& request, int64_t stream_id);
+
+    void clean_up_this_in_dest_client_map();
+
+    PROTO_TYPE get_proto_type();
+    void move_queued_request_to_controller_queue(bool immediate_schedule = true);
+
+    size_t get_max_concurrent_stream();
+
+    void connected_event_on_controller();
+
+    void fail_one_request_of_client(base_client* disconnected_client);
+
+    void early_fail_of_request(std::unique_ptr<Request_Response_Data>& req, base_client* client);
+
+    void submit_request_upon_connected();
+
+    size_t get_number_of_request_inflight();
+
+    bool is_quic();
+
+#ifdef ENABLE_HTTP3
+    // QUIC
+    int quic_init(const sockaddr* local_addr, socklen_t local_addrlen,
+                  const sockaddr* remote_addr, socklen_t remote_addrlen);
+    void quic_free();
+    int quic_handshake_completed();
+    int quic_recv_stream_data(uint32_t flags, int64_t stream_id,
+                              const uint8_t* data, size_t datalen);
+    int quic_acked_stream_data_offset(int64_t stream_id, size_t datalen);
+    int quic_stream_close(int64_t stream_id, uint64_t app_error_code);
+    int quic_stream_reset(int64_t stream_id, uint64_t app_error_code);
+    int quic_stream_stop_sending(int64_t stream_id, uint64_t app_error_code);
+    int quic_extend_max_local_streams();
+    void quic_write_qlog(const void* data, size_t datalen);
+    int quic_make_http3_session();
+
+    void request_connection_close();
+
+
+#endif // ENABLE_HTTP3
 
     base_worker* worker;
     ClientStat cstat;
-    std::multimap<std::chrono::steady_clock::time_point, int32_t> stream_timestamp;
-    std::unordered_map<int32_t, Stream> streams;
+    std::multimap<std::chrono::steady_clock::time_point, int64_t> stream_timestamp;
+    std::unordered_map<int64_t, Stream> streams;
     std::unique_ptr<Session> session;
     ClientState state;
     size_t reqidx;
@@ -223,8 +267,7 @@ public:
     // The client id per worker
     uint32_t id;
     std::string selected_proto;
-    std::string preferred_non_tls_proto;
-    bool new_connection_requested;
+    bool conn_normal_close_restart_to_be_done;
     // true if the current connection will be closed, and no more new
     // request cannot be processed.
     bool final;
@@ -235,12 +278,11 @@ public:
     // and it is only used if --rps is given.
     size_t rps_req_inflight;
     Config* config;
-    std::deque<Request_Data> requests_to_submit;
-    std::multimap<std::chrono::steady_clock::time_point, Request_Data> delayed_requests_to_submit;
-    std::map<int32_t, Request_Data> requests_awaiting_response;
+    std::deque<std::unique_ptr<Request_Response_Data>> requests_to_submit;
+    std::multimap<std::chrono::steady_clock::time_point, std::unique_ptr<Request_Response_Data>> delayed_requests_to_submit;
     std::vector<std::vector<lua_State*>> lua_states;
-    std::map<std::string, base_client*> dest_clients;
-    base_client* parent_client;
+    std::map<PROTO_TYPE, std::map<std::string, base_client*>> client_registry;
+    std::shared_ptr<base_client> parent_client;
     std::string schema;
     std::string authority;
     std::string preferred_authority;
@@ -248,12 +290,99 @@ public:
     std::deque<std::string> candidate_addresses;
     std::deque<std::string> used_addresses;
     Unique_Id this_client_id;
-    std::function<void()> write_clear_callback;
-    std::vector<Scenario_Data_Per_Client> scenario_data_per_connection;
-    time_point_in_seconds_double rps_duration_started;
+    std::function<bool()> write_clear_callback;
+    std::vector<Variable_Data_Per_Client> variable_data_per_connection;
+    time_point_in_seconds_double time_point_of_last_rps_timer_expiry;
     SSL* ssl;
+    SSL_CTX* ssl_context;
     std::vector<std::function<void(bool, h2load::base_client*)>> connected_callbacks;
-    std::map<int32_t, Stream_Callback_Data> stream_user_callback_queue;
+    std::map<int64_t, Stream_Callback_Data> per_stream_user_callbacks;
+    size_t req_inflight_of_all_clients = 0;
+#ifdef ENABLE_HTTP3
+    struct Quic
+    {
+        ngtcp2_crypto_conn_ref conn_ref;
+        ngtcp2_conn* conn = nullptr;
+        ngtcp2_connection_close_error last_error;
+        bool close_requested = false;
+        FILE* qlog_file = nullptr;
+
+        struct
+        {
+            bool send_blocked = false;
+            size_t num_blocked = 0;
+            size_t num_blocked_sent = 0;
+            struct
+            {
+                Address remote_addr;
+                const uint8_t* data = nullptr;
+                size_t datalen = 0;
+                size_t gso_size = 0;
+            } blocked[2];
+            std::unique_ptr<uint8_t[]> data;
+        } tx;
+        void init()
+        {
+            conn = nullptr;
+            close_requested = false;
+            qlog_file = nullptr;
+            tx.send_blocked = false;
+            tx.num_blocked = 0;
+            tx.num_blocked_sent = 0;
+            for (int i = 0; i < 2; i++)
+            {
+                tx.blocked[i].data = nullptr;
+                tx.blocked[i].datalen = 0;
+                tx.blocked[i].gso_size = 0;
+            }
+        };
+    } ;
+    Quic quic; // TODO: make this unique_ptr and reallocate during reconnect
+#endif // ENABLE_HTTP3
+    std::string tls_keylog_file_name;
+    PROTO_TYPE proto_type;
+
+    friend std::ostream& operator<<(std::ostream& o, const base_client& client)
+    {
+        o << "Client:"<<std::endl
+          <<"{" << std::endl
+          << "  this: "<<&client<<std::endl
+          << "  parent_client: " << client.parent_client.get() << std::endl
+          << "  schema: " << client.schema << std::endl
+          << "  authority: " << client.authority << std::endl
+          << "  cstat: " << client.cstat << std::endl
+          << "  state: " << client.state << std::endl
+          << "  reqidx: " << client.reqidx << std::endl
+          << "  req_todo: " << client.req_todo << std::endl
+          << "  req_left: " << client.req_left << std::endl
+          << "  req_inflight: " << client.req_inflight << std::endl
+          << "  req_started: " << client.req_started << std::endl
+          << "  req_done: " << client.req_done << std::endl
+          << "  id: " << client.id << std::endl
+          << "  selected_proto: " << client.selected_proto << std::endl
+          << "  conn_normal_close_restart_to_be_done: " << client.conn_normal_close_restart_to_be_done << std::endl
+          << "  final: " << client.final << std::endl
+          << "  rps_req_pending: " << client.rps_req_pending << std::endl
+          << "  rps_req_inflight: " << client.rps_req_inflight << std::endl
+          << "  preferred_authority: " << client.preferred_authority << std::endl
+          << "  rps: " << client.rps << std::endl
+          << "  this_client_id: " << client.this_client_id.my_id << std::endl
+          << "  req_inflight_of_all_clients: " << client.req_inflight_of_all_clients << std::endl
+          << "  proto_type: " << client.proto_type << std::endl;
+        o << "  candidate_addresses: "<< std::endl;
+        for (auto& s: client.candidate_addresses)
+        {
+            o << "  "<< s << std::endl;
+        }
+        o << "  used_addresses: " << std::endl;
+        for (auto& s: client.used_addresses)
+        {
+            o << "  "<< s << std::endl;
+        }
+        o<<"}" << std::endl;
+        return o;
+    }
+
 };
 
 }

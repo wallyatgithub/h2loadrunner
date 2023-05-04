@@ -10,7 +10,6 @@
 #ifdef USE_LIBEV
 #include "memchunk.h"
 #endif
-#include "h2load_stats.h"
 #include "h2load_Config.h"
 #include "base_client.h"
 
@@ -49,14 +48,14 @@ public:
     // Keeps track of the current phase (for timing-based experiment) for the
     // worker
     Phase current_phase;
-    // We need to keep track of the clients in order to stop them when needed
-    std::vector<base_client*> clients;
+    std::vector<base_client*> clients_in_timing_mode;
     std::map<base_client*, std::shared_ptr<base_client>> managed_clients;
     // This is only active when there is not a bounded number of requests
     // specified
 
-    std::map<std::string, std::set<base_client*>> client_pool;
+    std::map<PROTO_TYPE, std::map<std::string, std::set<base_client*>>> client_pool;
     std::map<size_t, base_client*> client_ids;
+    std::mt19937 randgen;
 
     base_worker(uint32_t id, size_t nreq_todo, size_t nclients,
                      size_t rate, size_t max_samples, Config* config);
@@ -69,9 +68,10 @@ public:
     virtual void stop_warmup_timer() = 0;
     virtual void stop_duration_timer() = 0;
     virtual void run_event_loop() = 0;
-    virtual std::shared_ptr<base_client> create_new_client(size_t req_todo) = 0;
+    virtual std::shared_ptr<base_client> create_new_client(size_t req_todo, PROTO_TYPE proto_type = PROTO_UNSPECIFIED, const std::string& schema = "", const std::string& authority = "") = 0;
+    virtual std::shared_ptr<base_client> create_new_sub_client(base_client* parent_client, size_t req_todo, const std::string& schema, const std::string& authority, PROTO_TYPE proto_type = PROTO_UNSPECIFIED) = 0;
     virtual void start_graceful_stop_timer() = 0;
-
+    virtual void stop_event_loop() = 0;
     void rate_period_timeout_handler();
     void warmup_timeout_handler();
     void duration_timeout_handler();
@@ -87,10 +87,13 @@ public:
     void check_in_client(std::shared_ptr<base_client>);
     void check_out_client(base_client*);
 
-    std::map<std::string, std::set<base_client*>>& get_client_pool();
+    std::map<PROTO_TYPE, std::map<std::string, std::set<base_client*>>>& get_client_pool();
 
     std::map<size_t, base_client*>& get_client_ids();
 
+    size_t get_number_of_active_clients();
+
+    std::shared_ptr<base_client> get_shared_ptr_of_client(base_client* client);
 
 };
 

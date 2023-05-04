@@ -42,8 +42,29 @@ int http1_msg_completecb(llhttp_t* htp)
     auto handler = static_cast<http1_handler*>(htp->data);
     handler->should_keep_alive = llhttp_should_keep_alive(htp);
     auto strm = handler->find_stream(handler->request_count);
-    handler->call_on_request(*strm);
+    if (!strm)
+    {
+        return HPE_OK;
+    }
+    auto& req = strm->request();
+    if (req.uri().host.empty())
+    {
+        auto& headers = req.header();
+        const std::string host = "host";
+        auto iter = headers.find(host);
+        if (iter != headers.end())
+        {
+            req.uri().host = iter->second.value;
+        }
+    }
 
+    if (req.uri().scheme.empty())
+    {
+        auto https = (handler->get_config().cert_file.size() &&
+                      handler->get_config().private_key_file.size());
+        req.uri().scheme = https ? "https" : "http";
+    }
+    handler->call_on_request(*strm);
     return HPE_OK;
 }
 } // namespace
@@ -54,6 +75,9 @@ int http1_hdr_keycb(llhttp_t* htp, const char* data, size_t len)
 {
     auto handler = static_cast<http1_handler*>(htp->data);
     handler->curr_header_name.assign(data, len);
+    std::transform(handler->curr_header_name.begin(), handler->curr_header_name.end(),
+                   handler->curr_header_name.begin(),
+                   [](unsigned char c){ return std::tolower(c); });
     return HPE_OK;
 }
 } // namespace
@@ -146,18 +170,19 @@ int http1_on_url_cb(llhttp_t* htp, const char* data, size_t len)
     }
     if (u.field_set & (1 << UF_PATH))
     {
-        uri.path = util::get_uri_field(data, u, UF_PATH).str();
+        uri.raw_path = util::get_uri_field(data, u, UF_PATH).str();
     }
     else
     {
-        uri.path = "/";
+        uri.raw_path = "/";
     }
 
     if (u.field_set & (1 << UF_QUERY))
     {
-        uri.path += '?';
-        uri.path += util::get_uri_field(data, u, UF_QUERY);
+        uri.raw_path += '?';
+        uri.raw_path += util::get_uri_field(data, u, UF_QUERY);
     }
+    uri.path = uri.raw_path;
 
     return HPE_OK;
 }
