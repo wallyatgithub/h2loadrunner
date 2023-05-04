@@ -373,16 +373,18 @@ int asio_client_connection::connect_to_host(const std::string& dest_schema, cons
     {
         std::cerr << __FUNCTION__ << ":" << dest_authority << ", proto: " << proto_type << std::endl;
     }
-
-    is_client_stopped = false;
-    output_data_length = 0;
-
     std::string host;
     std::string port;
     if (!get_host_and_port_from_authority(dest_schema, dest_authority, host, port))
     {
         exit(1);
     }
+    
+    output_data_length = 0;
+    is_write_in_progress = false;
+    write_signaled = false;
+    output_buffer_index = 0;
+    is_client_stopped = false;
 
     boost::system::error_code ec;
     auto remote_ip_address = boost::asio::ip::make_address(host, ec);
