@@ -795,6 +795,8 @@ void asio_client_connection::do_read()
 
 void asio_client_connection::handle_write_complete(const boost::system::error_code& e, std::size_t bytes_transferred)
 {
+    is_write_in_progress = false;
+
     if (e)
     {
         if (!is_error_due_to_aborted_operation(e))
@@ -809,8 +811,6 @@ void asio_client_connection::handle_write_complete(const boost::system::error_co
     }
 
     restart_timeout_timer();
-
-    is_write_in_progress = false;
 
     if (write_clear_callback)
     {
