@@ -978,6 +978,7 @@ bool asio_client_connection::handle_write_complete(bool is_quic, const boost::sy
     {
         //std::cerr << "write return code: " << e << ", bytes sent: " << bytes_transferred << std::endl;
     }
+    is_write_in_progress = false;
 
     if (e)
     {
@@ -991,7 +992,6 @@ bool asio_client_connection::handle_write_complete(bool is_quic, const boost::sy
 
     restart_timeout_timer();
 
-    is_write_in_progress = false;
 
 #ifdef ENABLE_HTTP3
     if (is_quic)
