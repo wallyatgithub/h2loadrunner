@@ -40,6 +40,16 @@ const std::string PLMNID = "plmnId";
 
 const std::string STATUS = ":status";
 
+const std::string ACU_INCREASE = "INCREASE";
+const std::string ACU_DECREASE = "DECREASE";
+const std::string ACU_UPDATE = "UPDATE";
+
+const std::string TAG_ACCESS_TYPE = "accessType";
+const std::string TAG_NF_ID = "nfId";
+const std::string TAG_NF_TYPE = "nfType";
+
+const size_t UES_THRESHOLD = 2000; // TODO: make this configurable
+
 class Ues_Update_Result
 {
 public:
@@ -65,7 +75,39 @@ public:
     }
 };
 
-thread_local std::map<std::pair<size_t, int32_t>, std::vector<Ues_Update_Result>> UeAcrStatus;
+class Ues_Ac_Control_Block
+{
+public:
+    Ingress_Request_Identify ingress_identity;
+    size_t acu_index = 0;
+    std::string supi;
+    std::string nf_id;
+    std::string nf_type;
+    std::string access_type;
+    std::string additional_access_type;
+    AcuOperationItem acu_item;
+    explicit Ues_Ac_Control_Block(boost::asio::io_service* ios, uint64_t h_id, int32_t s_id,
+                                  size_t index,
+                                  std::string uid,
+                                  std::string nfId,
+                                  std::string nfType,
+                                  std::string accessType,
+                                  std::string additionalAnType,
+                                  AcuOperationItem item):
+                                  ingress_identity(ios, h_id, s_id),
+                                  acu_index(index),
+                                  supi(std::move(uid)),
+                                  nf_id(std::move(nfId)),
+                                  nf_type(std::move(nfType)),
+                                  access_type(std::move(accessType)),
+                                  additional_access_type(std::move(additionalAnType)),
+                                  acu_item(std::move(item))
+    {
+    }
+    
+};
+
+thread_local std::map<std::pair<size_t, int32_t>, std::vector<Ues_Update_Result>> UeAcuStatus;
 
 void merge_result(Ingress_Request_Identify source_req_identity, size_t acu_index, bool success_or_failure)
 {
@@ -73,8 +115,8 @@ void merge_result(Ingress_Request_Identify source_req_identity, size_t acu_index
     auto stream_id = source_req_identity.stream_id;
     auto run_in_worker = [handler_id, stream_id, acu_index, success_or_failure]()
     {
-        auto iter = UeAcrStatus.find(std::pair<size_t, int32_t>(handler_id, stream_id));
-        if (iter != UeAcrStatus.end())
+        auto iter = UeAcuStatus.find(std::pair<size_t, int32_t>(handler_id, stream_id));
+        if (iter != UeAcuStatus.end())
         {
             iter->second[acu_index].update_done = true;
             iter->second[acu_index].update_success = success_or_failure;
@@ -96,7 +138,7 @@ void merge_result(Ingress_Request_Identify source_req_identity, size_t acu_index
             if (update_all_done)
             {
                 auto all_result = std::move(iter->second);
-                UeAcrStatus.erase(iter);
+                UeAcuStatus.erase(iter);
 
                 auto handler = nghttp2::asio_http2::server::base_handler::find_handler(handler_id);
                 if (!handler)
@@ -145,8 +187,7 @@ void merge_result(Ingress_Request_Identify source_req_identity, size_t acu_index
     }
 }
 
-void process_udsf_ues_update_response(const Ingress_Request_Identify& source_req_identity,
-                                  size_t acu_index,
+void process_udsf_ues_update_response(Ues_Ac_Control_Block cb,
                                   const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers,
                                   const std::string& resp_payload)
 {
@@ -160,82 +201,207 @@ void process_udsf_ues_update_response(const Ingress_Request_Identify& source_req
             update_success = true;
         }
     }
-    merge_result(source_req_identity, acu_index, update_success);
+    merge_result(std::move(cb.ingress_identity), cb.acu_index, update_success);
 }
 
-void add_ue_snssai_record(const Ingress_Request_Identify& source_req_identity,
-                                  size_t acu_index,
-                                  const std::string& snsaai, const std::string& supi,
-                                  const std::string& nfType, const std::string& nfId,
-                                  const std::string& plmnid,
-                                  udsf::Record record)
+
+void add_or_update_ue_snssai_record(Ues_Ac_Control_Block cb, udsf::Record record)
 {
     std::string uri;
-    uri.append(udsf_base_uri).append(PATH_DELIMETER).append(REALM_NAME).append(PATH_DELIMETER).append(STORAGE_PREFIX).append(snsaai).append(PATH_DELIMETER).append(RESOUCE_RECORDS);
-    uri.append(PATH_DELIMETER).append(UE_RECORD_PREFIX).append(supi);
-    auto r = std::move(record);
-    r.meta.tags[NFTYPE].emplace_back(nfType);
-    r.meta.tags[NFID].emplace_back(nfId);
-    r.meta.tags[PLMNID].emplace_back(plmnid);
+    uri.append(udsf_base_uri).append(PATH_DELIMETER).append(REALM_NAME).append(PATH_DELIMETER).append(STORAGE_PREFIX).append(cb.acu_item.snssai).append(PATH_DELIMETER).append(RESOUCE_RECORDS);
+    uri.append(PATH_DELIMETER).append(UE_RECORD_PREFIX).append(cb.supi);
     std::map<std::string, std::string, ci_less> additionalHeaders;
-    auto body = r.produce_multipart_body(true, "");
+    auto body = record.produce_multipart_body(true, "");
     additionalHeaders.insert(std::make_pair(CONTENT_TYPE, MULTIPART_CONTENT_TYPE));
-    auto process_response = [source_req_identity, acu_index](const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, const std::string& resp_payload)
+    auto process_response = [cb = std::move(cb)](const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, const std::string& resp_payload) mutable
     {
-        process_udsf_ues_update_response(source_req_identity, acu_index, resp_headers, resp_payload);
+        process_udsf_ues_update_response(std::move(cb), resp_headers, resp_payload);
     };
     send_http2_request(METHOD_PUT, uri, process_response, additionalHeaders, body);
 }
 
-void delete_ue_snssai_record(const Ingress_Request_Identify& source_req_identity,
-                                  size_t acu_index,
-                                  const std::string& snsaai, const std::string& supi)
+void delete_ue_snssai_record(Ues_Ac_Control_Block cb)
 {
     std::string uri;
-    uri.append(udsf_base_uri).append(PATH_DELIMETER).append(REALM_NAME).append(PATH_DELIMETER).append(STORAGE_PREFIX).append(snsaai).append(PATH_DELIMETER).append(RESOUCE_RECORDS);
-    uri.append(PATH_DELIMETER).append(UE_RECORD_PREFIX).append(supi);
-    auto process_response = [source_req_identity, acu_index](const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, const std::string& resp_payload)
+    uri.append(udsf_base_uri).append(PATH_DELIMETER).append(REALM_NAME).append(PATH_DELIMETER).append(STORAGE_PREFIX).append(cb.acu_item.snssai).append(PATH_DELIMETER).append(RESOUCE_RECORDS);
+    uri.append(PATH_DELIMETER).append(UE_RECORD_PREFIX).append(cb.supi);
+    auto process_response = [cb = std::move(cb)](const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, const std::string& resp_payload) mutable
     {
-        process_udsf_ues_update_response(source_req_identity, acu_index, resp_headers, resp_payload);
+        process_udsf_ues_update_response(std::move(cb), resp_headers, resp_payload);
     };
     send_http2_request(METHOD_DELETE, uri, process_response);
 }
 
-void process_udsf_ues_read_response(const Ingress_Request_Identify& source_req_identity,
-                                  size_t acu_index,
-                                  const std::string& supi, const AcuOperationItem& acu_item,
-                                  const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers,
+void process_get_ues_response(Ues_Ac_Control_Block cb, udsf::Record record, const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers,
                                   const std::string& resp_payload)
 {
-    udsf::Record record(UE_RECORD_PREFIX + supi);
-    if (resp_headers.size())
+    if (resp_headers.empty())
     {
-        auto code_iter = resp_headers[0].find(STATUS);
-        if (code_iter != resp_headers[0].end() && code_iter->second == "200")
-        {
-        }
+        return merge_result(std::move(cb.ingress_identity), cb.acu_index, false);
     }
+
+    auto code_iter = resp_headers[0].find(STATUS);
+    if ((code_iter == resp_headers[0].end()) || (code_iter->second != "200") || resp_payload.empty())
+    {
+        return merge_result(std::move(cb.ingress_identity), cb.acu_index, false);
+    }
+
+    rapidjson::Document d;
+    d.Parse(resp_payload.c_str());
+    if (d.HasParseError())
+    {
+        return merge_result(std::move(cb.ingress_identity), cb.acu_index, false);
+    }
+
+    rapidjson::Pointer ptr("/count");
+    auto count = ptr.Get(d);
+
+    if (!count || !count->IsUint64() || count->GetUint64() >= UES_THRESHOLD)
+    {
+        return merge_result(std::move(cb.ingress_identity), cb.acu_index, false);
+    }
+
+    auto& meta = record.meta;
+
+    meta.tags[TAG_NF_ID].emplace_back(std::move(cb.nf_id));
+    meta.tags[TAG_NF_TYPE].emplace_back(std::move(cb.nf_type));
+    meta.tags[TAG_ACCESS_TYPE].emplace_back(std::move(cb.access_type));
+    if (cb.additional_access_type.size())
+    {
+        meta.tags[TAG_ACCESS_TYPE].emplace_back(std::move(cb.additional_access_type));
+    }
+
+    return add_or_update_ue_snssai_record(std::move(cb), std::move(record));
 }
 
-void read_ue_snssai_record(const Ingress_Request_Identify& source_req_identity,
-                                   size_t acu_index,
-                                   const std::string& supi, const AcuOperationItem& acu_item)
+void get_number_of_ues(Ues_Ac_Control_Block cb, udsf::Record record)
 {
     std::string uri;
-    uri.append(udsf_base_uri).append(PATH_DELIMETER).append(REALM_NAME).append(PATH_DELIMETER).append(STORAGE_PREFIX).append(acu_item.snssai).append(PATH_DELIMETER).append(RESOUCE_RECORDS);
-    uri.append(PATH_DELIMETER).append(UE_RECORD_PREFIX).append(supi);
-    auto process_response = [source_req_identity, supi, acu_index, acu_item](const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, const std::string& resp_payload)
+    const std::string filter = "?count-indicator=true&filter=%7B%22op%22%3A%22GTE%22%2C%22tag%22%3A%22nfId%22%2C%22value%22%3A%22%22%7D";
+    uri.append(udsf_base_uri).append(PATH_DELIMETER).append(REALM_NAME).append(PATH_DELIMETER).append(STORAGE_PREFIX).append(cb.acu_item.snssai).append(PATH_DELIMETER).append(RESOUCE_RECORDS);
+    uri.append(filter);
+    auto process_response = [cb = std::move(cb), record = std::move(record)](const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, const std::string& resp_payload) mutable
     {
-        process_udsf_ues_read_response(source_req_identity, acu_index, supi, acu_item, resp_headers, resp_payload);
+        process_get_ues_response(std::move(cb), std::move(record), resp_headers, resp_payload);
     };
     send_http2_request(METHOD_GET, uri, process_response);
 }
 
-
-void process_one_ue_nssai(const Ingress_Request_Identify& source_req_identity,
-                                  size_t acu_index, const std::string& supi, const AcuOperationItem& acu_item)
+void process_udsf_ues_read_response(Ues_Ac_Control_Block cb,
+                                  const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers,
+                                  const std::string& resp_payload)
 {
-    
+    bool record_present = false;
+    udsf::Record record(UE_RECORD_PREFIX + cb.supi);
+    if (resp_headers.size())
+    {
+        auto code_iter = resp_headers[0].find(STATUS);
+        if (code_iter == resp_headers[0].end() && code_iter->second == "200")
+        {
+            staticjson::ParseStatus result;
+            if (!staticjson::from_json_string(resp_payload.c_str(), &record, &result))
+            {
+                return merge_result(std::move(cb.ingress_identity), cb.acu_index, false);
+            }
+            record_present = true;
+        }
+    }
+    if (cb.acu_item.updateFlag == ACU_DECREASE)
+    {
+        if (!record_present)
+        {
+            return merge_result(std::move(cb.ingress_identity), cb.acu_index, true);
+        }
+        auto remove_tag_value = [&record](const std::string& tag_name, const std::string& tag_value)
+        {
+            auto delete_record = false;
+            auto& tags = record.meta.tags;
+            auto iter = tags.find(tag_name);
+            if (iter != tags.end())
+            {
+                auto& tag_values_in_db = iter->second;
+                auto iter_in_vec = std::find(tag_values_in_db.begin(), tag_values_in_db.end(), tag_value);
+                if (iter_in_vec != tag_values_in_db.end())
+                {
+                    tag_values_in_db.erase(iter_in_vec);
+                }
+                if (tag_values_in_db.empty())
+                {
+                    delete_record = true;
+                }
+            }
+            return delete_record;
+        };
+        bool delete_record = (!record.meta.tags.empty());
+        if (!delete_record)
+        {
+            delete_record = remove_tag_value(TAG_ACCESS_TYPE, cb.access_type);
+        }
+        if (!delete_record)
+        {
+            remove_tag_value(TAG_ACCESS_TYPE, cb.additional_access_type);
+        }
+        if (!delete_record)
+        {
+            remove_tag_value(TAG_NF_TYPE, cb.nf_type);
+        }
+        if (!delete_record)
+        {
+            remove_tag_value(TAG_NF_ID, cb.nf_id);
+        }
+        if (delete_record)
+        {
+            return delete_ue_snssai_record(std::move(cb));
+        }
+    }
+    else if (cb.acu_item.updateFlag == ACU_INCREASE)
+    {
+        return get_number_of_ues(std::move(cb), std::move(record));
+    }
+    else if (cb.acu_item.updateFlag == ACU_UPDATE)
+    {
+        if (!record_present)
+        {
+            return merge_result(std::move(cb.ingress_identity), cb.acu_index, true);
+        }
+        auto update_tag_value = [&record](const std::string& tag_name, const std::string& tag_value)
+        {
+            auto& tags = record.meta.tags;
+            auto iter = tags.find(tag_name);
+            if (iter != tags.end())
+            {
+                auto& tag_values_in_db = iter->second;
+                tag_values_in_db.clear();
+                tag_values_in_db.push_back(tag_value);
+            }
+        };
+        update_tag_value(TAG_NF_TYPE, cb.nf_type);
+        update_tag_value(TAG_NF_ID, cb.nf_id);
+        update_tag_value(TAG_ACCESS_TYPE, cb.access_type);
+        if (cb.additional_access_type.size())
+        {
+            auto& tags = record.meta.tags;
+            auto iter = tags.find(TAG_ACCESS_TYPE);
+            iter->second.push_back(cb.additional_access_type);
+        }
+        return add_or_update_ue_snssai_record(std::move(cb), std::move(record));
+    }
+    else
+    {
+        return merge_result(std::move(cb.ingress_identity), cb.acu_index, false);
+    }
+}
+
+void read_ue_snssai_record(Ues_Ac_Control_Block cb)
+{
+    std::string uri;
+    uri.append(udsf_base_uri).append(PATH_DELIMETER).append(REALM_NAME).append(PATH_DELIMETER).append(STORAGE_PREFIX).append(cb.acu_item.snssai).append(PATH_DELIMETER).append(RESOUCE_RECORDS);
+    uri.append(PATH_DELIMETER).append(UE_RECORD_PREFIX).append(cb.supi);
+    auto process_response = [cb = std::move(cb)](const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, const std::string& resp_payload) mutable
+    {
+        process_udsf_ues_read_response(std::move(cb), resp_headers, resp_payload);
+    };
+    send_http2_request(METHOD_GET, uri, process_response);
 }
 
 bool process_ues(boost::asio::io_service* source_ios, const nghttp2::asio_http2::server::asio_server_request& req,
@@ -247,17 +413,27 @@ bool process_ues(boost::asio::io_service* source_ios, const nghttp2::asio_http2:
     staticjson::ParseStatus result;
     if (staticjson::from_json_string(msg_body.c_str(), &reqData, &result))
     {
-        Ingress_Request_Identify in_req_id(source_ios, handler_id, stream_id);
-        
         std::vector<Ues_Update_Result> update_result;
-        update_result.reserve(reqData.ueACRequestInfo.size());
+        size_t result_size = 0;
+        for (UeACRequestInfo& reqInfo: reqData.ueACRequestInfo)
+        {
+            result_size += reqInfo.acuOperationList.size();
+        }
+        update_result.reserve(result_size);
         size_t acu_index = 0;
         for (UeACRequestInfo& reqInfo: reqData.ueACRequestInfo)
         {
             for (AcuOperationItem& ac: reqInfo.acuOperationList)
             {
                 update_result.emplace_back(reqInfo.supi, ac.snssai);
-                process_one_ue_nssai(in_req_id, acu_index, reqInfo.supi, ac);
+                Ues_Ac_Control_Block cb(source_ios, handler_id, stream_id, acu_index,
+                                        reqInfo.supi,
+                                        reqData.nfId,
+                                        reqData.nfType,
+                                        reqInfo.anType,
+                                        reqInfo.additionalAnType,
+                                        ac);
+                read_ue_snssai_record(std::move(cb));
                 acu_index++;
             }
         }

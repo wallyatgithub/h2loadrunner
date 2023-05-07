@@ -695,7 +695,7 @@ void merge_search_result_and_send_search_response(udsf::Storage& storage, size_t
     g_io_services[originating_thread_id]->post(run_in_originating_thread);
 }
 
-bool process_records_in_parallel(const nghttp2::asio_http2::server::asio_server_request& req,
+bool process_records(const nghttp2::asio_http2::server::asio_server_request& req,
                                  nghttp2::asio_http2::server::asio_server_response& res,
                                  uint64_t handler_id, int32_t stream_id,
                                  const std::string& method,
@@ -1275,7 +1275,7 @@ void merge_timer_search_request_and_send_response(udsf::Storage& storage, size_t
     g_io_services[originating_thread_id]->post(run_in_originating_thread);
 }
 
-bool process_timers_in_parallel(const nghttp2::asio_http2::server::asio_server_request& req,
+bool process_timers(const nghttp2::asio_http2::server::asio_server_request& req,
                     nghttp2::asio_http2::server::asio_server_response& res,
                     uint64_t handler_id, int32_t stream_id,
                     const std::string& method,
@@ -1378,7 +1378,7 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
             }
             else
             {
-                ret = process_records_in_parallel(req, res, handler_id, stream_id, method, realm_id, storage_id, path_tokens, payload);
+                ret = process_records(req, res, handler_id, stream_id, method, realm_id, storage_id, path_tokens, payload);
             }
         }
         else if (resource == RESOURCE_META_SCHEMAS)
@@ -1413,7 +1413,7 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
             }
             else if (path_tokens.size() == RESOURCE_TYPE_INDEX + 1)
             {
-                ret = process_timers_in_parallel(req, res, handler_id, stream_id, method, realm_id, storage_id, path_tokens, payload);
+                ret = process_timers(req, res, handler_id, stream_id, method, realm_id, storage_id, path_tokens, payload);
             }
         }
     }

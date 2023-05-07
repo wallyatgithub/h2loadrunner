@@ -7,6 +7,7 @@ extern size_t number_of_worker_thread;
 extern std::vector<boost::asio::io_service* > g_io_services;
 extern std::vector<boost::asio::io_service::strand> g_strands;
 
+// TODO: pass config schema in
 h2load::asio_worker* get_egress_worker()
 {
     auto create_worker = []()

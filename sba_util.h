@@ -32,6 +32,7 @@ const std::string CRLF = "\r\n";
 
 const std::string PATH_DELIMETER = "/";
 const std::string QUERY_DELIMETER = "&";
+const std::string QUERY_SIGN = "?";
 const std::string METHOD_PUT = "put";
 const std::string METHOD_POST = "post";
 const std::string METHOD_PATCH = "patch";
