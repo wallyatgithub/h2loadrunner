@@ -277,12 +277,20 @@ set (H2LOAD_SRC_MAIN
 
 #udsf
 set (UDSF_SOURCES
-  udsf_util.cc
+  sba_util.cc
   multipart_parser.c
   udsf_cache.cc
   udsf_main.cc
   ${H2LOAD_SOURCES}
 )
+
+#nsacf
+set (NSACF_SOURCES
+  sba_util.cc
+  nsacf_main.cc
+  ${H2LOAD_SOURCES}
+)
+
 
 add_executable(h2loadrunner
   ${H2LOAD_SOURCES}
@@ -293,6 +301,12 @@ add_executable(h2loadrunner
 )
 
 add_executable(imudsf ${UDSF_SOURCES}
+  $<TARGET_OBJECTS:llhttp>
+  $<TARGET_OBJECTS:url-parser>
+  $<TARGET_OBJECTS:staticjson>
+)
+
+add_executable(ensacf ${NSACF_SOURCES}
   $<TARGET_OBJECTS:llhttp>
   $<TARGET_OBJECTS:url-parser>
   $<TARGET_OBJECTS:staticjson>

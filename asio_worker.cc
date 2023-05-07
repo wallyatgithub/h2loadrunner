@@ -82,8 +82,10 @@ std::shared_ptr<base_client> asio_worker::create_new_sub_client(base_client* par
 }
 
 asio_worker::asio_worker(uint32_t id, size_t nreq_todo, size_t nclients,
-                         size_t rate, size_t max_samples, Config* config):
+                         size_t rate, size_t max_samples, Config* config, boost::asio::io_service* external_ios):
     base_worker(id, nreq_todo, nclients, rate, max_samples, config),
+    internal_io_context(external_ios ? std::unique_ptr<boost::asio::io_service>(nullptr) : std::make_unique<boost::asio::io_service>()),
+    io_context(external_ios ? *external_ios : *(internal_io_context.get())),
     rate_mode_period_timer(io_context),
     warmup_timer(io_context),
     duration_timer(io_context),

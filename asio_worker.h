@@ -22,7 +22,7 @@ class asio_worker: public h2load::base_worker, private boost::noncopyable
 public:
 
     asio_worker(uint32_t id, size_t nreq_todo, size_t nclients,
-                size_t rate, size_t max_samples, Config* config);
+                size_t rate, size_t max_samples, Config* config, boost::asio::io_service* external_ios = nullptr);
 
     virtual ~asio_worker();
 
@@ -87,7 +87,8 @@ private:
     void update_resolver_cache(const std::pair<std::string, std::string>& query, const result_type& addresses, std::map<query_type, result_with_ttl_type>& cache);
     const result_type& get_from_resolver_cache(const std::pair<std::string, std::string>& query, std::map<query_type, result_with_ttl_type>& cache);
 
-    boost::asio::io_service io_context;
+    std::unique_ptr<boost::asio::io_service> internal_io_context;
+    boost::asio::io_service& io_context;
     boost::asio::deadline_timer rate_mode_period_timer;
     boost::asio::deadline_timer warmup_timer;
     boost::asio::deadline_timer duration_timer;

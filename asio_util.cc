@@ -703,4 +703,49 @@ void stop_server(const std::string& thread_id)
     }
 }
 
+bool start_tick_timer(boost::asio::deadline_timer& timer,
+                      std::multimap<std::chrono::steady_clock::time_point, std::pair<uint64_t, int32_t>>& streams)
+{
+    timer.expires_from_now(boost::posix_time::millisec(100));
+
+    timer.async_wait
+    (
+        [&timer, &streams](const boost::system::error_code & ec)
+    {
+        std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
+        auto barrier = streams.upper_bound(curr_time_point);
+        auto it = streams.begin();
+        while (it != barrier)
+        {
+            auto handler_id = it->second.first;
+            auto stream_id = it->second.second;
+            it = streams.erase(it);
+            auto handler = nghttp2::asio_http2::server::base_handler::find_handler(handler_id);
+            if (!handler)
+            {
+                continue;
+            }
+            auto stream = handler->find_stream(stream_id);
+            if (!stream)
+            {
+                continue;
+            }
+            auto& res = stream->response();
+            static auto msg = "request timeout";
+            res.write_head(500);
+            res.end(msg);
+        }
+        start_tick_timer(timer, streams);
+    });
+    return true;
+}
+
+void send_error_response(nghttp2::asio_http2::server::asio_server_response& res)
+{
+    uint32_t status_code = 501;
+    std::string resp_payload = "Operation not implemented";
+    res.write_head(status_code);
+    res.end(std::move(resp_payload));
+}
+
 

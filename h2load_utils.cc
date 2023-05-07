@@ -736,8 +736,8 @@ process_time_stats(const std::vector<std::shared_ptr<h2load::base_worker>>& work
 
 bool request_template_unavailable(h2load::Config& config)
 {
-    return (!config.base_uri_unix && config.connect_to_host.empty() && config.host.empty());
-    bool host_empty = (config.base_uri_unix && config.connect_to_host.empty() && config.host.empty());
+    //return (!config.base_uri_unix && config.connect_to_host.empty() && config.host.empty());
+    bool host_empty = (!config.base_uri_unix && config.connect_to_host.empty() && config.host.empty());
     bool empty_scenario = (config.json_config_schema.scenarios.size() == 1 &&
                            config.json_config_schema.scenarios[0].requests.size() == 1 &&
                            config.json_config_schema.scenarios[0].requests[0].uri.input.empty());

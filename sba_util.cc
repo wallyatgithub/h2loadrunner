@@ -1,31 +1,26 @@
-#include <udsf_util.h>
+#include <sba_util.h>
 #include <h2load_utils.h>
 
 extern bool debug_mode;
+extern thread_local size_t g_current_thread_id;
+extern size_t number_of_worker_thread;
+extern std::vector<boost::asio::io_service* > g_io_services;
+extern std::vector<boost::asio::io_service::strand> g_strands;
 
-namespace udsf
-{
-
-h2load::asio_worker* get_worker()
+h2load::asio_worker* get_egress_worker()
 {
     auto create_worker = []()
     {
-        auto conf = std::make_shared<h2load::Config>();
+        thread_local static h2load::Config conf;
         if (debug_mode)
         {
-            conf->verbose = true;
+            conf.verbose = true;
         }
         Request request;
         Scenario scenario;
         scenario.requests.push_back(request);
-        conf->json_config_schema.scenarios.push_back(scenario);
-        auto worker = std::make_shared<h2load::asio_worker>(0, 0xFFFFFFFF, 1, 0, 1000, conf.get());
-        auto work = std::make_shared<boost::asio::io_service::work> (worker->get_io_context());
-        std::thread worker_thread([worker, work, conf]()
-        {
-            worker->run_event_loop();
-        });
-        worker_thread.detach();
+        conf.json_config_schema.scenarios.push_back(scenario);
+        auto worker = std::make_shared<h2load::asio_worker>(0, 0xFFFFFFFF, 1, 0, 1000, &conf, g_io_services[g_current_thread_id]);
         return worker;
     };
 
@@ -38,8 +33,9 @@ void dummy_callback(const std::vector<std::map<std::string, std::string, ci_less
 }
 
 bool send_http2_request(const std::string& method, const std::string& uri,
+                        h2load::Stream_Close_CallBack callback,
                         const std::map<std::string, std::string, ci_less>& headers,
-                        const std::string& message_body, h2load::Stream_Close_CallBack callback)
+                        const std::string& message_body)
 {
     static std::map<std::string, std::string, ci_less> dummyHeaders;
     http_parser_url u {};
@@ -50,7 +46,7 @@ bool send_http2_request(const std::string& method, const std::string& uri,
         return false;
     }
 
-    auto worker = get_worker();
+    auto worker = get_egress_worker();
 
     auto run_inside_worker = [method, uri, headers, message_body, worker, callback]()
     {
@@ -129,4 +125,3 @@ bool send_http2_request(const std::string& method, const std::string& uri,
     return true;
 }
 
-}

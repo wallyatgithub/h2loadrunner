@@ -20,26 +20,12 @@
 #include "rapidjson/stringbuffer.h"
 #include "common_types.h"
 #include "h2load_utils.h"
-#include "udsf_util.h"
+#include "sba_util.h"
 
-extern bool debug_mode;
-extern bool schema_loose_check;
-extern std::vector<boost::asio::io_service* > g_io_services;
-extern std::vector<boost::asio::io_service::strand> g_strands;
-extern thread_local size_t g_current_thread_id;
-extern size_t number_of_worker_thread;
 
-const std::string CONTENT_ID = "Content-Id";
-const std::string CONTENT_TYPE = "Content-Type";
-const std::string CONTENT_LENGTH = "content-length";
-const std::string CONTENT_LOCATION = "content-location";
-const std::string CONTENT_TRANSFER_ENCODDING = "Content-Transfer-Encoding";
-const std::string COLON  = ":";
-const std::string CRLF = "\r\n";
 const std::string VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES = "-----wallyweiwallzzllawiewyllaw---";
 const std::string TWO_LEADING_DASH = "--";
 const std::string ENDING_TWO_DASH = "--";
-const std::string JSON_CONTENT = "application/json";
 const std::string META_CONTENT_ID = "meta";
 const std::string NOTIFICATION_DESCRIPTION_ID = "notification-description";
 const std::string MULTIPART_CONTENT_TYPE = "multipart/mixed; boundary=---wallyweiwallzzllawiewyllaw---";
@@ -78,10 +64,6 @@ const int DECODE_FAILURE = -6;
 const int SUBSCRIPTION_EXPIRY_INVALID = -7;
 const int INVALID_OPERATIONS_IN_SUBSCRIPTION = -8;
 
-
-const std::string PATH_DELIMETER = "/";
-const std::string QUERY_DELIMETER = "&";
-
 const std::string udsf_base_uri = "/nudsf-dr/v1";
 const size_t number_of_tokens_in_api_prefix = 0;
 const std::string api_prefix = "";
@@ -93,23 +75,13 @@ const size_t RECORD_ID_INDEX = number_of_tokens_in_api_prefix + 5;
 const size_t BLOCKS_INDEX = number_of_tokens_in_api_prefix + 6;
 const size_t BLOCK_ID_INDEX = number_of_tokens_in_api_prefix + 7;
 
-const std::string RESOUCE_RECORDS = "records";
-
 const std::string RESOUCE_SUBS_TO_NOTIFY = "subs-to-notify";
 
 const std::string RESOURCE_META_SCHEMAS = "meta-schemas";
 
-const std::string RESOURCE_BLOCKS = "blocks";
-
 const std::string RESOURCE_META = "meta";
 
 const std::string RESOURCE_TIMERS = "timers";
-
-const std::string& METHOD_PUT = "put";
-const std::string& METHOD_POST = "post";
-const std::string& METHOD_PATCH = "patch";
-const std::string& METHOD_DELETE = "delete";
-const std::string& METHOD_GET = "get";
 
 const std::string& LOCATION = "location";
 
@@ -2357,7 +2329,7 @@ public:
                     {
                         additionalHeaders.insert(std::make_pair(CONTENT_TYPE, MULTIPART_CONTENT_TYPE));
                     }
-                    send_http2_request(METHOD_POST, subscription.callbackReference, additionalHeaders, recordNotificationBody);
+                    send_http2_request(METHOD_POST, subscription.callbackReference, dummy_callback, additionalHeaders, recordNotificationBody);
                 }
             }
         }
@@ -2576,7 +2548,7 @@ public:
                     additionalHeaders.insert(std::make_pair(CONTENT_TYPE, JSON_CONTENT));
                     auto body = staticjson::to_json_string(notifInfo);
                     additionalHeaders.insert(std::make_pair(CONTENT_LENGTH, std::to_string(body.size())));
-                    send_http2_request(METHOD_POST, subs.callbackReference, additionalHeaders, body);
+                    send_http2_request(METHOD_POST, subs.callbackReference, dummy_callback, additionalHeaders, body);
                 }
             }
 
@@ -2619,7 +2591,7 @@ public:
                     additionalHeaders.insert(std::make_pair(CONTENT_TYPE, MULTIPART_CONTENT_TYPE));
                     additionalHeaders.insert(std::make_pair(CONTENT_LOCATION, content_location));
                     additionalHeaders.insert(std::make_pair(CONTENT_LENGTH, std::to_string(body.size())));
-                    send_http2_request(METHOD_POST, meta.callbackReference, additionalHeaders, body);
+                    send_http2_request(METHOD_POST, meta.callbackReference, dummy_callback, additionalHeaders, body);
 
                     storage.delete_record_directly(r);
                 }
@@ -2635,7 +2607,7 @@ public:
                     additionalHeaders.insert(std::make_pair(CONTENT_TYPE, JSON_CONTENT));
                     auto body = staticjson::to_json_string(timer_object);
                     additionalHeaders.insert(std::make_pair(CONTENT_LENGTH, std::to_string(body.size())));
-                    send_http2_request(METHOD_POST, timer_object.callbackReference, additionalHeaders,
+                    send_http2_request(METHOD_POST, timer_object.callbackReference, dummy_callback, additionalHeaders,
                                        staticjson::to_json_string(timer_object));
                 }
                 if (timer_object.deleteAfter)

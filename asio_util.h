@@ -23,6 +23,7 @@
 #include "H2Server_Request.h"
 #include "H2Server.h"
 
+
 struct ResponseStatistics
 {
     uint64_t response_sent = 0;
@@ -86,5 +87,11 @@ void install_request_callback(const std::string& bootstrap_thread_id, size_t ser
 void start_server(const std::string& config_file_name, bool start_stats_thread, std::function<void(void)> init_complete_callback);
 
 void stop_server(const std::string& thread_id);
+
+bool start_tick_timer(boost::asio::deadline_timer& timer,
+                      std::multimap<std::chrono::steady_clock::time_point, std::pair<uint64_t, int32_t>>& streams);
+
+void send_error_response(nghttp2::asio_http2::server::asio_server_response& res);
+
 
 #endif
