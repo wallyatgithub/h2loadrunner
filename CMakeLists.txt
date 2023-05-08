@@ -287,6 +287,7 @@ set (UDSF_SOURCES
 #nsacf
 set (NSACF_SOURCES
   sba_util.cc
+  multipart_parser.c
   nsacf_main.cc
   ${H2LOAD_SOURCES}
 )

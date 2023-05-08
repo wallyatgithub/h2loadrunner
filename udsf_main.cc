@@ -69,23 +69,6 @@ std::map<std::string, std::string> get_queries(const nghttp2::asio_http2::server
     return queries;
 }
 
-std::string get_boundary(const std::string& content_type)
-{
-    std::string boundary;
-    const std::string BOUNDARY = "boundary=";
-    auto boundary_start = content_type.find(BOUNDARY);
-    if (boundary_start != std::string::npos)
-    {
-        boundary = content_type.substr(boundary_start + BOUNDARY.size(), std::string::npos);
-        boundary = boundary.substr(0, boundary.find(";"));
-        std::string tmp;
-        tmp.reserve(TWO_LEADING_DASH.size() + boundary.size());
-        tmp.append(TWO_LEADING_DASH).append(boundary);
-        boundary = std::move(tmp);
-    }
-    return boundary;
-}
-
 bool process_create_or_update_record(const nghttp2::asio_http2::server::asio_server_request& req,
                                      nghttp2::asio_http2::server::asio_server_response& res,
                                      uint64_t handler_id, int32_t stream_id,
@@ -154,7 +137,8 @@ bool process_create_or_update_record(const nghttp2::asio_http2::server::asio_ser
         default:
         {
             res.write_head(400);
-            const std::string bad_request = "bad request";
+            std::string error_code = std::to_string(ret);
+            const std::string bad_request = "bad request: " + error_code;
             res.end(bad_request);
             break;
         }

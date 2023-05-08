@@ -126,3 +126,20 @@ bool send_http2_request(const std::string& method, const std::string& uri,
     return true;
 }
 
+std::string get_boundary(const std::string& content_type)
+{
+    std::string boundary;
+    const std::string BOUNDARY = "boundary=";
+    auto boundary_start = content_type.find(BOUNDARY);
+    if (boundary_start != std::string::npos)
+    {
+        boundary = content_type.substr(boundary_start + BOUNDARY.size(), std::string::npos);
+        boundary = boundary.substr(0, boundary.find(";"));
+        std::string tmp;
+        tmp.reserve(TWO_LEADING_DASH.size() + boundary.size());
+        tmp.append(TWO_LEADING_DASH).append(boundary);
+        boundary = std::move(tmp);
+    }
+    return boundary;
+}
+

@@ -41,6 +41,8 @@ const std::string METHOD_GET = "get";
 
 const std::string RESOUCE_RECORDS = "records";
 const std::string RESOURCE_BLOCKS = "blocks";
+const std::string TWO_LEADING_DASH = "--";
+const std::string ENDING_TWO_DASH = "--";
 
 void dummy_callback(const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, const std::string& resp_payload);
 
@@ -52,6 +54,8 @@ bool send_http2_request(const std::string& method, const std::string& uri,
                         h2load::Stream_Close_CallBack callback = dummy_callback,
                         const std::map<std::string, std::string, ci_less>& headers = dummy_header,
                         const std::string& message_body = "");
+
+std::string get_boundary(const std::string& content_type);
 
 
 #endif

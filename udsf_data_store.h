@@ -23,12 +23,10 @@
 #include "sba_util.h"
 
 
-const std::string VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES = "-----wallyweiwallzzllawiewyllaw---";
-const std::string TWO_LEADING_DASH = "--";
-const std::string ENDING_TWO_DASH = "--";
+const std::string VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES = "-----VERY_SPECIAL_BOUNARY_THAT_WILL_NOT_APPEAR_ELSEWHERE---";
 const std::string META_CONTENT_ID = "meta";
 const std::string NOTIFICATION_DESCRIPTION_ID = "notification-description";
-const std::string MULTIPART_CONTENT_TYPE = "multipart/mixed; boundary=---wallyweiwallzzllawiewyllaw---";
+const std::string MULTIPART_CONTENT_TYPE = "multipart/mixed; boundary=---VERY_SPECIAL_BOUNARY_THAT_WILL_NOT_APPEAR_ELSEWHERE---";
 const std::string RECORD_ID_LIST = "recordIdList";
 const std::string CONDITION = "cond";
 const std::string OPERATION = "op";
@@ -498,13 +496,17 @@ public:
     std::vector<Block> blocks;
     RecordMeta meta;
     std::string record_id;
+#ifndef NO_UDSF_RECORD_LOCK
     std::unique_ptr<std::shared_timed_mutex> blocks_mutex;
     std::unique_ptr<std::shared_timed_mutex> meta_mutex;
-
+#endif
     explicit Record(const std::string& id):
-        record_id(id),
+        record_id(id)
+#ifndef NO_UDSF_RECORD_LOCK
+        ,
         blocks_mutex(std::make_unique<std::shared_timed_mutex>()),
         meta_mutex(std::make_unique<std::shared_timed_mutex>())
+#endif
     {
     }
 
@@ -518,7 +520,9 @@ public:
                                 const std::map<std::string, std::string, ci_less>& headers,
                                 bool& update)
     {
+#ifndef NO_UDSF_RECORD_LOCK
         std::unique_lock<std::shared_timed_mutex> write_guard(*blocks_mutex);
+#endif
         auto iter = blockId_to_index.find(id);
         if (iter != blockId_to_index.end())
         {
@@ -546,7 +550,9 @@ public:
     bool delete_block(const std::string& blockId)
     {
         bool delete_successful = true;
+#ifndef NO_UDSF_RECORD_LOCK
         std::unique_lock<std::shared_timed_mutex> guard(*blocks_mutex);
+#endif
         auto iter = blockId_to_index.find(blockId);
         if (iter == blockId_to_index.end())
         {
@@ -569,7 +575,9 @@ public:
 
     Block get_block_object(const std::string& blockId)
     {
+#ifndef NO_UDSF_RECORD_LOCK
         std::shared_lock<std::shared_timed_mutex> guard(*blocks_mutex);
+#endif
         std::string ret;
         auto iter = blockId_to_index.find(blockId);
         if (iter == blockId_to_index.end())
@@ -585,14 +593,18 @@ public:
     {
         if (meta_only)
         {
+#ifndef NO_UDSF_RECORD_LOCK
             std::shared_lock<std::shared_timed_mutex> meta_guard(*meta_mutex);
+#endif
             return staticjson::to_json_string(meta);
         }
 
         else
         {
+#ifndef NO_UDSF_RECORD_LOCK
             std::shared_lock<std::shared_timed_mutex> blocks_guard(*blocks_mutex);
             std::shared_lock<std::shared_timed_mutex> meta_guard(*meta_mutex);
+#endif
             return staticjson::to_json_string(*this);
         }
     }
@@ -601,8 +613,10 @@ public:
     {
         std::string ret;
         size_t final_size = 0;
+#ifndef NO_UDSF_RECORD_LOCK
         std::shared_lock<std::shared_timed_mutex> blocks_guard(*blocks_mutex);
         std::shared_lock<std::shared_timed_mutex> meta_guard(*meta_mutex);
+#endif
         auto metaString = staticjson::to_json_string(meta);
         std::vector<std::string> block_body_parts;
         for (auto& b : blocks)
@@ -610,7 +624,7 @@ public:
             block_body_parts.emplace_back(b.produce_multipart_body());
         }
 
-        final_size += CRLF.size();
+        //final_size += CRLF.size();
 
         if (notificationDescription.size())
         {
@@ -637,7 +651,7 @@ public:
 
         final_size += VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES.size() + ENDING_TWO_DASH.size() + CRLF.size();
 
-        ret.append(CRLF);
+        //ret.append(CRLF);
 
         if (notificationDescription.size())
         {
@@ -670,27 +684,35 @@ public:
 
     std::string get_meta()
     {
+#ifndef NO_UDSF_RECORD_LOCK
         std::shared_lock<std::shared_timed_mutex> guard(*meta_mutex);
+#endif
         auto metaString = staticjson::to_json_string(meta);
         return metaString;
     }
 
     bool set_meta(const std::string& metaString)
     {
+#ifndef NO_UDSF_RECORD_LOCK
         std::unique_lock<std::shared_timed_mutex> guard(*meta_mutex);
+#endif
         staticjson::ParseStatus result;
         return staticjson::from_json_string(metaString.c_str(), &meta, &result);
     }
 
     RecordMeta get_meta_object()
     {
+#ifndef NO_UDSF_RECORD_LOCK
         std::shared_lock<std::shared_timed_mutex> guard(*meta_mutex);
+#endif
         return meta;
     }
 
     void set_meta_object(RecordMeta& new_meta)
     {
+#ifndef NO_UDSF_RECORD_LOCK
         std::unique_lock<std::shared_timed_mutex> guard(*meta_mutex);
+#endif
         meta = std::move(new_meta);
     }
 
@@ -712,9 +734,13 @@ public:
     {
         try
         {
+#ifndef NO_UDSF_RECORD_LOCK
             std::shared_lock<std::shared_timed_mutex> read_lock(*meta_mutex);
+#endif
             auto metaString = staticjson::to_json_string(meta);
+#ifndef NO_UDSF_RECORD_LOCK
             read_lock.unlock();
+#endif
             nlohmann::json original_meta = nlohmann::json::parse(metaString);
             nlohmann::json patch = nlohmann::json::parse(meta_patch);
             nlohmann::json patched_meta = original_meta.patch(patch);

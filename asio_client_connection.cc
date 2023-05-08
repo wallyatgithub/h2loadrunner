@@ -861,7 +861,7 @@ void asio_client_connection::handle_connection_error()
     if (config->verbose)
     {
         std::cerr << __FUNCTION__ << ": " << schema << "://" << authority << std::endl;
-        printBacktrace();
+        //printBacktrace();
     }
     if (is_client_stopped || self_destruction_timer_active)
     {

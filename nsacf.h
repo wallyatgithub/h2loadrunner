@@ -16,12 +16,37 @@
 #include "rapidjson/schema.h"
 #include "rapidjson/prettywriter.h"
 
+class Nssai
+{
+public:
+    std::string sst;
+    std::string sd;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("sst", &this->sst);
+        h->add_property("sd", &this->sd);
+    }
+};
+
+class PlmnId
+{
+public:
+    std::string mcc;
+    std::string mnc;
+    void staticjson_init(staticjson::ObjectHandler* h)
+    {
+        h->add_property("mcc", &this->mcc);
+        h->add_property("mnc", &this->mnc);
+    }
+};
+
+
 class AcuOperationItem
 {
 public:
     std::string updateFlag;
-    std::string snssai;
-    std::string plmnId;
+    Nssai snssai;
+    PlmnId plmnId;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("updateFlag", &this->updateFlag);
@@ -65,16 +90,19 @@ public:
 class AcuFailureItem
 {
 public:
-    std::string snssai;
+    Nssai snssai;
     std::string reason;
-    std::string plmnId;
+    PlmnId plmnId;
     std::string pduSessionId;
+    unsigned reasonFlag = staticjson::Flags::Optional | staticjson::Flags::IgnoreWrite;
+    unsigned plmnIdFlag = staticjson::Flags::Optional | staticjson::Flags::IgnoreWrite;
+    unsigned pduSessionIdFlag = staticjson::Flags::Optional | staticjson::Flags::IgnoreWrite;
     void staticjson_init(staticjson::ObjectHandler* h)
     {
         h->add_property("snssai", &this->snssai);
-        h->add_property("reason", &this->reason, staticjson::Flags::Optional);
-        h->add_property("plmnId", &this->plmnId, staticjson::Flags::Optional);
-        h->add_property("pduSessionId", &this->pduSessionId, staticjson::Flags::Optional);
+        h->add_property("reason", &this->reason, reasonFlag);
+        h->add_property("plmnId", &this->plmnId, plmnIdFlag);
+        h->add_property("pduSessionId", &this->pduSessionId, pduSessionIdFlag);
     }
 };
 
