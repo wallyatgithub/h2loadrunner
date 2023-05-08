@@ -1,0 +1,99 @@
+{
+  "$schema":"http://json-schema.org/draft-04/schema#",
+  "description":" NSACF configuration",
+  "title":"NSACF_configuration",
+  "type":"object",
+  "properties":{
+    "address":{
+      "description":"IP address",
+      "default": "0.0.0.0",
+      "type":"string"
+    },
+    "port":{
+      "description":"port, 80, 443 ,etc.",
+      "default": 80,
+      "type":"integer"
+    },
+    "udsf-url":{
+      "description":"USDF URL, e.g., http://127.0.0.1:8081/nudsf-dr/v1",
+      "type":"string"
+    },
+    "max-number-of-ues":{
+      "description":"max number of registered UEs allowed for a network slice",
+      "default": 2000,
+      "type":"integer"
+    },
+    "threads":{
+      "description":"Number of concurrent worker threads. If 0 is given: thead number matches number of cores",
+      "default": 1,
+      "type":"integer"
+    },
+    "private-key-file":{
+      "description":"path to private key file in PEM format",
+      "type":"string"
+    },
+    "cert-file":{
+      "description":"path to cert file in PEM format",
+      "type":"string"
+    },
+    "caCert-file":{
+      "description":"path to CA cert file in PEM format for client certificate verification, this is used when mTLS is enabled",
+      "type":"string"
+    },
+    "mTLS":{
+        "description": "true: enable mTLS, request and verify client certificate; false: do not request client certificate",
+        "default": false,
+        "type":"boolean"
+    },
+    "max-concurrent-streams":{
+      "description":"Value of SETTINGS_MAX_CONCURRENT_STREAMS in setting frame; default: 2048",
+      "default": 2048,
+      "type":"integer"
+    },
+    "header-table-size":
+    {
+      "description":"Specify decoder header table size.",
+      "default": 4096,
+      "type":"integer"
+    },
+    "encoder-header-table-size":
+    {
+      "description":"Specify encoder header table size. The decoder (server) specifies the maximum dynamic table size it accepts. Then the negotiated dynamic table size is the minimum of this option value and the value which server specified.",
+      "default": 4096,
+      "type":"integer"
+    },
+    "window-bits":
+    {
+      "description":"Sets the stream level initial window size to (2^window-bits)-1",
+      "default": 30,
+      "type":"integer"
+    },
+    "connection-window-bits":
+    {
+      "description":"Sets the connection level initial window size to (2^connection-window-bits)-1",
+      "default": 30,
+      "type":"integer"
+    },
+    "socket-receive-buffer-size":{
+      "description":"socket receive buffer size in bytes; default: 4M",
+      "default": 4194304,
+      "type":"integer"
+    },
+    "socket-send-buffer-size":{
+      "description":"socket send buffer size in bytes; default: 4M",
+      "default": 4194304,
+      "type":"integer"
+    },
+    "no-tls-proto":
+    {
+      "description":"Specify ALPN identifier of the protocol to be used for non-TLS connections. Available protocols: h2c and http/1.1",
+      "type":"string",
+      "default":"h2c"
+    },
+    "verbose":{
+        "description": "true: print debug trace; false: no debug print",
+        "default": false,
+        "type":"boolean"
+    }
+  }
+}

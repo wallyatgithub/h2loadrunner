@@ -25,7 +25,7 @@ const std::string UES = "ues";
 
 const std::string PDUS = "pdus";
 
-const std::string udsf_address = "http://127.0.0.1:8081/nudsf-dr/v1";
+std::string udsf_address = "http://127.0.0.1:8081/nudsf-dr/v1";
 
 const std::string REALM_NAME = "realm";
 
@@ -49,7 +49,7 @@ const std::string TAG_ACCESS_TYPE = "accessType";
 const std::string TAG_NF_ID = "nfId";
 const std::string TAG_NF_TYPE = "nfType";
 
-const size_t UES_THRESHOLD = 2000; // TODO: make this configurable
+size_t MAX_UEs = 2000;
 
 class Ues_Update_Result
 {
@@ -332,7 +332,7 @@ void process_read_number_of_ues_response(Ues_Ac_Control_Block cb, udsf::Record r
     rapidjson::Pointer ptr("/count");
     auto count = ptr.Get(d);
 
-    if (!count || !count->IsUint64() || count->GetUint64() >= UES_THRESHOLD)
+    if (!count || !count->IsUint64() || count->GetUint64() >= MAX_UEs)
     {
         return merge_result(std::move(cb.ingress_identity), cb.acu_index, false);
     }
@@ -672,6 +672,28 @@ int main(int argc, char** argv)
         {
             std::cout << "error reading config file:" << result.description() << std::endl;
             exit(1);
+        }
+
+        rapidjson::Document nsacf_config;
+        nsacf_config.Parse(jsonStr.c_str());
+        if (nsacf_config.HasParseError())
+        {
+            std::cout << "error reading config file "<< std::endl;
+            exit(1);
+        }
+        
+        rapidjson::Pointer url_ptr("/udsf-url");
+        auto url = url_ptr.Get(nsacf_config);
+        if (url && url->IsString())
+        {
+            udsf_address = url->GetString();
+        }
+
+        rapidjson::Pointer limit_ptr("/max-number-of-ues");
+        auto limit = limit_ptr.Get(nsacf_config);
+        if (limit && limit->IsUint64())
+        {
+            MAX_UEs = limit->GetUint64();
         }
 
         if (config_schema.verbose)
