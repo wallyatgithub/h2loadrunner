@@ -40,6 +40,7 @@ bool send_http2_request(const std::string& method, const std::string& uri,
                         std::string message_body)
 {
     static std::map<std::string, std::string, ci_less> dummyHeaders;
+    thread_local static std::map<PROTO_TYPE, std::map<std::string, size_t>> last_used_connection_id;
 
     http_parser_url u {};
     if (http_parser_parse_url(uri.c_str(), uri.size(), 0, &u) != 0 ||
@@ -72,26 +73,19 @@ bool send_http2_request(const std::string& method, const std::string& uri,
 
     h2load::base_client* dest_client = nullptr;
 
-    if (clients[proto_type][base_uri].size() < min_concurrent_clients)
+    auto& clients_in_cluster = clients[proto_type][base_uri];
+    if (clients_in_cluster.size() >= min_concurrent_clients)
     {
-        auto client = worker->create_new_client(0xFFFFFFFF, proto_type, schema, authority);
-        worker->check_in_client(client);
-        client->set_prefered_authority(authority);
-        dest_client = client.get();
-    }
-    if (!(clients[proto_type][base_uri].size() < min_concurrent_clients))
-    {
-        for (size_t count = 0; count < clients[proto_type][base_uri].size(); count++)
+        for (size_t i = 0; i < clients_in_cluster.size(); i++)
         {
-            thread_local static std::random_device rand_dev;
-            thread_local static std::mt19937 generator(rand_dev());
-            thread_local static std::uniform_int_distribution<uint64_t>  distr(0, min_concurrent_clients - 1);
-            auto client_index = distr(generator);
-            auto iter = clients[proto_type][base_uri].begin();
-            std::advance(iter, client_index);
-            dest_client = *iter;
-            if (dest_client->get_total_pending_streams() < dest_client->get_max_concurrent_stream())
+            auto last_used_id = last_used_connection_id[proto_type][base_uri];
+            auto new_id = (last_used_id + 1) % clients_in_cluster.size();
+            auto iter = clients_in_cluster.begin();
+            std::advance(iter, new_id);
+            if ((*iter)->get_total_pending_streams() < (*iter)->get_max_concurrent_stream())
             {
+                dest_client = (*iter);
+                last_used_connection_id[proto_type][base_uri] = new_id;
                 break;
             }
         }

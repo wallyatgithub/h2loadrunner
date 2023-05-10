@@ -290,7 +290,7 @@ void add_or_update_ue_snssai_record(Ues_Ac_Control_Block cb, udsf::Record record
     std::map<std::string, std::string, ci_less> additionalHeaders;
     auto body = record.produce_multipart_body(true, "");
     additionalHeaders.insert(std::make_pair(CONTENT_TYPE, MULTIPART_CONTENT_TYPE));
-    additionalHeaders.insert(std::make_pair(CONTENT_LENGTH, body.size()));
+    additionalHeaders.insert(std::make_pair(CONTENT_LENGTH, std::to_string(body.size())));
     auto process_response = [cb = std::move(cb)](const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, const std::string& resp_payload) mutable
     {
         process_udsf_ues_update_response(std::move(cb), resp_headers, resp_payload);
