@@ -50,6 +50,7 @@ const std::string TAG_NF_ID = "nfId";
 const std::string TAG_NF_TYPE = "nfType";
 
 size_t MAX_UEs = 2000;
+size_t min_concurrent_clients = 10;
 
 class Ues_Update_Result
 {
@@ -289,6 +290,7 @@ void add_or_update_ue_snssai_record(Ues_Ac_Control_Block cb, udsf::Record record
     std::map<std::string, std::string, ci_less> additionalHeaders;
     auto body = record.produce_multipart_body(true, "");
     additionalHeaders.insert(std::make_pair(CONTENT_TYPE, MULTIPART_CONTENT_TYPE));
+    additionalHeaders.insert(std::make_pair(CONTENT_LENGTH, body.size()));
     auto process_response = [cb = std::move(cb)](const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, const std::string& resp_payload) mutable
     {
         process_udsf_ues_update_response(std::move(cb), resp_headers, resp_payload);
@@ -694,6 +696,13 @@ int main(int argc, char** argv)
         if (limit && limit->IsUint64())
         {
             MAX_UEs = limit->GetUint64();
+        }
+
+        rapidjson::Pointer concurrent_connections_ptr("/minimum-egress-concurrent-connections");
+        auto concurrent_connection = concurrent_connections_ptr.Get(nsacf_config);
+        if (concurrent_connection && concurrent_connection->IsUint64())
+        {
+            min_concurrent_clients = concurrent_connection->GetUint64();
         }
 
         if (config_schema.verbose)

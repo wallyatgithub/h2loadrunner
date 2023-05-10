@@ -18,6 +18,11 @@
       "description":"USDF URL, e.g., http://127.0.0.1:8081/nudsf-dr/v1",
       "type":"string"
     },
+    "minimum-egress-concurrent-connections":{
+      "description":"NSACF can establish more than one concurrent connection to UDSF for better throughput; This field specifies the minimum number of concurrent connections to UDSF; if all the connections are blocked (max concurrent stream reached), further more connections will be opened",
+      "default": 5,
+      "type":"integer"
+    },
     "max-number-of-ues":{
       "description":"max number of registered UEs allowed for a network slice",
       "default": 2000,

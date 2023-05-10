@@ -52,8 +52,8 @@ h2load::asio_worker* get_egress_worker();
 
 bool send_http2_request(const std::string& method, const std::string& uri,
                         h2load::Stream_Close_CallBack callback = dummy_callback,
-                        const std::map<std::string, std::string, ci_less>& headers = dummy_header,
-                        const std::string& message_body = "");
+                        std::map<std::string, std::string, ci_less> headers = dummy_header,
+                        std::string message_body = "");
 
 std::string get_boundary(const std::string& content_type);
 

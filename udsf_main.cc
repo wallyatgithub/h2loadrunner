@@ -11,6 +11,7 @@
 
 extern bool debug_mode;
 bool schema_loose_check = true;
+size_t min_concurrent_clients = 10;
 
 extern thread_local size_t g_current_thread_id;
 extern size_t number_of_worker_thread;
@@ -1495,6 +1496,21 @@ int main(int argc, char** argv)
         {
             std::cout << "error reading config file:" << result.description() << std::endl;
             exit(1);
+        }
+
+        rapidjson::Document udsf_config;
+        udsf_config.Parse(jsonStr.c_str());
+        if (udsf_config.HasParseError())
+        {
+            std::cout << "error reading config file "<< std::endl;
+            exit(1);
+        }
+
+        rapidjson::Pointer concurrent_connections_ptr("/minimum-egress-concurrent-connections");
+        auto concurrent_connection = concurrent_connections_ptr.Get(udsf_config);
+        if (concurrent_connection && concurrent_connection->IsUint64())
+        {
+            min_concurrent_clients = concurrent_connection->GetUint64();
         }
 
         if (config_schema.verbose)
