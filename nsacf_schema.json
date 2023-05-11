@@ -45,13 +45,18 @@
       "description":"path to CA cert file in PEM format for client certificate verification, this is used when mTLS is enabled",
       "type":"string"
     },
+    "ciphers": {
+      "description": "Set allowed cipher list. The format of the string is described in OpenSSL ciphers(1)",
+      "type": "string",
+      "default": "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256"
+    },
     "mTLS":{
         "description": "true: enable mTLS, request and verify client certificate; false: do not request client certificate",
         "default": false,
         "type":"boolean"
     },
     "max-concurrent-streams":{
-      "description":"Value of SETTINGS_MAX_CONCURRENT_STREAMS in setting frame; default: 2048",
+      "description":"Value of SETTINGS_MAX_CONCURRENT_STREAMS in setting frame, or max concurrent streams allowed in each egress connection; default: 2048",
       "default": 2048,
       "type":"integer"
     },
@@ -89,11 +94,15 @@
       "default": 4194304,
       "type":"integer"
     },
-    "no-tls-proto":
-    {
-      "description":"Specify ALPN identifier of the protocol to be used for non-TLS connections. Available protocols: h2c and http/1.1",
-      "type":"string",
-      "default":"h2c"
+    "certVerificationMode": {
+      "description": "0: do not do certificate validation; 1: fail if peer certificate does not pass validation",
+      "default": 0,
+      "type": "integer"
+    },
+    "interval-between-ping-frames": {
+      "description": "ping frame can be sent to peer host to prevent the egress connection going idle, as a long idle connection might be taken down; this field specifies the max interval (in seconds) between 2 ping frames; if the connection comes out of idle state in less than this interval, next ping frame will not be sent; 0: no ping is sent even the connection is idle for long",
+      "default": 0,
+      "type": "number"
     },
     "verbose":{
         "description": "true: print debug trace; false: no debug print",

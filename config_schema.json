@@ -140,7 +140,7 @@
     },
     "max-tls-version": {
       "type": "string",
-      "description": "highest allowed TLS version",
+      "description": "max allowed TLS version",
       "default": "TLSv1.3",
       "enum": [
         "TLSv1.2",

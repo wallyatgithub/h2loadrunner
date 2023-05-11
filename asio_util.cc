@@ -429,7 +429,7 @@ void asio_svr_entry(const H2Server_Config_Schema& config_schema,
                 }
             }
 
-            nghttp2::asio_http2::server::configure_tls_context_easy(ec, tls, enable_mTLS);
+            nghttp2::asio_http2::server::configure_tls_context_easy(ec, tls, enable_mTLS, config_schema.ciphers);
 
             init_complete_callback();
 

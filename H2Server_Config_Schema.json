@@ -36,6 +36,11 @@
         "default": false,
         "type":"boolean"
     },
+    "ciphers": {
+      "description": "Set allowed cipher list. The format of the string is described in OpenSSL ciphers(1)",
+      "type": "string",
+      "default": "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256"
+    },
     "max-concurrent-streams":{
       "description":"Value of SETTINGS_MAX_CONCURRENT_STREAMS in setting frame; default: 2048",
       "default": 2048,

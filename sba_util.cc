@@ -8,21 +8,22 @@ extern std::vector<boost::asio::io_service* > g_io_services;
 extern std::vector<boost::asio::io_service::strand> g_strands;
 extern size_t min_concurrent_clients;
 
-// TODO: pass config schema in
+h2load::Config g_egress_config;
+
+
+void init_config_for_egress()
+{
+    Request request;
+    Scenario scenario;
+    scenario.requests.push_back(request);
+    g_egress_config.json_config_schema.scenarios.push_back(scenario);
+}
+
 h2load::asio_worker* get_egress_worker()
 {
     auto create_worker = []()
     {
-        thread_local static h2load::Config conf;
-        if (debug_mode)
-        {
-            conf.verbose = true;
-        }
-        Request request;
-        Scenario scenario;
-        scenario.requests.push_back(request);
-        conf.json_config_schema.scenarios.push_back(scenario);
-        auto worker = std::make_shared<h2load::asio_worker>(0, 0xFFFFFFFF, 1, 0, 1000, &conf, g_io_services[g_current_thread_id]);
+        auto worker = std::make_shared<h2load::asio_worker>(0, 0xFFFFFFFF, 1, 0, 1000, &g_egress_config, g_io_services[g_current_thread_id]);
         return worker;
     };
 
@@ -76,17 +77,27 @@ bool send_http2_request(const std::string& method, const std::string& uri,
     auto& clients_in_cluster = clients[proto_type][base_uri];
     if (clients_in_cluster.size() >= min_concurrent_clients)
     {
+        auto& last_used_id = last_used_connection_id[proto_type][base_uri];
+        auto new_id = (last_used_id + 1);
+        auto iter = clients_in_cluster.begin();
+        auto initial_step = new_id % clients_in_cluster.size();
+        std::advance(iter, initial_step);
         for (size_t i = 0; i < clients_in_cluster.size(); i++)
         {
-            auto last_used_id = last_used_connection_id[proto_type][base_uri];
-            auto new_id = (last_used_id + 1) % clients_in_cluster.size();
-            auto iter = clients_in_cluster.begin();
-            std::advance(iter, new_id);
             if ((*iter)->get_total_pending_streams() < (*iter)->get_max_concurrent_stream())
             {
                 dest_client = (*iter);
-                last_used_connection_id[proto_type][base_uri] = new_id;
+                last_used_id = new_id;
                 break;
+            }
+            else
+            {
+                new_id++;
+                std::advance(iter, 1);
+                if (iter == clients_in_cluster.end())
+                {
+                    iter = clients_in_cluster.begin();
+                }
             }
         }
     }
@@ -144,4 +155,27 @@ std::string get_boundary(const std::string& content_type)
     }
     return boundary;
 }
+
+uint64_t get_uint64_from_json_ptr(rapidjson::Document& doc, const std::string& ptr)
+{
+    rapidjson::Pointer json_ptr(ptr.c_str());
+    auto value = json_ptr.Get(doc);
+    if (value && value->IsUint64())
+    {
+        return value->GetUint64();
+    }
+    return 0;
+}
+
+std::string get_string_from_json_ptr(rapidjson::Document& doc, const std::string& ptr)
+{
+    rapidjson::Pointer json_ptr(ptr.c_str());
+    auto value = json_ptr.Get(doc);
+    if (value && value->IsString())
+    {
+        return value->GetString();
+    }
+    return "";
+}
+
 

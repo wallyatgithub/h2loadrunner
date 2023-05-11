@@ -12,6 +12,7 @@
 #include "udsf_data_store.h"
 
 extern bool debug_mode;
+extern h2load::Config g_egress_config;
 
 const std::string nsacf_base_uri = "/nnsacf-nsac/v1";
 const size_t nsacf_number_of_tokens_in_api_prefix = 0;
@@ -632,7 +633,7 @@ void nsacf_entry(const H2Server_Config_Schema& config_schema)
                 }
             }
 
-            nghttp2::asio_http2::server::configure_tls_context_easy(ec, tls, enable_mTLS);
+            nghttp2::asio_http2::server::configure_tls_context_easy(ec, tls, enable_mTLS, config_schema.ciphers);
 
             if (server.listen_and_serve(ec, tls, addr, port))
             {
@@ -655,13 +656,13 @@ void nsacf_entry(const H2Server_Config_Schema& config_schema)
 
 int main(int argc, char** argv)
 {
-    H2Server_Config_Schema config_schema;
+    H2Server_Config_Schema server_config_schema;
 
     if (argc < 2)
     {
-        config_schema.address = "0.0.0.0";
-        config_schema.port = 8082;
-        config_schema.threads = std::thread::hardware_concurrency();
+        server_config_schema.address = "0.0.0.0";
+        server_config_schema.port = 8082;
+        server_config_schema.threads = std::thread::hardware_concurrency();
     }
     else
     {
@@ -670,7 +671,7 @@ int main(int argc, char** argv)
         std::string jsonStr((std::istreambuf_iterator<char>(buffer)), std::istreambuf_iterator<char>());
 
         staticjson::ParseStatus result;
-        if (!staticjson::from_json_string(jsonStr.c_str(), &config_schema, &result))
+        if (!staticjson::from_json_string(jsonStr.c_str(), &server_config_schema, &result))
         {
             std::cout << "error reading config file:" << result.description() << std::endl;
             exit(1);
@@ -684,36 +685,33 @@ int main(int argc, char** argv)
             exit(1);
         }
         
-        rapidjson::Pointer url_ptr("/udsf-url");
-        auto url = url_ptr.Get(nsacf_config);
-        if (url && url->IsString())
-        {
-            udsf_address = url->GetString();
-        }
+        udsf_address = get_string_from_json_ptr(nsacf_config, "/udsf-url");
+        MAX_UEs = get_uint64_from_json_ptr(nsacf_config, "/max-number-of-ues");
+        min_concurrent_clients = get_uint64_from_json_ptr(nsacf_config, "/minimum-egress-concurrent-connections");
+        g_egress_config.json_config_schema.cert_verification_mode = get_uint64_from_json_ptr(nsacf_config, "/certVerificationMode");
+        g_egress_config.json_config_schema.interval_to_send_ping = get_uint64_from_json_ptr(nsacf_config, "/interval-between-ping-frames");
+        g_egress_config.ciphers = server_config_schema.ciphers;
+        g_egress_config.connection_window_bits = server_config_schema.connection_window_bits;
+        g_egress_config.encoder_header_table_size = server_config_schema.encoder_header_table_size;
+        g_egress_config.json_config_schema.ca_cert = server_config_schema.ca_cert_file;
+        g_egress_config.json_config_schema.client_cert = server_config_schema.cert_file;
+        g_egress_config.json_config_schema.private_key = server_config_schema.private_key_file;
+        g_egress_config.json_config_schema.skt_recv_buffer_size = server_config_schema.skt_recv_buffer_size;
+        g_egress_config.json_config_schema.skt_send_buffer_size = server_config_schema.skt_send_buffer_size;
+        g_egress_config.max_concurrent_streams = server_config_schema.max_concurrent_streams;
+        init_config_for_egress();
 
-        rapidjson::Pointer limit_ptr("/max-number-of-ues");
-        auto limit = limit_ptr.Get(nsacf_config);
-        if (limit && limit->IsUint64())
+        if (server_config_schema.verbose)
         {
-            MAX_UEs = limit->GetUint64();
-        }
-
-        rapidjson::Pointer concurrent_connections_ptr("/minimum-egress-concurrent-connections");
-        auto concurrent_connection = concurrent_connections_ptr.Get(nsacf_config);
-        if (concurrent_connection && concurrent_connection->IsUint64())
-        {
-            min_concurrent_clients = concurrent_connection->GetUint64();
-        }
-
-        if (config_schema.verbose)
-        {
-            std::cerr << "Configuration dump:" << std::endl << staticjson::to_pretty_json_string(config_schema)
+            std::cerr << "Configuration dump:" << std::endl << staticjson::to_pretty_json_string(server_config_schema)
                       << std::endl;
             debug_mode = true;
+            g_egress_config.verbose = true;
         }
+
     }
 
-    nsacf_entry(config_schema);
+    nsacf_entry(server_config_schema);
 
     return 0;
 }

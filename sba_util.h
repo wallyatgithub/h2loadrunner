@@ -57,5 +57,9 @@ bool send_http2_request(const std::string& method, const std::string& uri,
 
 std::string get_boundary(const std::string& content_type);
 
+void init_config_for_egress();
 
+uint64_t get_uint64_from_json_ptr(rapidjson::Document& doc, const std::string& ptr);
+
+std::string get_string_from_json_ptr(rapidjson::Document& doc, const std::string& ptr);
 #endif

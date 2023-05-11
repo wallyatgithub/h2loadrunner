@@ -10,6 +10,8 @@
 #include "H2Server_Response.h"
 
 extern bool debug_mode;
+extern h2load::Config g_egress_config;
+
 bool schema_loose_check = true;
 size_t min_concurrent_clients = 10;
 
@@ -1454,7 +1456,7 @@ void udsf_entry(const H2Server_Config_Schema& config_schema)
                 }
             }
 
-            nghttp2::asio_http2::server::configure_tls_context_easy(ec, tls, enable_mTLS);
+            nghttp2::asio_http2::server::configure_tls_context_easy(ec, tls, enable_mTLS, config_schema.ciphers);
 
             if (server.listen_and_serve(ec, tls, addr, port))
             {
@@ -1506,12 +1508,19 @@ int main(int argc, char** argv)
             exit(1);
         }
 
-        rapidjson::Pointer concurrent_connections_ptr("/minimum-egress-concurrent-connections");
-        auto concurrent_connection = concurrent_connections_ptr.Get(udsf_config);
-        if (concurrent_connection && concurrent_connection->IsUint64())
-        {
-            min_concurrent_clients = concurrent_connection->GetUint64();
-        }
+        min_concurrent_clients = get_uint64_from_json_ptr(udsf_config, "/minimum-egress-concurrent-connections");
+        g_egress_config.json_config_schema.cert_verification_mode = get_uint64_from_json_ptr(udsf_config, "/certVerificationMode");
+        g_egress_config.json_config_schema.interval_to_send_ping = get_uint64_from_json_ptr(udsf_config, "/interval-between-ping-frames");
+        g_egress_config.ciphers = config_schema.ciphers;
+        g_egress_config.connection_window_bits = config_schema.connection_window_bits;
+        g_egress_config.encoder_header_table_size = config_schema.encoder_header_table_size;
+        g_egress_config.json_config_schema.ca_cert = config_schema.ca_cert_file;
+        g_egress_config.json_config_schema.client_cert = config_schema.cert_file;
+        g_egress_config.json_config_schema.private_key = config_schema.private_key_file;
+        g_egress_config.json_config_schema.skt_recv_buffer_size = config_schema.skt_recv_buffer_size;
+        g_egress_config.json_config_schema.skt_send_buffer_size = config_schema.skt_send_buffer_size;
+        g_egress_config.max_concurrent_streams = config_schema.max_concurrent_streams;
+        init_config_for_egress();
 
         if (config_schema.verbose)
         {
