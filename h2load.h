@@ -106,7 +106,7 @@ struct Scenario_Data_Per_User
     }
 
 };
-using Stream_Close_CallBack = std::function<void(const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, const std::string& resp_payload)>;
+using Stream_Close_CallBack = std::function<void(std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, std::string& resp_payload)>;
 
 struct Request_Response_Data
 {

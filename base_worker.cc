@@ -349,6 +349,22 @@ size_t base_worker::get_number_of_active_clients()
     return managed_clients.size();
 }
 
+void base_worker::print_client_pool()
+{
+    for (auto& m: client_pool)
+    {
+        std::cerr<<"proto type: "<<m.first<<std::endl<<std::flush;
+        for (auto& s: m.second)
+        {
+            std::cerr<<"base uri: "<<s.first<<std::endl<<std::flush;
+            for (auto& client: s.second)
+            {
+                std::cerr<<"client: "<<client<<std::endl<<std::flush;
+            }
+        }
+    }
+}
+
 
 }
 

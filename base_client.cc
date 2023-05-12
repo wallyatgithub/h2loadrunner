@@ -822,7 +822,16 @@ void base_client::process_abandoned_streams()
     req_inflight = 0;
 }
 
-void base_client::process_requests_to_submit_upon_error(bool fail_all)
+void base_client::fail_all_unsent_request()
+{
+    while (requests_to_submit.size())
+    {
+        auto req = std::move(requests_to_submit.front());
+        requests_to_submit.pop_front();
+        early_fail_of_request(req, this);
+    }
+}
+void base_client::process_requests_to_submit_upon_error_on_sub_conn(bool fail_all)
 {
     if (is_controller_client())
     {
@@ -932,7 +941,7 @@ void base_client::final_cleanup()
     lua_states.clear();
 
     bool fail_all = true;
-    process_requests_to_submit_upon_error(fail_all);
+    fail_all_unsent_request();
 
     clean_up_this_in_dest_client_map();
 }
@@ -983,18 +992,28 @@ void base_client::cleanup_due_to_disconnect()
 
     call_connected_callbacks(false);
 
-    bool fail_one_req_done = false;
     while (streams.size())
     {
         auto iter = streams.begin();
         on_stream_close(iter->first, false);
-        fail_one_req_done = true;
     }
 
-    if (!conn_normal_close_restart_to_be_done)
+    if (controlled_by_upper_layer_logic(*config))
     {
-        // not a graceful disconnect, fail one unsent request
-        process_requests_to_submit_upon_error(false);
+        // all request must have an outcome for upper layer
+        fail_all_unsent_request();
+    }
+    else
+    {
+        if (!conn_normal_close_restart_to_be_done)
+        {
+            // not a graceful disconnect, fail one unsent request
+            process_requests_to_submit_upon_error_on_sub_conn(false);
+        }
+        else
+        {
+            // nomal connection restart for http1.1, retain all request
+        }
     }
 }
 
@@ -1940,13 +1959,12 @@ void base_client::on_stream_close(int64_t stream_id, bool success, bool final)
         {
             prepare_next_request(*finished_request);
         }
-        if (finished_request->stream_close_callback)
-        {
-            finished_request->stream_close_callback(finished_request->resp_headers, finished_request->resp_payload);
-        }
-        process_stream_user_callback(stream_id);
     }
 
+    auto resp_header = std::move(finished_request->resp_headers);
+    auto resp_body = std::move(finished_request->resp_payload);
+    bool trailer_present = finished_request->resp_trailer_present;
+    auto stream_close_callback = std::move(finished_request->stream_close_callback);
     streams.erase(itr);
 
     if (get_number_of_request_left() == 0 && get_controller_client()->req_inflight_of_all_clients == 0)
@@ -1976,6 +1994,12 @@ void base_client::on_stream_close(int64_t stream_id, bool success, bool final)
                 --get_controller_client()->rps_req_pending;
             }
         }
+    }
+
+    process_stream_user_callback(stream_id, resp_header, trailer_present, resp_body);
+    if (stream_close_callback)
+    {
+        stream_close_callback(resp_header, resp_body);
     }
 }
 
@@ -2761,7 +2785,7 @@ size_t base_client::get_max_concurrent_stream()
 
 int base_client::submit_request()
 {
-    if (requests_to_submit.empty() && request_template_unavailable(*config))
+    if (controlled_by_upper_layer_logic(*config) && requests_to_submit.empty())
     {
         return 0;
     }
@@ -3191,49 +3215,51 @@ void base_client::queue_stream_for_user_callback(int64_t stream_id)
     per_stream_user_callbacks[stream_id].stream_id = stream_id;
 }
 
-void base_client::process_stream_user_callback(int64_t stream_id)
+void base_client::process_stream_user_callback(int64_t stream_id, const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers,
+                                                          bool trailer_present, const std::string& resp_body)
 {
-    auto it = streams.find(stream_id);
-    if (it !=  streams.end() && per_stream_user_callbacks.count(stream_id) &&
-        it->second.request_response)
+    auto callback_it = per_stream_user_callbacks.find(stream_id);
+    if (callback_it != per_stream_user_callbacks.end())
     {
-        per_stream_user_callbacks[stream_id].resp_headers = std::move(it->second.request_response->resp_headers);
-        per_stream_user_callbacks[stream_id].resp_payload = std::move(it->second.request_response->resp_payload);
-        per_stream_user_callbacks[stream_id].response_available = true;
-        per_stream_user_callbacks[stream_id].resp_trailer_present = it->second.request_response->resp_trailer_present;
-        if (per_stream_user_callbacks[stream_id].response_callback)
+        callback_it->second.resp_headers = resp_headers;
+        callback_it->second.resp_payload = resp_body;
+        callback_it->second.response_available = true;
+        callback_it->second.resp_trailer_present = trailer_present;
+        if (callback_it->second.response_callback)
         {
-            per_stream_user_callbacks[stream_id].response_callback();
-            per_stream_user_callbacks.erase(stream_id);
+            callback_it->second.response_callback();
+            per_stream_user_callbacks.erase(callback_it);
         }
     }
 }
 
 void base_client::pass_response_to_lua(int64_t stream_id, lua_State* L)
 {
-    if (per_stream_user_callbacks.count(stream_id))
+    auto iter = per_stream_user_callbacks.find(stream_id);
+    if (per_stream_user_callbacks.end() != iter)
     {
         auto push_response_to_lua_stack = [this, L, stream_id]()
         {
+            auto cb_data = per_stream_user_callbacks[stream_id];
             std::map<std::string, std::string, ci_less>* trailer = nullptr;
-            if (per_stream_user_callbacks[stream_id].resp_headers.size() > 1 &&
-                per_stream_user_callbacks[stream_id].resp_trailer_present)
+            if (cb_data.resp_headers.size() > 1 &&
+                cb_data.resp_trailer_present)
             {
-                trailer = &per_stream_user_callbacks[stream_id].resp_headers.back();
+                trailer = &cb_data.resp_headers.back();
                 if (config->verbose)
                 {
-                    std::cout << "number of header frames: " << per_stream_user_callbacks[stream_id].resp_headers.size()
+                    std::cout << "number of header frames: " << cb_data.resp_headers.size()
                               << ", trailer found" << std::endl;
                 }
             }
-            lua_createtable(L, 0, std::accumulate(per_stream_user_callbacks[stream_id].resp_headers.begin(),
-                                                  per_stream_user_callbacks[stream_id].resp_headers.end(),
+            lua_createtable(L, 0, std::accumulate(cb_data.resp_headers.begin(),
+                                                  cb_data.resp_headers.end(),
                                                   0,
                                                   [trailer](uint64_t sum, const std::map<std::string, std::string, ci_less>& val)
             {
                 return sum + (&val == trailer ? 0 : val.size());
             }));
-            for (auto& header_map : per_stream_user_callbacks[stream_id].resp_headers)
+            for (auto& header_map : cb_data.resp_headers)
             {
                 if (&header_map == trailer)
                 {
@@ -3247,8 +3273,8 @@ void base_client::pass_response_to_lua(int64_t stream_id, lua_State* L)
                 }
             }
 
-            lua_pushlstring(L, per_stream_user_callbacks[stream_id].resp_payload.c_str(),
-                            per_stream_user_callbacks[stream_id].resp_payload.size());
+            lua_pushlstring(L, cb_data.resp_payload.c_str(),
+                            cb_data.resp_payload.size());
 
             if (trailer)
             {
@@ -3266,11 +3292,11 @@ void base_client::pass_response_to_lua(int64_t stream_id, lua_State* L)
             }
         };
 
-        if (per_stream_user_callbacks[stream_id].response_available)
+        if (iter->second.response_available)
         {
             push_response_to_lua_stack();
             lua_resume_if_yielded(L, 3);
-            per_stream_user_callbacks.erase(stream_id);
+            per_stream_user_callbacks.erase(iter);
         }
         else
         {
@@ -3279,7 +3305,7 @@ void base_client::pass_response_to_lua(int64_t stream_id, lua_State* L)
                 push_response_to_lua_stack();
                 lua_resume_if_yielded(L, 3);
             };
-            per_stream_user_callbacks[stream_id].response_callback = callback;
+            iter->second.response_callback = callback;
         }
     }
     else

@@ -53,7 +53,7 @@ std::shared_ptr<base_client> asio_worker::create_new_client(size_t req_todo, PRO
             std::cerr<<"invalid protol"<<std::endl;
             abort();
     }
-    return std::make_shared<asio_client_connection>(io_context, next_client_id++, this, req_todo, config, *ctx, nullptr, schema, authority);
+    return std::make_shared<asio_client_connection>(io_context, next_client_id++, this, req_todo, config, *ctx, nullptr, schema, authority, proto_type);
 }
 
 std::shared_ptr<base_client> asio_worker::create_new_sub_client(base_client* parent_client, size_t req_todo, const std::string& schema, const std::string& authority, PROTO_TYPE proto_type)

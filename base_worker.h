@@ -95,6 +95,8 @@ public:
 
     std::shared_ptr<base_client> get_shared_ptr_of_client(base_client* client);
 
+    void print_client_pool();
+
 };
 
 }

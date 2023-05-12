@@ -31,7 +31,7 @@ h2load::asio_worker* get_egress_worker()
     return worker.get();
 }
 
-void dummy_callback(const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, const std::string& resp_payload)
+void dummy_callback(std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, std::string& resp_payload)
 {
 }
 
@@ -75,6 +75,7 @@ bool send_http2_request(const std::string& method, const std::string& uri,
     h2load::base_client* dest_client = nullptr;
 
     auto& clients_in_cluster = clients[proto_type][base_uri];
+
     if (clients_in_cluster.size() >= min_concurrent_clients)
     {
         auto& last_used_id = last_used_connection_id[proto_type][base_uri];
@@ -123,7 +124,7 @@ bool send_http2_request(const std::string& method, const std::string& uri,
     request_to_send->schema = &(request_to_send->string_collection.back());
     request_to_send->req_headers_of_individual = std::move(headers);
     request_to_send->req_headers_from_config = &dummyHeaders;
-    request_to_send->stream_close_callback = callback;
+    request_to_send->stream_close_callback = std::move(callback);
     dest_client->requests_to_submit.emplace_back(std::move(request_to_send));
 
     if (h2load::CLIENT_IDLE == dest_client->state)

@@ -199,7 +199,7 @@ void setup_SSL_CTX(SSL_CTX* ssl_ctx, h2load::Config& config, const std::set<std:
 
 bool is_it_an_ipv6_address(const std::string& address);
 
-bool request_template_unavailable(h2load::Config& config);
+bool controlled_by_upper_layer_logic(h2load::Config& config);
 
 void process_delayed_scenario(h2load::Config& config);
 

@@ -841,7 +841,7 @@ void asio_client_connection::on_connected_event(const boost::system::error_code&
         else
         {
             bool fail_all = true;
-            process_requests_to_submit_upon_error(fail_all);
+            process_requests_to_submit_upon_error_on_sub_conn(fail_all);
             handle_connection_error();
         }
     }

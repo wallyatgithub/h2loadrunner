@@ -121,7 +121,8 @@ public:
 
     void process_timedout_streams();
     void process_abandoned_streams();
-    void process_requests_to_submit_upon_error(bool fail_all = false);
+    void process_requests_to_submit_upon_error_on_sub_conn(bool fail_all = false);
+    void fail_all_unsent_request();
     void timeout();
     void terminate_session();
     void on_header(int64_t stream_id, const uint8_t* name, size_t namelen,
@@ -190,7 +191,8 @@ public:
     void call_connected_callbacks(bool success);
     void install_connected_callback(std::function<void(bool, h2load::base_client*)> callback);
     void queue_stream_for_user_callback(int64_t stream_id);
-    void process_stream_user_callback(int64_t stream_id);
+    void process_stream_user_callback(int64_t stream_id, const std::vector<std::map<std::string, std::string, ci_less>>& resp_headers,
+                                                 bool trailer_present, const std::string& resp_body);
     void on_header_frame_begin(int64_t stream_id, uint8_t flags);
     void pass_response_to_lua(int64_t stream_id, lua_State* L);
     uint64_t get_client_unique_id();

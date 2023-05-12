@@ -2355,7 +2355,7 @@ public:
                     {
                         additionalHeaders.insert(std::make_pair(CONTENT_TYPE, MULTIPART_CONTENT_TYPE));
                     }
-                    send_http2_request(METHOD_POST, subscription.callbackReference, dummy_callback, additionalHeaders, recordNotificationBody);
+                    send_http2_request(METHOD_POST, subscription.callbackReference, dummy_callback, std::move(additionalHeaders), std::move(recordNotificationBody));
                 }
             }
         }
@@ -2574,7 +2574,7 @@ public:
                     additionalHeaders.insert(std::make_pair(CONTENT_TYPE, JSON_CONTENT));
                     auto body = staticjson::to_json_string(notifInfo);
                     additionalHeaders.insert(std::make_pair(CONTENT_LENGTH, std::to_string(body.size())));
-                    send_http2_request(METHOD_POST, subs.callbackReference, dummy_callback, additionalHeaders, body);
+                    send_http2_request(METHOD_POST, subs.callbackReference, dummy_callback, std::move(additionalHeaders), std::move(body));
                 }
             }
 
@@ -2617,7 +2617,7 @@ public:
                     additionalHeaders.insert(std::make_pair(CONTENT_TYPE, MULTIPART_CONTENT_TYPE));
                     additionalHeaders.insert(std::make_pair(CONTENT_LOCATION, content_location));
                     additionalHeaders.insert(std::make_pair(CONTENT_LENGTH, std::to_string(body.size())));
-                    send_http2_request(METHOD_POST, meta.callbackReference, dummy_callback, additionalHeaders, body);
+                    send_http2_request(METHOD_POST, meta.callbackReference, dummy_callback, std::move(additionalHeaders), std::move(body));
 
                     storage.delete_record_directly(r);
                 }
@@ -2633,8 +2633,8 @@ public:
                     additionalHeaders.insert(std::make_pair(CONTENT_TYPE, JSON_CONTENT));
                     auto body = staticjson::to_json_string(timer_object);
                     additionalHeaders.insert(std::make_pair(CONTENT_LENGTH, std::to_string(body.size())));
-                    send_http2_request(METHOD_POST, timer_object.callbackReference, dummy_callback, additionalHeaders,
-                                       staticjson::to_json_string(timer_object));
+                    send_http2_request(METHOD_POST, timer_object.callbackReference, dummy_callback, std::move(additionalHeaders),
+                                       std::move(staticjson::to_json_string(timer_object)));
                 }
                 if (timer_object.deleteAfter)
                 {

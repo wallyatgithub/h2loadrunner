@@ -734,7 +734,7 @@ process_time_stats(const std::vector<std::shared_ptr<h2load::base_worker>>& work
            };
 }
 
-bool request_template_unavailable(h2load::Config& config)
+bool controlled_by_upper_layer_logic(h2load::Config& config)
 {
     //return (!config.base_uri_unix && config.connect_to_host.empty() && config.host.empty());
     bool host_empty = (!config.base_uri_unix && config.connect_to_host.empty() && config.host.empty());
