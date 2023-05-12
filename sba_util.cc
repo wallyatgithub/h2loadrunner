@@ -31,10 +31,6 @@ h2load::asio_worker* get_egress_worker()
     return worker.get();
 }
 
-void dummy_callback(std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, std::string& resp_payload)
-{
-}
-
 bool send_http2_request(const std::string& method, const std::string& uri,
                         h2load::Stream_Close_CallBack callback,
                         std::map<std::string, std::string, ci_less> headers,
@@ -124,7 +120,10 @@ bool send_http2_request(const std::string& method, const std::string& uri,
     request_to_send->schema = &(request_to_send->string_collection.back());
     request_to_send->req_headers_of_individual = std::move(headers);
     request_to_send->req_headers_from_config = &dummyHeaders;
-    request_to_send->stream_close_callback = std::move(callback);
+    if (callback)
+    {
+        request_to_send->stream_close_callback = std::move(callback);
+    }
     dest_client->requests_to_submit.emplace_back(std::move(request_to_send));
 
     if (h2load::CLIENT_IDLE == dest_client->state)

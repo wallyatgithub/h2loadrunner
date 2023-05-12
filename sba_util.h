@@ -44,9 +44,9 @@ const std::string RESOURCE_BLOCKS = "blocks";
 const std::string TWO_LEADING_DASH = "--";
 const std::string ENDING_TWO_DASH = "--";
 
-void dummy_callback(std::vector<std::map<std::string, std::string, ci_less>>& resp_headers, std::string& resp_payload);
-
 const std::map<std::string, std::string, ci_less> dummy_header;
+
+const h2load::Stream_Close_CallBack dummy_callback;
 
 h2load::asio_worker* get_egress_worker();
 
