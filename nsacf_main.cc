@@ -191,77 +191,68 @@ void merge_result(Ingress_Request_Identify& source_req_identity, size_t acu_inde
 {
     auto handler_id = source_req_identity.handler_id;
     auto stream_id = source_req_identity.stream_id;
-    auto run_in_worker = [handler_id, stream_id, acu_index, success_or_failure]()
+    auto iter = UeAcuStatus.find(std::pair<size_t, int32_t>(handler_id, stream_id));
+    if (iter != UeAcuStatus.end())
     {
-        auto iter = UeAcuStatus.find(std::pair<size_t, int32_t>(handler_id, stream_id));
-        if (iter != UeAcuStatus.end())
+        iter->second[acu_index].update_done = true;
+        iter->second[acu_index].update_success = success_or_failure;
+        bool update_all_done = true;
+        bool all_success = true;
+        for (auto& result : iter->second)
         {
-            iter->second[acu_index].update_done = true;
-            iter->second[acu_index].update_success = success_or_failure;
-            bool update_all_done = true;
-            bool all_success = true;
-            for (auto& result : iter->second)
+            if (!result.update_done)
             {
-                if (!result.update_done)
-                {
-                    update_all_done = false;
-                    break;
-                }
-                if (!result.update_success)
-                {
-                    all_success = false;
-                    break;
-                }
+                update_all_done = false;
+                break;
             }
-            if (update_all_done)
+            if (!result.update_success)
             {
-                auto all_result = std::move(iter->second);
-                UeAcuStatus.erase(iter);
-
-                auto handler = nghttp2::asio_http2::server::base_handler::find_handler(handler_id);
-                if (!handler)
-                {
-                    return;
-                }
-                auto orig_stream = handler->find_stream(stream_id);
-                if (!orig_stream)
-                {
-                    return;
-                }
-                auto& res = orig_stream->response();
-                auto& req = orig_stream->request();
-
-                if (all_success)
-                {
-                    res.write_head(204);
-                    res.end();
-                }
-                else
-                {
-                    UeACResponseData response;
-                    for (auto& result : all_result)
-                    {
-                        if (!result.update_success)
-                        {
-                            AcuFailureItem item;
-                            item.snssai = result.snssai;
-                            response.acuFailureList[result.supi].push_back(std::move(item));
-                        }
-                    }
-                    auto body = staticjson::to_json_string(response);
-                    res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(body.size())}}});
-                    res.end(std::move(body));
-                }
+                all_success = false;
+                break;
             }
         }
-    };
-    if (g_io_services[g_current_thread_id] != source_req_identity.source_ios)
-    {
-        source_req_identity.source_ios->post(run_in_worker);
-    }
-    else
-    {
-        run_in_worker();
+        if (!update_all_done)
+        {
+            return;
+        }
+        auto all_result = std::move(iter->second);
+        UeAcuStatus.erase(iter);
+
+        auto handler = nghttp2::asio_http2::server::base_handler::find_handler(handler_id);
+        if (!handler)
+        {
+            return;
+        }
+        auto orig_stream = handler->find_stream(stream_id);
+        if (!orig_stream)
+        {
+            return;
+        }
+        auto& res = orig_stream->response();
+        auto& req = orig_stream->request();
+
+        if (all_success)
+        {
+            res.write_head(204);
+            res.end();
+        }
+        else
+        {
+            UeACResponseData response;
+            for (auto& result : all_result)
+            {
+                if (result.update_success)
+                {
+                    continue;
+                }
+                AcuFailureItem item;
+                item.snssai = result.snssai;
+                response.acuFailureList[result.supi].push_back(std::move(item));
+            }
+            auto body = staticjson::to_json_string(response);
+            res.write_head(200, {{CONTENT_TYPE, {JSON_CONTENT}}, {CONTENT_LENGTH, {std::to_string(body.size())}}});
+            res.end(std::move(body));
+        }
     }
 }
 
