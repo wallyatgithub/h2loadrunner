@@ -516,7 +516,7 @@ bool process_ues(boost::asio::io_service* source_ios, const nghttp2::asio_http2:
                                         reqData.nfType,
                                         reqInfo.anType,
                                         reqInfo.additionalAnType,
-                                        ac);
+                                        std::move(ac));
                 read_ue_snssai_record(cb);
                 acu_index++;
             }
