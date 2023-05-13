@@ -373,7 +373,7 @@ void update_ues_record(udsf::Record& record, Ues_Ac_Control_Block& cb)
     
     if (cb.additional_access_type.size())
     {
-        auto addl_target_index = find_index_of_target_value(record.meta, TAG_ACCESS_TYPE, cb.access_type);
+        auto addl_target_index = find_index_of_target_value(record.meta, TAG_ACCESS_TYPE, cb.additional_access_type);
         if (addl_target_index < 0)
         {
             add_tag_value(record.meta, TAG_ACCESS_TYPE, std::move(cb.additional_access_type));
