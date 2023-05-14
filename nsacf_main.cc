@@ -208,7 +208,6 @@ void merge_result(Ingress_Request_Identify& source_req_identity, size_t acu_inde
             if (!result.update_success)
             {
                 all_success = false;
-                break;
             }
         }
         if (!update_all_done)
