@@ -46,7 +46,7 @@ const std::string ACU_INCREASE = "INCREASE";
 const std::string ACU_DECREASE = "DECREASE";
 const std::string ACU_UPDATE = "UPDATE";
 
-const std::string TAG_ACCESS_TYPE = "accessType";
+const std::string TAG_ACCESS_TYPE = "anType";
 const std::string TAG_NF_ID = "nfId";
 const std::string TAG_NF_TYPE = "nfType";
 
@@ -360,29 +360,40 @@ void read_number_of_ues(Ues_Ac_Control_Block& cb, udsf::Record& record)
     send_http2_request(METHOD_GET, uri, std::move(process_response));
 }
 
-void update_ues_record(udsf::Record& record, Ues_Ac_Control_Block& cb)
+void update_ues_record(udsf::RecordMeta& meta, Ues_Ac_Control_Block& cb)
 {
-    auto target_index = find_index_of_target_value(record.meta, TAG_ACCESS_TYPE, cb.access_type);
+    auto target_index = find_index_of_target_value(meta, TAG_ACCESS_TYPE, cb.access_type);
     if (target_index < 0)
     {
-        add_tag_value(record.meta, TAG_ACCESS_TYPE, std::move(cb.access_type));
-        target_index = (record.meta.tags[TAG_ACCESS_TYPE].size() - 1);
+        add_tag_value(meta, TAG_ACCESS_TYPE, std::move(cb.access_type));
+        target_index = (meta.tags[TAG_ACCESS_TYPE].size() - 1);
     }
-    update_tag_value_at_index(record.meta, TAG_NF_ID, target_index, std::move(cb.nf_id));
-    update_tag_value_at_index(record.meta, TAG_NF_TYPE, target_index, std::move(cb.nf_type));
+    update_tag_value_at_index(meta, TAG_NF_ID, target_index, std::move(cb.nf_id));
+    update_tag_value_at_index(meta, TAG_NF_TYPE, target_index, std::move(cb.nf_type));
     
     if (cb.additional_access_type.size())
     {
-        auto addl_target_index = find_index_of_target_value(record.meta, TAG_ACCESS_TYPE, cb.additional_access_type);
+        auto addl_target_index = find_index_of_target_value(meta, TAG_ACCESS_TYPE, cb.additional_access_type);
         if (addl_target_index < 0)
         {
-            add_tag_value(record.meta, TAG_ACCESS_TYPE, std::move(cb.additional_access_type));
-            addl_target_index = (record.meta.tags[TAG_ACCESS_TYPE].size() - 1);
+            add_tag_value(meta, TAG_ACCESS_TYPE, std::move(cb.additional_access_type));
+            addl_target_index = (meta.tags[TAG_ACCESS_TYPE].size() - 1);
         }
-        update_tag_value_at_index(record.meta, TAG_NF_ID, addl_target_index,
-                                  get_tag_value_at_index(record.meta, TAG_NF_ID, target_index));
-        update_tag_value_at_index(record.meta, TAG_NF_TYPE, addl_target_index,
-                                  get_tag_value_at_index(record.meta, TAG_NF_TYPE, target_index));
+        update_tag_value_at_index(meta, TAG_NF_ID, addl_target_index,
+                                  get_tag_value_at_index(meta, TAG_NF_ID, target_index));
+        update_tag_value_at_index(meta, TAG_NF_TYPE, addl_target_index,
+                                  get_tag_value_at_index(meta, TAG_NF_TYPE, target_index));
+    }
+    else if (meta.tags[TAG_ACCESS_TYPE].size() > 1)
+    {
+        auto index_to_remove = ((target_index + 1) % meta.tags[TAG_ACCESS_TYPE].size());
+        remove_tag_value_at_index(meta, TAG_ACCESS_TYPE, index_to_remove);
+        remove_tag_value_at_index(meta, TAG_NF_ID, index_to_remove);
+        remove_tag_value_at_index(meta, TAG_NF_TYPE, index_to_remove);
+    }
+    else
+    {
+        // nop
     }
 }
 
@@ -462,7 +473,7 @@ void process_udsf_ues_read_response(Ues_Ac_Control_Block& cb,
     {
         if (record_present)
         {
-            update_ues_record(record, cb);
+            update_ues_record(record.meta, cb);
             return add_or_update_ue_snssai_record(cb, record);
         }
         else

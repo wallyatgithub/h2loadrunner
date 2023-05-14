@@ -92,6 +92,25 @@
           },
           "clear-old-cookies": false,
           "method": "POST",
+          "payload": "{   \"ueACRequestInfo\": [     {       \"supi\": \"imsi-11111USER\",       \"anType\": \"NON_3GPP_ACCESS\",       \"acuOperationList\": [         {           \"updateFlag\": \"UPDATE\",           \"snssai\": {             \"sst\": \"123\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"106\"           }         },         {           \"updateFlag\": \"UPDATE\",           \"snssai\": {             \"sst\": \"789\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"345\"           }         }       ],       \"additionalAnType\": \"\"     },     {       \"supi\": \"imsi-22222USER\",       \"anType\": \"NON_3GPP_ACCESS\",       \"acuOperationList\": [         {           \"updateFlag\": \"UPDATE\",           \"snssai\": {             \"sst\": \"123\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"106\"           }         },         {           \"updateFlag\": \"UPDATE\",           \"snssai\": {             \"sst\": \"789\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"345\"           }         }       ],       \"additionalAnType\": \"\"     }   ],   \"nfId\": \"1234567897231\",   \"nfType\": \"AMF\" }",
+          "additonalHeaders": [
+            "User-Agent:AMF"
+          ],
+          "luaScript": "",
+          "expected-status-code": 204,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nnsacf-nsac/v1/slices/ues"
+          },
+          "clear-old-cookies": false,
+          "method": "POST",
           "payload": "{   \"ueACRequestInfo\": [     {       \"supi\": \"imsi-11111USER\",       \"anType\": \"3GPP_ACCESS\",       \"acuOperationList\": [         {           \"updateFlag\": \"DECREASE\",           \"snssai\": {             \"sst\": \"123\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"106\"           }         },         {           \"updateFlag\": \"DECREASE\",           \"snssai\": {             \"sst\": \"789\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"345\"           }         }       ],       \"additionalAnType\": \"NON_3GPP_ACCESS\"     },     {       \"supi\": \"imsi-22222USER\",       \"anType\": \"3GPP_ACCESS\",       \"acuOperationList\": [         {           \"updateFlag\": \"DECREASE\",           \"snssai\": {             \"sst\": \"123\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"106\"           }         },         {           \"updateFlag\": \"DECREASE\",           \"snssai\": {             \"sst\": \"789\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"345\"           }         }       ],       \"additionalAnType\": \"NON_3GPP_ACCESS\"     }   ],   \"nfId\": \"1234567897231\",   \"nfType\": \"AMF\" }",
           "additonalHeaders": [
             "User-Agent:AMF"
