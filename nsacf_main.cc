@@ -402,41 +402,43 @@ void process_udsf_ues_read_response(Ues_Ac_Control_Block& cb,
 {
     bool record_present = false;
     udsf::Record record(UE_RECORD_PREFIX + cb.supi);
-    if (resp_headers.size())
+    if (!resp_headers.size())
     {
-        auto code_iter = resp_headers[0].find(STATUS);
-        if (code_iter == resp_headers[0].end())
+        return merge_result(cb.ingress_identity, cb.acu_index, false);
+    }
+
+    auto code_iter = resp_headers[0].find(STATUS);
+    if (code_iter == resp_headers[0].end())
+    {
+        return merge_result(cb.ingress_identity, cb.acu_index, false);
+    }
+    if (code_iter->second == "200")
+    {
+        auto iter = resp_headers[0].find(CONTENT_TYPE);
+        if (iter == resp_headers[0].end())
         {
             return merge_result(cb.ingress_identity, cb.acu_index, false);
         }
-        if (code_iter->second == "200")
+
+        auto boundary = get_boundary(iter->second);
+        if (boundary.empty())
         {
-            auto iter = resp_headers[0].find(CONTENT_TYPE);
-            if (iter == resp_headers[0].end())
-            {
-                return merge_result(cb.ingress_identity, cb.acu_index, false);
-            }
-            
-            auto boundary = get_boundary(iter->second);
-            if (boundary.empty())
-            {
-                return merge_result(cb.ingress_identity, cb.acu_index, false);
-            }
-
-            udsf::MultipartParser parser(boundary);
-            auto parts = std::move(parser.get_parts(resp_payload));
-            if (parts.empty())
-            {
-                return merge_result(cb.ingress_identity, cb.acu_index, false);
-            }
-
-            staticjson::ParseStatus result;
-            if (!staticjson::from_json_string(parts[0].second.c_str(), &record.meta, &result))
-            {
-                return merge_result(cb.ingress_identity, cb.acu_index, false);
-            }
-            record_present = true;
+            return merge_result(cb.ingress_identity, cb.acu_index, false);
         }
+
+        udsf::MultipartParser parser(boundary);
+        auto parts = std::move(parser.get_parts(resp_payload));
+        if (parts.empty())
+        {
+            return merge_result(cb.ingress_identity, cb.acu_index, false);
+        }
+
+        staticjson::ParseStatus result;
+        if (!staticjson::from_json_string(parts[0].second.c_str(), &record.meta, &result))
+        {
+            return merge_result(cb.ingress_identity, cb.acu_index, false);
+        }
+        record_present = true;
     }
 
     if (cb.acu_item.updateFlag == ACU_DECREASE)
