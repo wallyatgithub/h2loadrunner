@@ -383,7 +383,7 @@ void update_ues_record(udsf::RecordMeta& meta, Ues_Ac_Control_Block& cb)
         update_tag_value_at_index(meta, TAG_NF_TYPE, addl_target_index,
                                   get_tag_value_at_index(meta, TAG_NF_TYPE, target_index));
     }
-    else if (meta.tags[TAG_ACCESS_TYPE].size() > 1)
+    else if (meta.tags[TAG_ACCESS_TYPE].size() > 1 && cb.acu_item.updateFlag == ACU_UPDATE)
     {
         auto index_to_remove = ((target_index + 1) % meta.tags[TAG_ACCESS_TYPE].size());
         remove_tag_value_at_index(meta, TAG_ACCESS_TYPE, index_to_remove);
