@@ -102,8 +102,8 @@ public:
         ingress_identity(h_id, s_id),
         supi_index(index),
         supi(std::move(uid)),
-        nf_id(std::move(nfId)),
-        nf_type(std::move(nfType)),
+        nf_id(nfId),
+        nf_type(nfType),
         access_type(std::move(accessType)),
         additional_access_type(std::move(additionalAnType)),
         acu_items(std::move(item))
@@ -382,18 +382,22 @@ void delete_ues_supi_record(Ues_Supi_Control_Block& cb)
 void update_ues_record_block(udsf::Record& record, Ues_Supi_Control_Block& cb, size_t acu_index)
 {
     AcuOperationItem& ac_item = cb.acu_items[acu_index];
-    auto snssai = staticjson::to_json_string(ac_item.snssai);
+    auto snssai = ac_item.snssai.to_string();
     auto& update_flag = ac_item.updateFlag;
 
     size_t target_block_index = 0;
-    for (size_t i = 0; i < record.blocks.size(); i++)
+    for (target_block_index = 0; target_block_index < record.blocks.size(); target_block_index++)
     {
-        if (record.blocks[i].content_id == snssai)
+        if (record.blocks[target_block_index].content_id == snssai)
         {
-            target_block_index = i;
             break;
         }
     }
+    if (target_block_index == record.blocks.size())
+    {
+        record.blocks.emplace_back();
+    }
+
     udsf::Block& target_block = record.blocks[target_block_index];
 
     udsf::RecordMeta block_content;
@@ -417,7 +421,7 @@ void update_ues_record_block(udsf::Record& record, Ues_Supi_Control_Block& cb, s
             auto nf_type = remove_tag_value_at_index(record.meta, TAG_NF_TYPE, target_index);
         }
 
-        if (record.meta.tags[TAG_ACCESS_TYPE].empty() || cb.additional_access_type.size())
+        if (block_content.tags[TAG_ACCESS_TYPE].empty() || cb.additional_access_type.size())
         {
             auto iter = record.blocks.begin();
             std::advance(iter, target_block_index);
@@ -430,17 +434,17 @@ void update_ues_record_block(udsf::Record& record, Ues_Supi_Control_Block& cb, s
         auto target_index = find_index_of_target_value(block_content, TAG_ACCESS_TYPE, cb.access_type);
         if (target_index < 0)
         {
-            add_tag_value(block_content, TAG_ACCESS_TYPE, std::move(cb.access_type));
+            add_tag_value(block_content, TAG_ACCESS_TYPE, cb.access_type);
             target_index = (block_content.tags[TAG_ACCESS_TYPE].size() - 1);
         }
-        update_tag_value_at_index(block_content, TAG_NF_ID, target_index, std::move(cb.nf_id));
-        update_tag_value_at_index(block_content, TAG_NF_TYPE, target_index, std::move(cb.nf_type));
+        update_tag_value_at_index(block_content, TAG_NF_ID, target_index, cb.nf_id);
+        update_tag_value_at_index(block_content, TAG_NF_TYPE, target_index, cb.nf_type);
         if (cb.additional_access_type.size())
         {
             auto addl_target_index = find_index_of_target_value(block_content, TAG_ACCESS_TYPE, cb.additional_access_type);
             if (addl_target_index < 0)
             {
-                add_tag_value(block_content, TAG_ACCESS_TYPE, std::move(cb.additional_access_type));
+                add_tag_value(block_content, TAG_ACCESS_TYPE, cb.additional_access_type);
                 addl_target_index = (block_content.tags[TAG_ACCESS_TYPE].size() - 1);
             }
             update_tag_value_at_index(block_content, TAG_NF_ID, addl_target_index,
@@ -592,7 +596,7 @@ void read_number_of_ues(Ues_Supi_Control_Block& cb, size_t acu_index)
     uri.append(udsf_address).append(PATH_DELIMETER).append(REALM_NAME).append(PATH_DELIMETER).append(STORAGE_NAME).append(
         PATH_DELIMETER).append(RESOUCE_RECORDS);
     uri.append(filter);
-    uri.append(staticjson::to_json_string(cb.acu_items[acu_index].snssai)).append("%22%7D");
+    uri.append(cb.acu_items[acu_index].snssai.to_string()).append("%22%7D");
     auto ingress_id = cb.ingress_identity;
     auto supi_index = cb.supi_index;
     auto process_response = [ingress_id = std::move(ingress_id), supi_index,
@@ -679,34 +683,18 @@ void process_ues_read_response(Ues_Supi_Control_Block& cb,
 
     }
 
-    std::set<std::string> snssais_inc_in_req;
-    for (auto& acu : cb.acu_items)
-    {
-        auto& snssai = acu.snssai;
-        if (acu.updateFlag != ACU_INCREASE)
-        {
-            continue;
-        }
-        snssais_inc_in_req.insert(staticjson::to_json_string(snssai));
-    }
-
-    std::set<std::string> snssais_need_count;
+    std::set<std::string> snssais_already_exists;
     if (record_present)
     {
         auto& tag_snssai_values = record->meta.tags[TAG_SNSSAI];
-        for (auto& s : snssais_inc_in_req)
-        {
-            if (std::find(tag_snssai_values.begin(), tag_snssai_values.end(), s) == tag_snssai_values.end())
-            {
-                snssais_need_count.insert(s);
-            }
-        }
+        snssais_already_exists.insert(tag_snssai_values.begin(), tag_snssai_values.end());
     }
 
     bool read_count_sent = false;
     for (size_t acu_index = 0; acu_index < cb.acu_items.size(); acu_index++)
     {
-        if (snssais_need_count.count(staticjson::to_json_string(cb.acu_items[acu_index].snssai)) == 0)
+        auto snssai = cb.acu_items[acu_index].snssai.to_string();
+        if (cb.acu_items[acu_index].updateFlag != ACU_INCREASE || snssais_already_exists.count(snssai))
         {
             cb.ues_snssai_result[acu_index].req_done = true;
             cb.ues_snssai_result[acu_index].req_success = true;

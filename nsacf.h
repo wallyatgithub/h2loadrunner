@@ -26,6 +26,19 @@ public:
         h->add_property("sst", &this->sst);
         h->add_property("sd", &this->sd);
     }
+    std::string to_string()
+    {
+        return sst + "-" + sd;
+    }
+    void from_string(const std::string& source)
+    {
+        auto pos = source.find("-");
+        if ((pos != std::string::npos) && (pos != (source.size() -1)))
+        {
+            sst = source.substr(0, pos);
+            sd = source.substr(pos + 1, std::string::npos);
+        }
+    }
 };
 
 class PlmnId
