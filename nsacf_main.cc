@@ -452,6 +452,13 @@ void update_ues_record_block(udsf::Record& record, Ues_Supi_Control_Block& cb, s
             update_tag_value_at_index(block_content, TAG_NF_TYPE, addl_target_index,
                                       get_tag_value_at_index(block_content, TAG_NF_TYPE, target_index));
         }
+        else if (block_content.tags[TAG_ACCESS_TYPE].size() > 1 && update_flag == ACU_UPDATE)
+        {
+            auto index_to_remove = ((target_index + 1) % block_content.tags[TAG_ACCESS_TYPE].size());
+            remove_tag_value_at_index(block_content, TAG_ACCESS_TYPE, index_to_remove);
+            remove_tag_value_at_index(block_content, TAG_NF_ID, index_to_remove);
+            remove_tag_value_at_index(block_content, TAG_NF_TYPE, index_to_remove);
+        }
     }
 
     target_block.content = staticjson::to_json_string(block_content);
