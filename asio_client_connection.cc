@@ -103,7 +103,7 @@ void asio_client_connection::start_conn_active_watcher()
     {
         return;
     }
-    conn_activity_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 * config->conn_active_timeout)));
+    conn_activity_timer.expires_from_now(std::chrono::milliseconds((size_t)(1000 * config->conn_active_timeout)));
     conn_activity_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -137,7 +137,7 @@ void asio_client_connection::start_self_destruction_timer()
         return;
     }
 
-    self_destruction_timer.expires_from_now(boost::posix_time::millisec(timebomb_timer_value));
+    self_destruction_timer.expires_from_now(std::chrono::milliseconds(timebomb_timer_value));
     self_destruction_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -152,7 +152,7 @@ void asio_client_connection::start_self_destruction_timer()
 
 void asio_client_connection::start_ssl_handshake_watcher()
 {
-    ssl_handshake_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 * 2)));
+    ssl_handshake_timer.expires_from_now(std::chrono::milliseconds((size_t)(1000 * 2)));
     ssl_handshake_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -168,7 +168,7 @@ void asio_client_connection::start_conn_inactivity_watcher()
         return;
     }
 
-    conn_inactivity_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 * config->conn_inactivity_timeout)));
+    conn_inactivity_timer.expires_from_now(std::chrono::milliseconds((size_t)(1000 * config->conn_inactivity_timeout)));
     conn_inactivity_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -179,7 +179,7 @@ void asio_client_connection::start_conn_inactivity_watcher()
 
 void asio_client_connection::start_stream_timeout_timer()
 {
-    stream_timeout_timer.expires_from_now(boost::posix_time::millisec(10));
+    stream_timeout_timer.expires_from_now(std::chrono::milliseconds(10));
 
     stream_timeout_timer.async_wait
     (
@@ -202,7 +202,7 @@ void asio_client_connection::stop_rps_timer()
 
 void asio_client_connection::start_timing_script_request_timeout_timer(double duration)
 {
-    timing_script_request_timeout_timer.expires_from_now(boost::posix_time::millisec((size_t)(duration * 1000)));
+    timing_script_request_timeout_timer.expires_from_now(std::chrono::milliseconds((size_t)(duration * 1000)));
     timing_script_request_timeout_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -220,7 +220,7 @@ void asio_client_connection::start_connect_timeout_timer()
 {
     // set a longer timeout if too many connections are to be established
     uint32_t timeout = (config->nclients / 1000) + 5;
-    connect_timer.expires_from_now(boost::posix_time::seconds(timeout));
+    connect_timer.expires_from_now(std::chrono::seconds(timeout));
     connect_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -236,7 +236,7 @@ void asio_client_connection::stop_connect_timeout_timer()
 
 void asio_client_connection::start_connect_to_preferred_host_timer()
 {
-    connect_back_to_preferred_host_timer.expires_from_now(boost::posix_time::millisec(1000));
+    connect_back_to_preferred_host_timer.expires_from_now(std::chrono::milliseconds(1000));
     connect_back_to_preferred_host_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -247,7 +247,7 @@ void asio_client_connection::start_connect_to_preferred_host_timer()
 
 void asio_client_connection::start_delayed_reconnect_timer()
 {
-    delayed_reconnect_timer.expires_from_now(boost::posix_time::millisec(1000));
+    delayed_reconnect_timer.expires_from_now(std::chrono::milliseconds(1000));
     delayed_reconnect_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -263,6 +263,7 @@ void asio_client_connection::stop_conn_inactivity_timer()
 
 void asio_client_connection::disconnect()
 {
+
 #ifdef ENABLE_HTTP3
     if (config->verbose)
     {
@@ -544,7 +545,7 @@ void asio_client_connection::start_ping_watcher()
     {
         return;
     }
-    ping_timer.expires_from_now(boost::posix_time::millisec((size_t)(1000 *
+    ping_timer.expires_from_now(std::chrono::milliseconds((size_t)(1000 *
                                                                      config->json_config_schema.interval_to_send_ping)));
     ping_timer.async_wait
     (
@@ -556,7 +557,7 @@ void asio_client_connection::start_ping_watcher()
 
 void asio_client_connection::restart_rps_timer()
 {
-    rps_timer.expires_from_now(boost::posix_time::millisec(std::max(uint64_t(10), uint64_t(1000.0 / rps))));
+    rps_timer.expires_from_now(std::chrono::milliseconds(std::max(uint64_t(10), uint64_t(1000.0 / rps))));
     rps_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -565,7 +566,7 @@ void asio_client_connection::restart_rps_timer()
     });
 }
 
-bool asio_client_connection::timer_common_check(boost::asio::deadline_timer& timer, const boost::system::error_code& ec,
+bool asio_client_connection::timer_common_check(boost::asio::steady_timer& timer, const boost::system::error_code& ec,
                                                 void (asio_client_connection::*handler)(const boost::system::error_code&),
                                                 bool check_stop_flag, bool check_self_destruction_timer_flag)
 {
@@ -585,7 +586,7 @@ bool asio_client_connection::timer_common_check(boost::asio::deadline_timer& tim
     }
 
     if (timer.expires_at() >
-        boost::asio::deadline_timer::traits_type::now())
+        std::chrono::steady_clock::now())
     {
         timer.async_wait
         (
@@ -723,7 +724,7 @@ void asio_client_connection::start_request_delay_execution_timer()
 {
     if (is_controller_client())
     {
-        delay_request_execution_timer.expires_from_now(boost::posix_time::millisec(10));
+        delay_request_execution_timer.expires_from_now(std::chrono::milliseconds(10));
         delay_request_execution_timer.async_wait
         (
             [this](const boost::system::error_code & ec)
@@ -1284,7 +1285,7 @@ void asio_client_connection::quic_restart_pkt_timer()
     auto expiry = ngtcp2_conn_get_expiry(quic.conn);
     auto now = current_timestamp_nanoseconds();
 
-    quic_pkt_timer.expires_from_now(boost::posix_time::millisec((expiry - now) / (1000 * 1000)));
+    quic_pkt_timer.expires_from_now(std::chrono::milliseconds((expiry - now) / (1000 * 1000)));
     quic_pkt_timer.async_wait
     (
         [this](const boost::system::error_code & ec)

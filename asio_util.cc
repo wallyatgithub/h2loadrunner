@@ -703,10 +703,10 @@ void stop_server(const std::string& thread_id)
     }
 }
 
-bool start_tick_timer(boost::asio::deadline_timer& timer,
+bool start_tick_timer(boost::asio::steady_timer& timer,
                       std::multimap<std::chrono::steady_clock::time_point, std::pair<uint64_t, int32_t>>& streams)
 {
-    timer.expires_from_now(boost::posix_time::millisec(100));
+    timer.expires_from_now(std::chrono::milliseconds(100));
 
     timer.async_wait
     (

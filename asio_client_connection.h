@@ -128,7 +128,7 @@ private:
 
     void restart_rps_timer();
 
-    bool timer_common_check(boost::asio::deadline_timer& timer, const boost::system::error_code& ec,
+    bool timer_common_check(boost::asio::steady_timer& timer, const boost::system::error_code& ec,
                                    void (asio_client_connection::*handler)(const boost::system::error_code&), bool check_stop_flag = true,
                                    bool check_self_destruction_timer_flag = true);
 
@@ -261,7 +261,7 @@ private:
     std::deque<size_t> quic_output_buffer_indexes;
     std::deque<size_t> udp_output_buffer_indexes;
     boost::asio::ip::udp::endpoint remote_addr;
-    boost::asio::deadline_timer quic_pkt_timer;
+    boost::asio::steady_timer quic_pkt_timer;
     bool quic_close_sent = false;
     struct  Defer_Or_DoNothing
     {
@@ -294,18 +294,18 @@ private:
     size_t output_data_length = 0;
     size_t output_buffer_index = 0;
 
-    boost::asio::deadline_timer connect_timer;
-    boost::asio::deadline_timer delay_request_execution_timer;
-    boost::asio::deadline_timer rps_timer;
-    boost::asio::deadline_timer conn_activity_timer;
-    boost::asio::deadline_timer ping_timer;
-    boost::asio::deadline_timer conn_inactivity_timer;
-    boost::asio::deadline_timer stream_timeout_timer;
-    boost::asio::deadline_timer timing_script_request_timeout_timer;
-    boost::asio::deadline_timer connect_back_to_preferred_host_timer;
-    boost::asio::deadline_timer delayed_reconnect_timer;
-    boost::asio::deadline_timer ssl_handshake_timer;
-    boost::asio::deadline_timer self_destruction_timer;
+    boost::asio::steady_timer connect_timer;
+    boost::asio::steady_timer delay_request_execution_timer;
+    boost::asio::steady_timer rps_timer;
+    boost::asio::steady_timer conn_activity_timer;
+    boost::asio::steady_timer ping_timer;
+    boost::asio::steady_timer conn_inactivity_timer;
+    boost::asio::steady_timer stream_timeout_timer;
+    boost::asio::steady_timer timing_script_request_timeout_timer;
+    boost::asio::steady_timer connect_back_to_preferred_host_timer;
+    boost::asio::steady_timer delayed_reconnect_timer;
+    boost::asio::steady_timer ssl_handshake_timer;
+    boost::asio::steady_timer self_destruction_timer;
     bool self_destruction_timer_active = false;
     std::function<void(asio_client_connection*)> do_read_fn, do_write_fn;
 };

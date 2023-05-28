@@ -35,7 +35,7 @@ public:
     virtual std::shared_ptr<base_client> create_new_client(size_t req_todo, PROTO_TYPE proto_type = PROTO_UNSPECIFIED, const std::string& schema = "", const std::string& authority = "");
     virtual std::shared_ptr<base_client> create_new_sub_client(base_client* parent_client, size_t req_todo, const std::string& schema, const std::string& authority, PROTO_TYPE proto_type = PROTO_UNSPECIFIED);
 
-    bool timer_common_check(boost::asio::deadline_timer & timer, const boost::system::error_code & ec,
+    bool timer_common_check(boost::asio::steady_timer & timer, const boost::system::error_code & ec,
                             void (asio_worker:: * handler)(const boost::system::error_code&));
 
     virtual void start_rate_mode_period_timer();
@@ -89,10 +89,10 @@ private:
 
     std::unique_ptr<boost::asio::io_service> internal_io_context;
     boost::asio::io_service& io_context;
-    boost::asio::deadline_timer rate_mode_period_timer;
-    boost::asio::deadline_timer warmup_timer;
-    boost::asio::deadline_timer duration_timer;
-    boost::asio::deadline_timer tick_timer;
+    boost::asio::steady_timer rate_mode_period_timer;
+    boost::asio::steady_timer warmup_timer;
+    boost::asio::steady_timer duration_timer;
+    boost::asio::steady_timer tick_timer;
     boost::asio::ssl::context ssl_ctx;
     boost::asio::ssl::context ssl_ctx_http1;
     boost::asio::ssl::context ssl_ctx_http2;

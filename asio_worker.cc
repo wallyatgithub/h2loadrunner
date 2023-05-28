@@ -109,7 +109,7 @@ asio_worker::~asio_worker()
     managed_clients.clear();
 }
 
-bool asio_worker::timer_common_check(boost::asio::deadline_timer& timer, const boost::system::error_code& ec,
+bool asio_worker::timer_common_check(boost::asio::steady_timer& timer, const boost::system::error_code& ec,
                                      void (asio_worker::*handler)(const boost::system::error_code&))
 {
     if (boost::asio::error::operation_aborted == ec)
@@ -118,7 +118,7 @@ bool asio_worker::timer_common_check(boost::asio::deadline_timer& timer, const b
     }
 
     if (timer.expires_at() >
-        boost::asio::deadline_timer::traits_type::now())
+        std::chrono::steady_clock::now())
     {
         timer.async_wait
         (
@@ -133,7 +133,7 @@ bool asio_worker::timer_common_check(boost::asio::deadline_timer& timer, const b
 
 void asio_worker::start_rate_mode_period_timer()
 {
-    rate_mode_period_timer.expires_from_now(boost::posix_time::millisec((int64_t)(config->rate_period * 1000)));
+    rate_mode_period_timer.expires_from_now(std::chrono::milliseconds((int64_t)(config->rate_period * 1000)));
     rate_mode_period_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -144,7 +144,7 @@ void asio_worker::start_rate_mode_period_timer()
 
 void asio_worker::start_tick_timer()
 {
-    tick_timer.expires_from_now(boost::posix_time::millisec(10));
+    tick_timer.expires_from_now(std::chrono::milliseconds(10));
     tick_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -191,7 +191,7 @@ void asio_worker::handle_rate_mode_period_timer_timeout(const boost::system::err
 
 void asio_worker::start_warmup_timer()
 {
-    warmup_timer.expires_from_now(boost::posix_time::millisec((int64_t)(config->warm_up_time * 1000)));
+    warmup_timer.expires_from_now(std::chrono::milliseconds((int64_t)(config->warm_up_time * 1000)));
     warmup_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -216,7 +216,7 @@ void asio_worker::handle_warmup_timer_timeout(const boost::system::error_code& e
 
 void asio_worker::start_duration_timer()
 {
-    duration_timer.expires_from_now(boost::posix_time::millisec((int64_t)(config->duration * 1000)));
+    duration_timer.expires_from_now(std::chrono::milliseconds((int64_t)(config->duration * 1000)));
     duration_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -242,7 +242,7 @@ void asio_worker::stop_duration_timer()
 
 void asio_worker::start_graceful_stop_timer()
 {
-    duration_timer.expires_from_now(boost::posix_time::millisec(config->stream_timeout_in_ms));
+    duration_timer.expires_from_now(std::chrono::milliseconds(config->stream_timeout_in_ms));
     duration_timer.async_wait
     (
         [this](const boost::system::error_code & ec)

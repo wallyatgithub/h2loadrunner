@@ -551,7 +551,7 @@ void handle_incoming_http2_message(const nghttp2::asio_http2::server::asio_serve
 {
     bool ret = false;
     static thread_local auto io_service = g_io_services[g_current_thread_id];
-    static thread_local boost::asio::deadline_timer tick_timer(*io_service);
+    static thread_local boost::asio::steady_timer tick_timer(*io_service);
     static thread_local std::multimap<std::chrono::steady_clock::time_point, std::pair<uint64_t, int32_t>> active_requests;
     static thread_local auto dummy = start_tick_timer(tick_timer, active_requests);
     const std::chrono::milliseconds REQUEST_TTL(15000);
