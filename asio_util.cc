@@ -486,7 +486,8 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
             std::this_thread::sleep_for(std::chrono::seconds(config_schema.statistics_interval));
              if (counter % 10 == 0)
              {
-                SStream << std::endl << std::setw(req_name_width) << "req-name"
+                SStream <<"time, "
+                    << std::endl << std::setw(req_name_width) << "req-name"
                     << "," << std::setw(resp_name_width) << "resp-name"
                     << "," << std::setw(total_number_width) << "msg-total"
                     << "," << std::setw(total_number_width) << "throttled-total"
@@ -548,12 +549,15 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
             auto period_end = std::chrono::steady_clock::now();
             auto period_duration = std::chrono::duration_cast<std::chrono::milliseconds>(period_end - period_start).count();
             period_start = period_end;
+            auto now_c = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
             for (size_t req_index = 0; req_index < config_schema.service.size(); req_index++)
             {
                 for (size_t resp_index = 0; resp_index < config_schema.service[req_index].responses.size(); resp_index++)
                 {
-                    SStream <<     std::setw(req_name_width) << config_schema.service[req_index].request.name
+                    SStream << std::put_time(std::localtime(&now_c), "%F %T")
+                            <<", "
+                            <<     std::setw(req_name_width) << config_schema.service[req_index].request.name
                             << "," << std::setw(resp_name_width) << config_schema.service[req_index].responses[resp_index].name
                             << "," << std::setw(total_number_width) << resp_sent_till_now[req_index][resp_index]
                             << "," << std::setw(total_number_width) << resp_throttled_till_now[req_index][resp_index]
@@ -564,7 +568,9 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
                             << std::endl;
                 }
             }
-            SStream <<     std::setw(req_name_width) << "SUM"
+            SStream << std::put_time(std::localtime(&now_c), "%F %T")
+                    <<", "
+                    <<     std::setw(req_name_width) << "SUM"
                     << "," << std::setw(resp_name_width) << "SUM"
                     << "," << std::setw(total_number_width) << total_resp_sent_till_now
                     << "," << std::setw(total_number_width) << total_resp_throttled_till_now
@@ -574,7 +580,9 @@ void start_statistic_thread(std::vector<uint64_t>& totalReqsReceived,
                                                             *std::milli::den) / period_duration
                     << std::endl;
 
-            SStream <<     std::setw(req_name_width) << "UNMATCHED"
+            SStream << std::put_time(std::localtime(&now_c), "%F %T")
+                    <<", "
+                    <<     std::setw(req_name_width) << "UNMATCHED"
                     << "," << std::setw(resp_name_width) << "---"
                     << "," << std::setw(total_number_width) << total_unmatched_responses_till_now
                     << "," << std::setw(total_number_width) << "---"
