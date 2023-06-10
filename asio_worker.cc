@@ -31,23 +31,77 @@ boost::asio::io_service& asio_worker::get_io_context()
     return io_context;
 }
 
-std::shared_ptr<base_client> asio_worker::create_new_client(size_t req_todo)
+std::shared_ptr<base_client> asio_worker::create_new_client(size_t req_todo, PROTO_TYPE proto_type, const std::string& schema, const std::string& authority)
 {
-    return std::make_shared<asio_client_connection>(io_context, next_client_id++, this, req_todo, (config), ssl_ctx);
+    auto ctx = &ssl_ctx;
+    switch (proto_type)
+    {
+        case PROTO_HTTP1:
+            ctx = &ssl_ctx_http1;
+            break;
+        case PROTO_HTTP2:
+            ctx = &ssl_ctx_http2;
+            break;
+        case PROTO_HTTP3:
+            ctx = &ssl_ctx_http3;
+            break;
+        case PROTO_UNSPECIFIED:
+            ctx = &ssl_ctx;
+            break;
+
+        default:
+            std::cerr<<"invalid protol"<<std::endl;
+            abort();
+    }
+    return std::make_shared<asio_client_connection>(io_context, next_client_id++, this, req_todo, config, *ctx, nullptr, schema, authority, proto_type);
 }
 
+std::shared_ptr<base_client> asio_worker::create_new_sub_client(base_client* parent_client, size_t req_todo, const std::string& schema, const std::string& authority, PROTO_TYPE proto_type)
+{
+    auto ctx = &ssl_ctx;
+    switch (proto_type)
+    {
+        case PROTO_HTTP1:
+            ctx = &ssl_ctx_http1;
+            break;
+        case PROTO_HTTP2:
+            ctx = &ssl_ctx_http2;
+            break;
+        case PROTO_HTTP3:
+            ctx = &ssl_ctx_http3;
+            break;
+        case PROTO_UNSPECIFIED:
+            ctx = &ssl_ctx;
+            break;
+
+        default:
+            std::cerr<<"invalid proto"<<std::endl;
+            abort();
+    }
+    return std::make_shared<asio_client_connection>(io_context, parent_client->id, this, req_todo, config, *ctx, parent_client, schema, authority, proto_type);
+}
 
 asio_worker::asio_worker(uint32_t id, size_t nreq_todo, size_t nclients,
-                         size_t rate, size_t max_samples, Config* config):
+                         size_t rate, size_t max_samples, Config* config, boost::asio::io_service* external_ios):
     base_worker(id, nreq_todo, nclients, rate, max_samples, config),
+    internal_io_context(external_ios ? std::unique_ptr<boost::asio::io_service>(nullptr) : std::make_unique<boost::asio::io_service>()),
+    io_context(external_ios ? *external_ios : *(internal_io_context.get())),
     rate_mode_period_timer(io_context),
     warmup_timer(io_context),
     duration_timer(io_context),
     tick_timer(io_context),
     ssl_ctx(boost::asio::ssl::context::sslv23),
+    ssl_ctx_http1(boost::asio::ssl::context::sslv23),
+    ssl_ctx_http2(boost::asio::ssl::context::sslv23),
+    ssl_ctx_http3(boost::asio::ssl::context::sslv23),
     async_resolver(io_context)
 {
     setup_SSL_CTX(ssl_ctx.native_handle(), *config);
+    setup_SSL_CTX(ssl_ctx_http1.native_handle(), *config, std::set<std::string>{HTTP1_ALPN});
+    setup_SSL_CTX(ssl_ctx_http2.native_handle(), *config, std::set<std::string>{HTTP2_ALPN, HTTP1_ALPN});
+    setup_SSL_CTX(ssl_ctx_http3.native_handle(), *config, std::set<std::string>{HTTP3_ALPN});
+    // DEBUG
+    start_tick_timer();
 }
 
 asio_worker::~asio_worker()
@@ -55,7 +109,7 @@ asio_worker::~asio_worker()
     managed_clients.clear();
 }
 
-bool asio_worker::timer_common_check(boost::asio::deadline_timer& timer, const boost::system::error_code& ec,
+bool asio_worker::timer_common_check(boost::asio::steady_timer& timer, const boost::system::error_code& ec,
                                      void (asio_worker::*handler)(const boost::system::error_code&))
 {
     if (boost::asio::error::operation_aborted == ec)
@@ -64,7 +118,7 @@ bool asio_worker::timer_common_check(boost::asio::deadline_timer& timer, const b
     }
 
     if (timer.expires_at() >
-        boost::asio::deadline_timer::traits_type::now())
+        std::chrono::steady_clock::now())
     {
         timer.async_wait
         (
@@ -79,7 +133,7 @@ bool asio_worker::timer_common_check(boost::asio::deadline_timer& timer, const b
 
 void asio_worker::start_rate_mode_period_timer()
 {
-    rate_mode_period_timer.expires_from_now(boost::posix_time::millisec((int64_t)(config->rate_period * 1000)));
+    rate_mode_period_timer.expires_from_now(std::chrono::milliseconds((int64_t)(config->rate_period * 1000)));
     rate_mode_period_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -90,7 +144,7 @@ void asio_worker::start_rate_mode_period_timer()
 
 void asio_worker::start_tick_timer()
 {
-    tick_timer.expires_from_now(boost::posix_time::millisec(10));
+    tick_timer.expires_from_now(std::chrono::milliseconds(10));
     tick_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -123,7 +177,6 @@ void asio_worker::handle_tick_timer_timeout(const boost::system::error_code & ec
         return;
     }
     process_user_timers();
-    start_tick_timer();
 }
 
 void asio_worker::handle_rate_mode_period_timer_timeout(const boost::system::error_code& ec)
@@ -138,7 +191,7 @@ void asio_worker::handle_rate_mode_period_timer_timeout(const boost::system::err
 
 void asio_worker::start_warmup_timer()
 {
-    warmup_timer.expires_from_now(boost::posix_time::millisec((int64_t)(config->warm_up_time * 1000)));
+    warmup_timer.expires_from_now(std::chrono::milliseconds((int64_t)(config->warm_up_time * 1000)));
     warmup_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -163,7 +216,7 @@ void asio_worker::handle_warmup_timer_timeout(const boost::system::error_code& e
 
 void asio_worker::start_duration_timer()
 {
-    duration_timer.expires_from_now(boost::posix_time::millisec((int64_t)(config->duration * 1000)));
+    duration_timer.expires_from_now(std::chrono::milliseconds((int64_t)(config->duration * 1000)));
     duration_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -189,7 +242,7 @@ void asio_worker::stop_duration_timer()
 
 void asio_worker::start_graceful_stop_timer()
 {
-    duration_timer.expires_from_now(boost::posix_time::millisec(config->stream_timeout_in_ms));
+    duration_timer.expires_from_now(std::chrono::milliseconds(config->stream_timeout_in_ms));
     duration_timer.async_wait
     (
         [this](const boost::system::error_code & ec)
@@ -242,6 +295,57 @@ void asio_worker::resolve_hostname(const std::string& hostname, const std::funct
         cb_function(resolved_addresses);
     };
     async_resolver.async_resolve(hostname, "", resolve_handler);
+}
+
+void asio_worker::stop_event_loop()
+{
+    io_context.stop();
+}
+
+void asio_worker::update_resolver_cache(const std::pair<std::string, std::string>& query, const asio_worker::result_type& addresses, std::map<query_type, result_with_ttl_type>& cache)
+{
+    std::chrono::steady_clock::time_point curr_time_point = std::chrono::steady_clock::now();
+    auto ttl = std::chrono::seconds(60);
+    auto expiry_timepoint = curr_time_point + ttl;
+    cache[query] = std::make_pair(addresses, expiry_timepoint);
+}
+
+const asio_worker::result_type& asio_worker::get_from_resolver_cache(const std::pair<std::string, std::string>& query, std::map<query_type, result_with_ttl_type>& cache)
+{
+    static std::pair<std::vector<std::string>, std::vector<std::string>> empty_result{std::vector<std::string>(0), std::vector<std::string>(0)};
+    auto iter = cache.find(query);
+    if (iter != cache.end())
+    {
+        if (iter->second.second > std::chrono::steady_clock::now())
+        {
+            return iter->second.first;
+        }
+        else
+        {
+            cache.erase(iter);
+        }
+    }
+    return empty_result;
+}
+
+void asio_worker::update_tcp_resolver_cache(const std::pair<std::string, std::string>& query, const asio_worker::result_type& addresses)
+{
+    return update_resolver_cache(query, addresses, tcp_resolver_cache);
+}
+
+const asio_worker::result_type& asio_worker::get_from_tcp_resolver_cache(const std::pair<std::string, std::string>& query)
+{
+    return get_from_resolver_cache(query, tcp_resolver_cache);
+}
+
+void asio_worker::update_udp_resolver_cache(const std::pair<std::string, std::string>& query, const asio_worker::result_type& addresses)
+{
+    return update_resolver_cache(query, addresses, udp_resolver_cache);
+}
+
+const asio_worker::result_type& asio_worker::get_from_udp_resolver_cache(const std::pair<std::string, std::string>& query)
+{
+    return get_from_resolver_cache(query, udp_resolver_cache);
 }
 
 }

@@ -30,7 +30,6 @@ extern "C" {
 #include "asio_worker.h"
 
 #include "h2load_Cookie.h"
-#include "h2load_stats.h"
 
 
 #include "h2load_http1_session.h"
@@ -88,6 +87,11 @@ void resolve_host(h2load::Config& config);
 int client_select_next_proto_cb(SSL* ssl, unsigned char** out,
                                 unsigned char* outlen, const unsigned char* in,
                                 unsigned int inlen, void* arg);
+
+int client_select_next_proto_cb_http3(SSL* ssl, unsigned char** out,
+                                      unsigned char* outlen, const unsigned char* in,
+                                      unsigned int inlen, void* arg);
+
 #endif // !OPENSSL_NO_NEXTPROTONEG
 
 
@@ -145,6 +149,11 @@ void connect_to_prefered_host_cb(struct ev_loop* loop, ev_timer* w, int revents)
 
 void probe_writecb(struct ev_loop* loop, ev_io* w, int revents);
 
+#ifdef ENABLE_HTTP3
+void quic_pkt_timeout_cb(struct ev_loop* loop, ev_timer* w, int revents);
+
+#endif
+
 #endif
 
 std::string get_tls_error_string();
@@ -157,7 +166,8 @@ std::vector<std::vector<h2load::SDStat>>
                                       produce_requests_latency_stats(const std::vector<std::shared_ptr<h2load::base_worker>>& workers);
 
 void output_realtime_stats(h2load::Config& config, std::vector<std::shared_ptr<h2load::base_worker>>& workers,
-                           std::atomic<bool>& workers_stopped, std::stringstream& DatStream);
+                           std::atomic<bool>& workers_stopped, std::stringstream& DatStream,
+                           std::condition_variable& stats_thread_wait_cond);
 
 template<typename T>
 std::string to_string_with_precision_3(const T a_value);
@@ -185,11 +195,11 @@ bool check_key_cert_consistency(SSL_CTX* ctx);
 
 void set_cert_verification_mode(SSL_CTX* ctx, uint32_t certificate_verification_mode);
 
-void setup_SSL_CTX(SSL_CTX* ssl_ctx, h2load::Config& config);
+void setup_SSL_CTX(SSL_CTX* ssl_ctx, h2load::Config& config, const std::set<std::string>& apln_proto = std::set<std::string>());
 
 bool is_it_an_ipv6_address(const std::string& address);
 
-bool is_null_destination(h2load::Config& config);
+bool controlled_by_upper_layer_logic(h2load::Config& config);
 
 void process_delayed_scenario(h2load::Config& config);
 
@@ -208,5 +218,19 @@ void transform_old_style_variable(h2load::Config& config);
 void load_generic_variables_from_csv_file(Scenario& scenario);
 
 void load_file_content(std::string& source);
+
+uint64_t current_timestamp_nanoseconds();
+
+uint64_t convert_iso8601_to_ms_since_epoch_ignore_tz(const std::string& iso8601);
+
+bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenario& scenario, const std::vector<std::string>& skipped_host);
+
+bool convert_har_to_h2loadrunner_config(std::string& har_file_content, h2load::Config& config_out, const std::vector<std::string>& skipped_host);
+
+void parse_uri_and_populate_fields(const std::string& uri, std::string& schema, std::string& authority,
+                                   std::string& path);
+
+void remove_reserved_http_headers(std::map<std::string, std::string, ci_less>& header_map);
+
 
 #endif

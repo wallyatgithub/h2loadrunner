@@ -4,8 +4,27 @@ RUN apt-get update && \
     apt-get install --yes libnghttp2-dev openssl libssl-dev libev-dev liblua5.3-dev rapidjson-dev cmake build-essential libboost-all-dev libluajit-5.1-dev gcc g++ unzip wget && \
     wget https://github.com/wallyatgithub/h2loadrunner/archive/refs/heads/main.zip && \
     unzip main.zip && \
-    cmake -S h2loadrunner-main/third-party/c-ares -B h2loadrunner-main/third-party/c-ares && \
-    cmake --build h2loadrunner-main/third-party/c-ares && \
+    cd h2loadrunner-main && \
+    git clone --depth 1 -b OpenSSL_1_1_1q+quic https://github.com/quictls/openssl && \
+    cd openssl && \
+    ./config --prefix=$PWD/build --openssldir=/etc/ssl && \
+    make -j$(nproc) && \
+    make install_sw && \
+    cd .. && \
+    git clone --depth 1 -b v0.7.1 https://github.com/ngtcp2/nghttp3 && \
+    cd nghttp3 && \
+    autoreconf -i && \
+    ./configure --prefix=$PWD/build --enable-lib-only && \
+    make -j$(nproc) && \
+    make install && \
+    cd .. && \
+    git clone --depth 1 -b v0.9.0 https://github.com/ngtcp2/ngtcp2 && \
+    cd ngtcp2 && \
+    autoreconf -i && \
+    ./configure --prefix=$PWD/build --enable-lib-only PKG_CONFIG_PATH="$PWD/../openssl/build/lib/pkgconfig" && \
+    make -j$(nproc) && \
+    make install && \
+    cd ../../ && \
     mkdir h2loadrunner-main/build && \
     cmake -S h2loadrunner-main -B h2loadrunner-main/build && \
     cmake --build h2loadrunner-main/build && \

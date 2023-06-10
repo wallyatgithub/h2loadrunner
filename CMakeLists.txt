@@ -9,9 +9,13 @@ set(Boost_USE_STATIC_LIBS ON)
 
 #set (USE_LIBEV ON)
 
+add_definitions(-DOPENSSL_NO_NEXTPROTONEG=1)
+
 add_subdirectory(third-party)
 
-find_package(OpenSSL 1.0.1)
+if (NOT DEFINED ENABLE_HTTP3)
+    find_package(OpenSSL 1.0.1)
+endif()
 find_package(Boost 1.53.0 REQUIRED system thread)
 find_package(LuaJIT)
 
@@ -102,6 +106,28 @@ set(C_ARES_INCLUDE
 "."
 )
 
+if(DEFINED ENABLE_HTTP3)
+    add_definitions(-DENABLE_HTTP3=1)
+    add_definitions(-DHAVE_LIBNGTCP2_CRYPTO_OPENSSL=1)
+    set(HTTP3_SOURCES
+      quic.cc
+      h2load_http3_session.cc
+    )
+    set(http3_link_directories
+    "${CMAKE_CURRENT_SOURCE_DIR}/openssl/build/lib"
+    "${CMAKE_CURRENT_SOURCE_DIR}/nghttp3/build/lib"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/build/lib"
+    )
+    
+    set(http3_libraries
+    ngtcp2
+    nghttp3
+    ngtcp2_crypto_openssl
+    ssl
+    crypto
+    )
+endif()
+
 if(DEFINED USE_LIBEV)
     find_package(Libev 4.11)
 
@@ -117,10 +143,12 @@ if(DEFINED USE_LIBEV)
 
     add_definitions(-DUSE_LIBEV=1)
 
-    link_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib
-    ${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib64
+    set (ares_link_directories
+    "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/lib64"
     )
+    
+    
 endif()
 
 if (NOT DEFINED LIBEV_INCLUDE_DIR)
@@ -154,12 +182,23 @@ include_directories(
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party"
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/llhttp/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/third-party/StaticJSON/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/nghttp3/lib/includes"
+  "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/lib/includes"
+  "${CMAKE_CURRENT_SOURCE_DIR}/ngtcp2/crypto/includes"
+  "${CMAKE_CURRENT_SOURCE_DIR}/openssl/build/include"
   "${LUA_INCLUDE_DIR}"
   "${LIBEV_INCLUDE_DIR}"
   "${C_ARES_INCLUDE}"
   "${Boost_INCLUDE_DIRS}"
   "${GETOPT_INCLUDE_DIR}"
   "${NGHTTP2_INCLUDE_DIR}"
+  ${OPENSSL_INCLUDE_DIRS}
+  ${Boost_INCLUDE_DIRS}
+)
+
+link_directories(
+    ${ares_link_directories}
+    ${http3_link_directories}
 )
 
 link_libraries(
@@ -171,6 +210,7 @@ link_libraries(
   ${GETOPT_LIBRARY}
   ${EXECINFO_LIBRARY}
   ${MIMALLOC_LIB}
+  ${http3_libraries}
 )
 
 set (CMAKE_INCLUDE_CURRENT_DIR ON)
@@ -208,11 +248,11 @@ set(THIRD_PARTY_LUA_MOD_SOURCE
     third-party/lua-rapidJson/values.hpp
     pb.c
 )
+
 # h2load
 set(H2LOAD_SOURCES
   util.cc
   http2.cc
-  h2load.cc
   h2load_utils.cc
   h2load_Config.cc
   h2load_Cookie.cc
@@ -227,22 +267,89 @@ set(H2LOAD_SOURCES
   h2load_lua.cc
   ${H2LOAD_SOURCE_USING_LIBEV}
   ${ASIO_SV_SOURCES}
+  ${HTTP3_SOURCES}
   ${THIRD_PARTY_LUA_MOD_SOURCE}
 )
 
+set (H2LOAD_SRC_MAIN
+  h2load.cc
+)
 
-add_executable(h2loadrunner ${H2LOAD_SOURCES} $<TARGET_OBJECTS:llhttp>
-  $<TARGET_OBJECTS:url-parser> $<TARGET_OBJECTS:staticjson>)
+#udsf
+set (UDSF_SOURCES
+  sba_util.cc
+  multipart_parser.c
+  udsf_cache.cc
+  udsf_main.cc
+  ${H2LOAD_SOURCES}
+)
+
+#nsacf
+set (NSACF_SOURCES
+  sba_util.cc
+  multipart_parser.c
+  nsacf_main.cc
+  ${H2LOAD_SOURCES}
+)
+
+
+add_executable(h2loadrunner
+  ${H2LOAD_SOURCES}
+  ${H2LOAD_SRC_MAIN}
+  $<TARGET_OBJECTS:llhttp>
+  $<TARGET_OBJECTS:url-parser>
+  $<TARGET_OBJECTS:staticjson>
+)
+
+add_executable(imudsf ${UDSF_SOURCES}
+  $<TARGET_OBJECTS:llhttp>
+  $<TARGET_OBJECTS:url-parser>
+  $<TARGET_OBJECTS:staticjson>
+)
+
+add_executable(ensacf ${NSACF_SOURCES}
+  $<TARGET_OBJECTS:llhttp>
+  $<TARGET_OBJECTS:url-parser>
+  $<TARGET_OBJECTS:staticjson>
+)
 
 if(DEFINED USE_LIBEV)
     target_link_libraries(h2loadrunner cares_static)
-    target_include_directories(h2loadrunner PUBLIC 
-    "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/third-party/c-ares"
-    )
+    target_link_libraries(imudsf cares_static)
 endif()
 
 install(TARGETS h2loadrunner
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+
+set(NGHTTP2_ASIO_SV_SOURCES
+  util.cc
+  http2.cc
+  tls.cc
+  timegm.c
+  ${ASIO_SV_SOURCES}
+  ${THIRD_PARTY_LUA_MOD_SOURCE}
+)
+
+add_library(nghttp2_asio_sv OBJECT
+   ${NGHTTP2_ASIO_SV_SOURCES}
+   $<TARGET_OBJECTS:llhttp>
+   $<TARGET_OBJECTS:url-parser>
+)
+
+target_link_libraries(nghttp2_asio_sv PUBLIC
+  ${NGHTTP2_LIBRARY}
+  ${OPENSSL_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${LUA_LIBRARIES}
+  ${MIMALLOC_LIB}
+)
+
+add_executable(maock asio-sv.cc
+  $<TARGET_OBJECTS:llhttp>
+  $<TARGET_OBJECTS:nghttp2_asio_sv>
+  $<TARGET_OBJECTS:url-parser>
+  $<TARGET_OBJECTS:staticjson>
+)
+
 
 

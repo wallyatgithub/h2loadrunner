@@ -27,7 +27,7 @@
 
 #include <nghttp2/asio_http2.h>
 #include "H2Server_Config_Schema.h"
-
+#include "tls.h"
 
 namespace nghttp2 {
 
@@ -143,7 +143,7 @@ private:
 boost::system::error_code
 configure_tls_context_easy(boost::system::error_code &ec,
                            boost::asio::ssl::context &tls_context,
-                           bool mTLS);
+                           bool mTLS, const std::string& ciphers = nghttp2::tls::DEFAULT_CIPHER_LIST);
 
 // Returns request handler to do redirect to |uri| using
 // |status_code|.  The |uri| appears in "location" header field as is.
