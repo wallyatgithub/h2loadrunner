@@ -288,7 +288,6 @@ public:
     std::string schema;
     std::string authority;
     std::string preferred_authority;
-    double rps;
     std::deque<std::string> candidate_addresses;
     std::deque<std::string> used_addresses;
     Unique_Id this_client_id;
