@@ -422,7 +422,7 @@ void asio_client_connection::start_ping_watcher()
 
 void asio_client_connection::restart_rps_timer()
 {
-    rps_timer.expires_from_now(boost::posix_time::millisec(std::max(10, 1000 / (int)rps)));
+    rps_timer.expires_from_now(boost::posix_time::millisec(std::max(10, 1000 / (int)config->rps)));
     rps_timer.async_wait
     (
         [this](const boost::system::error_code & ec)

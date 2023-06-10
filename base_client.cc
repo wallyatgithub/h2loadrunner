@@ -53,7 +53,6 @@ base_client::base_client(uint32_t id, base_worker* wrker, size_t req_todo, Confi
     parent_client(parent),
     schema(dest_schema),
     authority(dest_authority),
-    rps(conf->rps),
     this_client_id(),
     rps_duration_started(),
     ssl(nullptr)
@@ -1231,7 +1230,7 @@ void base_client::slice_var_ids()
 
 bool base_client::rps_mode()
 {
-    return (rps > 0.0);
+    return (config->rps > 0.0);
 }
 
 void base_client::update_scenario_based_stats(size_t scenario_index, size_t request_index, bool success,
