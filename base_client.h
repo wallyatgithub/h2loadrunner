@@ -366,7 +366,6 @@ public:
           << "  rps_req_pending: " << client.rps_req_pending << std::endl
           << "  rps_req_inflight: " << client.rps_req_inflight << std::endl
           << "  preferred_authority: " << client.preferred_authority << std::endl
-          << "  rps: " << client.rps << std::endl
           << "  this_client_id: " << client.this_client_id.my_id << std::endl
           << "  req_inflight_of_all_clients: " << client.req_inflight_of_all_clients << std::endl
           << "  proto_type: " << client.proto_type << std::endl;
