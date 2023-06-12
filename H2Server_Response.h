@@ -612,14 +612,7 @@ public:
 
             lua_pushlstring(L, response_body.c_str(), response_body.size());
 
-            auto lua_ret = lua_pcall(L, 4, 2, 0);
-            if (lua_ret != LUA_OK )
-            {
-                const char* error = lua_tostring(L, -1);
-                std::cerr<<std::endl<<std::endl<<std::flush;
-                std::cerr<<"ERROR: error executing lua script: "<<error<<std::endl<<std::flush;
-                exit(1);
-            }
+            lua_pcall(L, 4, 2, 0);
             int top = lua_gettop(L);
             for (int i = 0; i < top; i++)
             {
