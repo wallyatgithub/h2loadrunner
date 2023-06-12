@@ -110,9 +110,9 @@ int htp_msg_completecb(llhttp_t* htp)
 
         // Connection is going down.  If we have still request to do,
         // create new connection and keep on doing the job.
-        if (client->get_req_left())
+        if (client->get_number_of_request_left())
         {
-            client->try_new_connection();
+            client->set_open_new_conn_needed();
         }
 
         return HPE_PAUSED;
@@ -217,8 +217,7 @@ Http1Session::Http1Session(base_client* client)
       htp_(),
       complete_(false),
       config(client->get_config()),
-      stats(client->get_stats()),
-      request_map(client->requests_waiting_for_response())
+      stats(client->get_stats())
 {
     llhttp_init(&htp_, HTTP_RESPONSE, &htp_hooks);
     htp_.data = this;
@@ -233,6 +232,11 @@ void Http1Session::on_connect()
 
 int Http1Session::submit_request()
 {
+    if (client_->get_number_of_request_inflight())
+    {
+        return MAX_CONCURRENT_STREAM_REACHED;
+    }
+
     if (config->json_config_schema.scenarios.size())
     {
         return _submit_request();
@@ -355,7 +359,8 @@ int Http1Session::on_write()
 
 int Http1Session::_submit_request()
 {
-    auto data = std::move(client_->get_request_to_submit());
+    auto ptr = client_->get_request_to_submit();
+    auto& data = *ptr;
     if (data.is_empty())
     {
         return -1;
@@ -371,11 +376,14 @@ int Http1Session::_submit_request()
         {
             continue;
         }
-        if (header.first == path_header || header.first == scheme_header || header.first == authority_header
-            || header.first == method_header)
-        {
-            continue;
-        }
+
+        /*
+            if (reserved_headers.count(header.first))
+            {
+                continue;
+            }
+        */
+
         req.append(header.first);
         req.append(": ");
         req.append(header.second);
@@ -383,11 +391,13 @@ int Http1Session::_submit_request()
     }
     for (auto& header : data.req_headers_of_individual)
     {
-        if (header.first == path_header || header.first == scheme_header || header.first == authority_header
-            || header.first == method_header)
-        {
-            continue;
-        }
+        /*
+            if (reserved_headers.count(header.first))
+            {
+                continue;
+            }
+        */
+
         req.append(header.first);
         req.append(": ");
         req.append(header.second);
@@ -401,9 +411,7 @@ int Http1Session::_submit_request()
         std::cout << "sending headers:" << req << std::endl;
     }
 
-    request_map.emplace(std::make_pair(stream_req_counter_, std::move(data)));
-
-    client_->on_request_start(stream_req_counter_);
+    client_->on_request_start(stream_req_counter_, ptr);
 
     auto req_stat = client_->get_req_stat(stream_req_counter_);
 
@@ -433,11 +441,9 @@ int Http1Session::_on_write()
     {
         return 0;
     }
-    auto request = request_map.find(stream_req_counter_);
-    assert(request != request_map.end());
+    auto& request = client_->get_request_response_data(stream_req_counter_);
     static std::string empty_str;
-    auto it = request_map.find(stream_req_counter_);
-    std::string& stream_buffer = (it == request_map.end()) ? empty_str : *(it->second.req_payload);
+    std::string& stream_buffer = request ? *(request->req_payload) : empty_str;
 
     if (!stream_buffer.empty())
     {
@@ -475,6 +481,7 @@ int Http1Session::_on_write()
 void Http1Session::terminate()
 {
     complete_ = true;
+    client_->signal_write();
 }
 
 base_client* Http1Session::get_client()

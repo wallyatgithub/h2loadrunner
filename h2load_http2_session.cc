@@ -48,11 +48,10 @@ namespace h2load
 
 Http2Session::Http2Session(base_client* client)
     : client_(client),
-      session_(nullptr),
-      curr_stream_id(0),
-      config(client->get_config()),
-      stats(client->get_stats()),
-      request_map(client->requests_waiting_for_response())
+    session_(nullptr),
+    curr_stream_id(0),
+    config(client->get_config()),
+    stats(client->get_stats())
 {
 
 }
@@ -218,31 +217,30 @@ ssize_t buffer_read_callback(nghttp2_session* session, int32_t stream_id,
 {
     auto client = static_cast<base_client*>(user_data);
     auto config = client->get_config();
-    auto& request_map = client->requests_waiting_for_response();
-    auto request = request_map.find(stream_id);
-    assert(request != request_map.end());
-    std::string& stream_buffer = *(request->second.req_payload);
+    auto& request = client->get_request_response_data(stream_id);
+    static std::string empty_str;
+    std::string& stream_buffer = request ? *(request->req_payload) : empty_str;
 
     if (config->verbose)
     {
         std::cout << "sending data:" << stream_buffer << std::endl;
     }
 
-    if (request->second.req_payload_cursor < stream_buffer.size())
+    if (request && request->req_payload_cursor < stream_buffer.size())
     {
-        if (length >= (stream_buffer.size() - request->second.req_payload_cursor))
+        if (length >= (stream_buffer.size() - request->req_payload_cursor))
         {
-            memcpy(buf, (stream_buffer.c_str() + request->second.req_payload_cursor),
-                   (stream_buffer.size() - request->second.req_payload_cursor));
+            memcpy(buf, (stream_buffer.c_str() + request->req_payload_cursor),
+                   (stream_buffer.size() - request->req_payload_cursor));
             *data_flags |= NGHTTP2_DATA_FLAG_EOF;
-            size_t buf_size = (stream_buffer.size() - request->second.req_payload_cursor);
-            request->second.req_payload_cursor = stream_buffer.size();
+            size_t buf_size = (stream_buffer.size() - request->req_payload_cursor);
+            request->req_payload_cursor = stream_buffer.size();
             return buf_size;
         }
         else
         {
             memcpy(buf, stream_buffer.c_str(), length);
-            request->second.req_payload_cursor += length;
+            request->req_payload_cursor += length;
             return length;
         }
     }
@@ -327,7 +325,12 @@ void Http2Session::on_connect()
         iv[niv].value = config->header_table_size;
         ++niv;
     }
-
+    if (config->max_frame_size != 16_k)
+    {
+        iv[niv].settings_id = NGHTTP2_SETTINGS_MAX_FRAME_SIZE;
+        iv[niv].value = config->max_frame_size;
+        ++niv;
+    }
     rv = nghttp2_submit_settings(session_, NGHTTP2_FLAG_NONE, iv.data(), niv);
 
     assert(rv == 0);
@@ -342,7 +345,12 @@ int Http2Session::submit_request()
 {
     if (nghttp2_session_check_request_allowed(session_) == 0)
     {
-        return -1;
+        return REQUEST_SENDING_FAILURE;
+    }
+
+    if (client_->get_number_of_request_inflight() >= client_->get_max_concurrent_stream())
+    {
+        return MAX_CONCURRENT_STREAM_REACHED;
     }
 
     if (config->json_config_schema.scenarios.size())
@@ -413,6 +421,7 @@ int Http2Session::on_write()
 void Http2Session::terminate()
 {
     nghttp2_session_terminate_session(session_, NGHTTP2_NO_ERROR);
+    client_->signal_write();
 }
 
 size_t Http2Session::max_concurrent_streams()
@@ -420,7 +429,7 @@ size_t Http2Session::max_concurrent_streams()
     return (size_t)config->max_concurrent_streams;
 }
 
-void Http2Session::submit_rst_stream(int32_t stream_id)
+void Http2Session::reset_stream(int64_t stream_id)
 {
     nghttp2_submit_rst_stream(session_, NGHTTP2_FLAG_END_STREAM, stream_id, NGHTTP2_STREAM_CLOSED);
 }
@@ -444,7 +453,8 @@ int Http2Session::_submit_request()
     nghttp2_data_provider prd {{0}, buffer_read_callback};
 
     std::vector<nghttp2_nv> http2_nvs;
-    auto data = std::move(client_->get_request_to_submit());
+    auto ptr = client_->get_request_to_submit();
+    auto& data = *ptr;
     if (data.is_empty())
     {
         return -1;
@@ -459,25 +469,29 @@ int Http2Session::_submit_request()
 
     for (auto& header : *data.req_headers_from_config)
     {
+    /*
+        if (reserved_headers.count(header.first))
+        {
+            continue;
+        }
+    */
         if (data.req_headers_of_individual.count(header.first))
         {
             continue;
         }
-        if (header.first == path_header || header.first == scheme_header || header.first == authority_header
-            || header.first == method_header)
-        {
-            continue;
-        }
+
         http2_nvs.emplace_back(http2::make_nv(header.first, header.second, false));
     }
 
     for (auto& header : data.req_headers_of_individual)
     {
-        if (header.first == path_header || header.first == scheme_header || header.first == authority_header
-            || header.first == method_header)
-        {
-            continue;
-        }
+        /*
+            if (reserved_headers.count(header.first))
+            {
+                continue;
+            }
+        */
+
         http2_nvs.emplace_back(http2::make_nv(header.first, header.second, false));
     }
 
@@ -502,8 +516,7 @@ int Http2Session::_submit_request()
     }
 
     curr_stream_id = stream_id;
-    request_map.emplace(std::make_pair(stream_id, std::move(data)));
-    client_->on_request_start(stream_id);
+    client_->on_request_start(stream_id, ptr);
     return 0;
 }
 

@@ -1,0 +1,130 @@
+{
+  "schema": "http",
+  "host": "127.0.0.1",
+  "port": 8082,
+  "load-share-hosts": [],
+  "open-new-connection-based-on-authority-header": false,
+  "connection-retry": false,
+  "switch-back-after-connection-retry": false,
+  "threads": 1,
+  "clients": 1,
+  "duration": 0,
+  "total-requests": 0,
+  "warm-up-time": 0,
+  "max-concurrent-streams": 1000,
+  "request-per-second": 1,
+  "request-per-second-feed-file": "",
+  "rate": 0,
+  "rate-period": 1,
+  "stream-timeout": 10000,
+  "ciphers": "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256",
+  "caCert": "",
+  "cert": "",
+  "privateKey": "",
+  "certVerificationMode": 0,
+  "max-tls-version": "TLSv1.3",
+  "no-tls-proto": "h2c",
+  "connection-active-timeout": 0,
+  "connection-inactivity-timeout": 0,
+  "interval-between-ping-frames": 0,
+  "npn-list": "h2,h2-16,h2-14,http/1.1",
+  "header-table-size": 4096,
+  "encoder-header-table-size": 4096,
+  "log-file": "ee_log_file_eoload",
+  "failed-request-log-file": "ee_fail_log",
+  "statistics-interval": 5,
+  "statistics-file": "",
+  "builtin-server-listening-port": 8888,
+  "window-bits": 30,
+  "connection-window-bits": 30,
+  "Scenarios": [
+    {
+      "name": "UES",
+      "weight": 100,
+      "user-id-variable-in-path-and-data": "USER",
+      "user-id-list-file": "",
+      "user-id-range-start": 1000000000,
+      "user-id-range-end": 9999999999,
+      "user-id-range-slicing": true,
+      "Requests": [
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nnsacf-nsac/v1/slices/ues"
+          },
+          "clear-old-cookies": false,
+          "method": "POST",
+          "payload": "{   \"ueACRequestInfo\": [     {       \"supi\": \"imsi-11111USER\",       \"anType\": \"3GPP_ACCESS\",       \"acuOperationList\": [         {           \"updateFlag\": \"INCREASE\",           \"snssai\": {             \"sst\": \"123\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"106\"           }         },         {           \"updateFlag\": \"INCREASE\",           \"snssai\": {             \"sst\": \"789\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"345\"           }         }       ],       \"additionalAnType\": \"\"     },     {       \"supi\": \"imsi-22222USER\",       \"anType\": \"3GPP_ACCESS\",       \"acuOperationList\": [         {           \"updateFlag\": \"INCREASE\",           \"snssai\": {             \"sst\": \"123\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"106\"           }         },         {           \"updateFlag\": \"INCREASE\",           \"snssai\": {             \"sst\": \"789\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"345\"           }         }       ],       \"additionalAnType\": \"\"     }   ],   \"nfId\": \"1234567897231\",   \"nfType\": \"AMF\" }",
+          "additonalHeaders": [
+            "User-Agent:AMF"
+          ],
+          "luaScript": "",
+          "expected-status-code": 204,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nnsacf-nsac/v1/slices/ues"
+          },
+          "clear-old-cookies": false,
+          "method": "POST",
+          "payload": "{   \"ueACRequestInfo\": [     {       \"supi\": \"imsi-11111USER\",       \"anType\": \"3GPP_ACCESS\",       \"acuOperationList\": [         {           \"updateFlag\": \"UPDATE\",           \"snssai\": {             \"sst\": \"123\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"106\"           }         },         {           \"updateFlag\": \"UPDATE\",           \"snssai\": {             \"sst\": \"789\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"345\"           }         }       ],       \"additionalAnType\": \"NON_3GPP_ACCESS\"     },     {       \"supi\": \"imsi-22222USER\",       \"anType\": \"3GPP_ACCESS\",       \"acuOperationList\": [         {           \"updateFlag\": \"UPDATE\",           \"snssai\": {             \"sst\": \"123\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"106\"           }         },         {           \"updateFlag\": \"UPDATE\",           \"snssai\": {             \"sst\": \"789\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"345\"           }         }       ],       \"additionalAnType\": \"NON_3GPP_ACCESS\"     }   ],   \"nfId\": \"1234567897231\",   \"nfType\": \"AMF\" }",
+          "additonalHeaders": [
+            "User-Agent:AMF"
+          ],
+          "luaScript": "",
+          "expected-status-code": 204,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nnsacf-nsac/v1/slices/ues"
+          },
+          "clear-old-cookies": false,
+          "method": "POST",
+          "payload": "{   \"ueACRequestInfo\": [     {       \"supi\": \"imsi-11111USER\",       \"anType\": \"NON_3GPP_ACCESS\",       \"acuOperationList\": [         {           \"updateFlag\": \"UPDATE\",           \"snssai\": {             \"sst\": \"123\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"106\"           }         },         {           \"updateFlag\": \"UPDATE\",           \"snssai\": {             \"sst\": \"789\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"345\"           }         }       ],       \"additionalAnType\": \"\"     },     {       \"supi\": \"imsi-22222USER\",       \"anType\": \"NON_3GPP_ACCESS\",       \"acuOperationList\": [         {           \"updateFlag\": \"UPDATE\",           \"snssai\": {             \"sst\": \"123\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"106\"           }         },         {           \"updateFlag\": \"UPDATE\",           \"snssai\": {             \"sst\": \"789\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"345\"           }         }       ],       \"additionalAnType\": \"\"     }   ],   \"nfId\": \"1234567897231\",   \"nfType\": \"AMF\" }",
+          "additonalHeaders": [
+            "User-Agent:AMF"
+          ],
+          "luaScript": "",
+          "expected-status-code": 204,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "delay-before-executing-next": 0
+        },
+        {
+          "uri": {
+            "typeOfAction": "input",
+            "input": "/nnsacf-nsac/v1/slices/ues"
+          },
+          "clear-old-cookies": false,
+          "method": "POST",
+          "payload": "{   \"ueACRequestInfo\": [     {       \"supi\": \"imsi-11111USER\",       \"anType\": \"3GPP_ACCESS\",       \"acuOperationList\": [         {           \"updateFlag\": \"DECREASE\",           \"snssai\": {             \"sst\": \"123\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"106\"           }         },         {           \"updateFlag\": \"DECREASE\",           \"snssai\": {             \"sst\": \"789\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"345\"           }         }       ],       \"additionalAnType\": \"NON_3GPP_ACCESS\"     },     {       \"supi\": \"imsi-22222USER\",       \"anType\": \"3GPP_ACCESS\",       \"acuOperationList\": [         {           \"updateFlag\": \"DECREASE\",           \"snssai\": {             \"sst\": \"123\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"106\"           }         },         {           \"updateFlag\": \"DECREASE\",           \"snssai\": {             \"sst\": \"789\",             \"sd\": \"123456\"           },           \"plmnId\": {             \"mcc\": \"262\",             \"mnc\": \"345\"           }         }       ],       \"additionalAnType\": \"NON_3GPP_ACCESS\"     }   ],   \"nfId\": \"1234567897231\",   \"nfType\": \"AMF\" }",
+          "additonalHeaders": [
+            "User-Agent:AMF"
+          ],
+          "luaScript": "",
+          "expected-status-code": 204,
+          "response-match": {
+            "headers": [],
+            "payload": []
+          },
+          "delay-before-executing-next": 0
+        }
+      ]
+    }
+  ]
+}
+

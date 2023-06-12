@@ -502,15 +502,18 @@ int32_t _make_connection(lua_State* L, const std::string& uri,
         std::string base_uri = schema;
         base_uri.append("://").append(authority);
         auto& clients = worker->get_client_pool();
-        if (clients[base_uri].size() < clients_needed)
+        PROTO_TYPE proto_type = PROTO_UNSPECIFIED;
+        auto iter = http_proto_map.find(proto);
+        if (iter != http_proto_map.end())
         {
-            auto client = worker->create_new_client(0xFFFFFFFF);
+            proto_type = iter->second;
+        }
+        if (clients[proto_type][base_uri].size() < clients_needed)
+        {
+            auto client = worker->create_new_client(0xFFFFFFFF, proto_type, schema, authority);
             worker->check_in_client(client);
-            // pre-mature insert to block excessive client creation during test start
-            clients[base_uri].insert(client.get());
             client->install_connected_callback(connected_callback);
             client->set_prefered_authority(authority);
-            client->preferred_non_tls_proto = proto;
             client->connect_to_host(schema, authority);
         }
         else
@@ -519,7 +522,7 @@ int32_t _make_connection(lua_State* L, const std::string& uri,
             thread_local static std::mt19937 generator(rand_dev());
             thread_local static std::uniform_int_distribution<uint64_t>  distr(0, clients_needed - 1);
             auto client_index = distr(generator);
-            auto iter = clients[base_uri].begin();
+            auto iter = clients[proto_type][base_uri].begin();
             std::advance(iter, client_index);
             auto client = *iter;
 
@@ -575,16 +578,13 @@ void update_orig_dst_and_proto(std::map<std::string, std::string, ci_less>& head
                                std::string& orig_dst,
                                std::string& proto)
 {
-    if (headers.count(h2load::x_envoy_original_dst_host_header))
+    auto iter = headers.find(h2load::x_envoy_original_dst_host_header);
+    if (iter != headers.end())
     {
-        orig_dst = headers[h2load::x_envoy_original_dst_host_header];
-        headers.erase(h2load::x_envoy_original_dst_host_header);
+        orig_dst = iter->second;
+        headers.erase(iter);
     }
-    if (headers.count(h2load::x_proto_to_use))
-    {
-        proto = headers[h2load::x_proto_to_use];
-        headers.erase(h2load::x_proto_to_use);
-    }
+    update_proto(headers, payload, orig_dst, proto);
 }
 
 // TODO: this is called every request, should be optimized
@@ -592,10 +592,11 @@ void update_proto(std::map<std::string, std::string, ci_less>& headers, std::str
                   std::string& orig_dst,
                   std::string& proto)
 {
-    if (headers.count(h2load::x_proto_to_use))
+    auto iter = headers.find(h2load::x_proto_to_use);
+    if (iter != headers.end())
     {
-        proto = headers[h2load::x_proto_to_use];
-        headers.erase(h2load::x_proto_to_use);
+        proto = iter->second;
+        headers.erase(iter);
     }
 }
 
@@ -607,7 +608,7 @@ int send_http_request(lua_State* L)
         update_proto(headers, payload, orig_dst, proto);
     };
     enter_c_function(L);
-    auto request_sent = [L](int32_t stream_id, h2load::base_client * client)
+    auto request_sent = [L](int64_t stream_id, h2load::base_client * client)
     {
         if (stream_id && client)
         {
@@ -628,7 +629,7 @@ int send_http_request(lua_State* L)
 
 Request_Sent_cb await_response_request_sent_cb_generator(lua_State* L)
 {
-    return [L](int32_t stream_id, h2load::base_client * client)
+    return [L](int64_t stream_id, h2load::base_client * client)
     {
         if (stream_id > 0 && client)
         {
@@ -774,7 +775,7 @@ int await_response(lua_State* L)
 
 
 int _send_http_request(lua_State* L, Request_Preprocessor request_preprocessor,
-                       std::function<void(int32_t, h2load::base_client*)> request_sent_callback)
+                       std::function<void(int64_t, h2load::base_client*)> request_sent_callback)
 {
     auto argument_error = false;
     std::string payload;
@@ -844,13 +845,15 @@ int _send_http_request(lua_State* L, Request_Preprocessor request_preprocessor,
         }
 
         std::string schema = headers[h2load::scheme_header];
-        headers.erase(h2load::scheme_header);
+        //headers.erase(h2load::scheme_header);
         std::string authority = headers[h2load::authority_header];
-        headers.erase(h2load::authority_header);
+        //headers.erase(h2load::authority_header);
+        //headers.erase(h2load::host_header);
         std::string method = headers[h2load::method_header];
-        headers.erase(h2load::method_header);
+        //headers.erase(h2load::method_header);
         std::string path = headers[h2load::path_header];
-        headers.erase(h2load::path_header);
+        //headers.erase(h2load::path_header);
+        remove_reserved_http_headers(headers);
         std::string base_uri;
         if (original_dst.size())
         {
@@ -878,21 +881,21 @@ int _send_http_request(lua_State* L, Request_Preprocessor request_preprocessor,
                 request_sent_callback(-1, nullptr);
                 return;
             }
-            h2load::Request_Data request_to_send(0);
-            request_to_send.request_sent_callback = request_sent_callback;
-            request_to_send.string_collection.emplace_back(payload);
-            request_to_send.req_payload = &(request_to_send.string_collection.back());
-            request_to_send.string_collection.emplace_back(method);
-            request_to_send.method = &(request_to_send.string_collection.back());
-            request_to_send.string_collection.emplace_back(path);
-            request_to_send.path = &(request_to_send.string_collection.back());
-            request_to_send.string_collection.emplace_back(authority);
-            request_to_send.authority = &(request_to_send.string_collection.back());
-            request_to_send.string_collection.emplace_back(schema);
-            request_to_send.schema = &(request_to_send.string_collection.back());
-            request_to_send.req_headers_of_individual = std::move(headers);
-            request_to_send.req_headers_from_config = &dummyHeaders;
-            request_to_send.stream_timeout_in_ms = timeout_interval_in_ms;
+            auto request_to_send = std::make_unique<h2load::Request_Response_Data>(std::vector<uint64_t>(0));
+            request_to_send->request_sent_callback = request_sent_callback;
+            request_to_send->string_collection.emplace_back(payload);
+            request_to_send->req_payload = &(request_to_send->string_collection.back());
+            request_to_send->string_collection.emplace_back(method);
+            request_to_send->method = &(request_to_send->string_collection.back());
+            request_to_send->string_collection.emplace_back(path);
+            request_to_send->path = &(request_to_send->string_collection.back());
+            request_to_send->string_collection.emplace_back(authority);
+            request_to_send->authority = &(request_to_send->string_collection.back());
+            request_to_send->string_collection.emplace_back(schema);
+            request_to_send->schema = &(request_to_send->string_collection.back());
+            request_to_send->req_headers_of_individual = std::move(headers);
+            request_to_send->req_headers_from_config = &dummyHeaders;
+            request_to_send->stream_timeout_in_ms = timeout_interval_in_ms;
             client->requests_to_submit.emplace_back(std::move(request_to_send));
             client->submit_request();
         };
@@ -1399,13 +1402,13 @@ int resolve_hostname(lua_State* L)
         auto resolve_callback = [return_addresses, hostname, L, worker_id, group_id,
                                                    ttl](std::vector<std::string>& resolved_addresses)
         {
-            auto& lua_sates_await_result = get_runtime_data(L).host_resolution_data[hostname].lua_sates_await_result;
-            if (lua_sates_await_result.size() && lua_sates_await_result[0] == L)
+            auto& lua_states_await_result = get_runtime_data(L).host_resolution_data[hostname].lua_states_await_result;
+            if (lua_states_await_result.size() && lua_states_await_result[0] == L)
             {
                 get_runtime_data(L).host_resolution_data[hostname].ip_addresses = std::move(resolved_addresses);
                 get_runtime_data(L).host_resolution_data[hostname].expire_time_point = std::chrono::steady_clock::now() +
                                                                                        std::chrono::milliseconds(ttl);
-                auto lua_states_to_resume = std::move(lua_sates_await_result);
+                auto lua_states_to_resume = std::move(lua_states_await_result);
                 auto& ip_addresses = get_runtime_data(L).host_resolution_data[hostname].ip_addresses;
                 for (auto& l : lua_states_to_resume)
                 {
@@ -1429,13 +1432,13 @@ int resolve_hostname(lua_State* L)
             {
                 resolve_callback(get_runtime_data(L).host_resolution_data[hostname].ip_addresses);
             }
-            else if (get_runtime_data(L).host_resolution_data[hostname].lua_sates_await_result.size())
+            else if (get_runtime_data(L).host_resolution_data[hostname].lua_states_await_result.size())
             {
-                get_runtime_data(L).host_resolution_data[hostname].lua_sates_await_result.push_back(L);
+                get_runtime_data(L).host_resolution_data[hostname].lua_states_await_result.push_back(L);
             }
             else
             {
-                get_runtime_data(L).host_resolution_data[hostname].lua_sates_await_result.push_back(L);
+                get_runtime_data(L).host_resolution_data[hostname].lua_states_await_result.push_back(L);
                 worker->resolve_hostname(hostname, resolve_callback);
             }
         };

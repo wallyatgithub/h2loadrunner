@@ -60,7 +60,7 @@ int alpn_select_proto_cb(SSL *ssl, const unsigned char **out,
 boost::system::error_code
 configure_tls_context_easy(boost::system::error_code &ec,
                            boost::asio::ssl::context &tls_context,
-                           bool mTLS) {
+                           bool mTLS, const std::string& ciphers) {
   ec.clear();
 
   auto ctx = tls_context.native_handle();
@@ -79,7 +79,7 @@ configure_tls_context_easy(boost::system::error_code &ec,
       SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
   }
 
-  SSL_CTX_set_cipher_list(ctx, tls::DEFAULT_CIPHER_LIST);
+  SSL_CTX_set_cipher_list(ctx, ciphers.c_str());
 
 #ifndef OPENSSL_NO_EC
   auto ecdh = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);

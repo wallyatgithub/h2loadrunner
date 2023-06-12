@@ -1,554 +1,568 @@
 {
-  "$schema":"http://json-schema.org/draft-04/schema#",
-  "description":" h2loadrunner configuration",
-  "title":"h2loadrunner_configuration",
-  "type":"object",
-  "properties":
-  {
-    "schema":
-    {
-      "description":"http, or https; to use TLS or mTLS, please choose https here",
-      "type":"string",
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "description": " h2loadrunner configuration",
+  "title": "h2loadrunner_configuration",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "description": "http, or https; to use TLS or mTLS, please choose https here",
+      "type": "string",
       "default": "http",
-      "enum": ["http", "https"]
+      "enum": [
+        "http",
+        "https"
+      ]
     },
-    "host":
-    {
-      "description":"host to be tested with load, for example: 192.168.1.1, or, www.h2loadrunner.com",
-      "type":"string"
+    "host": {
+      "description": "host to be tested with load, for example: 192.168.1.1, or, www.h2loadrunner.com",
+      "type": "string"
     },
-    "port":
-    {
-      "description":"port, 80, 443 ,etc.",
+    "port": {
+      "description": "port, 80, 443 ,etc.",
       "default": 80,
-      "type":"integer"
+      "type": "integer"
     },
-    "load-share-hosts":
-    {
+    "load-share-hosts": {
       "description": "A list of hosts with optional ports, which together with host in host/port field above would be used as a load share group; h2loadrunner will distribute the connections evenly to each host of the group, so the test traffic is also evenly distributed to each host.",
-      "type":"array",
-      "minItems":0,
-      "items":
-      {
+      "type": "array",
+      "minItems": 0,
+      "items": {
         "type": "object",
-        "properties":
-        {
-          "host":
-          {
-            "description":"host part, for example: 192.168.1.1, or, www.h2loadrunner.com",
-            "type":"string"
+        "properties": {
+          "host": {
+            "description": "host part, for example: 192.168.1.1, or, www.h2loadrunner.com",
+            "type": "string"
           },
-          "port":
-          {
-            "description":"port, 80, 443 ,etc.",
+          "port": {
+            "description": "port, 80, 443 ,etc.",
             "default": 80,
-            "type":"integer"
+            "type": "integer"
           }
         },
-        "required":
-        [
-           "host"
+        "required": [
+          "host"
         ]
       }
     },
-    "open-new-connection-based-on-authority-header":
-    {
+    "open-new-connection-based-on-authority-header": {
       "description": "false: h2loadrunner will stick to the connections created with host fields above, and create no dynamic connections; true: request should be routed to the host strictly matching the authority header, so h2loadrunner will create dynamic connections when necessary based on per request configuration (either from input or from previous response header), and route the requests based on the request authority header",
       "default": false,
-      "type":"boolean"
+      "type": "boolean"
     },
-    "connection-retry":
-    {
+    "connection-retry": {
       "description": "false: upon disconnect from host, h2loadrunner will not try open new connection; true: h2loadrunner will try to open new connections upon host disconnect, either to another host in the load share group above, or to the same host if no other host is available; note: after reconnection is made due to peer disconnect, load balance is no longer guaranteed, see next field for more information",
       "default": true,
-      "type":"boolean"
+      "type": "boolean"
     },
-    "switch-back-after-connection-retry":
-    {
-      "description": "when connection-retry occurs due to host disconnect, load balance may be broken as mentioned above; this field provide an option to recover; true: h2loadrunner will monitor the host disconnected, and when it is up again (tcp connect is successful), h2loadrunner will re-establish connection to it to reach load balance; false: h2loadrunner will not monitor the host disconnected, and leave the load unbalanced; note: it is not always positive to have this set to true, as it may cause connection to flip-flop when the host itself is unstable",
+    "switch-back-after-connection-retry": {
+      "description": "when connection-retry occurs due to host disconnect, load balance may be broken as mentioned above; this field provide an option to recover; true: h2loadrunner will monitor the host disconnected, and when it is up again (tcp connect is successful), h2loadrunner will re-establish connection to it to reach load balance; false: h2loadrunner will not monitor the host disconnected, and leave the load unbalanced; note: it is not always positive to have this set to true, as it may cause connection to flip-flop when the host itself is unstable; note: this is not yet supported with http3",
       "default": false,
-      "type":"boolean"
+      "type": "boolean"
     },
-    "threads":
-    {
-      "description":"Number of threads. Each thread can run multiple connections (see clients field). Recommendation: thead number matches number of cores",
+    "threads": {
+      "description": "Number of threads. Each thread can run multiple connections (see clients field). Recommendation: thead number matches number of cores",
       "default": 1,
-      "type":"integer"
+      "type": "integer"
     },
-    "clients":
-    {
-      "description":"Total number of concurrent clients(connections) to be established to host(s) under test; different connections are running in parallel mode even they are handled by same thread (see threads field). If working together with rate field, this field specifies the total number of connections to be made. This field must have a value no less than threads field.",
+    "clients": {
+      "description": "Total number of concurrent clients(connections) to be established to host(s) under test; different connections are running in parallel mode even they are handled by same thread (see threads field). If working together with rate field, this field specifies the total number of connections to be made. This field must have a value no less than threads field.",
       "default": 1,
-      "type":"integer"
+      "type": "integer"
     },
-    "duration":
-    {
-      "description":"Specifies the duration (in second) for timing-based benchmarking.",
+    "duration": {
+      "description": "Specifies the duration (in second) for timing-based benchmarking.",
       "default": 60,
-      "type":"number"
+      "type": "number"
     },
-    "total-requests":
-    {
-      "description":"Number of requests across all clients. This field is ignored if duration field has a positive value, and this field must have a positive value if duration field is blank",
+    "total-requests": {
+      "description": "Number of requests across all clients. This field is ignored if duration field has a positive value, and this field must have a positive value if duration field is blank",
       "default": 1,
-      "type":"integer"
+      "type": "integer"
     },
-    "warm-up-time":
-    {
-      "description":"Specifies the time period (in second) before starting the actual measurements, in case of timing-based benchmarking. Needs non-zero value in duration field for warm-up-time field to work.",
-      "type":"number"
+    "warm-up-time": {
+      "description": "Specifies the time period (in second) before starting the actual measurements, in case of timing-based benchmarking. Needs non-zero value in duration field for warm-up-time field to work.",
+      "type": "number"
     },
-    "max-concurrent-streams":
-    {
-      "description":"each http2 connection can have multiple concurrent streams running in parallel, this field specifies the max concurrent streams for each connection; this field is ignored for http 1.x test",
-      "default": 32,
-      "type":"integer"
+    "max-concurrent-streams": {
+      "description": "each http2 connection can have multiple concurrent streams running in parallel, this field specifies the max concurrent streams for each connection; this field is ignored for http 1.x test",
+      "default": 2048,
+      "type": "integer"
     },
-    "request-per-second":
-    {
-      "description":"Specifies request per second for each client(connection), so the total number of requests per second would be request-per-second * clients. If no value is given in this field, it will try to send as many as possible requests for each client(connection)",
-      "type":"number"
+    "request-per-second": {
+      "description": "Specifies request per second for each client(connection), so the total number of requests per second would be request-per-second * clients. If no value is given in this field, it will try to send as many as possible requests for each client(connection)",
+      "type": "number"
     },
-    "request-per-second-feed-file":
-    {
-      "description":"If given, h2loadrunner will monitor this file; if the file is changed, h2loadrunner will read the first line, and try to interpret it as a number as described in request-per-second field, and if successful, request-per-second is updated with the number dynamically",
-      "type":"string"
+    "request-per-second-feed-file": {
+      "description": "If given, h2loadrunner will monitor this file; if the file is changed, h2loadrunner will read the first line, and try to interpret it as a number as described in request-per-second field, and if successful, request-per-second is updated with the number dynamically",
+      "type": "string"
     },
-    "rate":
-    {
-      "description":"Specifies a fixed rate at which connections are created. If given, it must be a positive integer, representing the number of connections to be made per rate-period. The maximum number of connections to be made is given in clients field. This rate will be distributed among threads as evenly as possible. For example, with thread=2 and rate=4, each thread gets 2 connections per rate-period, until total number of connections specified in clients field is reached.  When the rate is 0, the program will run as it normally does, creating connections at whatever variable rate it wants.",
+    "rate": {
+      "description": "Specifies a fixed rate at which connections are created. If given, it must be a positive integer, representing the number of connections to be made per rate-period. The maximum number of connections to be made is given in clients field. This rate will be distributed among threads as evenly as possible. For example, with thread=2 and rate=4, each thread gets 2 connections per rate-period, until total number of connections specified in clients field is reached.  When the rate is 0, the program will run as it normally does, creating connections at whatever variable rate it wants.",
       "default": 0,
-      "type":"integer"
+      "type": "integer"
     },
-    "rate-period":
-    {
-      "description":"Specifies the time period between connection creating connections. The period must be a positive number, representing the length of the period in time. This option is ignored if the rate option is not used.",
+    "rate-period": {
+      "description": "Specifies the time period between connection creating connections. The period must be a positive number, representing the length of the period in time. This option is ignored if the rate option is not used.",
       "default": 1,
-      "type":"number"
+      "type": "number"
     },
-    "stream-timeout":
-    {
-      "description":"Specifies the maximum time (ms) that h2loadrunner would wait for response before resetting a stream. This field is not applicable for http 1.x test",
+    "stream-timeout": {
+      "description": "Specifies the maximum time (ms) that h2loadrunner would wait for response before resetting a stream. This field is not applicable for http 1.x test",
       "default": 5000,
-      "type":"integer"
+      "type": "integer"
     },
-    "ciphers":
-    {
-      "description":"Set allowed cipher list. The format of the string is described in OpenSSL ciphers(1)",
-      "type":"string",
-      "default":"ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256"
+    "ciphers": {
+      "description": "Set allowed cipher list. The format of the string is described in OpenSSL ciphers(1)",
+      "type": "string",
+      "default": "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256"
     },
-    "caCert":
-    {
-      "description":"The path to a file whose content is the CA certificate in PEM format. This is used to verify the server certificate",
-      "type":"string"
+    "tls13-ciphers": {
+      "description": "Set allowed cipher list for TLSv1.3. The format of the string is described in OpenSSL ciphers(1)",
+      "type": "string",
+      "default": "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256"
     },
-    "cert":
-    {
-      "description":"The path to a file whose content is the certificate in PEM format. This is used in mTLS where server requires peer/client certificate",
-      "type":"string"
+    "caCert": {
+      "description": "The path to a file whose content is the CA certificate in PEM format. This is used to verify the server certificate",
+      "type": "string"
     },
-    "privateKey":
-    {
-      "description":"The full path to a file whose content is the private key in PEM format. This is used by mTLS where server requires peer certificate, thus the private key is also needed",
-      "type":"string"
+    "cert": {
+      "description": "The path to a file whose content is the certificate in PEM format. This is used in mTLS where server requires peer/client certificate",
+      "type": "string"
     },
-    "certVerificationMode":
-    {
+    "privateKey": {
+      "description": "The full path to a file whose content is the private key in PEM format. This is used by mTLS where server requires peer certificate, thus the private key is also needed",
+      "type": "string"
+    },
+    "certVerificationMode": {
       "description": "0: do not do certificate validation; 1: fail if peer certificate does not pass validation",
       "default": 0,
-      "type":"integer"
+      "type": "integer"
     },
-    "max-tls-version":
-    {
-      "type":"string",
-      "description": "highest allowed TLS version",
+    "max-tls-version": {
+      "type": "string",
+      "description": "max allowed TLS version",
       "default": "TLSv1.3",
-      "enum": ["TLSv1.2", "TLSv1.3"]
+      "enum": [
+        "TLSv1.2",
+        "TLSv1.3"
+      ]
     },
-    "no-tls-proto":
-    {
-      "description":"Specify ALPN identifier of the protocol to be used when accessing http URI without SSL/TLS. Available protocols: h2c and http/1.1",
-      "type":"string",
-      "default":"h2c"
+    "tls-keylog-file": {
+      "description": "Enable tls key log and specify base file name for tls key log; key log is emitted for each tls connection. For a given base name 'base', each output file name becomes 'base_localPort.log' where 'localPort' is the local port of the connection",
+      "type": "string"
     },
-    "connection-active-timeout":
-    {
-      "description":"Specifies the maximum time (ms) that h2loadrunner is willing to keep a connection open, regardless of the activity on said connection. If given, it must be a positive integer, specifying the amount of time to wait. When no timeout value is set (either active or inactive), the tool will keep a connection open indefinitely, waiting for a response.",
-      "type":"number"
+    "no-tls-proto": {
+      "description": "Specify ALPN identifier of the protocol to be used when accessing http URI without SSL/TLS. Available protocols: h2c and http/1.1",
+      "type": "string",
+      "default": "h2c"
     },
-    "connection-inactivity-timeout":
-    {
-      "description":"Specifies the amount of time that h2loadrunner is willing to wait to see activity on a given connection. If given, it must be a positive integer, specifying the amount of time to wait. When no timeout value is set (either active or inactive), the tool will keep a connection open indefinitely, waiting for a response.",
-      "type":"number"
+    "connection-active-timeout": {
+      "description": "Specifies the maximum time (ms) that h2loadrunner is willing to keep a connection open, regardless of the activity on said connection. If given, it must be a positive integer, specifying the amount of time to wait. When no timeout value is set (either active or inactive), the tool will keep a connection open indefinitely, waiting for a response.",
+      "type": "number"
     },
-    "interval-between-ping-frames":
-    {
-      "description":"h2loadrunner can send ping frame to peer host to prevent the connection going idle, as a long idle connection might be taken down; this field specifies the max interval (in seconds) between 2 ping frames; if the connection comes out of idle state in less than this interval, next ping frame will not be sent; 0: h2loadrunner will not send ping frames even the connection is idle for long; note: this field is not applicable for http1.x connections",
+    "connection-inactivity-timeout": {
+      "description": "Specifies the amount of time that h2loadrunner is willing to wait to see activity on a given connection. If given, it must be a positive integer, specifying the amount of time to wait. When no timeout value is set (either active or inactive), the tool will keep a connection open indefinitely, waiting for a response.",
+      "type": "number"
+    },
+    "interval-between-ping-frames": {
+      "description": "h2loadrunner can send ping frame to peer host to prevent the connection going idle, as a long idle connection might be taken down; this field specifies the max interval (in seconds) between 2 ping frames; if the connection comes out of idle state in less than this interval, next ping frame will not be sent; 0: h2loadrunner will not send ping frames even the connection is idle for long; note: this field is not applicable for http1.x connections",
       "default": 0,
-      "type":"number"
+      "type": "number"
     },
-    "npn-list":
-    {
-      "description":"Comma delimited list of ALPN protocol identifier sorted in the order of preference. That means most desirable protocol comes first. This is used in both ALPN and NPN. The parameter must be delimited by a single comma only and any white spaces are treated as a part of protocol string.",
-      "type":"string",
-      "default":"h2,h2-16,h2-14,http/1.1"
+    "npn-list": {
+      "description": "Comma delimited list of ALPN protocol identifier sorted in the order of preference. That means most desirable protocol comes first. This is used in both ALPN and NPN. The parameter must be delimited by a single comma only and any white spaces are treated as a part of protocol string.",
+      "type": "string",
+      "default": "h2,h2-16,h2-14,http/1.1,h3,h3-29"
     },
-    "header-table-size":
-    {
-      "description":"Specify decoder header table size.",
+    "header-table-size": {
+      "description": "Specify decoder header table size.",
       "default": 4096,
-      "type":"integer"
+      "type": "integer"
     },
-    "encoder-header-table-size":
-    {
-      "description":"Specify encoder header table size. The decoder (server) specifies the maximum dynamic table size it accepts. Then the negotiated dynamic table size is the minimum of this option value and the value which server specified.",
+    "encoder-header-table-size": {
+      "description": "Specify encoder header table size. The decoder (server) specifies the maximum dynamic table size it accepts. Then the negotiated dynamic table size is the minimum of this option value and the value which server specified.",
       "default": 4096,
-      "type":"integer"
+      "type": "integer"
     },
-    "log-file":
-    {
-      "description":"Write per-request brief information to a file with name specified here. columns: start time as microseconds since epoch; HTTP status code; microseconds until end of response. Note: this is not the file to print statistics, and this per-request log may slow down the performance of h2loadrunner",
-      "type":"string"
+    "log-file": {
+      "description": "Write per-request brief information to a file with name specified here. columns: start time as microseconds since epoch; HTTP status code; microseconds until end of response. Note: this is not the file to print statistics, and this per-request log may slow down the performance of h2loadrunner",
+      "type": "string"
     },
-    "failed-request-log-file":
-    {
-      "description":"Path to a file; if this is given, h2loadrunner will dump failed request/response details to this file",
-      "type":"string"
+    "qlog-file-base": {
+      "description": "Enable qlog output and specify base file name for qlogs. Qlog is emitted  for each connection. For a given base name 'base', each output file name becomes 'base.M.N.sqlog' where M is worker ID and N is client ID (e.g. 'base.0.3.sqlog'). Only effective in QUIC runs",
+      "type": "string"
     },
-    "statistics-interval":
-    {
-      "description":"This field specifies a repeated timer in seconds; h2loadrunner will print the statistics to stdout or to statistics-file, in Comma-separated values (CSV) format upon each timer expiry",
-      "default": 5,
-      "type":"integer"
+    "failed-request-log-file": {
+      "description": "Path to a file; if this is given, h2loadrunner will dump failed request/response details to this file",
+      "type": "string"
     },
-    "statistics-file":
-    {
-      "description":"Path to a file to write statistics periodically as instructed by statistics-interval. If no file is given here, statistics would be written to stdout",
-      "type":"string"
+    "statistics-interval": {
+      "description": "This field specifies a repeated timer in seconds; h2loadrunner will print the statistics to stdout or to statistics-file, in Comma-separated values (CSV) format upon each timer expiry",
+      "default": 1,
+      "type": "integer"
     },
-    "builtin-server-listening-port":
-    {
-      "description":"h2loadrunner has a builtin http/1.1 server, which would handle incoming request from an http client like curl or a browser, to /stat to get the latest statistics report, and to /config to update configuration options; currently, the only supported configuration option update is rps, e.g., /config?rps=100 will update rps to 100",
+    "statistics-file": {
+      "description": "Path to a file to write statistics periodically as instructed by statistics-interval. If no file is given here, statistics would be written to stdout",
+      "type": "string"
+    },
+    "builtin-server-listening-port": {
+      "description": "h2loadrunner has a builtin http/1.1 server, which would handle incoming request from an http client like curl or a browser, to /stat to get the latest statistics report, and to /config to update configuration options; currently, the only supported configuration option update is rps, e.g., /config?rps=100 will update rps to 100",
       "default": 8888,
-      "type":"integer"
+      "type": "integer"
     },
-    "window-bits":
-    {
-      "description":"Sets the stream level initial window size to (2^window-bits)-1",
+    "window-bits": {
+      "description": "Sets the stream level initial window size to (2^window-bits)-1",
       "default": 30,
-      "type":"integer"
+      "type": "integer"
     },
-    "connection-window-bits":
-    {
-      "description":"Sets the connection level initial window size to (2^connection-window-bits)-1",
+    "connection-window-bits": {
+      "description": "Sets the connection level initial window size to (2^connection-window-bits)-1",
       "default": 30,
-      "type":"integer"
+      "type": "integer"
     },
-    "socket-receive-buffer-size":{
-      "description":"socket receive buffer size in bytes; default: 4M",
+    "socket-receive-buffer-size": {
+      "description": "socket receive buffer size in bytes; default: 4M",
       "default": 4194304,
-      "type":"integer"
+      "type": "integer"
     },
-    "socket-send-buffer-size":{
-      "description":"socket send buffer size in bytes; default: 4M",
+    "socket-send-buffer-size": {
+      "description": "socket send buffer size in bytes; default: 4M",
       "default": 4194304,
-      "type":"integer"
+      "type": "integer"
     },
-    "Scenarios":
-    {
-      "description":"Array of scenarios, each scenario has a name, a weight, and a list of requests to be executed",
-      "type":"array",
-      "minItems":1,
-      "items":
-      {
-        "description":"A scenario is a list of requests to be executed sequentially for each user; different users of the same scenario can be executed in parallel however, even in the same connection.",
-        "type":"object",
-        "properties":
-        {
-          "name":
-          {
-            "description":"name of the scenario, use for statistics output, max length: 24",
-            "type":"string",
+    "max-frame-size": {
+      "description": "Maximum frame size that the local endpoint is willing to receive; Default: 16384",
+      "default": 16384,
+      "type": "integer"
+    },
+    "groups": {
+      "description": "Specify the supported groups. Default: X25519:P-256:P-384:P-521",
+      "default": "X25519:P-256:P-384:P-521",
+      "type": "string"
+    },
+    "no-udp-gso": {
+      "description": "true: Disable UDP GSO; false: enable UDP GSO",
+      "default": false,
+      "type": "boolean"
+    },
+    "ktls": {
+      "description": "true: Enable ktls",
+      "default": false,
+      "type": "boolean"
+    },
+    "max-udp-payload-size": {
+      "description": "Specify the maximum outgoing UDP datagram payload size.",
+      "default": 0,
+      "type": "integer"
+    },
+    "quic-congestion-control-algorithm": {
+      "description": "Choose congestion control algorithm for QUIC",
+      "type": "string",
+      "default": "RENO",
+      "enum": [
+        "RENO",
+        "CUBIC",
+        "BBR",
+        "BBR2"
+      ]
+    },
+    "builtin-cookie-support": {
+      "description": "true: builtin cookie support is on; false: builtin cookie support is turned off, which is used when running an HAR file",
+      "default": true,
+      "type": "boolean"
+    },
+    "Scenarios": {
+      "description": "Array of scenarios, each scenario has a name, a weight, and a list of requests to be executed",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "description": "A scenario is a list of requests to be executed sequentially for each user; different users of the same scenario can be executed in parallel however, even in the same connection.",
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "name of the scenario, use for statistics output, max length: 24",
+            "type": "string",
             "maxLength": 24
           },
-          "weight":
-          {
-            "description":"weight of this scenario among all scenarios; the chance for this scenario to be schedule to run is: weight / total weight of all scenarios",
+          "weight": {
+            "description": "weight of this scenario among all scenarios; the chance for this scenario to be schedule to run is: weight / total weight of all scenarios",
             "default": 100,
             "minimum": 0,
             "maximum": 65535,
-            "type":"integer"
+            "type": "integer"
           },
-          "interval-to-wait-before-start":
-          {
-            "description":"interval (in milliseconds) to wait before this scenario can be scheduled to run; before this interval is over, the weight of this scenario is considered zero; granularity: 100ms",
+          "interval-to-wait-before-start": {
+            "description": "interval (in milliseconds) to wait before this scenario can be scheduled to run; before this interval is over, the weight of this scenario is considered zero; granularity: 100ms",
             "default": 0,
-            "type":"integer"
+            "type": "integer"
           },
-          "user-id-variable-in-path-and-data":
-          {
-            "description":"Deprecated, use range-based-variables instead. specifies the variable name in uri path and payload, which is considered as a user id, and is to be replaced with an actual value specified by next fields.",
-            "type":"string"
+          "user-id-variable-in-path-and-data": {
+            "description": "Deprecated, use range-based-variables instead. specifies the variable name in uri path and payload, which is considered as a user id, and is to be replaced with an actual value specified by next fields.",
+            "type": "string"
           },
-          "user-id-list-file":
-          {
-            "description":"Deprecated, check two-dimensional-variables instead. Path of a CSV file; Suppose this CSV file has M rows and N columns, then each row (except the first row which is column name) represents a list of identities for one user. So, this file will represent M - 1 users, with each user associated with N identities, and these N identities are for the N requests defined in this scenario respectively. It is acceptable that, there are N requests defined, while only 1 column is present in this file, then for each user, all the N requests will share the same identity from this single column. Note: if user-id-range-slicing is enabled, and the number of users (M - 1) from this file is less than the number of clients, the test cannot be done, as some client would have not even a single user. When user-id-list-file has a value, user-id-range-start/end would be ignored",
-            "type":"string"
+          "user-id-list-file": {
+            "description": "Deprecated, check two-dimensional-variables instead. Path of a CSV file; Suppose this CSV file has M rows and N columns, then each row (except the first row which is column name) represents a list of identities for one user. So, this file will represent M - 1 users, with each user associated with N identities, and these N identities are for the N requests defined in this scenario respectively. It is acceptable that, there are N requests defined, while only 1 column is present in this file, then for each user, all the N requests will share the same identity from this single column. Note: if user-id-range-slicing is enabled, and the number of users (M - 1) from this file is less than the number of clients, the test cannot be done, as some client would have not even a single user. When user-id-list-file has a value, user-id-range-start/end would be ignored",
+            "type": "string"
           },
-          "user-id-range-start":
-          {
-            "description":"Deprecated, use range-based-variables instead. specify variable user id range start; for example, user-id-range-start = 0, user-id-range-end = 1000, then the actual user id would be 0000, 0001, 0002, ... 0999",
-            "type":"integer"
+          "user-id-range-start": {
+            "description": "Deprecated, use range-based-variables instead. specify variable user id range start; for example, user-id-range-start = 0, user-id-range-end = 1000, then the actual user id would be 0000, 0001, 0002, ... 0999",
+            "type": "integer"
           },
-          "user-id-range-end":
-          {
-            "description":"Deprecated, use range-based-variables instead. specify variable user id range end; actual range does not include the end, which is: [user-id-range-start, user-id-range-end)",
-            "type":"integer"
+          "user-id-range-end": {
+            "description": "Deprecated, use range-based-variables instead. specify variable user id range end; actual range does not include the end, which is: [user-id-range-start, user-id-range-end)",
+            "type": "integer"
           },
-          "user-id-range-slicing":
-          {
+          "user-id-range-slicing": {
             "description": "true: Slice the user-id range, each client get a sub range; e.g.: full range 1-1000, with 10 clients, each client gets a sub range of 100 (1-100, 101-200...); if user-id-list-file is given, the full list of the user id list from that file will be sliced up, and each client will take a sub list. false: each client gets a full range",
             "default": true,
-            "type":"boolean"
+            "type": "boolean"
           },
-          "run-requests-in-parallel":
-          {
-            "description": "true: all the requests of this scenario will be run in parallel, obvious, the request uri typeOfAction cannot be fromResponseHeader or fromJsonPointer in this case; false: the requests of this scenario will be run one after another in the listed order",
-            "default": false,
-            "type":"boolean"
+          "user-variables-input-file": {
+            "description": "path of a UTF-8 CSV file; the first row must be the list of column names, and each colume name is interpreted as a variable name; the value of this variable is given from the second row and after, with each row representing a specific user; suppose the CSV files has M columns and N rows, then it represents N-1 users: each row represents the M variable values of a single user; each variable value can be referred to in user message definition by wrapping the variable name with ${}, where variable name is given in the corresponding column at the first row",
+            "type": "string"
           },
-          "user-variables-input-file":
-          {
-            "description":"path of a UTF-8 CSV file; the first row must be the list of column names, and each colume name is interpreted as a variable name; the value of this variable is given from the second row and after, with each row representing a specific user; suppose the CSV files has M columns and N rows, then it represents N-1 users: each row represents the M variable values of a single user; each variable value can be referred to in user message definition by wrapping the variable name with ${}, where variable name is given in the corresponding column at the first row",
-            "type":"string"
-          },
-          "range-based-variables":
-          {
-            "description":"Array of range based variables, each has a name, range start and range end; the name can be referred to in request uri, payload, and header definition, wrapper with ${}, like /some-path/${var_name}, where ${var_name} is to be substituted by an actual value within range start and range end",
-            "type":"array",
-            "minItems":0,
-            "items":
-            {
-              "type":"object",
-              "properties":
-              {
-                "variable-name":
-                {
-                  "description":"Specifies the variable name",
-                  "type":"string"
+          "range-based-variables": {
+            "description": "Array of range based variables, each has a name, range start and range end; the name can be referred to in request uri, payload, and header definition, wrapper with ${}, like /some-path/${var_name}, where ${var_name} is to be substituted by an actual value within range start and range end",
+            "type": "array",
+            "minItems": 0,
+            "items": {
+              "type": "object",
+              "properties": {
+                "variable-name": {
+                  "description": "Specifies the variable name",
+                  "type": "string"
                 },
-                "variable-range-start":
-                {
-                  "description":"Specify variable range start; for example, variable-range-start = 0, variable-range-end = 1000, then the actual user id would be 0000, 0001, 0002, ... 0999",
-                  "type":"integer"
+                "variable-range-start": {
+                  "description": "Specify variable range start; for example, variable-range-start = 0, variable-range-end = 1000, then the actual user id would be 0000, 0001, 0002, ... 0999",
+                  "type": "integer"
                 },
-                "variable-range-end":
-                {
-                  "description":"Specify variable range end; actual range does not include the end, which is: [variable-range-start, variable-range-end)",
-                  "type":"integer"
+                "variable-range-end": {
+                  "description": "Specify variable range end; actual range does not include the end, which is: [variable-range-start, variable-range-end)",
+                  "type": "integer"
                 }
               }
             }
           },
-          "two-dimensional-variables":
-          {
-            "description":"Array of csv based variables, each variable has a name, and path to a csv file; the name can be referred to in request uri, payload, and header definition, wrapper with ${}, like /some-path/${var_name}, where ${var_name} is to be substituted by an actual value from the csv file",
-            "type":"array",
-            "minItems":0,
-            "items":
-            {
-              "type":"object",
-              "properties":
-              {
-                "variable-name":
-                {
-                  "description":"Specifies the variable name",
-                  "type":"string"
+          "two-dimensional-variables": {
+            "description": "Array of csv based variables, each variable has a name, and path to a csv file; the name can be referred to in request uri, payload, and header definition, wrapper with ${}, like /some-path/${var_name}, where ${var_name} is to be substituted by an actual value from the csv file",
+            "type": "array",
+            "minItems": 0,
+            "items": {
+              "type": "object",
+              "properties": {
+                "variable-name": {
+                  "description": "Specifies the variable name",
+                  "type": "string"
                 },
-                "file-name":
-                {
-                  "description":"path of a csv file; Suppose this csv file has M rows and N columns, then each row (except the first row which is column name and is ignored) represents a list of identities for one user. So, this file will represent M - 1 users, with each user associated with N identities, and these N identities are for the N requests defined in this scenario respectively. Note: if user-id-range-slicing is enabled, and the number of users (M - 1) from this file is less than the number of clients, the test cannot be done, as some client would have not even a single user.",
-                  "type":"string"
+                "file-name": {
+                  "description": "path of a csv file; Suppose this csv file has M rows and N columns, then each row (except the first row which is column name and is ignored) represents a list of identities for one user. So, this file will represent M - 1 users, with each user associated with N identities, and these N identities are for the N requests defined in this scenario respectively. Note: if user-id-range-slicing is enabled, and the number of users (M - 1) from this file is less than the number of clients, the test cannot be done, as some client would have not even a single user.",
+                  "type": "string"
                 }
               }
             }
           },
-          "Requests":
-          {
-            "description":"Array of requests, each request has URI, method, optional payload, optional addtional headers, and optionally an lua script for advanced users to customize the request",
-            "type":"array",
-            "minItems":1,
-            "items":
-            {
-            "type": "object",
-              "properties":
-              {
-                "uri":
-                {
+          "HAR-file": {
+            "description": "path to an HAR file; the content of the HAR file will be loaded and transformed to a list of requests; if this field is given, the input of 'Requests' will be ignored",
+            "type": "string"
+          },
+          "Requests": {
+            "description": "Array of requests, each request has URI, method, optional payload, optional addtional headers, and optionally an lua script for advanced users to customize the request",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "uri": {
                   "description": "This could be a full URI with schema, authority, path, etc., or, it can be path only, in the latter case, the global schema, host, port fields would be used to construct the full URI",
-                  "type":"object",
-                  "properties":
-                  {
-                    "typeOfAction":
-                    {
-                      "type":"string",
+                  "type": "object",
+                  "properties": {
+                    "typeOfAction": {
+                      "type": "string",
                       "description": "Specifies how to generate the URI. input: direct input into input field, and the input can include variables wrapped with ${}; sameWithLastOne: same URI with last request; fromResponseHeader: extract the URI for this request from a specific header (name specified in input field) of last response; fromLuaScript: provide URI by lua script (see field luaScript); fromXpath: Search XML body of last response for the XPATH value given in input field (to be implemented); fromJsonPointer: Search Json body of last response body for the Json pointer value given in input field (to be implemented)",
-                      "enum": ["input", "sameWithLastOne", "fromResponseHeader", "fromLuaScript", "fromXPath", "fromJsonPointer"]
+                      "enum": [
+                        "input",
+                        "sameWithLastOne",
+                        "fromResponseHeader",
+                        "fromLuaScript",
+                        "fromXPath",
+                        "fromJsonPointer"
+                      ]
                     },
-                    "input":
-                    {
+                    "input": {
                       "description": "input needed to execute the typeOfAction above",
-                      "type":"string"
+                      "type": "string"
                     }
                   }
                 },
-                "clear-old-cookies":
-                {
+                "clear-old-cookies": {
                   "description": "clear cookies before executing this request: cookies received prior to this request, will be cleared, and will not be included in Cookie header of this request and after; Cookies header (if any) in additonalHeaders below for this request, will still be sent (but will not be passed on to next request)",
                   "default": false,
-                  "type":"boolean"
+                  "type": "boolean"
                 },
-                "method":
-                {
+                "method": {
                   "description": "method of the HTTP(2) request",
                   "default": "GET",
-                  "type":"string"
+                  "type": "string"
                 },
-                "payload":
-                {
+                "http-version": {
+                  "type": "string",
+                  "description": "http version, allowed value: default, http/1.1, http2, http3; default means use the default http version specified by 'no-tls-proto' and 'non-list'",
+                  "default": "default",
+                  "enum": [
+                    "default",
+                    "http/1.1",
+                    "http/2.0",
+                    "http/3.0"
+                  ]
+                },
+                "payload": {
                   "description": "http message content, or a filename containing the actual content",
-                  "type":"string"
+                  "type": "string"
                 },
-                "additonalHeaders":
-                {
+                "additonalHeaders": {
                   "description": "additional headers to include in this request. Valid format for each header: pair of strings with : in the middle; for example, user-agent: h2loadrunner",
                   "type": "array",
-                  "items":
-                  {
+                  "items": {
                     "type": "string"
                   }
                 },
-                "luaScript":
-                {
-                  "type":"string",
+                "luaScript": {
+                  "type": "string",
                   "description": "lua script (or a filename containing the actual script). The script can be used to customize the request, and to validate the response; to customized the request, a function named make_request should be present, handling 4 arguments: response_headers, response_payload, request_headers_to_send, request_payload_to_send; returning request_headers_to_send and request_payload_to_send. h2loadrunner passes the response headers and payload of last request within this scenarios sequence, and the request headers (path, method, additional headers) and payload specified here, to this lua function, which can update the request headers and request payload, and h2loadrunner will use the updated headers and payload for the request. Example make_request: function make_request(response_header, response_payload, request_headers_to_send, request_payload_to_send) return request_headers_to_send, request_payload_to_send end    To validate response, a function named validate_response should be present, handling 2 argument, response_header and response_payload, returning true or false. h2loadrunner passes the response headers and payload to function validate_response, and validate_response can do whatever check to decide whether the response is a success or a failure and return the result accordingly. Note: if validate_response function is provided, the result from it will override the result from expected-status-code and response-match"
                 },
-                "expected-status-code":
-                {
-                  "description":"the expected http status code for this request; if the returned status code matches the one specified here, this request is considered successful in statistics report; if nothing or 0 is specified here, 2xx status codes (i.e., 200, 201, 204, etc.) are all considered successful",
+                "expected-status-code": {
+                  "description": "the expected http status code for this request; if the returned status code matches the one specified here, this request is considered successful in statistics report; if nothing or 0 is specified here, 2xx status codes (i.e., 200, 201, 204, etc.) are all considered successful",
                   "default": 0,
-                  "type":"integer"
+                  "type": "integer"
                 },
-                "response-match":{
+                "page-id": {
+                  "description": "specify the id of the page to which this request belongs to; a valid page id must be a non-zero positive integer; requests with same valid page id would be executed in parallel (if possible) like a browser loads different resources of same page in parallel; different pages are executed in ascending order of page id; each request with an invalid (negative or zero) page id, or with a valid page id but different from any other request, would be considered to be belonging to a different page each",
+                  "default": 0,
+                  "type": "integer"
+                },
+                "response-match": {
                   "description": "A list of matching rules of both headers and payload; if provisioned, the received response is validated with the matching rules, and the result will override that from expected-status-code; if all matching rules given below are successful, the response is considered successful; otherwise, this response is considered as failed",
-                  "type":"object",
-                  "properties":{
-                    "headers":{
+                  "type": "object",
+                  "properties": {
+                    "headers": {
                       "description": "Array of matching rules to be executed against the response headers",
-                      "type":"array",
-                      "minItems":0,
+                      "type": "array",
+                      "minItems": 0,
                       "items": {
                         "type": "object",
                         "description": "One matching rule to be executed against one response header",
-                        "properties":{
-                          "header-name":{
+                        "properties": {
+                          "header-name": {
                             "description": "This field specifies the name of a received header; the value of this header is to be picked up to run the match",
                             "default": ":status",
-                            "type":"string"
+                            "type": "string"
                           },
-                          "matchType":{
-                            "type":"string",
+                          "matchType": {
+                            "type": "string",
                             "description": "Type of match action",
                             "default": "EqualsTo",
-                            "enum": ["EqualsTo", "StartsWith", "EndsWith", "Contains", "RegexMatch"]
+                            "enum": [
+                              "EqualsTo",
+                              "StartsWith",
+                              "EndsWith",
+                              "Contains",
+                              "RegexMatch"
+                            ]
                           },
-                          "input":{
+                          "input": {
                             "description": "Content used to run the matchType above against the received header value; i.e., received header value should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression of ECMAScript flavor, and it should match the entire target character sequence, i.e., the header value",
                             "default": "200",
-                            "type":"string"
+                            "type": "string"
                           }
                         }
                       }
                     },
                     "payload": {
                       "description": "Array of matching rules to be executed against the received Json payload",
-                      "type":"array",
-                      "minItems":0,
+                      "type": "array",
+                      "minItems": 0,
                       "items": {
                         "type": "object",
                         "description": "One matching rule to be executed against the received Json payload",
-                        "properties":{
+                        "properties": {
                           "JsonPointer": {
                             "description": "A Json pointer to locate a value within the received Json payload",
-                            "type":"string"
+                            "type": "string"
                           },
                           "matchType": {
-                            "type":"string",
+                            "type": "string",
                             "description": "Type of match action",
-                            "enum": ["EqualsTo", "StartsWith", "EndsWith", "Contains", "RegexMatch"]
+                            "enum": [
+                              "EqualsTo",
+                              "StartsWith",
+                              "EndsWith",
+                              "Contains",
+                              "RegexMatch"
+                            ]
                           },
                           "input": {
                             "description": "Content used to execute the matchType above against the value specified by the Json pointer above; the value specified by the Json pointer above should either equal to or start with or end with or contain the content specified in this field; if RegexMatch is chosen, it means this input field is a regular expression of ECMAScript flavor, and it should match the entire target character sequence, i.e., the value specified by the Json pointer",
-                            "type":"string"
+                            "type": "string"
                           }
                         }
                       }
                     }
                   }
                 },
-                "value-pickers":
-                {
+                "value-pickers": {
                   "description": "This is the actions to run when the response is received; it is using a regular expression of ECMAScript flavor to pick up a value, from a specific header, or from a value in the payload specified by a Json pointer, and then save the value to a variable whose name is given in save-to-variable; the stored value can be accessed later by wrapping the name of the variable with ${}, for example, pick up a value from the response header here, and store it to a variable named user_id, and then refer to this variable in a later request of the same scenario in this way: some_api_path/${user_id}, and ${user_id} would be replaced by the actual value stored here",
                   "type": "array",
                   "items": {
                     "type": "object",
                     "description": "One value-picker",
-                    "properties":{
+                    "properties": {
                       "where-to-pickup-from": {
                         "description": "where to pick up the value from: from request header, request payload, response header, response payload",
-                        "type":"string",
-			            "enum": ["Request-Header", "Response-Header", "Json-Pointer-In-Request-Payload", "Json-Pointer-In-Response-Payload"]
+                        "type": "string",
+                        "enum": [
+                          "Request-Header",
+                          "Response-Header",
+                          "Json-Pointer-In-Request-Payload",
+                          "Json-Pointer-In-Response-Payload"
+                        ]
                       },
                       "source": {
-                        "type":"string",
+                        "type": "string",
                         "description": "A header name, or a Json pointer, depending on what is given in where-to-pickup-from"
                       },
                       "regexp": {
                         "description": "A regular expression of ECMAScript flavor to extract value from the source above",
                         "default": ".*",
-                        "type":"string"
+                        "type": "string"
                       },
                       "save-to-variable": {
                         "description": "A name of the varible into what the extracted value is saved to, and this name could be refered to in subsequent requests of the same user id, to fetch the value by wrapping the name with ${}",
-                        "type":"string"
+                        "type": "string"
                       }
                     }
                   }
                 },
-                "delay-before-executing-next":
-                {
-                  "description":"milliseconds to delay before executing the next request within the same scenario; granularity: 10ms, i.e., setting 115ms delay would cause an actual delay of 120ms",
+                "delay-before-executing-next": {
+                  "description": "milliseconds to delay before executing the next request within the same scenario; granularity: 10ms, i.e., setting 115ms delay would cause an actual delay of 120ms",
                   "default": 0,
-                  "type":"integer"
+                  "type": "integer"
                 }
               },
-              "required":[
-                 "uri",
-                 "method"
+              "required": [
+                "uri",
+                "method"
               ]
             }
           }
         },
-        "required":[
-           "name",
-           "Requests"
+        "required": [
+          "name",
+          "Requests"
         ]
       }
     }
   },
-  "required":
-  [
+  "required": [
     "schema",
     "host",
     "Scenarios"

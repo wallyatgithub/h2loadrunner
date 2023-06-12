@@ -21,7 +21,7 @@ namespace asio_http2
 namespace server
 {
 
-thread_local std::atomic<uint64_t> base_handler::handler_unique_id(0);
+thread_local uint64_t base_handler::handler_unique_id(0);
 thread_local std::map<uint64_t, base_handler*> base_handler::alive_handlers;
 thread_local std::map<uint64_t, boost::asio::io_service*> base_handler::handler_io_service;
 
@@ -135,6 +135,11 @@ boost::asio::io_service& base_handler::io_service()
 const boost::asio::ip::tcp::endpoint& base_handler::remote_endpoint()
 {
     return remote_ep_;
+}
+
+const H2Server_Config_Schema& base_handler::get_config()
+{
+    return config;
 }
 
 callback_guard::callback_guard(base_handler& h) : handler(h)

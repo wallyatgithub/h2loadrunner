@@ -91,6 +91,8 @@ public:
 
     void reset_writefun();
 
+    const H2Server_Config_Schema& get_config();
+
 protected:
     std::map<int32_t, std::shared_ptr<asio_server_stream>> streams_;
     connection_write writefun_;
@@ -103,7 +105,7 @@ protected:
     bool write_signaled_;
     time_t tstamp_cached_;
     std::string formatted_date_;
-    thread_local static std::atomic<uint64_t> handler_unique_id;
+    thread_local static uint64_t handler_unique_id;
     thread_local static std::map<uint64_t, base_handler*> alive_handlers;
     thread_local static std::map<uint64_t, boost::asio::io_service*> handler_io_service;
     uint64_t this_handler_id;

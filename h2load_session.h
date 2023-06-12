@@ -54,7 +54,7 @@ public:
     virtual void terminate() = 0;
     // Return the maximum concurrency per connection
     virtual size_t max_concurrent_streams() = 0;
-    virtual void submit_rst_stream(int32_t stream_id) {};
+    virtual void reset_stream(int64_t stream_id) {};
 
     virtual void submit_ping() {};
 };

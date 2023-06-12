@@ -173,6 +173,8 @@ public:
     NO_TLS_PROTO no_tls_proto_enum;
     std::vector<Schema_Service> service;
     std::string statistics_file;
+    uint32_t statistics_interval;
+    std::string ciphers;
     explicit H2Server_Config_Schema():
         enable_mTLS(false),
         verbose(false),
@@ -184,7 +186,9 @@ public:
         header_table_size(4096),
         encoder_header_table_size(4096),
         no_tls_proto("h2c"),
-        no_tls_proto_enum(HTTP2)
+        no_tls_proto_enum(HTTP2),
+        statistics_interval(1),
+        ciphers("ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256")
     {
     }
     void staticjson_init(staticjson::ObjectHandler* h)
@@ -197,6 +201,7 @@ public:
         h->add_property("cert-file", &this->cert_file, staticjson::Flags::Optional);
         h->add_property("caCert-file", &this->ca_cert_file, staticjson::Flags::Optional);
         h->add_property("mTLS", &this->enable_mTLS, staticjson::Flags::Optional);
+        h->add_property("ciphers", &this->ciphers, staticjson::Flags::Optional);
         h->add_property("max-concurrent-streams", &this->max_concurrent_streams, staticjson::Flags::Optional);
         h->add_property("socket-receive-buffer-size", &this->skt_recv_buffer_size, staticjson::Flags::Optional);
         h->add_property("socket-send-buffer-size", &this->skt_send_buffer_size, staticjson::Flags::Optional);
@@ -206,7 +211,7 @@ public:
         h->add_property("connection-window-bits", &this->connection_window_bits, staticjson::Flags::Optional);
         h->add_property("no-tls-proto", &this->no_tls_proto, staticjson::Flags::Optional);
         h->add_property("statistics-file", &this->statistics_file, staticjson::Flags::Optional);
-        h->add_property("Service", &this->service);
+        h->add_property("Service", &this->service, staticjson::Flags::Optional);
     }
     void config_post_process()
     {
