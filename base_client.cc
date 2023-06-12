@@ -214,7 +214,14 @@ bool base_client::validate_response_with_lua(lua_State* L, const Request_Data& f
         }
 
         lua_pushlstring(L, finished_request.resp_payload.c_str(), finished_request.resp_payload.size());
-        lua_pcall(L, 2, 1, 0);
+        auto lua_ret = lua_pcall(L, 2, 1, 0);
+        if (lua_ret != LUA_OK )
+        {
+            const char* error = lua_tostring(L, -1);
+            std::cerr<<std::endl<<std::endl<<std::flush;
+            std::cerr<<"ERROR: error executing lua script: "<<error<<std::endl<<std::flush;
+            exit(1);
+        }
         int top = lua_gettop(L);
         for (int i = 0; i < top; i++)
         {
@@ -1442,7 +1449,14 @@ bool base_client::update_request_with_lua(lua_State* L, const Request_Data& fini
 
         lua_pushlstring(L, request_to_send.req_payload->c_str(), request_to_send.req_payload->size());
 
-        lua_pcall(L, 4, 2, 0);
+        auto lua_ret= lua_pcall(L, 4, 2, 0);
+        if (lua_ret != LUA_OK )
+        {
+            const char* error = lua_tostring(L, -1);
+            std::cerr<<std::endl<<std::endl<<std::flush;
+            std::cerr<<"ERROR: error executing lua script: "<<error<<std::endl<<std::flush;
+            exit(1);
+        }
         int top = lua_gettop(L);
         for (int i = 0; i < top; i++)
         {

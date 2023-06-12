@@ -959,6 +959,13 @@ int lua_resume_wrapper(lua_State* L, int nargs)
     auto retCode = lua_resume(L, nargs);
     if (LUA_YIELD != retCode)
     {
+        if (LUA_OK != retCode)
+        {
+            const char* error = lua_tostring(L, -1);
+            std::cerr<<std::endl<<std::endl<<std::flush;
+            std::cerr<<"ERROR: error executing lua script: "<<error<<std::endl<<std::flush;
+            exit(1);
+        }
         auto group_id = get_group_id(L);
         auto& lua_group_config = get_lua_group_config(group_id);
         auto worker_index = get_worker_index(L);
