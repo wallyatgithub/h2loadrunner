@@ -100,8 +100,6 @@ asio_worker::asio_worker(uint32_t id, size_t nreq_todo, size_t nclients,
     setup_SSL_CTX(ssl_ctx_http1.native_handle(), *config, std::set<std::string>{HTTP1_ALPN});
     setup_SSL_CTX(ssl_ctx_http2.native_handle(), *config, std::set<std::string>{HTTP2_ALPN, HTTP1_ALPN});
     setup_SSL_CTX(ssl_ctx_http3.native_handle(), *config, std::set<std::string>{HTTP3_ALPN});
-    // DEBUG
-    start_tick_timer();
 }
 
 asio_worker::~asio_worker()
@@ -177,6 +175,7 @@ void asio_worker::handle_tick_timer_timeout(const boost::system::error_code & ec
         return;
     }
     process_user_timers();
+    start_tick_timer();
 }
 
 void asio_worker::handle_rate_mode_period_timer_timeout(const boost::system::error_code& ec)
