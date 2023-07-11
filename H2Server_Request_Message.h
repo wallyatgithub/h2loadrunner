@@ -55,7 +55,7 @@ public:
         if (json_payload_string)
         {
             json_payload.Parse(json_payload_string->c_str());
-            json_payload_string == nullptr;
+            json_payload_string = nullptr;
         }
     }
 };

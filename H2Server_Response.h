@@ -23,6 +23,9 @@ extern "C" {
 #include "lauxlib.h"
 }
 #include "common_lua.h"
+#ifndef LUA_OK
+#define LUA_OK 0
+#endif
 
 const std::string extended_json_pointer_indicator = "/~#";
 
