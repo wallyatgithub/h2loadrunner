@@ -251,7 +251,9 @@ public:
     socket_.lowest_layer().close(ignored_ec);
     deadline_.cancel();
     if (handler_)
-      handler_->reset_writefun();// break the cyclic reference, as base_handler::writefun_ holds shared_ptr to this connnection
+    {
+        handler_->reset_writefun();// break the cyclic reference, as base_handler::writefun_ holds shared_ptr to this connnection
+    }
   }
 
 private:

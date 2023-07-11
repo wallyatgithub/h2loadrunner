@@ -137,6 +137,11 @@ const boost::asio::ip::tcp::endpoint& base_handler::remote_endpoint()
     return remote_ep_;
 }
 
+const H2Server_Config_Schema& base_handler::get_config()
+{
+    return config;
+}
+
 callback_guard::callback_guard(base_handler& h) : handler(h)
 {
     handler.enter_callback();
