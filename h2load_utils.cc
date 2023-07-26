@@ -1067,7 +1067,8 @@ void output_realtime_stats(h2load::Config& config,
             size_t sum = 0;
             for (auto& one_d_vec : two_d_vec)
             {
-                sum += std::accumulate(one_d_vec.begin(), one_d_vec.end(), 0);
+                size_t init = 0;
+                sum += std::accumulate(one_d_vec.begin(), one_d_vec.end(), init);
             }
             return sum;
         };
