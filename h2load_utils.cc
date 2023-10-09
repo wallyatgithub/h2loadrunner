@@ -2452,7 +2452,44 @@ bool convert_har_to_h2loadrunner_scenario(std::string& har_file_content, Scenari
                     }
                     else
                     {
-                        // TODO: multipart/form-data
+                        if (req_in_har.postData.text.size())
+                        {
+                            req_in_config.payload = req_in_har.postData.text;
+                        }
+                        else
+                        {
+                            const std::string VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES = "-----VERY_SPECIAL_BOUNARY_THAT_WILL_NOT_APPEAR_ELSEWHERE---";
+                            const std::string CRLF = "\r\n";
+                            const std::string MULTIPART_CONTENT_TYPE = "multipart/form-data; boundary=---VERY_SPECIAL_BOUNARY_THAT_WILL_NOT_APPEAR_ELSEWHERE---";
+                            std::string content_type = "Content-Type:" + MULTIPART_CONTENT_TYPE;
+                            req_in_config.additonalHeaders.emplace_back(content_type);
+                            for (auto& param : req_in_har.postData.params)
+                            {
+                                std::string body = param.value;
+                                req_in_config.payload.append(VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES).append(CRLF);
+                                req_in_config.payload.append("Content-Disposition: form-data; name=\"").append(param.name).append("\"");
+                                if (param.fileName.size())
+                                {
+                                    req_in_config.payload.append("; filename=\"").append(param.fileName).append("\"");
+                                }
+                                req_in_config.payload.append(CRLF);
+                                if (param.fileName.size())
+                                {
+                                    req_in_config.payload.append("Content-Type: ").append(param.contentType).append(CRLF);
+                                    std::ifstream file_stream(param.fileName);
+                                    if (!file_stream)
+                                    {
+                                        std::cerr << "cannot read file: " << param.fileName << std::endl;
+                                        exit(EXIT_FAILURE);
+                                    }
+                                    body.assign((std::istreambuf_iterator<char>(file_stream)),
+                                                            std::istreambuf_iterator<char>());
+                                }
+                                req_in_config.payload.append(CRLF);
+                                req_in_config.payload.append(body).append(CRLF);
+                            }
+                            req_in_config.payload.append(VERY_SPECIAL_BOUNARY_WITH_LEADING_TWO_DASHES).append("--").append(CRLF);
+                        }
                     }
                 }
             }
